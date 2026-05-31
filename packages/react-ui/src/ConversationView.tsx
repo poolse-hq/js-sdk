@@ -1,6 +1,6 @@
 import type { Message } from '@poolse/sdk';
 import { useMe, useMessages, useRealtimeStatus, useTyping } from '@poolse/react';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import { usePoolseFonts } from './fonts.js';
 import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer } from './MessageComposer.js';
@@ -103,7 +103,12 @@ export function ConversationView({
         ) : messages.length === 0 ? (
           <div className="poolse-conversation__empty">{emptyState ?? 'No messages yet.'}</div>
         ) : (
-          messages.map((msg) => <div key={msg.id}>{renderOne(msg, me?.id ?? null)}</div>)
+          // Fragment, not a wrapper <div>: MessageBubble's
+          // `align-self: flex-end|flex-start` only works when the
+          // bubble is a DIRECT flex child of `.poolse-conversation__
+          // messages`. A wrapper div would block-default to 100%
+          // width and pin every bubble to the left.
+          messages.map((msg) => <Fragment key={msg.id}>{renderOne(msg, me?.id ?? null)}</Fragment>)
         )}
 
         {error && <div className="poolse-conversation__empty">Failed to load: {error.message}</div>}

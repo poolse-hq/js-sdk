@@ -1,6 +1,7 @@
 import type { Message, MessageCreateRequest } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
+import { useMe } from './use-me.js';
 
 interface UseMessagesState {
   /** Newest-last array. The wire returns newest-first; we reverse so list rendering matches reading order. */
@@ -33,6 +34,7 @@ const PAGE_SIZE = 50;
  */
 export function useMessages(conversationId: string): UseMessagesState {
   const chat = usePoolse();
+  const { me } = useMe();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -40,6 +42,12 @@ export function useMessages(conversationId: string): UseMessagesState {
 
   // Cursor for `loadMore` — the lowest sequence currently in state.
   const oldestSequenceRef = useRef<number | null>(null);
+
+  // Hold `me.id` in a ref so `send()` stays stable across renders
+  // (otherwise its identity changes every time `me` reloads, which
+  // would re-create handlers in calling components).
+  const meIdRef = useRef<string | null>(me?.id ?? null);
+  meIdRef.current = me?.id ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +138,11 @@ export function useMessages(conversationId: string): UseMessagesState {
         id,
         tenant_id: '',
         conversation_id: conversationId,
-        sender_id: null,
+        // Stamp the current user's id so the optimistic row renders
+        // on the right (self) side from the moment it appears. Null
+        // here would briefly flash the row on the "other" side until
+        // the realtime echo replaced it with the canonical row.
+        sender_id: meIdRef.current,
         type: attrs.type ?? 'text',
         body: attrs.body,
         reply_to_id: attrs.reply_to_id ?? null,
