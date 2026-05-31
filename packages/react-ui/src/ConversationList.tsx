@@ -21,6 +21,19 @@ export interface ConversationListProps {
   renderItem?: (conv: Conversation, selected: boolean) => ReactNode;
   /** Custom empty state when there are no conversations. */
   emptyState?: ReactNode;
+  /**
+   * Controlled mode — when provided, render from these props instead
+   * of calling `useConversations()` internally. Lets parent components
+   * own the conversations state when they need to mutate it (e.g.,
+   * after creating a conversation via a custom backend route the SDK
+   * can't see). Pass `conversations` to enable; `loading` and `error`
+   * are optional companions.
+   *
+   * When omitted, the component auto-fetches via `useConversations()`.
+   */
+  conversations?: Conversation[];
+  loading?: boolean;
+  error?: Error | null;
 }
 
 export function ConversationList({
@@ -28,8 +41,15 @@ export function ConversationList({
   onSelect,
   renderItem,
   emptyState,
+  conversations: controlledConversations,
+  loading: controlledLoading,
+  error: controlledError,
 }: ConversationListProps) {
-  const { conversations, loading, error } = useConversations();
+  const auto = useConversations();
+  const isControlled = controlledConversations !== undefined;
+  const conversations = isControlled ? controlledConversations : auto.conversations;
+  const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
+  const error = isControlled ? (controlledError ?? null) : auto.error;
 
   if (loading && conversations.length === 0) {
     return <div className="poolse-list poolse-list--placeholder">Loading conversations…</div>;
