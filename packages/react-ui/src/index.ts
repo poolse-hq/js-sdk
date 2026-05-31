@@ -17,8 +17,11 @@ export { ConversationView, type ConversationViewProps } from './ConversationView
 
 // ── Pieces of the chat surface ────────────────────────────────
 export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';
+export { EditableMessageBubble, type EditableMessageBubbleProps } from './EditableMessageBubble.js';
 export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';
+export { MessageActions, type MessageActionsProps } from './MessageActions.js';
 export { TypingIndicator, type TypingIndicatorProps } from './TypingIndicator.js';
+export { ThreadView, type ThreadViewProps } from './ThreadView.js';
 export { Avatar, type AvatarProps } from './Avatar.js';
 
 // ── Conversation + member panels ──────────────────────────────

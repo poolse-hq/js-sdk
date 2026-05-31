@@ -113,7 +113,7 @@ export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadS
         conversation_id: conversationId,
         sender_id: null,
         type: attrs.type ?? 'text',
-        body: attrs.body,
+        body: attrs.body ?? null,
         reply_to_id: rootMessageId,
         thread_root_id: rootMessageId,
         mentions: attrs.mentions ?? [],

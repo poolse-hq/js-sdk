@@ -839,3 +839,358 @@
 .poolse-mention-menu__item--active:hover {
   background: var(--poolse-brand-soft);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   MessageActions — hover popover
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-msg-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  box-shadow: var(--poolse-shadow-sm);
+  position: relative;
+}
+
+.poolse-msg-actions__btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--poolse-ink-2);
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s;
+}
+
+.poolse-msg-actions__btn:hover {
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+}
+
+.poolse-msg-actions__btn--active {
+  background: var(--poolse-brand-soft);
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-msg-actions__btn--danger:hover {
+  color: var(--poolse-error);
+}
+
+.poolse-msg-actions__picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+}
+
+/* Default container that customers can wrap each message in for
+   hover-show behavior. Adds positioning context + reveals the
+   actions only on row hover. */
+.poolse-message-row {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  position: relative;
+}
+
+.poolse-message-row__actions {
+  position: absolute;
+  top: -16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+
+.poolse-message-row__actions--right {
+  right: 0;
+}
+
+.poolse-message-row__actions--left {
+  left: 0;
+}
+
+.poolse-message-row:hover .poolse-message-row__actions,
+.poolse-message-row:focus-within .poolse-message-row__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   EditableMessageBubble — in-place edit
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-message--editing {
+  padding: 10px;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.poolse-message__edit {
+  width: 100%;
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+  padding: 8px 12px;
+  font: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.poolse-message--self .poolse-message__edit {
+  /* Switch self-edit to a surface-color textarea — coral background
+     would make the cursor invisible. */
+  background: var(--poolse-on-brand);
+  color: var(--poolse-ink);
+}
+
+.poolse-message__edit:focus {
+  border-color: var(--poolse-brand);
+}
+
+.poolse-message__edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.poolse-message__edit-btn {
+  font: 600 12.5px / 1 var(--poolse-font-body);
+  padding: 6px 12px;
+  border-radius: var(--poolse-radius-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--poolse-ink-2);
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+
+.poolse-message--self .poolse-message__edit-btn {
+  color: var(--poolse-on-brand);
+}
+
+.poolse-message__edit-btn:hover {
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+}
+
+.poolse-message--self .poolse-message__edit-btn:hover {
+  background: color-mix(in oklab, var(--poolse-on-brand) 15%, transparent);
+  color: var(--poolse-on-brand);
+}
+
+.poolse-message__edit-btn--primary {
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+}
+
+.poolse-message--self .poolse-message__edit-btn--primary {
+  background: var(--poolse-on-brand);
+  color: var(--poolse-brand);
+}
+
+.poolse-message__edit-btn--primary:hover {
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+  filter: brightness(1.04);
+}
+
+.poolse-message__edit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ThreadView — side pane
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-thread {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--poolse-paper);
+  color: var(--poolse-ink);
+  font-family: var(--poolse-font-body);
+  font-size: var(--poolse-font-size);
+  border-left: 1px solid var(--poolse-border);
+}
+
+.poolse-thread__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--poolse-border);
+  background: var(--poolse-surface);
+  flex-shrink: 0;
+}
+
+.poolse-thread__title {
+  font-family: var(--poolse-font-display);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--poolse-ink);
+}
+
+.poolse-thread__root {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--poolse-border);
+  background: var(--poolse-surface-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.poolse-thread__messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   ConversationView shell — composes view + optional thread pane
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-conversation-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.poolse-conversation-shell > .poolse-conversation {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.poolse-conversation-shell__thread {
+  width: 380px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .poolse-conversation-shell__thread {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    background: var(--poolse-paper);
+    z-index: 5;
+  }
+}
+
+/* Message row — flex container that wraps bubble + attachments +
+   reactions + (hover) actions. Keeps the row a direct flex child of
+   the messages list so align-self works the same way as the bare
+   bubble. */
+.poolse-message-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: flex-start;
+  max-width: 78%;
+  position: relative;
+  gap: 4px;
+}
+
+.poolse-message-row--right {
+  align-items: flex-end;
+  align-self: flex-end;
+}
+
+.poolse-message-row .poolse-message {
+  /* Bubble's own max-width was on the bubble itself; lift the
+     row-level cap and let the row decide. */
+  max-width: 100%;
+}
+
+.poolse-message-row__attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.poolse-message-row__attachments.is-self {
+  align-items: flex-end;
+}
+
+.poolse-message-row__reactions {
+  display: flex;
+  align-items: flex-start;
+}
+
+.poolse-message-row__reactions.is-self {
+  justify-content: flex-end;
+}
+
+/* Composer row — attach button + composer */
+.poolse-conversation__composer-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-top: 1px solid var(--poolse-border);
+  background: var(--poolse-surface);
+}
+
+.poolse-conversation__composer-row > .poolse-attach-btn {
+  align-self: center;
+  margin-left: 8px;
+}
+
+.poolse-conversation__composer-flex {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.poolse-conversation__composer-flex .poolse-composer {
+  border-top: none;
+}
+
+.poolse-attach-input {
+  display: none;
+}
+
+.poolse-attach-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--poolse-ink-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background-color 0.12s,
+    color 0.12s;
+}
+
+.poolse-attach-btn:hover:not(:disabled) {
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+}
+
+.poolse-attach-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -50,7 +50,7 @@ export function PoolseProvider({ config, children }: PoolseProviderProps) {
 
   // Captured at mount for the dev-mode change warning below.
   const initialConnectionRef = useRef<{
-    apiUrl: string;
+    apiUrl: string | undefined;
     wsUrl: string | undefined;
     socketPath: string | undefined;
   } | null>(null);
@@ -63,7 +63,9 @@ export function PoolseProvider({ config, children }: PoolseProviderProps) {
       socketPath: initial.socketPath,
     };
     return new Poolse({
-      apiUrl: initial.apiUrl,
+      // apiUrl is optional in PoolseConfig — only forward when set
+      // so the SDK can fall back to its hosted-endpoint default.
+      ...(initial.apiUrl !== undefined ? { apiUrl: initial.apiUrl } : {}),
       // Always read the latest callbacks from the ref — they're free
       // to change between renders.
       getToken: () => configRef.current.getToken(),

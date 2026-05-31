@@ -4,6 +4,25 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [0.2.0] — 2026-06-01
+
+### Changed
+
+- `PoolseConfig.apiUrl` is now optional. Defaults to the hosted
+  endpoint at `https://api.poolse.dev`. Self-hosted / staging
+  deployments still override via the field.
+- Exports new `POOLSE_API_URL` constant for callers who want to
+  reference the default explicitly.
+
+### Added
+
+- `Message.attachments?: Attachment[]` — server populates on send +
+  realtime broadcast for messages with linked attachments.
+- `MessageCreateRequest.attachment_ids?: Uuid[]` — send a message
+  with one or more previously-uploaded attachments.
+- `MessageCreateRequest.body` is now optional (was required) — a
+  message with attachments and no body is valid.
+
 ## [0.1.0] — 2026-06-01
 
 First publishable release.

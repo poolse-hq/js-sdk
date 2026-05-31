@@ -4,6 +4,28 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [0.2.0] — 2026-06-01
+
+### Added
+
+- `useMessages.edit(messageId, body)` — optimistic edit with rollback
+  on server error. Server enforces sender-only authorization.
+- `useMessages.delete(messageId)` — optimistic soft-delete (sets
+  `deleted_at` + null body locally, rolls back on error).
+- `useMessages.markReadUpTo(messageId)` — wraps
+  `chat.conversations.one(id).messages.markRead`; advances the
+  caller's read cursor and triggers server-side read-receipt
+  broadcasts to other members.
+
+### Changed
+
+- `useMembers(conversationId)` now treats an empty string id as
+  "skip fetch" (returns `{ members: [], loading: false }`) so
+  callers can conditionally enable member loading without wrapping
+  in a `enabled ?` guard.
+- Provider auto-resolves the SDK's new default `apiUrl` when none
+  is passed in config.
+
 ## [0.1.1] — 2026-06-01
 
 ### Fixed

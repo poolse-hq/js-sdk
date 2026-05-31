@@ -1,12 +1,22 @@
 /**
+ * Hosted poolse API URL. Used as the default for `PoolseConfig.apiUrl`
+ * when you don't pass one — appropriate for the vast majority of
+ * integrations that target the official poolse cloud. Self-hosted /
+ * staging deployments override via the `apiUrl` field.
+ */
+export const POOLSE_API_URL = 'https://api.poolse.dev';
+
+/**
  * SDK configuration passed to `new Poolse(config)`.
  */
 export interface PoolseConfig {
   /**
-   * Base URL of the poolse REST API, e.g. `https://chat.example.com`.
-   * MUST NOT include the `/v1` path — the SDK adds that itself.
+   * Base URL of the poolse REST API. Defaults to the hosted endpoint
+   * at `https://api.poolse.dev`. Override only for self-hosted /
+   * staging deployments. MUST NOT include the `/v1` path — the SDK
+   * adds that itself.
    */
-  apiUrl: string;
+  apiUrl?: string;
 
   /**
    * Async hook the SDK calls every time it needs an `Authorization:
@@ -91,9 +101,6 @@ const DEFAULT_BASE_BACKOFF_MS = 250;
 const DEFAULT_MAX_BACKOFF_MS = 30_000;
 
 export function resolveConfig(config: PoolseConfig): ResolvedConfig {
-  if (!config.apiUrl) {
-    throw new Error('Poolse: `apiUrl` is required.');
-  }
   if (typeof config.getToken !== 'function') {
     throw new Error('Poolse: `getToken` is required and must be a function.');
   }
@@ -114,7 +121,7 @@ export function resolveConfig(config: PoolseConfig): ResolvedConfig {
   const fetchFn = rawFetch.bind(globalThis);
 
   return {
-    apiUrl: trimTrailingSlash(config.apiUrl),
+    apiUrl: trimTrailingSlash(config.apiUrl ?? POOLSE_API_URL),
     getToken: config.getToken,
     fetch: fetchFn,
     maxRetries: config.maxRetries ?? DEFAULT_MAX_RETRIES,

@@ -41,6 +41,16 @@ export function useMembers(conversationId: Uuid): UseMembersState {
 
   const fetcher = useCallback(
     async (signal?: AbortSignal): Promise<void> => {
+      // Empty id = "skip fetch" — used by callers that conditionally
+      // want member data (e.g. ConversationView's `mentions={false}
+      // readReceipts={false}` configuration). Better than asking
+      // every caller to wrap in `enabled ? useMembers(id) : null`.
+      if (!conversationId) {
+        setLoading(false);
+        setMembers([]);
+        setError(null);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {

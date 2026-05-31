@@ -1,6 +1,7 @@
 // Public SDK surface.
 
 export { Poolse } from './poolse.js';
+export { POOLSE_API_URL } from './config.js';
 export type { PoolseConfig } from './config.js';
 
 export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from './errors.js';

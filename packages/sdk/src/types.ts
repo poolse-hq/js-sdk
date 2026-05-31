@@ -132,6 +132,13 @@ export interface Message {
   thread_root_id: Uuid | null;
   mentions: Uuid[];
   reactions: Record<string, Uuid[]>;
+  /**
+   * Attachments linked to this message. Server populates on send +
+   * realtime broadcast; absent on partial responses (e.g. when the
+   * client posted with attachment_ids but the server has yet to
+   * resolve them).
+   */
+  attachments?: Attachment[];
   edited_at: IsoDateTime | null;
   deleted_at: IsoDateTime | null;
   sequence: number;
@@ -144,12 +151,31 @@ export interface MessageList {
 }
 
 export interface MessageCreateRequest {
-  body: string;
+  /**
+   * Plain-text body. Optional only when `attachment_ids` is non-empty
+   * — a message with attachments AND no body is valid (just the
+   * attachment renders). At least one of `body` or `attachment_ids`
+   * must be present.
+   */
+  body?: string | null;
   type?: MessageType;
   reply_to_id?: Uuid;
   mentions?: Uuid[];
-  // Client-supplied UUID for retry-safe sends. The SDK fills this in
-  // automatically when not provided.
+  /**
+   * Attach previously-uploaded attachments to this message. Each id
+   * must come from `chat.attachments.upload(...)` or the lower-level
+   * `requestUpload(...)` flow and must belong to the same tenant.
+   * The server links them in the same transaction as the insert, so
+   * the broadcast and REST response both carry the resolved
+   * `Attachment` rows in `message.attachments`.
+   */
+  attachment_ids?: Uuid[];
+  /**
+   * Client-supplied UUID for retry-safe sends. The SDK fills this in
+   * automatically when not provided so the optimistic temp row and
+   * the canonical server row share a single id (used for id-based
+   * dedup in `useMessages`).
+   */
   id?: Uuid;
 }
 

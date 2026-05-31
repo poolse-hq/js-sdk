@@ -23,12 +23,10 @@ describe('Poolse client', () => {
     expect(chat.rest).toBeDefined();
   });
 
-  it('throws if apiUrl is missing', () => {
-    expect(
-      () =>
-        // @ts-expect-error — deliberately missing required field
-        new Poolse({ getToken: () => 'tok' }),
-    ).toThrow(/apiUrl/);
+  it('defaults apiUrl to the hosted poolse endpoint when not provided', () => {
+    // No apiUrl — should not throw and should resolve to api.poolse.dev.
+    const chat = new Poolse({ getToken: () => 'tok' });
+    expect(chat.realtime).toBeDefined();
   });
 
   it('throws if getToken is missing', () => {

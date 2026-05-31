@@ -1,4 +1,4 @@
-import type { Message, MessageCreateRequest } from '@poolse/sdk';
+import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 import { useMe } from './use-me.js';
@@ -13,6 +13,26 @@ interface UseMessagesState {
   loadMore: () => Promise<void>;
   /** Optimistically append + POST. Replaces the optimistic row with the server response on success. */
   send: (attrs: MessageCreateRequest) => Promise<Message>;
+  /**
+   * Edit a message you previously sent. Optimistically updates the
+   * local row, rolls back on server error. Server enforces
+   * sender-only authorization — calling this for a message you didn't
+   * send will throw an ApiError.
+   */
+  edit: (messageId: Uuid, body: string) => Promise<Message>;
+  /**
+   * Soft-delete a message you sent (or that you have admin authority
+   * over). Optimistically applies the tombstone (`deleted_at` + null
+   * body) locally, rolls back on error.
+   */
+  delete: (messageId: Uuid) => Promise<void>;
+  /**
+   * Advance the caller's read cursor to `messageId`. Server emits
+   * read-receipt updates to other members; the conversation's
+   * unread count drops to zero. No local state mutation — this is
+   * "tell the server we read up to here".
+   */
+  markReadUpTo: (messageId: Uuid) => Promise<void>;
 }
 
 const PAGE_SIZE = 50;
@@ -144,7 +164,7 @@ export function useMessages(conversationId: string): UseMessagesState {
         // the realtime echo replaced it with the canonical row.
         sender_id: meIdRef.current,
         type: attrs.type ?? 'text',
-        body: attrs.body,
+        body: attrs.body ?? null,
         reply_to_id: attrs.reply_to_id ?? null,
         thread_root_id: null,
         mentions: attrs.mentions ?? [],
@@ -174,7 +194,85 @@ export function useMessages(conversationId: string): UseMessagesState {
     [chat, conversationId],
   );
 
-  return { messages, loading, error, hasMore, loadMore, send };
+  const edit = useCallback(
+    async (messageId: Uuid, body: string): Promise<Message> => {
+      // Optimistic: capture the previous body so we can roll back if the
+      // PATCH fails. `edited_at` is set to "now" client-side; the server
+      // will overwrite with its authoritative timestamp on the realtime
+      // echo + REST response.
+      let previous: Message | undefined;
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          previous = m;
+          return { ...m, body, edited_at: new Date().toISOString() };
+        }),
+      );
+
+      try {
+        const updated = await chat.messages.one(messageId).update({ body });
+        // Replace with the canonical row (right edited_at, etc).
+        setMessages((prev) => prev.map((m) => (m.id === messageId ? updated : m)));
+        return updated;
+      } catch (err) {
+        if (previous) {
+          const restore = previous;
+          setMessages((prev) => prev.map((m) => (m.id === messageId ? restore : m)));
+        }
+        throw err;
+      }
+    },
+    [chat],
+  );
+
+  const deleteMessage = useCallback(
+    async (messageId: Uuid): Promise<void> => {
+      // Optimistic tombstone — same shape the realtime delete handler
+      // applies, so the UI is consistent regardless of which path
+      // (REST response or WS push) lands first.
+      let previous: Message | undefined;
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          previous = m;
+          return { ...m, body: null, deleted_at: new Date().toISOString() };
+        }),
+      );
+
+      try {
+        await chat.messages.one(messageId).delete();
+      } catch (err) {
+        if (previous) {
+          const restore = previous;
+          setMessages((prev) => prev.map((m) => (m.id === messageId ? restore : m)));
+        }
+        throw err;
+      }
+    },
+    [chat],
+  );
+
+  const markReadUpTo = useCallback(
+    async (messageId: Uuid): Promise<void> => {
+      // Fire-and-forget — server updates the caller's last_read_message_id
+      // and broadcasts the resulting membership update to other clients
+      // (which is what drives read-receipt glyphs in their UIs).
+      await chat.conversations.one(conversationId).messages.markRead(messageId);
+    },
+    [chat, conversationId],
+  );
+
+  return {
+    messages,
+    loading,
+    error,
+    hasMore,
+    loadMore,
+    send,
+    edit,
+    delete: deleteMessage,
+    markReadUpTo,
+  };
 }
 
 function upsertById(prev: Message[], msg: Message): Message[] {

@@ -4,6 +4,41 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [0.2.0] — 2026-06-01
+
+### Added — new components
+
+- `<MessageActions>` — hover-triggered popover with react / reply
+  (open thread) / edit / delete affordances. Built on `PoolseIcon`
+  and reuses the existing `ReactionPicker`.
+- `<EditableMessageBubble>` — extends `MessageBubble` with an
+  inline-edit mode (controlled `editing` prop, textarea with
+  Enter-to-save / Esc-to-cancel).
+- `<ThreadView>` — side-pane component for thread replies.
+  Composes `useThread` + `MessageBubble` + `MessageComposer` with
+  the same brand styling as the main view. Includes a root-message
+  preview at the top.
+
+### Added — `<ConversationView>` feature toggles (all default ON)
+
+- `reactions` — render `<ReactionStrip>` under each message.
+- `mentions` — swap `<MessageComposer>` for `<MentionInput>` when
+  the conversation has loaded members.
+- `attachments` — paperclip icon in the composer triggers a file
+  picker → presigned upload → send with `attachment_ids`. Inline
+  renders attached images / file cards via `<AttachmentPreview>`.
+- `actions` — hover-revealed `<MessageActions>` next to each message,
+  with edit/delete only shown for own messages.
+- `threads` — clicking "reply in thread" from a message opens a
+  right-side `<ThreadView>`.
+- `readReceipts` — check-double glyph on own messages once another
+  member's `last_read_message_id` advances past them. Auto-computed
+  from `useMembers`.
+
+Each toggle defaults to `true`, so dropping in
+`<ConversationView conversationId={id} />` gets you the full chat
+surface out of the box. Set any to `false` to slim down the view.
+
 ## [0.1.2] — 2026-06-01
 
 ### Added
