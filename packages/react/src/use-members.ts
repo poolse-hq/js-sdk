@@ -67,7 +67,9 @@ export function useMembers(conversationId: Uuid): UseMembersState {
   const addMembers = useCallback(
     async (externalIds: string[], opts: { role?: MemberRole } = {}) => {
       const addOpts: AddMemberOptions = opts.role !== undefined ? { role: opts.role } : {};
-      const { data } = await chat.conversations.one(conversationId).addMembers(externalIds, addOpts);
+      const { data } = await chat.conversations
+        .one(conversationId)
+        .addMembers(externalIds, addOpts);
       // Dedup by id in case the server returns a row that was already
       // a member (idempotent re-add).
       setMembers((prev) => {

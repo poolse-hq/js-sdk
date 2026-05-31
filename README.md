@@ -4,9 +4,9 @@ TypeScript SDKs for the [poolse](https://github.com/jasirfetai/poolse) Chat-as-a
 
 This repository is a pnpm monorepo. **Three packages**, each usable independently:
 
-| Package                                    | What                                                                                                                   | Use when                                                                     |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [`@poolse/sdk`](./packages/sdk)           | Headless TypeScript SDK. REST + WebSocket + offline queue. No React, no DOM.                                           | Building for Node, vanilla JS, mobile (RN), or you want zero UI opinions.    |
+| Package                                   | What                                                                                                                  | Use when                                                                     |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`@poolse/sdk`](./packages/sdk)           | Headless TypeScript SDK. REST + WebSocket + offline queue. No React, no DOM.                                          | Building for Node, vanilla JS, mobile (RN), or you want zero UI opinions.    |
 | [`@poolse/react`](./packages/react)       | Headless React hooks built on `@poolse/sdk`. Provider + `useMessages` / `useTyping` / `usePresence` / etc. **No UI**. | You want real-time wired up but you're building your own UI from scratch.    |
 | [`@poolse/react-ui`](./packages/react-ui) | Plug-and-play React components built on `@poolse/react`. CSS-variable theming + render-slot escape hatches.           | You want a working chat in 5 minutes; eject to lower layers later if needed. |
 

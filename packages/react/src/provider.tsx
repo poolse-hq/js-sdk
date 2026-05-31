@@ -1,12 +1,5 @@
 import { Poolse, type PoolseConfig } from '@poolse/sdk';
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 interface PoolseContextValue {
   chat: Poolse;
@@ -92,7 +85,6 @@ export function PoolseProvider({ config, children }: PoolseProviderProps) {
     // Mount-once: the `Poolse` instance owns a WebSocket and channel
     // subscriptions, so it MUST be stable for the life of the mount.
     // Changing `apiUrl` / `wsUrl` / `socketPath` requires a remount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Surface mistakes early in dev: connection-shaped fields are
@@ -108,7 +100,6 @@ export function PoolseProvider({ config, children }: PoolseProviderProps) {
         initial.wsUrl !== config.wsUrl ||
         initial.socketPath !== config.socketPath
       ) {
-        // eslint-disable-next-line no-console
         console.warn(
           '[poolse] connection-shaped config (apiUrl / wsUrl / socketPath) ' +
             'changed after <PoolseProvider> mounted. These are captured at ' +

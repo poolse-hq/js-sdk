@@ -104,12 +104,12 @@ Open http://localhost:5173. You should see the conversation UI; type and send. T
 
 ## What gets exercised
 
-| Path                                  | Layer                                             | Test                     |
-| ------------------------------------- | ------------------------------------------------- | ------------------------ |
+| Path                                  | Layer                                            | Test                     |
+| ------------------------------------- | ------------------------------------------------ | ------------------------ |
 | `GET /v1/me`                          | REST via `@poolse/sdk`                           | useMe                    |
 | `GET /v1/conversations/:id/messages`  | REST via `@poolse/sdk`                           | useMessages initial load |
 | `POST /v1/conversations/:id/messages` | REST via `@poolse/sdk`                           | composer send            |
 | `wss://…/socket conversation:<id>`    | WebSocket via `phoenix` + `@poolse/sdk` realtime | live message:new pushes  |
-| `typing` push                         | WebSocket                                         | typing indicator         |
+| `typing` push                         | WebSocket                                        | typing indicator         |
 
 If any of those fail, the SDK package's tests + the backend's `mix check` cover the unit-level surface; the end-to-end is the integration of the two.

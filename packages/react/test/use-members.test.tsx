@@ -73,10 +73,7 @@ describe('useMembers', () => {
   it('removeMember rolls back on error', async () => {
     const fetchFn = scriptedFetch([
       jsonResponse({ data: [member('u-1'), member('u-2')] }),
-      jsonResponse(
-        { error: { code: 'forbidden', message: 'nope', doc_url: '' } },
-        { status: 403 },
-      ),
+      jsonResponse({ error: { code: 'forbidden', message: 'nope', doc_url: '' } }, { status: 403 }),
     ]);
     const { result } = renderHookWithProvider(() => useMembers('c-1'), fetchFn);
 

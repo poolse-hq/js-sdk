@@ -43,7 +43,6 @@ export function PoolseIcon({
     // Surface unknown icon names at runtime (TS catches it at compile
     // time, but a stale dynamic name from data is worth flagging).
     if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
       console.warn(`PoolseIcon: unknown icon "${String(name)}"`);
     }
     return <svg aria-hidden="true" className={className} style={style} />;

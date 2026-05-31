@@ -69,14 +69,8 @@ describe('<ConversationList>', () => {
 
   it('fires onSelect with the conversation on click', async () => {
     const onSelect = vi.fn();
-    const fetchFn = scriptedFetch([
-      jsonResponse(me),
-      jsonResponse({ data: [conv('c-1')] }),
-    ]);
-    const { container } = renderWithProvider(
-      <ConversationList onSelect={onSelect} />,
-      fetchFn,
-    );
+    const fetchFn = scriptedFetch([jsonResponse(me), jsonResponse({ data: [conv('c-1')] })]);
+    const { container } = renderWithProvider(<ConversationList onSelect={onSelect} />, fetchFn);
     await waitFor(() => expect(container.querySelectorAll('.poolse-list__item')).toHaveLength(1));
     fireEvent.click(container.querySelector('.poolse-list__item')!);
     expect(onSelect).toHaveBeenCalledTimes(1);
@@ -84,10 +78,7 @@ describe('<ConversationList>', () => {
   });
 
   it('renderItem escape hatch replaces the default row', async () => {
-    const fetchFn = scriptedFetch([
-      jsonResponse(me),
-      jsonResponse({ data: [conv('c-1', 'one')] }),
-    ]);
+    const fetchFn = scriptedFetch([jsonResponse(me), jsonResponse({ data: [conv('c-1', 'one')] })]);
     const { container } = renderWithProvider(
       <ConversationList renderItem={(c) => <span>custom:{c.name}</span>} />,
       fetchFn,

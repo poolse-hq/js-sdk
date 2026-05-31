@@ -3,6 +3,7 @@
 import js from '@eslint/js';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default [
@@ -19,9 +20,17 @@ export default [
       // from `browser`, setTimeout/AbortSignal/etc. from `node`.
       globals: { ...globals.browser, ...globals.node },
     },
-    plugins: { '@typescript-eslint': tsPlugin },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      // Catches real hook bugs (deps array drift, conditional hooks,
+      // hooks-in-loops). The packages/react source has matching
+      // `// eslint-disable-next-line` comments where the rule is
+      // intentionally bypassed (mount-once useMemo + dev-only effect).
+      'react-hooks': reactHooks,
+    },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      ...reactHooks.configs.recommended.rules,
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },

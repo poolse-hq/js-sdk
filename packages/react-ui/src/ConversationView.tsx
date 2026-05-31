@@ -106,9 +106,7 @@ export function ConversationView({
           messages.map((msg) => <div key={msg.id}>{renderOne(msg, me?.id ?? null)}</div>)
         )}
 
-        {error && (
-          <div className="poolse-conversation__empty">Failed to load: {error.message}</div>
-        )}
+        {error && <div className="poolse-conversation__empty">Failed to load: {error.message}</div>}
       </div>
 
       <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />

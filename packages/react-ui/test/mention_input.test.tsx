@@ -35,9 +35,7 @@ describe('<MentionInput>', () => {
       fireEvent.change(input, { target: { value: '@' } });
     });
 
-    await waitFor(() =>
-      expect(container.querySelector('.poolse-mention-menu')).not.toBeNull(),
-    );
+    await waitFor(() => expect(container.querySelector('.poolse-mention-menu')).not.toBeNull());
     const items = container.querySelectorAll('.poolse-mention-menu__item');
     expect(items).toHaveLength(2);
     expect(items[0]?.textContent).toContain('alice');
@@ -78,9 +76,7 @@ describe('<MentionInput>', () => {
     act(() => {
       fireEvent.change(input, { target: { value: '@' } });
     });
-    await waitFor(() =>
-      expect(container.querySelector('.poolse-mention-menu')).not.toBeNull(),
-    );
+    await waitFor(() => expect(container.querySelector('.poolse-mention-menu')).not.toBeNull());
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(input.value).toMatch(/^@alice /);
     expect(container.querySelector('.poolse-mention-menu')).toBeNull();
@@ -99,9 +95,7 @@ describe('<MentionInput>', () => {
     act(() => {
       fireEvent.change(input, { target: { value: '@' } });
     });
-    await waitFor(() =>
-      expect(container.querySelector('.poolse-mention-menu')).not.toBeNull(),
-    );
+    await waitFor(() => expect(container.querySelector('.poolse-mention-menu')).not.toBeNull());
     fireEvent.keyDown(input, { key: 'Enter' });
     // Now type the rest of the message.
     act(() => {

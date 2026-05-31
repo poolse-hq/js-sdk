@@ -3,7 +3,7 @@
 // fetch, wraps the component in a PoolseProvider pointed at it,
 // and asserts on rendered output + interaction.
 
-import { render, type RenderOptions } from '@testing-library/react';
+import { render, type RenderOptions, type RenderResult } from '@testing-library/react';
 import { type ReactElement, type ReactNode } from 'react';
 import { vi } from 'vitest';
 import { PoolseProvider } from '@poolse/react';
@@ -45,11 +45,15 @@ export function noContent(status = 204): Response {
 /**
  * Render a tree inside a PoolseProvider wired to a scripted fetch.
  */
+// Explicit return type — without it TS infers a type that references
+// `@testing-library/dom`'s `queries` module, which isn't a direct
+// dependency of @poolse/react-ui. The inferred name is "not portable"
+// (TS2742) and breaks `tsc --noEmit` in CI.
 export function renderWithProvider(
   ui: ReactElement,
   fetchFn: typeof globalThis.fetch,
   options?: Omit<RenderOptions, 'wrapper'>,
-) {
+): RenderResult {
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <PoolseProvider

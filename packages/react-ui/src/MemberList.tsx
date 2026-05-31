@@ -62,9 +62,7 @@ export function MemberList({
 
   if (members.length === 0) {
     return (
-      <div className="poolse-list poolse-list--placeholder">
-        {emptyState ?? 'No members yet.'}
-      </div>
+      <div className="poolse-list poolse-list--placeholder">{emptyState ?? 'No members yet.'}</div>
     );
   }
 
@@ -117,9 +115,7 @@ function DefaultMemberRow({
       <Avatar src={avatarUrl} name={name} online={online} size="md" />
       <div className="poolse-member-row__body">
         <div className="poolse-member-row__name">{name}</div>
-        <div className="poolse-member-row__sub">
-          {online ? 'online' : 'offline'}
-        </div>
+        <div className="poolse-member-row__sub">{online ? 'online' : 'offline'}</div>
       </div>
       <RoleBadge role={membership.role} />
       {removable && (
@@ -141,9 +137,5 @@ function DefaultMemberRow({
 
 function RoleBadge({ role }: { role: MemberRole }) {
   const mod = role === 'owner' ? 'owner' : role === 'admin' ? 'admin' : null;
-  return (
-    <span className={`poolse-badge${mod ? ` poolse-badge--${mod}` : ''}`}>
-      {role}
-    </span>
-  );
+  return <span className={`poolse-badge${mod ? ` poolse-badge--${mod}` : ''}`}>{role}</span>;
 }

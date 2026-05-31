@@ -30,10 +30,7 @@ describe('<AttachmentPreview>', () => {
     const fetchFn = scriptedFetch([
       jsonResponse({ url: 'https://cdn.test/cat.png?sig=1', method: 'get' }),
     ]);
-    const { container } = renderWithProvider(
-      <AttachmentPreview attachment={imageAtt} />,
-      fetchFn,
-    );
+    const { container } = renderWithProvider(<AttachmentPreview attachment={imageAtt} />, fetchFn);
     await waitFor(() => expect(container.querySelector('img')).not.toBeNull());
     expect(container.querySelector('img')?.getAttribute('src')).toBe(
       'https://cdn.test/cat.png?sig=1',
@@ -44,10 +41,7 @@ describe('<AttachmentPreview>', () => {
     const fetchFn = scriptedFetch([
       jsonResponse({ url: 'https://cdn.test/spec.pdf?sig=2', method: 'get' }),
     ]);
-    const { container } = renderWithProvider(
-      <AttachmentPreview attachment={fileAtt} />,
-      fetchFn,
-    );
+    const { container } = renderWithProvider(<AttachmentPreview attachment={fileAtt} />, fetchFn);
     await waitFor(() =>
       expect(container.querySelector('.poolse-attachment__file-name')).not.toBeNull(),
     );
@@ -61,10 +55,7 @@ describe('<AttachmentPreview>', () => {
 
   it('shows a loading placeholder while the URL fetch is pending', () => {
     const fetchFn = scriptedFetch([]);
-    const { container } = renderWithProvider(
-      <AttachmentPreview attachment={imageAtt} />,
-      fetchFn,
-    );
+    const { container } = renderWithProvider(<AttachmentPreview attachment={imageAtt} />, fetchFn);
     expect(container.textContent).toMatch(/loading/i);
   });
 });

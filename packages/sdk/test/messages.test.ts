@@ -41,9 +41,7 @@ describe('ConversationMessages', () => {
 
       const body = (await bodyJson(fetchFn.calls[0]!)) as { body: string; id: string };
       expect(body.body).toBe('hello');
-      expect(body.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      );
+      expect(body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
     });
 
     it('preserves an explicit `id` when caller provides one (idempotency-safe retries)', async () => {

@@ -62,11 +62,7 @@ const WORDMARK_PATHS = (offsetX: number) => (
       transform="translate(1280,0)"
       d="M305 -14Q225 -14 163.5 17.0Q102 48 67.0 110.0Q32 172 32 265Q32 358 67.0 419.5Q102 481 164.0 511.5Q226 542 306 542Q386 542 448.0 511.0Q510 480 545.0 418.5Q580 357 580 264Q580 169 544.0 107.0Q508 45 445.5 15.5Q383 -14 305 -14ZM310 103Q346 103 370.0 119.5Q394 136 406.0 170.0Q418 204 418 254Q418 307 405.0 343.5Q392 380 366.5 399.5Q341 419 301 419Q267 419 242.5 402.5Q218 386 206.0 352.0Q194 318 194 267Q194 185 224.5 144.0Q255 103 310 103Z"
     />
-    <path
-      className="wm-ink"
-      transform="translate(1902,0)"
-      d="M62 0V720H220V0Z"
-    />
+    <path className="wm-ink" transform="translate(1902,0)" d="M62 0V720H220V0Z" />
     <path
       className="wm-ink"
       transform="translate(2195,0)"
@@ -84,10 +80,28 @@ const VARIANTS: Record<
   PoolseLogoVariant,
   { vb: string; aspect: number; render: () => ReactElement }
 > = {
-  lockup:   { vb: '0 0 454 100', aspect: 4.54, render: () => <>{MARK_PATHS}{WORDMARK_PATHS(126)}</> },
-  mark:     { vb: '0 0 100 100', aspect: 1.00, render: () => MARK_PATHS },
-  wordmark: { vb: '0 0 350 100', aspect: 3.50, render: () => WORDMARK_PATHS(0) },
-  mono:     { vb: '0 0 454 100', aspect: 4.54, render: () => <>{MARK_PATHS}{WORDMARK_PATHS(126)}</> },
+  lockup: {
+    vb: '0 0 454 100',
+    aspect: 4.54,
+    render: () => (
+      <>
+        {MARK_PATHS}
+        {WORDMARK_PATHS(126)}
+      </>
+    ),
+  },
+  mark: { vb: '0 0 100 100', aspect: 1.0, render: () => MARK_PATHS },
+  wordmark: { vb: '0 0 350 100', aspect: 3.5, render: () => WORDMARK_PATHS(0) },
+  mono: {
+    vb: '0 0 454 100',
+    aspect: 4.54,
+    render: () => (
+      <>
+        {MARK_PATHS}
+        {WORDMARK_PATHS(126)}
+      </>
+    ),
+  },
 };
 
 export function PoolseLogo({

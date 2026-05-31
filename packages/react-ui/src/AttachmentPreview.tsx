@@ -74,7 +74,7 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
   }
 
   // File card mode.
-  const filename = isFullRow ? attachment.original_filename ?? 'file' : 'file';
+  const filename = isFullRow ? (attachment.original_filename ?? 'file') : 'file';
   const byteSize = isFullRow ? attachment.byte_size : null;
 
   return (
@@ -92,14 +92,24 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
           }
         }}
       >
-        <PoolseIcon name="attachment" size={20} className="poolse-attachment__file-icon" label={null} />
+        <PoolseIcon
+          name="attachment"
+          size={20}
+          className="poolse-attachment__file-icon"
+          label={null}
+        />
         <div className="poolse-attachment__file-body">
           <div className="poolse-attachment__file-name">{filename}</div>
           {byteSize !== null && (
             <div className="poolse-attachment__file-meta">{formatBytes(byteSize)}</div>
           )}
         </div>
-        <PoolseIcon name="download" size={16} className="poolse-attachment__file-icon" label="Download" />
+        <PoolseIcon
+          name="download"
+          size={16}
+          className="poolse-attachment__file-icon"
+          label="Download"
+        />
       </a>
     </div>
   );

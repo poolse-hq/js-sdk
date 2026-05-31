@@ -53,10 +53,7 @@ describe('useConversation', () => {
   });
 
   it('refetch hits the server again and updates state', async () => {
-    const fetchFn = scriptedFetch([
-      jsonResponse(conv),
-      jsonResponse({ ...conv, name: 'renamed' }),
-    ]);
+    const fetchFn = scriptedFetch([jsonResponse(conv), jsonResponse({ ...conv, name: 'renamed' })]);
     const { result } = renderHookWithProvider(() => useConversation('c-1'), fetchFn);
 
     await waitFor(() => expect(result.current.conversation?.name).toBe('general'));

@@ -90,11 +90,7 @@ function DefaultRow({ conv, selected: _selected }: { conv: Conversation; selecte
 
   return (
     <>
-      <Avatar
-        src={conv.avatar_url ?? null}
-        name={conv.name}
-        size="md"
-      />
+      <Avatar src={conv.avatar_url ?? null} name={conv.name} size="md" />
       <div className="poolse-list__body">
         <div className="poolse-list__head">
           <span className="poolse-list__title">{title}</span>

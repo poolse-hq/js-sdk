@@ -112,9 +112,7 @@ function parseJwtExp(token: string): number | null {
   try {
     const json = decodeBase64Url(parts[1] as string);
     const payload = JSON.parse(json) as { exp?: unknown };
-    return typeof payload.exp === 'number' && Number.isFinite(payload.exp)
-      ? payload.exp
-      : null;
+    return typeof payload.exp === 'number' && Number.isFinite(payload.exp) ? payload.exp : null;
   } catch {
     return null;
   }
@@ -129,7 +127,9 @@ function decodeBase64Url(s: string): string {
   // Node fallback (older runtimes without global atob). The SDK's
   // minimum target is Node 18 where atob is global, but keep this for
   // safety / SSR environments that polyfill differently.
-  const g = globalThis as { Buffer?: { from(s: string, e: string): { toString(e: string): string } } };
+  const g = globalThis as {
+    Buffer?: { from(s: string, e: string): { toString(e: string): string } };
+  };
   if (g.Buffer) return g.Buffer.from(padded, 'base64').toString('binary');
   throw new Error('No base64 decoder available');
 }

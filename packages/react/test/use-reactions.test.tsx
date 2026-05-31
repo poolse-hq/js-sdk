@@ -1,4 +1,4 @@
-import { act, waitFor } from '@testing-library/react';
+import { act } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { useReactions } from '../src/use-reactions.js';
 import { jsonResponse, renderHookWithProvider, scriptedFetch } from './_helpers.js';

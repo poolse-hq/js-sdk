@@ -53,7 +53,9 @@ describe('<ReactionStrip>', () => {
       <ReactionStrip messageId="m-1" conversationId="c-1" currentUserId="u-2" />,
       fetchFn,
     );
-    const picker = container.querySelector('button[aria-label="Add reaction"]') as HTMLButtonElement;
+    const picker = container.querySelector(
+      'button[aria-label="Add reaction"]',
+    ) as HTMLButtonElement;
     fireEvent.click(picker);
     expect(container.querySelector('.poolse-reaction-picker')).not.toBeNull();
   });
@@ -106,7 +108,9 @@ describe('<ReactionStrip>', () => {
       />,
       fetchFn,
     );
-    const picker = container.querySelector('button[aria-label="Add reaction"]') as HTMLButtonElement;
+    const picker = container.querySelector(
+      'button[aria-label="Add reaction"]',
+    ) as HTMLButtonElement;
     fireEvent.click(picker);
     const pick = container.querySelector('.poolse-reaction-picker__btn') as HTMLButtonElement;
     fireEvent.click(pick);

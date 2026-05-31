@@ -10,7 +10,11 @@ function jwt(exp: number | null, payload: Record<string, unknown> = {}): string 
 }
 
 function base64url(s: string): string {
-  return Buffer.from(s, 'utf-8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return Buffer.from(s, 'utf-8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 describe('TokenCache', () => {
@@ -120,9 +124,7 @@ describe('TokenCache', () => {
     // First call returns a JWT with exp in the past — cache shouldn't
     // trust the exp but holds for the fallback TTL to absorb bursts.
     let returnExpired = true;
-    const fetcher = vi.fn(async () =>
-      returnExpired ? jwt(nowSec() - 60) : jwt(nowSec() + 3600),
-    );
+    const fetcher = vi.fn(async () => (returnExpired ? jwt(nowSec() - 60) : jwt(nowSec() + 3600)));
     const cache = new TokenCache(fetcher);
 
     await cache.getToken();

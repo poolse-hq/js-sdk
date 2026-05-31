@@ -47,7 +47,8 @@ export function ReactionStrip({
   return (
     <div className="poolse-reactions" style={{ position: 'relative' }}>
       {entries.map(([emoji, users]) => {
-        const mine = currentUserId !== undefined && currentUserId !== null && users.includes(currentUserId);
+        const mine =
+          currentUserId !== undefined && currentUserId !== null && users.includes(currentUserId);
         return (
           <button
             key={emoji}
@@ -76,7 +77,9 @@ export function ReactionStrip({
             aria-expanded={pickerOpen}
           >
             <PoolseIcon name="emoji" size={14} label={null} />
-            <span className="poolse-reaction-pill__count" aria-hidden="true">+</span>
+            <span className="poolse-reaction-pill__count" aria-hidden="true">
+              +
+            </span>
           </button>
           {pickerOpen && (
             <ReactionPicker

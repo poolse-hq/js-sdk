@@ -25,20 +25,13 @@ describe('useThread', () => {
   it('lists replies on mount and exposes hasMore=true at PAGE_SIZE', async () => {
     // Easier than mocking 50 rows — we don't actually need a full page,
     // just a non-full page sets hasMore=false; a full page sets true.
-    const fetchFn = scriptedFetch([
-      jsonResponse({ data: [reply('r-1', 1), reply('r-2', 2)] }),
-    ]);
-    const { result } = renderHookWithProvider(
-      () => useThread('c-1', 'm-root'),
-      fetchFn,
-    );
+    const fetchFn = scriptedFetch([jsonResponse({ data: [reply('r-1', 1), reply('r-2', 2)] })]);
+    const { result } = renderHookWithProvider(() => useThread('c-1', 'm-root'), fetchFn);
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.replies).toHaveLength(2);
     expect(result.current.hasMore).toBe(false); // < PAGE_SIZE
-    expect(fetchFn.calls[0]?.url).toBe(
-      'https://chat.test/v1/messages/m-root/replies?limit=50',
-    );
+    expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/messages/m-root/replies?limit=50');
   });
 
   it('sendReply pre-generates id, posts with reply_to_id set to root, dedupes echo', async () => {
@@ -47,10 +40,7 @@ describe('useThread', () => {
       jsonResponse({ data: [reply('r-1', 1)] }),
       jsonResponse(sentRow, { status: 201 }),
     ]);
-    const { result } = renderHookWithProvider(
-      () => useThread('c-1', 'm-root'),
-      fetchFn,
-    );
+    const { result } = renderHookWithProvider(() => useThread('c-1', 'm-root'), fetchFn);
 
     await waitFor(() => expect(result.current.replies).toHaveLength(1));
 
@@ -82,10 +72,7 @@ describe('useThread', () => {
       jsonResponse({ data: [reply('r-1', 1)] }),
       jsonResponse({ error: { code: 'boom', message: 'nope', doc_url: '' } }, { status: 500 }),
     ]);
-    const { result } = renderHookWithProvider(
-      () => useThread('c-1', 'm-root'),
-      fetchFn,
-    );
+    const { result } = renderHookWithProvider(() => useThread('c-1', 'm-root'), fetchFn);
     await waitFor(() => expect(result.current.replies).toHaveLength(1));
 
     let caught: unknown = null;
