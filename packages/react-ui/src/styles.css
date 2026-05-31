@@ -1194,3 +1194,63 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   ConversationList unread badge (Phase 5)
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-list__unread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+  font-family: var(--poolse-font-body);
+  font-weight: 700;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--poolse-radius-pill);
+  flex-shrink: 0;
+  margin-left: auto;
+  letter-spacing: 0.01em;
+}
+
+.poolse-list__item--selected .poolse-list__unread {
+  background: var(--poolse-on-brand);
+  color: var(--poolse-brand-strong);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Scroll-to-new floating button (Phase 5)
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-conversation__scroll-to-new {
+  position: absolute;
+  bottom: 92px; /* clears the composer */
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+  border: none;
+  border-radius: var(--poolse-radius-pill);
+  padding: 8px 16px;
+  font-family: var(--poolse-font-body);
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+  box-shadow: 0 8px 22px -6px color-mix(in oklab, var(--poolse-brand) 60%, transparent);
+  z-index: 5;
+  transition: filter 0.12s;
+}
+
+.poolse-conversation__scroll-to-new:hover {
+  filter: brightness(1.05);
+}
+
+/* Make the parent positioning context — the conversation container */
+.poolse-conversation {
+  position: relative;
+}

@@ -104,6 +104,7 @@ export function ConversationView({
     send,
     edit,
     delete: deleteMsg,
+    markReadUpTo,
   } = useMessages(conversationId);
   const { typing, signalTyping } = useTyping(conversationId);
   const status = useRealtimeStatus();
@@ -115,16 +116,84 @@ export function ConversationView({
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-scroll on new tail message.
+  // Track whether the user is currently pinned to the bottom of the
+  // scroller. We use this for TWO things: (a) auto-scroll on new tail
+  // only when at bottom (no jumping while reading history), and (b)
+  // auto-mark-read once the latest message scrolls into view.
+  const [atBottom, setAtBottom] = useState(true);
+  const [newCountWhileAway, setNewCountWhileAway] = useState(0);
+
+  // Observe the bottom sentinel — it's a 1px div at the end of the
+  // message list. Visible = scroller is pinned to bottom.
+  useEffect(() => {
+    const el = bottomSentinelRef.current;
+    if (!el) return;
+    const root = listRef.current;
+    if (!root) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return;
+        setAtBottom(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          // Coming back to the bottom — clear the "new messages while
+          // away" badge.
+          setNewCountWhileAway(0);
+        }
+      },
+      { root, threshold: 0.95 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // Auto-scroll on new tail message, but only when the user is at the
+  // bottom. Otherwise just bump the unread counter so the
+  // scroll-to-new button can show it.
   useEffect(() => {
     const tail = messages[messages.length - 1];
     if (!tail) return;
     if (tail.id === lastMessageIdRef.current) return;
+    const isFirstSet = lastMessageIdRef.current === null;
     lastMessageIdRef.current = tail.id;
+
+    if (atBottom || isFirstSet) {
+      const el = listRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    } else if (me && tail.sender_id !== me.id) {
+      // Only count messages from OTHERS as "unread while scrolled up"
+      // — your own sends are obviously not new-to-you.
+      setNewCountWhileAway((n) => n + 1);
+    }
+  }, [messages, atBottom, me]);
+
+  // Auto-mark-read whenever the latest message is in view.
+  // Fire-and-forget — the server handles dedup if we call repeatedly
+  // with the same id, and `useMessages.markReadUpTo` doesn't mutate
+  // local state.
+  const lastMarkedReadRef = useRef<Uuid | null>(null);
+  useEffect(() => {
+    if (!atBottom) return;
+    if (messages.length === 0) return;
+    const tail = messages[messages.length - 1];
+    if (!tail) return;
+    // Don't mark optimistic temp messages (which have
+    // sequence === MAX_SAFE_INTEGER) — wait for the canonical row.
+    if (tail.sequence === Number.MAX_SAFE_INTEGER) return;
+    if (lastMarkedReadRef.current === tail.id) return;
+    lastMarkedReadRef.current = tail.id;
+    void markReadUpTo(tail.id).catch(() => {
+      // Allow re-attempt on next tail.
+      lastMarkedReadRef.current = null;
+    });
+  }, [atBottom, messages, markReadUpTo]);
+
+  const scrollToBottom = () => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+    setNewCountWhileAway(0);
+  };
 
   // Compute the highest message sequence that ANY other member has read.
   // We treat any message with `sequence <= maxReadByOthers` as "read",
@@ -256,7 +325,21 @@ export function ConversationView({
           {error && (
             <div className="poolse-conversation__empty">Failed to load: {error.message}</div>
           )}
+
+          {/* Bottom sentinel for the IntersectionObserver. Lives at the
+              very end so its visibility ≡ "scroller is at bottom". */}
+          <div ref={bottomSentinelRef} aria-hidden="true" style={{ height: 1 }} />
         </div>
+
+        {!atBottom && newCountWhileAway > 0 && (
+          <button
+            type="button"
+            className="poolse-conversation__scroll-to-new"
+            onClick={scrollToBottom}
+          >
+            ↓ {newCountWhileAway} new {newCountWhileAway === 1 ? 'message' : 'messages'}
+          </button>
+        )}
 
         <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
 
