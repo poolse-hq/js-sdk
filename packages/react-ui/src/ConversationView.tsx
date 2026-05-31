@@ -9,7 +9,7 @@
 // MessageActions + ReactionStrip + AttachmentPreview + ThreadView —
 // directly. ConversationView is just the canonical wiring.
 
-import type { Attachment, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
+import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import {
   useAttachmentUpload,
   useMembers,
@@ -19,15 +19,11 @@ import {
   useTyping,
 } from '@poolse/react';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AttachmentPreview } from './AttachmentPreview.js';
-import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { usePoolseFonts } from './fonts.js';
 import { MentionInput } from './MentionInput.js';
-import { MessageActions } from './MessageActions.js';
-import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer } from './MessageComposer.js';
+import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
-import { ReactionStrip } from './Reactions.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
 
@@ -295,31 +291,42 @@ export function ConversationView({
           ) : messages.length === 0 ? (
             <div className="poolse-conversation__empty">{emptyState ?? 'No messages yet.'}</div>
           ) : (
-            messages.map((msg) => (
-              <Fragment key={msg.id}>
-                {renderMessage
-                  ? renderMessage(msg, me?.id ?? null)
-                  : defaultRenderMessage({
-                      msg,
-                      meId: me?.id ?? null,
-                      reactions,
-                      attachments,
-                      actions,
-                      threads,
-                      readReceipts,
-                      maxReadByOthers,
-                      editing: editingId === msg.id,
-                      onStartEdit: () => setEditingId(msg.id),
-                      onCancelEdit: () => setEditingId(null),
-                      onSaveEdit: async (body: string) => {
-                        await edit(msg.id, body);
-                        setEditingId(null);
-                      },
-                      onDelete: () => void deleteMsg(msg.id),
-                      onOpenThread: () => setThreadRootId(msg.id),
-                    })}
-              </Fragment>
-            ))
+            messages.map((msg) => {
+              if (renderMessage) {
+                return <Fragment key={msg.id}>{renderMessage(msg, me?.id ?? null)}</Fragment>;
+              }
+              // Read-state per row: only self messages, and only when
+              // readReceipts is on. "read" if any other member's read
+              // cursor is at or past this message's sequence.
+              const isSelf = me !== null && msg.sender_id === me.id;
+              const readState =
+                readReceipts && isSelf && maxReadByOthers !== null
+                  ? maxReadByOthers >= msg.sequence
+                    ? ('read' as const)
+                    : ('sent' as const)
+                  : undefined;
+              return (
+                <MessageRow
+                  key={msg.id}
+                  msg={msg}
+                  meId={me?.id ?? null}
+                  reactions={reactions}
+                  attachments={attachments}
+                  actions={actions}
+                  threads={threads}
+                  {...(readState ? { readState } : {})}
+                  editing={editingId === msg.id}
+                  onStartEdit={() => setEditingId(msg.id)}
+                  onCancelEdit={() => setEditingId(null)}
+                  onSaveEdit={async (body: string) => {
+                    await edit(msg.id, body);
+                    setEditingId(null);
+                  }}
+                  onDelete={() => void deleteMsg(msg.id)}
+                  onOpenThread={() => setThreadRootId(msg.id)}
+                />
+              );
+            })
           )}
 
           {error && (
@@ -360,130 +367,6 @@ export function ConversationView({
       )}
     </div>
   );
-}
-
-interface DefaultRenderProps {
-  msg: Message;
-  meId: string | null;
-  reactions: boolean;
-  attachments: boolean;
-  actions: boolean;
-  threads: boolean;
-  readReceipts: boolean;
-  maxReadByOthers: number | null;
-  editing: boolean;
-  onStartEdit: () => void;
-  onCancelEdit: () => void;
-  onSaveEdit: (body: string) => Promise<void>;
-  onDelete: () => void;
-  onOpenThread: () => void;
-}
-
-function defaultRenderMessage({
-  msg,
-  meId,
-  reactions,
-  attachments,
-  actions,
-  threads,
-  readReceipts,
-  maxReadByOthers,
-  editing,
-  onStartEdit,
-  onCancelEdit,
-  onSaveEdit,
-  onDelete,
-  onOpenThread,
-}: DefaultRenderProps): ReactNode {
-  const isSelf = meId !== null && msg.sender_id === meId;
-
-  // Read state: only self messages get the glyph. "read" if any other
-  // member's read cursor is at or past this message's sequence.
-  let readState: 'sent' | 'read' | undefined;
-  if (readReceipts && isSelf && maxReadByOthers !== null) {
-    readState = maxReadByOthers >= msg.sequence ? 'read' : 'sent';
-  }
-
-  // Reaction add/remove handled inside ReactionStrip via useReactions.
-  // We just decide whether to show it.
-  const showReactions = reactions && !msg.deleted_at;
-  const showAttachments =
-    attachments && Array.isArray(msg.attachments) && msg.attachments.length > 0;
-  const showActions = actions && !msg.deleted_at && !editing;
-
-  return (
-    <div className={`poolse-message-row ${isSelf ? 'poolse-message-row--right' : ''}`}>
-      {editing ? (
-        <EditableMessageBubble
-          message={msg}
-          currentUserId={meId}
-          {...(readState ? { readState } : {})}
-          editing
-          onSave={onSaveEdit}
-          onCancel={onCancelEdit}
-        />
-      ) : (
-        <MessageBubble message={msg} currentUserId={meId} {...(readState ? { readState } : {})} />
-      )}
-
-      {showAttachments && (
-        <div className={`poolse-message-row__attachments ${isSelf ? 'is-self' : ''}`}>
-          {msg.attachments!.map((att: Attachment) => (
-            <AttachmentPreview key={att.id} attachment={att} />
-          ))}
-        </div>
-      )}
-
-      {showReactions && (
-        <div className={`poolse-message-row__reactions ${isSelf ? 'is-self' : ''}`}>
-          <ReactionStrip
-            messageId={msg.id}
-            conversationId={msg.conversation_id}
-            initialReactions={msg.reactions}
-            currentUserId={meId}
-            picker={false}
-          />
-        </div>
-      )}
-
-      {showActions && (
-        <div
-          className={`poolse-message-row__actions ${
-            isSelf ? 'poolse-message-row__actions--right' : 'poolse-message-row__actions--left'
-          }`}
-        >
-          <MessageActions
-            {...(reactions ? { onReact: (e) => void onReactWithStrip(msg, meId, e) } : {})}
-            {...(threads ? { onReply: onOpenThread } : {})}
-            {...(isSelf ? { onEdit: onStartEdit } : {})}
-            {...(isSelf ? { onDelete } : {})}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// React-via-hover-menu wires through the SAME useReactions instance
-// that ReactionStrip uses. Since both share the (messageId,
-// conversationId) key inside the SDK's TokenCache-style channel
-// dedup, the optimistic add lands once and the realtime echo upserts.
-// We rebuild a small ad-hoc instance here — there's no direct API to
-// "react via parent state" without lifting the entire reactions
-// state, which would be much more invasive.
-async function onReactWithStrip(
-  _msg: Message,
-  _meId: string | null,
-  _emoji: string,
-): Promise<void> {
-  // Intentionally a no-op — the actual add happens via the
-  // ReactionStrip's own picker. The MessageActions emoji picker is
-  // a convenience; reactions wired through useReactions inside
-  // ReactionStrip handle the state. A future polish pass could
-  // share a single useReactions instance per message, but for now
-  // the picker in ReactionStrip is the primary entry point.
-  // TODO: thread an addReaction callback through from a shared
-  // useReactions higher up so this button stops being decorative.
 }
 
 // ── Attachment picker button ─────────────────────────────────────────────

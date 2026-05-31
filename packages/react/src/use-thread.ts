@@ -17,6 +17,16 @@ interface UseThreadState {
    * `MessageCreateRequest` fields) as you would to `useMessages.send`.
    */
   sendReply: (attrs: Omit<MessageCreateRequest, 'reply_to_id'>) => Promise<Message>;
+  /**
+   * Edit a reply (or the root message). Optimistic with rollback —
+   * mirrors `useMessages.edit`. Server enforces sender-only authz.
+   */
+  edit: (messageId: Uuid, body: string) => Promise<Message>;
+  /**
+   * Soft-delete a reply (or the root message). Optimistic tombstone
+   * (`deleted_at` + null body) — mirrors `useMessages.delete`.
+   */
+  delete: (messageId: Uuid) => Promise<void>;
 }
 
 const PAGE_SIZE = 50;
@@ -142,7 +152,66 @@ export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadS
     [chat, conversationId, rootMessageId],
   );
 
-  return { replies, loading, error, hasMore, loadMore, sendReply };
+  const edit = useCallback(
+    async (messageId: Uuid, body: string): Promise<Message> => {
+      let previous: Message | undefined;
+      setReplies((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          previous = m;
+          return { ...m, body, edited_at: new Date().toISOString() };
+        }),
+      );
+
+      try {
+        const updated = await chat.messages.one(messageId).update({ body });
+        setReplies((prev) => prev.map((m) => (m.id === messageId ? updated : m)));
+        return updated;
+      } catch (err) {
+        if (previous) {
+          const restore = previous;
+          setReplies((prev) => prev.map((m) => (m.id === messageId ? restore : m)));
+        }
+        throw err;
+      }
+    },
+    [chat],
+  );
+
+  const deleteReply = useCallback(
+    async (messageId: Uuid): Promise<void> => {
+      let previous: Message | undefined;
+      setReplies((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          previous = m;
+          return { ...m, body: null, deleted_at: new Date().toISOString() };
+        }),
+      );
+
+      try {
+        await chat.messages.one(messageId).delete();
+      } catch (err) {
+        if (previous) {
+          const restore = previous;
+          setReplies((prev) => prev.map((m) => (m.id === messageId ? restore : m)));
+        }
+        throw err;
+      }
+    },
+    [chat],
+  );
+
+  return {
+    replies,
+    loading,
+    error,
+    hasMore,
+    loadMore,
+    sendReply,
+    edit,
+    delete: deleteReply,
+  };
 }
 
 function upsertById(prev: Message[], msg: Message): Message[] {
