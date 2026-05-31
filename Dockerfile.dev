@@ -1,0 +1,15 @@
+# Pinned to Node 22 LTS. Bump in lockstep with the engines.node in
+# package.json when LTS rolls.
+FROM node:22-alpine
+
+# Match the chatapp Elixir dev container's working dir convention.
+WORKDIR /app
+
+# Corepack ships with modern Node and is how we get pnpm without a
+# global install. The version is pinned in package.json's
+# `packageManager` field; corepack reads that on first invocation.
+RUN corepack enable
+
+# Source is bind-mounted at runtime via compose; nothing to COPY at
+# build time. Node modules live in a named volume to avoid the host
+# OS x container OS arch mismatch eating us alive.

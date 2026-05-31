@@ -1,0 +1,31 @@
+# Local development for the @poolse/sdk TypeScript package.
+# All work runs inside the `node` service to honour poolse's
+# docker-only-on-host rule (see poolse/README.md "Development").
+#
+# Usage:
+#   docker compose run --rm node pnpm install
+#   docker compose run --rm node pnpm test
+#   docker compose run --rm node pnpm build
+#   docker compose run --rm node pnpm check     # everything CI runs
+
+services:
+  node:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: poolse-js-sdk/dev:latest
+    working_dir: /app
+    volumes:
+      - .:/app
+      # Named volume for node_modules so the container's install
+      # doesn't get clobbered by an empty host directory on first run,
+      # and so a Linux container can hold Linux-built native modules
+      # while the host (mac/win) holds host-native ones for editors.
+      - node_modules:/app/node_modules
+      - pnpm_store:/root/.local/share/pnpm/store
+    tty: true
+    stdin_open: true
+
+volumes:
+  node_modules:
+  pnpm_store:
