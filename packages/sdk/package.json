@@ -1,8 +1,27 @@
 {
   "name": "@poolse/sdk",
-  "version": "0.0.2",
-  "description": "Headless TypeScript SDK for the poolse Chat-as-a-Service API. REST + WebSocket + offline queue. Framework-agnostic — use directly, or via @poolse/react.",
+  "version": "0.1.0",
+  "description": "Headless TypeScript SDK for poolse — realtime chat infrastructure. REST + WebSocket, framework-agnostic. Use directly, or via @poolse/react.",
   "license": "MIT",
+  "keywords": [
+    "poolse",
+    "chat",
+    "sdk",
+    "typescript",
+    "realtime",
+    "websocket",
+    "messaging",
+    "phoenix-channels"
+  ],
+  "homepage": "https://poolse.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/poolse-hq/js-sdk.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/poolse-hq/js-sdk/issues"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

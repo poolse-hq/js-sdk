@@ -4,13 +4,16 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
-## [Unreleased]
+## [0.1.0] — 2026-06-01
+
+First publishable release.
 
 ### Added
 
 - `Poolse` client class with REST resources: `me`, `conversations`
   (list/create/get/update + members), `messages` (send/list/mark-read +
-  edit/delete/replies/reactions on per-id handle).
+  edit/delete/replies/reactions on per-id handle), `attachments`
+  (presigned upload + download + delete).
 - `RestClient` low-level wrapper:
   - Bearer JWT via `config.getToken` (async or sync; nullable for
     deliberate unauthenticated calls).

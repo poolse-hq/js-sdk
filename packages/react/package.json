@@ -1,8 +1,26 @@
 {
   "name": "@poolse/react",
-  "version": "0.0.1",
-  "description": "Headless React hooks for the poolse SDK. Provider + useMessages / useTyping / usePresence / etc. NO UI — bring your own.",
+  "version": "0.1.0",
+  "description": "Headless React hooks for poolse — realtime chat infrastructure. Provider + useMessages / useTyping / usePresence / useReactions / useAttachmentUpload / etc. NO UI.",
   "license": "MIT",
+  "keywords": [
+    "poolse",
+    "chat",
+    "react",
+    "hooks",
+    "realtime",
+    "websocket",
+    "messaging"
+  ],
+  "homepage": "https://poolse.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/poolse-hq/js-sdk.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/poolse-hq/js-sdk/issues"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

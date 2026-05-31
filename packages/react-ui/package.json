@@ -1,8 +1,26 @@
 {
   "name": "@poolse/react-ui",
-  "version": "0.0.1",
-  "description": "Plug-and-play React components for poolse. Built on @poolse/react hooks; opinionated defaults with CSS-variable theming + render-slot escape hatches.",
+  "version": "0.1.0",
+  "description": "Plug-and-play React components for poolse — realtime chat infrastructure. Brand-aligned defaults, CSS-variable theming, render-prop escape hatches.",
   "license": "MIT",
+  "keywords": [
+    "poolse",
+    "chat",
+    "react",
+    "ui",
+    "components",
+    "messaging",
+    "realtime"
+  ],
+  "homepage": "https://poolse.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/poolse-hq/js-sdk.git",
+    "directory": "packages/react-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/poolse-hq/js-sdk/issues"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
