@@ -6,6 +6,18 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Added
+
+- `MemberReadEvent` — wire shape for the server's `member:read` push,
+  emitted on the conversation channel whenever any member advances
+  their read cursor.
+- `ConversationChannel.onMemberRead(fn)` — subscribe to read-cursor
+  advances. The companion `useMembers` hook wires this so the sender's
+  read-receipt glyph flips from "sent" to "read" without a refetch.
+- `Conversation.unread_count?: number` — populated by
+  `chat.conversations.list()`. Diff between `last_sequence` and the
+  caller's `last_read_message_id`'s sequence; powers sidebar badges.
+
 ### Changed
 
 - `PoolseConfig.apiUrl` is now optional. Defaults to the hosted

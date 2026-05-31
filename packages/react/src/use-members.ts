@@ -21,11 +21,13 @@ interface UseMembersState {
 
 /**
  * Live-ish membership list for a conversation. Initial REST fetch on
- * mount; mutation helpers update local state in place. No realtime
- * sync yet — the backend doesn't broadcast `member:joined` /
- * `member:left` events. For now, callers who depend on
- * cross-client member updates should poll with `refetch()` or
- * remount the hook.
+ * mount; mutation helpers update local state in place.
+ *
+ * Realtime: subscribes to `member:read` on the conversation channel
+ * and advances the matching membership's `last_read_message_id` /
+ * `last_read_at` so the sender's read-receipt glyph flips from "sent"
+ * to "read" without a refetch. `member:joined` / `member:left` aren't
+ * broadcast yet — for cross-client adds/removes, call `refetch()`.
  */
 export function useMembers(conversationId: Uuid): UseMembersState {
   const chat = usePoolse();
@@ -71,6 +73,30 @@ export function useMembers(conversationId: Uuid): UseMembersState {
     void fetcher(controller.signal);
     return () => controller.abort();
   }, [fetcher]);
+
+  // Real-time read-cursor sync. When ANY member reads, advance their
+  // membership row locally — the sender's UI uses
+  // max(memberships.last_read_message_id.sequence) to decide whether
+  // to show the "read" glyph, so this single state edit drives the
+  // whole receipt UI.
+  useEffect(() => {
+    if (!conversationId) return;
+    const channel = chat.realtime.conversation(conversationId);
+    const off = channel.onMemberRead((evt) => {
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === evt.user_id
+            ? {
+                ...m,
+                last_read_message_id: evt.last_read_message_id,
+                last_read_at: evt.last_read_at,
+              }
+            : m,
+        ),
+      );
+    });
+    return () => off();
+  }, [chat, conversationId]);
 
   const refetch = useCallback(() => fetcher(), [fetcher]);
 

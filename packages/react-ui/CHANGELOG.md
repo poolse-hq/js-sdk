@@ -33,11 +33,19 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   right-side `<ThreadView>`.
 - `readReceipts` — check-double glyph on own messages once another
   member's `last_read_message_id` advances past them. Auto-computed
-  from `useMembers`.
+  from `useMembers`. Now updates in real time via the new
+  `member:read` realtime event.
 
 Each toggle defaults to `true`, so dropping in
 `<ConversationView conversationId={id} />` gets you the full chat
 surface out of the box. Set any to `false` to slim down the view.
+
+### Added — new props
+
+- `<ConversationView onMarkedRead={(convId) => ...}>` — fires once
+  per fresh tail after auto-mark-read commits. Pair with
+  `useConversations().markConversationRead` to clear a sidebar
+  unread badge immediately (before the realtime echo).
 
 ## [0.1.2] — 2026-06-01
 

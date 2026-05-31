@@ -16,6 +16,10 @@ All notable changes to `@poolse/react` are documented here. Format follows
   `chat.conversations.one(id).messages.markRead`; advances the
   caller's read cursor and triggers server-side read-receipt
   broadcasts to other members.
+- `useConversations` now exposes `unreadCounts: Record<convId, number>`
+  plus `markConversationRead(convId)` for sidebar-badge UIs.
+- `useThread.edit(messageId, body)` / `useThread.delete(messageId)`
+  for inline reply editing inside `<ThreadView>`.
 
 ### Changed
 
@@ -23,6 +27,10 @@ All notable changes to `@poolse/react` are documented here. Format follows
   "skip fetch" (returns `{ members: [], loading: false }`) so
   callers can conditionally enable member loading without wrapping
   in a `enabled ?` guard.
+- `useMembers` subscribes to the new `member:read` realtime event
+  and advances the matching membership's `last_read_message_id` /
+  `last_read_at` in place. The sender's check-double glyph now
+  flips in real time without a refetch.
 - Provider auto-resolves the SDK's new default `apiUrl` when none
   is passed in config.
 

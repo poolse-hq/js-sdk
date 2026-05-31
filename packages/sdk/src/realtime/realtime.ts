@@ -20,6 +20,7 @@ import { PoolseError } from '../errors.js';
 import type { TokenCache } from '../token-cache.js';
 import type {
   ConversationCreatedEvent,
+  MemberReadEvent,
   MentionEvent,
   MessageDeletedEvent,
   MessageNewEvent,
@@ -260,6 +261,14 @@ export class ConversationChannel {
 
   onReactionRemoved(fn: (evt: ReactionEvent) => void): Unsubscribe {
     return this.subscribe('reaction:removed', fn as (p: unknown) => void);
+  }
+
+  /**
+   * A conversation member advanced their read cursor. Used to flip the
+   * sender's read-receipt glyph from "sent" to "read" in real time.
+   */
+  onMemberRead(fn: (evt: MemberReadEvent) => void): Unsubscribe {
+    return this.subscribe('member:read', fn as (p: unknown) => void);
   }
 
   onPresenceState(fn: (state: PresenceSnapshot) => void): Unsubscribe {

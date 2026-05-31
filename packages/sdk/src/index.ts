@@ -27,6 +27,7 @@ export {
 export { PoolseRealtime, ConversationChannel, UserChannel } from './realtime/realtime.js';
 export type {
   ConversationCreatedEvent,
+  MemberReadEvent,
   MentionEvent,
   MessageDeletedEvent,
   MessageNewEvent,

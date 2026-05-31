@@ -27,6 +27,19 @@ export interface ReactionEvent {
   user_id: Uuid;
 }
 
+/**
+ * `member:read` — a conversation member advanced their read cursor.
+ * Server broadcasts on `conversation:<id>` so the sender's
+ * read-receipt glyph (check vs check-double) updates in real time
+ * without needing to refetch the member list.
+ */
+export interface MemberReadEvent {
+  user_id: Uuid;
+  conversation_id: Uuid;
+  last_read_message_id: Uuid;
+  last_read_at: string;
+}
+
 /** Per-user mention push on the `user:<id>` channel. */
 export interface MentionEvent {
   message_id: Uuid;

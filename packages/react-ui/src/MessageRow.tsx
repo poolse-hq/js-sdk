@@ -10,12 +10,10 @@
 
 import type { Attachment, Message } from '@poolse/sdk';
 import { useReactions } from '@poolse/react';
-import { type ReactNode } from 'react';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble } from './MessageBubble.js';
-import { ReactionStrip } from './Reactions.js';
 
 export interface MessageRowProps {
   msg: Message;

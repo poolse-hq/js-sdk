@@ -1,5 +1,5 @@
-import type { Conversation, ConversationCreateRequest } from '@poolse/sdk';
-import { useCallback, useEffect, useState } from 'react';
+import type { Conversation, ConversationCreateRequest, Uuid } from '@poolse/sdk';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePoolse } from './provider.js';
 import { useMe } from './use-me.js';
 
@@ -9,6 +9,20 @@ interface UseConversationsState {
   error: Error | null;
   refetch: () => Promise<void>;
   create: (attrs: ConversationCreateRequest) => Promise<Conversation>;
+  /**
+   * Per-conversation unread count, keyed by conversation id. Sourced
+   * from `Conversation.unread_count` on the initial fetch and kept
+   * fresh as the caller marks conversations read (via `markRead`).
+   *
+   * Note: cross-conversation incrementing on a new inbound message
+   * requires subscribing to every conversation channel, which the SDK
+   * doesn't do by default. Counts in this map are accurate for the
+   * conversation the caller has open + correct at fetch time for the
+   * rest; refetch on a fresh tab focus for true reconciliation.
+   */
+  unreadCounts: Record<Uuid, number>;
+  /** Force a conversation's unread to 0 — invoked by `markReadUpTo`. */
+  markConversationRead: (conversationId: Uuid) => void;
 }
 
 /**
@@ -74,7 +88,27 @@ export function useConversations(): UseConversationsState {
     return off;
   }, [chat, me]);
 
-  return { conversations, loading, error, refetch, create };
+  // Force-zero an unread count without mutating the conversation row.
+  // Wired by ConversationView's auto-mark-read on scroll so the sidebar
+  // badge clears the moment the caller's IntersectionObserver fires
+  // — before the server roundtrip + realtime echo for `member:read`.
+  const markConversationRead = useCallback((conversationId: Uuid) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conversationId ? { ...c, unread_count: 0 } : c)),
+    );
+  }, []);
+
+  const unreadCounts = useMemo<Record<Uuid, number>>(() => {
+    const out: Record<Uuid, number> = {};
+    for (const c of conversations) {
+      if (typeof c.unread_count === 'number' && c.unread_count > 0) {
+        out[c.id] = c.unread_count;
+      }
+    }
+    return out;
+  }, [conversations]);
+
+  return { conversations, loading, error, refetch, create, unreadCounts, markConversationRead };
 }
 
 /**

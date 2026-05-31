@@ -71,6 +71,14 @@ export interface ConversationViewProps {
 
   /** Check-double glyph on own messages once another member's read cursor advances past them. */
   readReceipts?: boolean;
+
+  /**
+   * Fired once after the caller's auto-mark-read fires for a fresh
+   * message. Useful for clearing a sidebar unread badge before the
+   * `member:read` realtime echo round-trips. Receives the conv id so
+   * a single handler can switch between rooms.
+   */
+  onMarkedRead?: (conversationId: string) => void;
 }
 
 const TRUE = true;
@@ -87,6 +95,7 @@ export function ConversationView({
   actions = TRUE,
   threads = TRUE,
   readReceipts = TRUE,
+  onMarkedRead,
 }: ConversationViewProps) {
   usePoolseFonts(loadFonts);
 
@@ -179,11 +188,15 @@ export function ConversationView({
     if (tail.sequence === Number.MAX_SAFE_INTEGER) return;
     if (lastMarkedReadRef.current === tail.id) return;
     lastMarkedReadRef.current = tail.id;
-    void markReadUpTo(tail.id).catch(() => {
-      // Allow re-attempt on next tail.
-      lastMarkedReadRef.current = null;
-    });
-  }, [atBottom, messages, markReadUpTo]);
+    void markReadUpTo(tail.id)
+      .then(() => {
+        onMarkedRead?.(conversationId);
+      })
+      .catch(() => {
+        // Allow re-attempt on next tail.
+        lastMarkedReadRef.current = null;
+      });
+  }, [atBottom, messages, markReadUpTo, onMarkedRead, conversationId]);
 
   const scrollToBottom = () => {
     const el = listRef.current;
@@ -242,7 +255,6 @@ export function ConversationView({
       // Caller has no UI hook for upload errors yet; surface via console
       // so debugging is straightforward. A future polish pass can add a
       // toast slot.
-      // eslint-disable-next-line no-console
       console.error('attachment upload failed:', err);
     }
   };

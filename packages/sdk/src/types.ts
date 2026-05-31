@@ -52,6 +52,13 @@ export interface Conversation {
   last_message_at: IsoDateTime | null;
   /** Monotonic per-conversation sequence counter (last message's `sequence`). */
   last_sequence: number;
+  /**
+   * Number of messages the caller hasn't read yet
+   * (`last_sequence - sequence_of(my_last_read_message_id)`).
+   * Populated only by `chat.conversations.list()` — undefined when the
+   * conversation is fetched via other paths.
+   */
+  unread_count?: number;
   inserted_at: IsoDateTime;
   updated_at: IsoDateTime;
 }

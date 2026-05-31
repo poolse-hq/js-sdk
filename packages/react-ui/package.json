@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react-ui",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "description": "Plug-and-play React components for poolse — realtime chat infrastructure. Brand-aligned defaults, CSS-variable theming, render-prop escape hatches.",
   "license": "MIT",
   "keywords": [
