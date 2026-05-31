@@ -16,6 +16,18 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    // Map workspace package names to source so `tsc --noEmit` can
+    // run on a fresh checkout without first building dist/. The
+    // mapping is TS-config-only — it has no effect on the published
+    // package's `types` field (consumers still resolve via dist/).
+    // Paths in an extended config are resolved relative to the
+    // config that declares them (this file, at the monorepo root).
+    "baseUrl": ".",
+    "paths": {
+      "@poolse/sdk": ["packages/sdk/src/index.ts"],
+      "@poolse/react": ["packages/react/src/index.ts"],
+      "@poolse/react-ui": ["packages/react-ui/src/index.ts"]
+    }
   }
 }

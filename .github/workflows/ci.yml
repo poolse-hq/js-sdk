@@ -25,8 +25,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Build first so cross-workspace imports (`@poolse/react` →
+      # `@poolse/sdk`) resolve at runtime in the test step. The
+      # tsconfig also maps these to source for typecheck, but the
+      # tests load real built artifacts through Vite's resolver.
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test
-      - run: pnpm build
