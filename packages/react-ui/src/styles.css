@@ -209,7 +209,9 @@
   font-size: 15px;
   letter-spacing: -0.01em;
   flex-shrink: 0;
-  overflow: hidden;
+  /* NOTE: no `overflow: hidden` here — the presence dot sits at
+     right/bottom: -1px and must overhang the avatar. The <img> is
+     independently circle-clipped via `border-radius` on `img` below. */
   user-select: none;
 }
 
@@ -228,6 +230,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: inherit;
 }
 
 .poolse-avatar__presence {
@@ -1473,7 +1476,9 @@
 
 .poolse-msg-actions__picker {
   position: absolute;
-  bottom: calc(100% + 6px);
+  /* Picker appears BELOW the actions toolbar so the stack is
+     bubble → toolbar → picker, no overlap with the bubble body. */
+  top: calc(100% + 6px);
   left: 0;
   z-index: 10;
 }
@@ -1488,32 +1493,29 @@
   position: relative;
 }
 
+/* The actions toolbar sits BELOW the bubble — flush to the bubble's
+   trailing edge so it visually anchors to the message rather than
+   floating elsewhere on the row.
+   - Self (right-aligned) bubble  → toolbar right-aligned
+   - Other (left-aligned) bubble  → toolbar left-aligned
+   Reveals on hover/focus (desktop) or tap-on-bubble (touch — handled
+   in MessageRow.tsx, which sets data-actions-open). */
 .poolse-message-row__actions {
   position: absolute;
-  /* Vertically align with the bubble's top edge, slightly inset so
-     the toolbar visually centers on the first line of a multi-line
-     message. */
-  top: 4px;
+  top: 100%;
+  margin-top: 4px;
   z-index: 3;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s;
 }
 
-/* The toolbar sits BESIDE the bubble — never over it. That keeps
-   the entire bubble body clickable (links, embedded UI, etc.) and
-   sidesteps the messages-container overflow clipping that bit the
-   "float above" approach when a bubble was near the top of the
-   scrollable area.
-   - Self (right-aligned) bubble  → toolbar on the LEFT
-   - Other (left-aligned) bubble  → toolbar on the RIGHT
-   Both directions point INTO the messages container's free space. */
 .poolse-message-row__actions--right {
-  right: calc(100% + 6px);
+  right: 0;
 }
 
 .poolse-message-row__actions--left {
-  left: calc(100% + 6px);
+  left: 0;
 }
 
 .poolse-message-row:hover .poolse-message-row__actions,
@@ -1521,40 +1523,6 @@
 .poolse-message-row[data-actions-open] .poolse-message-row__actions {
   opacity: 1;
   pointer-events: auto;
-}
-
-/* Tap-reveal trigger for touch devices. Hidden where hover works
-   (desktop): the hover/focus reveal above already covers that case.
-   On touch, tap the `…` to open; tap outside the row to close. */
-.poolse-message-row__more {
-  display: none;
-  position: absolute;
-  top: -6px;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--poolse-border);
-  border-radius: 50%;
-  background: var(--poolse-surface);
-  color: var(--poolse-ink-2);
-  padding: 0;
-  cursor: pointer;
-  z-index: 3;
-  align-items: center;
-  justify-content: center;
-}
-
-.poolse-message-row--right .poolse-message-row__more {
-  right: -6px;
-}
-
-.poolse-message-row:not(.poolse-message-row--right) .poolse-message-row__more {
-  left: -6px;
-}
-
-@media (hover: none) {
-  .poolse-message-row__more {
-    display: inline-flex;
-  }
 }
 
 /* ─────────────────────────────────────────────────────────────

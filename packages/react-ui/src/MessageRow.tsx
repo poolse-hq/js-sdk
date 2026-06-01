@@ -126,11 +126,10 @@ export function MessageRow({
   const handleSave = onSaveEdit ?? (async () => undefined);
   const handleCancel = onCancelEdit ?? (() => undefined);
 
-  // Touch reveal: hover doesn't fire on touch devices, so we expose
-  // a small `…` button (visible only via @media (hover: none)) that
-  // toggles the action toolbar. State is row-local — open one row
-  // at a time wouldn't be much better and would add coordination
-  // overhead (a parent context just to track a tap-state).
+  // Touch reveal: hover doesn't fire on touch devices, so tapping
+  // the bubble itself toggles the action toolbar. Desktop continues
+  // to reveal on hover/focus via CSS — the tap path no-ops there to
+  // avoid hijacking text selection.
   const [actionsOpen, setActionsOpen] = useState(false);
   const rowRef = useRef<HTMLDivElement | null>(null);
 
@@ -146,6 +145,17 @@ export function MessageRow({
     document.addEventListener('pointerdown', onDown);
     return () => document.removeEventListener('pointerdown', onDown);
   }, [actionsOpen]);
+
+  const onRowClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only fire on touch-only viewports. Desktop keeps hover/focus.
+    if (typeof window === 'undefined' || !window.matchMedia('(hover: none)').matches) return;
+    // Don't hijack clicks on interactive children — links, attachment
+    // images (wrapped in <button>), reaction pills, edit textarea,
+    // composer, etc. Use closest() so deep targets are still caught.
+    const target = e.target as HTMLElement;
+    if (target.closest('a, button, input, textarea, label, select')) return;
+    setActionsOpen((o) => !o);
+  };
 
   return (
     <div
@@ -163,6 +173,7 @@ export function MessageRow({
         .join(' ')}
       data-message-id={msg.id}
       data-actions-open={actionsOpen || undefined}
+      onClick={onRowClick}
     >
       {editing ? (
         <EditableMessageBubble
@@ -229,18 +240,6 @@ export function MessageRow({
           <span>
             {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
           </span>
-        </button>
-      )}
-
-      {showActions && (
-        <button
-          type="button"
-          className="poolse-message-row__more"
-          aria-label="Show message actions"
-          aria-expanded={actionsOpen}
-          onClick={() => setActionsOpen((o) => !o)}
-        >
-          <PoolseIcon name="more-h" size={16} label={null} />
         </button>
       )}
 

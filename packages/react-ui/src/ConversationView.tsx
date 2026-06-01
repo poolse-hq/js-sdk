@@ -206,6 +206,12 @@ export function ConversationView({
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  // Guards re-entrant loadMore calls while one is in flight. Without
+  // this, IO would call loadMore again if the sentinel stays in view
+  // across the async gap. Plain ref (not state) so check + set is
+  // synchronous within the IO callback.
+  const loadingMoreRef = useRef(false);
 
   // Track whether the user is currently pinned to the bottom of the
   // scroller. We use this for TWO things: (a) auto-scroll on new tail
@@ -213,6 +219,38 @@ export function ConversationView({
   // auto-mark-read once the latest message scrolls into view.
   const [atBottom, setAtBottom] = useState(true);
   const [newCountWhileAway, setNewCountWhileAway] = useState(0);
+
+  // Auto load-more: a top sentinel + IO that fires when the user
+  // scrolls up to within `rootMargin` of the messages container's
+  // top. Reentry is blocked by `loadingMoreRef`, and the trigger
+  // no-ops when `hasMore === false` so we don't loop after history
+  // is exhausted. IO only fires on intersection-state transitions —
+  // staying intersecting across an async load doesn't re-fire on its
+  // own. The deps re-create the observer when `hasMore`/`loadMore`
+  // change, which is correct: a stale `loadMore` closure would call
+  // against the wrong cursor.
+  useEffect(() => {
+    const sentinel = topSentinelRef.current;
+    const root = listRef.current;
+    if (!sentinel || !root) return;
+    if (!hasMore) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) return;
+        if (loadingMoreRef.current) return;
+        loadingMoreRef.current = true;
+        void Promise.resolve(loadMore()).finally(() => {
+          loadingMoreRef.current = false;
+        });
+      },
+      // Fire when sentinel is within ~400px above the viewport — the
+      // user is approaching the top of loaded history, fetch ahead.
+      { root, rootMargin: '400px 0px 0px 0px', threshold: 0 },
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [hasMore, loadMore]);
 
   // Observe the bottom sentinel — it's a 1px div at the end of the
   // message list. Visible = scroller is pinned to bottom.
@@ -484,10 +522,11 @@ export function ConversationView({
           aria-live="polite"
           aria-relevant="additions"
         >
-          {hasMore && !loading && (
-            <button type="button" className="poolse-conversation__load-more" onClick={loadMore}>
-              Load older messages
-            </button>
+          {/* Top sentinel for the auto-load IntersectionObserver.
+              Rendered only while there's more history to fetch so IO
+              doesn't observe a dead element. */}
+          {hasMore && (
+            <div ref={topSentinelRef} aria-hidden="true" style={{ height: 1 }} />
           )}
 
           {loading && messages.length === 0 ? (
