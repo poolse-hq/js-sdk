@@ -1,6 +1,6 @@
 {
   "name": "@poolse/sdk",
-  "version": "0.2.0-alpha.6",
+  "version": "0.2.0-alpha.7",
   "description": "Headless TypeScript SDK for poolse — realtime chat infrastructure. REST + WebSocket, framework-agnostic. Use directly, or via @poolse/react.",
   "license": "MIT",
   "keywords": [

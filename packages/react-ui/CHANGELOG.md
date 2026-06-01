@@ -6,6 +6,18 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Changed — quote card polish
+
+- WhatsApp-style quote card visuals: compact padding, 4px Pulse Coral
+  accent stripe flush with the bubble edge, body text at 0.62 opacity
+  so the eye lands on the actual message. Self-bubble variant tints
+  with a dark overlay; other-bubble variant tints slightly darker than
+  the surface for visual "depth."
+- Optimistic quote preview: when you quote-reply, the card renders
+  immediately on the locally-inserted bubble (looked up from the
+  in-memory message list) instead of flashing in once the realtime
+  echo arrives ~100ms later.
+
 ### Added — quote replies (WhatsApp-style)
 
 - `<ConversationView quotations?>` (default `true`) — new feature

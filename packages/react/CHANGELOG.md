@@ -6,6 +6,16 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Fixed
+
+- Realtime read receipts now actually fire. The server-side broadcast
+  call in `Messaging.do_mark_read` was missing — the alpha.2 commit
+  added the channel handler and the SDK subscription but the broadcast
+  itself never made it into the commit, so no `member:read` event was
+  ever sent. Fixed in the matching server release; `useMembers` also
+  logs received events as `[poolse] member:read received` for easy
+  observability.
+
 ### Changed — thread replies routed to reply_count only
 
 - `useMessages` no longer adds incoming thread replies to the main

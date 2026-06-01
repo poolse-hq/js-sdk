@@ -353,6 +353,29 @@ export function ConversationView({
               if (renderMessage) {
                 return <Fragment key={msg.id}>{renderMessage(msg, me?.id ?? null)}</Fragment>;
               }
+              // Optimistic quote preview: a message we JUST sent has
+              // `quoted_message_id` set but no preloaded
+              // `quoted_message` yet (server echo brings that). Look it
+              // up in the local feed so the quote card renders
+              // immediately instead of flashing in once the realtime
+              // echo lands.
+              const enriched =
+                quotations && msg.quoted_message_id && !msg.quoted_message
+                  ? (() => {
+                      const original = messages.find((m) => m.id === msg.quoted_message_id);
+                      if (!original) return msg;
+                      return {
+                        ...msg,
+                        quoted_message: {
+                          id: original.id,
+                          sender_id: original.sender_id,
+                          body: original.body,
+                          deleted_at: original.deleted_at,
+                          inserted_at: original.inserted_at,
+                        },
+                      };
+                    })()
+                  : msg;
               // Read-state per row: only self messages, and only when
               // readReceipts is on. "read" if any other member's read
               // cursor is at or past this message's sequence.
@@ -366,7 +389,7 @@ export function ConversationView({
               return (
                 <div key={msg.id} data-message-id={msg.id}>
                   <MessageRow
-                    msg={msg}
+                    msg={enriched}
                     meId={me?.id ?? null}
                     reactions={reactions}
                     attachments={attachments}

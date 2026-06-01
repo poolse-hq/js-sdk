@@ -492,24 +492,32 @@
   color: var(--poolse-ink);
 }
 
-/* Quoted card rendered INSIDE a message bubble (a quote-reply's
-   reference to the original). Self-vs-other variants tint differently
-   so the card reads as part of the bubble on either side. */
+/* WhatsApp-style quoted card rendered INSIDE a message bubble — a
+   compact reference to the original message. Tap to scroll to the
+   source row.
+   Self-vs-other variants tint differently so the card reads as part
+   of the bubble on either side. */
 .poolse-quote {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 6px 10px;
+  align-items: stretch;
+  gap: 1px;
+  padding: 5px 9px;
   margin-bottom: 6px;
-  border-radius: var(--poolse-radius-sm, 6px);
+  border-radius: 6px;
   border: none;
+  border-left: 4px solid var(--poolse-brand);
   cursor: pointer;
   text-align: left;
   max-width: 100%;
   min-width: 0;
   font-family: var(--poolse-font-body);
-  transition: filter 0.12s;
+  /* The quote sits flush with the bubble's left padding so the
+     accent stripe lines up with the bubble's edge — WhatsApp-style. */
+  margin-left: -2px;
+  transition:
+    filter 0.12s,
+    background-color 0.12s;
 }
 
 .poolse-quote:disabled {
@@ -517,36 +525,47 @@
 }
 
 .poolse-quote--other {
-  background: var(--poolse-surface-2);
-  border-left: 3px solid var(--poolse-brand);
+  /* Darker tint than the surface bubble so the quote sits visually
+     "below" the main message body. */
+  background: color-mix(in oklab, var(--poolse-ink) 5%, var(--poolse-surface));
   color: var(--poolse-ink);
 }
 
 .poolse-quote--self {
-  /* Inside a coral self-bubble — invert so the quote stays readable. */
-  background: rgba(255, 255, 255, 0.18);
-  border-left: 3px solid rgba(255, 255, 255, 0.6);
+  /* Inside a coral self-bubble — semi-transparent white overlay so
+     the quote tints darker than the bubble (matches WhatsApp). */
+  background: rgba(0, 0, 0, 0.12);
+  border-left-color: rgba(255, 255, 255, 0.85);
   color: inherit;
 }
 
 .poolse-quote:hover:not(:disabled) {
-  filter: brightness(0.97);
+  filter: brightness(0.96);
 }
 
 .poolse-quote__sender {
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.01em;
+  line-height: 1.3;
 }
 
 .poolse-quote--other .poolse-quote__sender {
   color: var(--poolse-brand-strong);
 }
 
+.poolse-quote--self .poolse-quote__sender {
+  /* Slightly translucent white so it reads as accent without
+     stealing focus from the main body. */
+  color: rgba(255, 255, 255, 0.95);
+}
+
 .poolse-quote__body {
   font-size: 13px;
-  line-height: 1.4;
-  opacity: 0.85;
+  line-height: 1.35;
+  /* Muted text — the WhatsApp convention. The reader's eye should
+     bounce off this and land on the bubble's actual message. */
+  opacity: 0.62;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
