@@ -76,6 +76,62 @@ describe('useAttachmentUpload', () => {
     expect(result.current.uploading).toBe(false);
   });
 
+  it('tracks the queue + uploadAll resolves attachments in input order', async () => {
+    const att2 = { ...baseAttachment, id: 'a-2', original_filename: 'dog.png' };
+    const fetchFn = scriptedFetch([
+      jsonResponse(baseUploadResponse, { status: 201 }),
+      jsonResponse(
+        { ...baseUploadResponse, attachment: att2, upload: baseUploadResponse.upload },
+        { status: 201 },
+      ),
+      new Response(null, { status: 200 }),
+      new Response(null, { status: 200 }),
+    ]);
+    const { result } = renderHookWithProvider(() => useAttachmentUpload(), fetchFn);
+
+    let attachments: Awaited<ReturnType<typeof result.current.uploadAll>> = [];
+    await act(async () => {
+      attachments = await result.current.uploadAll([
+        {
+          body: new Blob(['x'], { type: 'image/png' }),
+          contentType: 'image/png',
+          byteSize: 1,
+          filename: 'cat.png',
+        },
+        {
+          body: new Blob(['y'], { type: 'image/png' }),
+          contentType: 'image/png',
+          byteSize: 1,
+          filename: 'dog.png',
+        },
+      ]);
+    });
+    expect(attachments.map((a) => a.id)).toEqual(['a-1', 'a-2']);
+    expect(result.current.queue.map((q) => q.status)).toEqual(['ready', 'ready']);
+    expect(result.current.queue.map((q) => q.filename)).toEqual(['cat.png', 'dog.png']);
+    expect(result.current.uploading).toBe(false);
+  });
+
+  it('remove() drops an item from the queue', async () => {
+    const fetchFn = scriptedFetch([
+      jsonResponse(baseUploadResponse, { status: 201 }),
+      new Response(null, { status: 200 }),
+    ]);
+    const { result } = renderHookWithProvider(() => useAttachmentUpload(), fetchFn);
+
+    await act(async () => {
+      await result.current.upload({
+        body: new Blob(['x'], { type: 'image/png' }),
+        contentType: 'image/png',
+        byteSize: 1,
+      });
+    });
+    expect(result.current.queue).toHaveLength(1);
+    const id = result.current.queue[0]!.localId;
+    act(() => result.current.remove(id));
+    expect(result.current.queue).toHaveLength(0);
+  });
+
   it('reset() clears state', async () => {
     const fetchFn = scriptedFetch([
       jsonResponse(baseUploadResponse, { status: 201 }),

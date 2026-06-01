@@ -22,11 +22,16 @@ function wrap(children: ReactNode) {
 }
 
 describe('<TypingIndicator>', () => {
-  it('renders nothing visible when no one is typing', () => {
+  it('keeps the live region mounted with empty text when no one is typing', () => {
     const { container } = render(wrap(<TypingIndicator typing={new Set()} />));
     const root = container.querySelector('.poolse-typing')!;
-    expect(root.getAttribute('aria-hidden')).toBe('true');
-    expect(root.querySelector('.poolse-typing__dots')).toBeNull();
+    // No data-typing attr → CSS visually hides the dot bubble.
+    expect(root.getAttribute('data-typing')).toBeNull();
+    // Live region must stay mounted so transitions into typing
+    // are announced politely.
+    const live = root.querySelector('[aria-live="polite"]')!;
+    expect(live).not.toBeNull();
+    expect(live.textContent).toBe('');
   });
 
   it('singular: "Alice is typing"', () => {

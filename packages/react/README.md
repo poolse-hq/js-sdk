@@ -49,21 +49,43 @@ function Chat({ conversationId }: { conversationId: string }) {
 
 ## Hooks at a glance
 
-| Hook                            | Returns                                                           |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `useMe()`                       | The signed-in End User                                            |
-| `useConversations()`            | List + `create` + realtime new-conversation push                  |
-| `useConversation(id)`           | Single conversation read + refetch                                |
-| `useMembers(convId)`            | Membership list + add/remove helpers                              |
-| `useMessages(convId)`           | Live messages + `send` + pagination + optimistic dedup            |
-| `useThread(convId, rootId)`     | Replies + `sendReply` + pagination                                |
-| `useTyping(convId)`             | Live `typing` set + `signalTyping` (debounced)                    |
-| `usePresence(convId)`           | Live `online` set                                                 |
-| `useReactions(messageId, opts)` | Live reaction map + add/remove                                    |
-| `useAttachmentUpload()`         | Stateful `upload(file)` with `uploading` + `error`                |
-| `useAttachmentUrl(id)`          | Presigned download URL                                            |
-| `useRealtimeStatus()`           | Socket lifecycle (connecting / connected / reconnecting / closed) |
-| `usePoolse()`                   | Raw `Poolse` instance (escape hatch)                              |
+| Hook                            | Returns                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `useMe()`                       | The signed-in End User                                                               |
+| `useConversations()`            | List + `create` + realtime new-conversation push                                     |
+| `useConversation(id)`           | Single conversation read + refetch                                                   |
+| `useMembers(convId)`            | Membership list + add/remove helpers                                                 |
+| `useMessages(convId)`           | Live messages + `send` + pagination + optimistic dedup                               |
+| `useThread(convId, rootId)`     | Replies + `sendReply` + pagination                                                   |
+| `useTyping(convId)`             | Live `typing` set + `signalTyping` (debounced)                                       |
+| `usePresence(convId)`           | Live `online` set                                                                    |
+| `useReactions(messageId, opts)` | Live reaction map + add/remove                                                       |
+| `useAttachmentUpload()`         | Upload queue with per-item progress, `upload` / `uploadAll` / `cancel` / `remove`    |
+| `useAttachmentUrl(id)`          | Presigned download URL                                                               |
+| `useUser(userId)`               | Customer-supplied profile via `config.userResolver`, cached + dedup'd                |
+| `useRealtimeStatus()`           | Socket lifecycle (connecting / connected / reconnecting / closed)                    |
+| `usePoolse()`                   | Raw `Poolse` instance (escape hatch)                                                 |
+
+## Identity resolution (`userResolver`)
+
+The SDK doesn't know your users' names or where their avatars live. Wire a `userResolver` once on the provider and every component that renders a sender (`<MessageBubble>`, `<MemberList>`, `<TypingIndicator>`, `<MentionInput>`, …) lights up automatically:
+
+```tsx
+<PoolseProvider
+  config={{
+    apiUrl,
+    getToken,
+    userResolver: async (userId) => {
+      const u = await fetch(`/api/users/by-poolse-id/${userId}`).then((r) => r.json());
+      return { displayName: u.full_name, avatarUrl: u.avatar_url };
+    },
+  }}
+>
+  …
+</PoolseProvider>
+```
+
+Resolved profiles are cached in-memory and concurrent lookups dedupe — a busy chat with 50 messages from 5 senders fires the resolver 5 times, not 50.
 
 ## What the provider gives you
 

@@ -10,7 +10,7 @@
 
 import type { Attachment, Message, Uuid } from '@poolse/sdk';
 import { useReactions, useUser } from '@poolse/react';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { Avatar } from './Avatar.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
@@ -126,8 +126,30 @@ export function MessageRow({
   const handleSave = onSaveEdit ?? (async () => undefined);
   const handleCancel = onCancelEdit ?? (() => undefined);
 
+  // Touch reveal: hover doesn't fire on touch devices, so we expose
+  // a small `…` button (visible only via @media (hover: none)) that
+  // toggles the action toolbar. State is row-local — open one row
+  // at a time wouldn't be much better and would add coordination
+  // overhead (a parent context just to track a tap-state).
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-close when the user taps anywhere outside this row.
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target;
+      if (t instanceof Node && rowRef.current && !rowRef.current.contains(t)) {
+        setActionsOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [actionsOpen]);
+
   return (
     <div
+      ref={rowRef}
       className={[
         'poolse-message-row',
         isSelf ? 'poolse-message-row--right' : '',
@@ -139,12 +161,8 @@ export function MessageRow({
       ]
         .filter(Boolean)
         .join(' ')}
-      // data-message-id lets `<ConversationView>`'s scroll-to-original
-      // querySelector find this row without an extra wrapper div in
-      // between. The wrapper version broke flex alignment because it
-      // took 100% width and left an empty band to the right of self
-      // bubbles.
       data-message-id={msg.id}
+      data-actions-open={actionsOpen || undefined}
     >
       {editing ? (
         <EditableMessageBubble
@@ -211,6 +229,18 @@ export function MessageRow({
           <span>
             {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
           </span>
+        </button>
+      )}
+
+      {showActions && (
+        <button
+          type="button"
+          className="poolse-message-row__more"
+          aria-label="Show message actions"
+          aria-expanded={actionsOpen}
+          onClick={() => setActionsOpen((o) => !o)}
+        >
+          <PoolseIcon name="more-h" size={16} label={null} />
         </button>
       )}
 

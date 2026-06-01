@@ -18,7 +18,14 @@ import {
   useRealtimeStatus,
   useTyping,
 } from '@poolse/react';
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { usePoolseFonts } from './fonts.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
 import { MentionInput } from './MentionInput.js';
@@ -27,6 +34,7 @@ import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
+import { UploadQueueStrip } from './UploadQueueStrip.js';
 
 export interface ConversationViewProps {
   conversationId: Uuid;
@@ -338,25 +346,78 @@ export function ConversationView({
     setTimeout(() => el.classList.remove('poolse-message-row--highlight'), 1600);
   };
 
-  // Attachment upload state — null between uploads, populated while one is in flight.
-  const { upload, uploading } = useAttachmentUpload();
+  // Attachment upload state — multi-file capable. The hook's queue
+  // drives per-item UI (progress chips above the composer).
+  const { queue: uploadQueue, uploadAll, cancel: cancelUpload, remove: removeUpload, uploading } =
+    useAttachmentUpload();
 
-  const onPickFile = async (file: File) => {
+  // Errored items linger so the user can dismiss them; ready items
+  // get cleared by the parent right after the send completes.
+  const visibleUploads = uploadQueue.filter(
+    (it) => it.status === 'pending' || it.status === 'uploading' || it.status === 'error',
+  );
+
+  const onPickFiles = async (files: File[]) => {
+    if (files.length === 0) return;
     try {
-      const att = await upload({
-        body: file,
-        contentType: file.type || 'application/octet-stream',
-        byteSize: file.size,
-        filename: file.name,
-      });
-      // Send a message with the attachment id. Empty body = attachment-only.
-      await send({ body: '', attachment_ids: [att.id] });
-    } catch (err) {
-      // Caller has no UI hook for upload errors yet; surface via console
-      // so debugging is straightforward. A future polish pass can add a
-      // toast slot.
-      console.error('attachment upload failed:', err);
+      const atts = await uploadAll(
+        files.map((f) => ({
+          body: f,
+          contentType: f.type || 'application/octet-stream',
+          byteSize: f.size,
+          filename: f.name,
+        })),
+      );
+      // One message carries all the attachments — feels right for
+      // multi-pick + drag-drop (vs spamming one message per file).
+      // Empty body = attachment-only.
+      await send({ body: '', attachment_ids: atts.map((a) => a.id) });
+      // Clear ready chips now that the message is delivered. Errored
+      // chips stay until the user dismisses them.
+      for (const it of uploadQueue) {
+        if (it.status === 'ready') removeUpload(it.localId);
+      }
+    } catch {
+      // Errored items remain visible in the upload strip with a
+      // dismiss button — that IS the user-facing surface for the
+      // failure; no further reporting needed.
     }
+  };
+
+  // Drag-and-drop state. `dragDepth` counts nested dragenter/dragleave
+  // pairs so the overlay only hides when the drag truly leaves the
+  // outer container (children fire leave→enter on every hop otherwise).
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepthRef = useRef(0);
+
+  const isFileDrag = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer?.types ?? []).includes('Files');
+
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!attachments || !isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setDragActive(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!attachments || !isFileDrag(e)) return;
+    // Must preventDefault on dragover for drop to fire.
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!attachments || !isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!attachments || !isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length > 0) void onPickFiles(files);
   };
 
   const onSendBody = async (body: string, opts?: { quoted_message_id?: Uuid }) => {
@@ -395,16 +456,34 @@ export function ConversationView({
 
   return (
     <div className="poolse-conversation-shell">
-      <div className="poolse-conversation">
+      <div
+        className={`poolse-conversation${dragActive ? ' is-drag-active' : ''}`}
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
         {status !== 'connected' && status !== 'idle' && (
-          <div className="poolse-conversation__status">
+          <div
+            className="poolse-conversation__status"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             {status === 'connecting' && 'Connecting…'}
             {status === 'reconnecting' && 'Reconnecting…'}
             {status === 'closed' && 'Disconnected'}
           </div>
         )}
 
-        <div className="poolse-conversation__messages" ref={listRef}>
+        <div
+          className="poolse-conversation__messages"
+          ref={listRef}
+          role="log"
+          aria-label="Conversation messages"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
           {hasMore && !loading && (
             <button type="button" className="poolse-conversation__load-more" onClick={loadMore}>
               Load older messages
@@ -529,10 +608,30 @@ export function ConversationView({
 
         <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
 
+        {attachments && (
+          <UploadQueueStrip
+            items={visibleUploads}
+            onCancel={cancelUpload}
+            onDismiss={removeUpload}
+          />
+        )}
+
         <div className="poolse-conversation__composer-row">
-          {attachments && <AttachmentPickerButton onPick={onPickFile} disabled={uploading} />}
+          {attachments && <AttachmentPickerButton onPick={onPickFiles} disabled={uploading} />}
           <div className="poolse-conversation__composer-flex">{Composer}</div>
         </div>
+
+        {dragActive && (
+          <div className="poolse-conversation__drop-overlay" aria-hidden="true">
+            <div className="poolse-conversation__drop-overlay-inner">
+              <PoolseIcon name="attachment" size={40} label={null} />
+              <div className="poolse-conversation__drop-overlay-title">Drop files to upload</div>
+              <div className="poolse-conversation__drop-overlay-hint">
+                They'll be sent in one message
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {threads && threadRoot && (
@@ -554,7 +653,7 @@ function AttachmentPickerButton({
   onPick,
   disabled,
 }: {
-  onPick: (file: File) => void;
+  onPick: (files: File[]) => void;
   disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -563,10 +662,11 @@ function AttachmentPickerButton({
       <input
         ref={inputRef}
         type="file"
+        multiple
         className="poolse-attach-input"
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onPick(f);
+          const files = Array.from(e.target.files ?? []);
+          if (files.length > 0) onPick(files);
           // Reset so picking the same file twice still fires onChange.
           e.target.value = '';
         }}
@@ -576,8 +676,8 @@ function AttachmentPickerButton({
         className="poolse-attach-btn"
         onClick={() => inputRef.current?.click()}
         disabled={disabled}
-        aria-label="Attach file"
-        title="Attach file"
+        aria-label="Attach files"
+        title="Attach files"
       >
         <PoolseIcon name="attachment" size={20} label={null} />
       </button>

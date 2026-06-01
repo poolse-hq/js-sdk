@@ -234,6 +234,14 @@ export function MentionInput({
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           disabled={disabled || sending}
+          aria-label={placeholder}
+          role="combobox"
+          aria-expanded={Boolean(mention && filtered.length > 0)}
+          aria-controls="poolse-mention-menu"
+          aria-autocomplete="list"
+          {...(mention && filtered.length > 0
+            ? { 'aria-activedescendant': `poolse-mention-opt-${activeIdx}` }
+            : {})}
         />
         <button
           type="submit"
@@ -246,10 +254,16 @@ export function MentionInput({
       </div>
 
       {mention && filtered.length > 0 && (
-        <div className="poolse-mention-menu" role="listbox" aria-label="Members">
+        <div
+          id="poolse-mention-menu"
+          className="poolse-mention-menu"
+          role="listbox"
+          aria-label="Members"
+        >
           {filtered.map((m, i) => (
             <div
               key={m.id}
+              id={`poolse-mention-opt-${i}`}
               role="option"
               aria-selected={i === activeIdx}
               className={`poolse-mention-menu__item${i === activeIdx ? ' poolse-mention-menu__item--active' : ''}`}

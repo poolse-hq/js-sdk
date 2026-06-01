@@ -1,86 +1,206 @@
 import type { Attachment, AttachmentUploadInput } from '@poolse/sdk';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 
-interface UseAttachmentUploadState {
-  /** Last successfully uploaded attachment, or null. */
+export type UploadItemStatus = 'pending' | 'uploading' | 'ready' | 'error' | 'cancelled';
+
+export interface UploadItem {
+  /** Local-only id (random per-enqueue). Stable for keys + `cancel(localId)` / `remove(localId)`. */
+  localId: string;
+  filename: string;
+  contentType: string;
+  byteSize: number;
+  status: UploadItemStatus;
+  /** Bytes uploaded so far; 0 until the PUT actually begins. */
+  loaded: number;
+  /** Resolved attachment row once `status === 'ready'`. Null otherwise. */
   attachment: Attachment | null;
+  /** Set when `status === 'error'`. */
+  error: Error | null;
+}
+
+interface UseAttachmentUploadState {
+  /** Every enqueued item, in enqueue order, until removed by `remove()` / `reset()`. */
+  queue: UploadItem[];
+  /**
+   * Last attachment that reached `ready`, for the common one-file
+   * "did the upload finish" check. Null after `reset()` / `remove()`
+   * of the most recent ready item. Multi-file callers should iterate
+   * `queue` instead.
+   */
+  attachment: Attachment | null;
+  /** True while at least one item is `pending` or `uploading`. */
   uploading: boolean;
+  /** Most recent item-level error, or null. */
   error: Error | null;
   /**
-   * Run the upload pipeline (presigned-URL request + PUT). Updates
-   * local state with the resolved attachment on success; sets `error`
-   * and rethrows on failure so callers can surface a toast.
+   * Enqueue a single upload. Resolves with the final attachment row.
+   * Rejects with the underlying error (item's `status` becomes
+   * `'error'`); aborts surface as a DOMException('AbortError') and the
+   * item's status becomes `'cancelled'`.
    */
   upload: (input: AttachmentUploadInput) => Promise<Attachment>;
-  /** Reset state (clears `attachment`, `error`). */
+  /**
+   * Enqueue many at once — drag-and-drop, multi-file picker. Items run
+   * in parallel (the SDK is per-call independent). Resolves with the
+   * attachments in the same order as the input; if any item fails the
+   * whole promise rejects after the others settle.
+   */
+  uploadAll: (inputs: AttachmentUploadInput[]) => Promise<Attachment[]>;
+  /** Abort an in-flight upload. Sets the item's status to `cancelled`. No-op if not in flight. */
+  cancel: (localId: string) => void;
+  /** Drop an item from the queue. Cancels first if it's still in flight. */
+  remove: (localId: string) => void;
+  /** Drop everything + abort any in-flight uploads. */
   reset: () => void;
 }
 
+interface InFlight {
+  controller: AbortController;
+}
+
 /**
- * Stateful wrapper around `chat.attachments.upload`. Provides
- * `uploading` + `error` flags for the common "show a spinner while
- * the PUT is in flight" UI, plus retention of the last attachment
- * so the caller can reference its id when sending a message.
+ * Stateful wrapper around `chat.attachments.upload`. Exposes a queue
+ * of in-flight / completed uploads with per-item progress + per-item
+ * cancel — drag-and-drop, multi-file picker, retry chips, all without
+ * the host app reimplementing AbortController plumbing.
  *
  * ```tsx
- * const { upload, uploading, attachment } = useAttachmentUpload();
- * const onPick = async (file: File) => {
- *   const att = await upload({
- *     body: file, contentType: file.type, byteSize: file.size, filename: file.name
- *   });
+ * const { upload, queue, cancel, remove } = useAttachmentUpload();
+ * const onPick = async (files: File[]) => {
+ *   const atts = await uploadAll(files.map(f => ({
+ *     body: f, contentType: f.type, byteSize: f.size, filename: f.name
+ *   })));
  *   await chat.conversations.one(convId).messages.send({
- *     body: 'attached',
- *     custom_data: { attachment_id: att.id },
+ *     body: '', attachment_ids: atts.map(a => a.id),
  *   });
  * };
  * ```
+ *
+ * The legacy `upload(input)` → `Promise<Attachment>` shape is preserved
+ * so older callers keep working — they just won't render the queue UI.
  */
 export function useAttachmentUpload(): UseAttachmentUploadState {
   const chat = usePoolse();
-  const [attachment, setAttachment] = useState<Attachment | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  // Track an in-flight upload's AbortController so unmount cancels it.
-  const inFlightRef = useRef<AbortController | null>(null);
+  const [queue, setQueue] = useState<UploadItem[]>([]);
+  const inFlightRef = useRef<Map<string, InFlight>>(new Map());
+  // Track mount status so async resolves don't setState on unmounted
+  // components. Strict-mode double-effects re-arm this on remount.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const v of inFlightRef.current.values()) v.controller.abort();
+      inFlightRef.current.clear();
+    };
+  }, []);
 
-  const upload = useCallback(
-    async (input: AttachmentUploadInput): Promise<Attachment> => {
-      // Cancel any prior in-flight upload — last-write-wins on intent.
-      inFlightRef.current?.abort();
+  const updateItem = useCallback((localId: string, patch: Partial<UploadItem>) => {
+    if (!mountedRef.current) return;
+    setQueue((q) => q.map((it) => (it.localId === localId ? { ...it, ...patch } : it)));
+  }, []);
+
+  const runUpload = useCallback(
+    async (localId: string, input: AttachmentUploadInput): Promise<Attachment> => {
       const controller = new AbortController();
-      inFlightRef.current = controller;
-
-      setUploading(true);
-      setError(null);
+      inFlightRef.current.set(localId, { controller });
+      updateItem(localId, { status: 'uploading', loaded: 0 });
       try {
-        const att = await chat.attachments.upload(input, { signal: controller.signal });
-        if (inFlightRef.current === controller) {
-          setAttachment(att);
-        }
+        const att = await chat.attachments.upload(input, {
+          signal: controller.signal,
+          onProgress: (e) => updateItem(localId, { loaded: e.loaded }),
+        });
+        updateItem(localId, {
+          status: 'ready',
+          loaded: input.byteSize,
+          attachment: att,
+          error: null,
+        });
         return att;
       } catch (err) {
-        if ((err as DOMException)?.name === 'AbortError') throw err;
+        if ((err as DOMException)?.name === 'AbortError') {
+          updateItem(localId, { status: 'cancelled' });
+          throw err;
+        }
         const e = err instanceof Error ? err : new Error(String(err));
-        setError(e);
+        updateItem(localId, { status: 'error', error: e });
         throw e;
       } finally {
-        if (inFlightRef.current === controller) {
-          setUploading(false);
-          inFlightRef.current = null;
-        }
+        inFlightRef.current.delete(localId);
       }
     },
-    [chat],
+    [chat, updateItem],
+  );
+
+  const enqueue = useCallback((input: AttachmentUploadInput): UploadItem => {
+    const localId = generateLocalId();
+    const item: UploadItem = {
+      localId,
+      filename: input.filename ?? 'file',
+      contentType: input.contentType,
+      byteSize: input.byteSize,
+      status: 'pending',
+      loaded: 0,
+      attachment: null,
+      error: null,
+    };
+    setQueue((q) => [...q, item]);
+    return item;
+  }, []);
+
+  const upload = useCallback(
+    (input: AttachmentUploadInput): Promise<Attachment> => {
+      const item = enqueue(input);
+      return runUpload(item.localId, input);
+    },
+    [enqueue, runUpload],
+  );
+
+  const uploadAll = useCallback(
+    (inputs: AttachmentUploadInput[]): Promise<Attachment[]> => {
+      // Enqueue all first so the UI shows the full queue immediately,
+      // then start the PUTs in parallel. Order in resolved array
+      // matches input order regardless of which PUT finishes first.
+      const items = inputs.map((inp) => ({ item: enqueue(inp), input: inp }));
+      return Promise.all(items.map(({ item, input }) => runUpload(item.localId, input)));
+    },
+    [enqueue, runUpload],
+  );
+
+  const cancel = useCallback((localId: string) => {
+    const inf = inFlightRef.current.get(localId);
+    if (inf) inf.controller.abort();
+  }, []);
+
+  const remove = useCallback(
+    (localId: string) => {
+      const inf = inFlightRef.current.get(localId);
+      if (inf) inf.controller.abort();
+      setQueue((q) => q.filter((it) => it.localId !== localId));
+    },
+    [],
   );
 
   const reset = useCallback(() => {
-    inFlightRef.current?.abort();
-    inFlightRef.current = null;
-    setAttachment(null);
-    setError(null);
-    setUploading(false);
+    for (const v of inFlightRef.current.values()) v.controller.abort();
+    inFlightRef.current.clear();
+    setQueue([]);
   }, []);
 
-  return { attachment, uploading, error, upload, reset };
+  const uploading = queue.some((it) => it.status === 'pending' || it.status === 'uploading');
+  // Last error in queue order — pendings/readies have null, so the
+  // most recently transitioned-to-error item wins.
+  const error = queue.reduce<Error | null>((acc, it) => it.error ?? acc, null);
+  // Last ready attachment — same convenience.
+  const attachment = queue.reduce<Attachment | null>((acc, it) => it.attachment ?? acc, null);
+
+  return { queue, attachment, uploading, error, upload, uploadAll, cancel, remove, reset };
+}
+
+function generateLocalId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  // Fallback for older runtimes (tests on Node 18 without crypto, etc).
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

@@ -39,21 +39,36 @@ That's it. Auto-loads the brand fonts (Bricolage Grotesque / Hanken Grotesk / Je
 
 ## Components
 
-| Component                              | Use                                                                       |
-| -------------------------------------- | ------------------------------------------------------------------------- |
-| `<ConversationView>`                   | Full chat surface: message list + typing indicator + composer             |
-| `<ConversationList>`                   | Sidebar of conversations the user belongs to                              |
-| `<MemberList>`                         | Roster for a conversation, with role badges + optional remove             |
-| `<MessageBubble>`                      | One message — coral for self, surface for others; read-receipt glyph      |
-| `<MessageComposer>`                    | Pill input + circular brand send button                                   |
-| `<MentionInput>`                       | Composer with `@` autocomplete                                            |
-| `<TypingIndicator>`                    | Three bouncing dots + names label                                         |
-| `<AttachmentPreview>`                  | Inline image (lazy thumbnail) OR file card with download                  |
-| `<ReactionStrip>` + `<ReactionPicker>` | Pills with counts + emoji picker                                          |
-| `<Avatar>`                             | Initials gradient + presence dot + image fallback                         |
-| `<PoolseIcon name="…" />`              | Any icon from the 41-icon brand set                                       |
-| `<PoolseLogo>`                         | Brand mark / lockup / wordmark, theme-aware                               |
-| `<PoolseFonts />`                      | Inject the brand fonts (idempotent; `ConversationView` does this for you) |
+| Component                              | Use                                                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `<ConversationView>`                   | Full chat surface: messages, typing, composer, reactions, threads, attachments — drag-drop + lightbox    |
+| `<ConversationList>`                   | Sidebar of conversations the user belongs to                                                              |
+| `<MemberList>`                         | Roster for a conversation, with role badges + optional remove                                             |
+| `<MessageBubble>`                      | One message — coral for self, surface for others; markdown body; read-receipt glyph                       |
+| `<MessageComposer>`                    | Pill input + circular brand send button                                                                   |
+| `<MentionInput>`                       | Composer with `@` autocomplete (combobox ARIA)                                                            |
+| `<TypingIndicator>`                    | Three bouncing dots + names label; live region for screen readers                                         |
+| `<AttachmentPreview>`                  | Inline image (lazy thumbnail) + lightbox on click, OR file card with download                             |
+| `<UploadQueueStrip>`                   | Chips with progress bar + cancel/dismiss for in-flight uploads                                            |
+| `<ReactionStrip>` + `<ReactionPicker>` | Pills with counts + emoji picker (keyboard-navigable)                                                     |
+| `<Avatar>`                             | Initials gradient + presence dot + image fallback                                                         |
+| `<UserName>` / `useDisplayName`        | Resolve a user_id to its display name via `userResolver` (3-tier fallback chain)                          |
+| `<ThreadView>`                         | Right-pane reply thread with focus management + ESC close                                                 |
+| `<PoolseIcon name="…" />`              | Any icon from the 41-icon brand set                                                                       |
+| `<PoolseLogo>`                         | Brand mark / lockup / wordmark, theme-aware                                                               |
+| `<PoolseFonts />`                      | Inject the brand fonts (idempotent; `ConversationView` does this for you)                                 |
+
+## What you get for free
+
+- **Multi-file uploads** — composer picker accepts multiple files; drag-and-drop a batch onto the conversation pane and they ship as one message
+- **Progress + cancel** — every upload shows a chip above the composer with live progress bar (XHR-driven) and per-item cancel
+- **Image lightbox** — click any image attachment to view full-size; ESC closes, click-outside closes, body scroll locks
+- **Markdown messages** — GFM-flavored (bold/italic/lists/code/blockquotes/strikethrough/autolinks); long messages auto-trim with a "Read more" toggle
+- **Group-chat avatars + sender labels** — auto-on when a conversation has 3+ members; resolved via your `userResolver`
+- **WhatsApp-style grouping** — same-sender messages within 5 min cluster visually; day separators between calendar days
+- **Quote replies + threads** — quote stays in the main feed; "Reply in thread" opens the side pane
+- **A11y baseline** — `role="log"` messages list, live regions for typing + status, focus management on overlays, scoped `prefers-reduced-motion`, keyboard-only emoji picker
+- **Mobile baseline** — 44px touch targets, 16px composer font (no iOS auto-zoom), `safe-area-inset` on lightbox + composer, tap-reveal for message actions, full-screen thread pane below 760px
 
 ## Theming
 

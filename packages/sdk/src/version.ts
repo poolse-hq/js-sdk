@@ -1,4 +1,3 @@
-// Pulled in here as a tiny standalone module so the test + build pipeline
-// have *something* non-trivial to exercise before the real client lands.
-// Bumped automatically by the release pipeline (TODO once 0.1.0 ships).
-export const version = '0.0.1';
+// Single source of truth for the SDK version at runtime. Kept in sync
+// with package.json by the release process.
+export const version = '1.0.0-rc.0';

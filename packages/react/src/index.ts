@@ -15,7 +15,11 @@ export { useThread } from './use-thread.js';
 export { useTyping } from './use-typing.js';
 export { usePresence } from './use-presence.js';
 export { useRealtimeStatus } from './use-realtime-status.js';
-export { useAttachmentUpload } from './use-attachment-upload.js';
+export {
+  useAttachmentUpload,
+  type UploadItem,
+  type UploadItemStatus,
+} from './use-attachment-upload.js';
 export { useAttachmentUrl } from './use-attachment-url.js';
 export { useUser, type UseUserState } from './use-user.js';
 

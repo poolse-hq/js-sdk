@@ -17,6 +17,7 @@ export {
 export { MeResource } from './resources/me.js';
 export { ConversationMessages, MessageHandle, MessagesResource } from './resources/messages.js';
 export { UsersResource } from './resources/users.js';
+export type { AttachmentProgressEvent } from './resources/attachments.js';
 export {
   AttachmentHandle,
   AttachmentsResource,

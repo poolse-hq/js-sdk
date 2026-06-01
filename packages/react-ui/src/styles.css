@@ -584,6 +584,13 @@
   min-height: 22px;
 }
 
+/* Hide the decorative bubble + label visually when nobody is typing
+   — the screen-reader live region stays mounted (empty string) so
+   the polite announcement fires on next change. */
+.poolse-typing:not([data-typing]) .poolse-typing__dots {
+  visibility: hidden;
+}
+
 .poolse-typing__dots {
   display: inline-flex;
   gap: 5px;
@@ -820,6 +827,45 @@
     border-color 0.15s,
     background-color 0.15s;
   max-height: 140px;
+}
+
+/* iOS auto-zooms when a focused text input has font-size < 16px.
+   Bump to exactly 16px on touch viewports so the page stays at its
+   intended scale on tap. */
+@media (max-width: 760px) {
+  .poolse-composer__input {
+    font-size: 16px;
+  }
+
+  /* WCAG 2.5.5 / Apple HIG: 44x44 minimum touch target for primary
+     icon controls. Desktop sizes stay tight; mobile gets the bump.
+     Inner icon stays the same — only the hit-area grows. */
+  .poolse-composer__send,
+  .poolse-attach-btn,
+  .poolse-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* The hover-revealed message-actions toolbar isn't reachable by
+     touch (no hover state). The toolbar buttons size up so when the
+     `…` tap-reveal opens it, taps land reliably. */
+  .poolse-msg-actions__btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Tighten horizontal padding so bubbles can stretch a bit wider
+     on narrow phones — readability over symmetry. */
+  .poolse-conversation__messages {
+    padding: 16px 8px;
+  }
+
+  /* Bubbles get a touch more breathing room — same column rules
+     desktop uses become cramped at <360px viewports. */
+  .poolse-message-row {
+    max-width: 88%;
+  }
 }
 
 .poolse-composer__input:focus {
@@ -1090,13 +1136,103 @@
   max-width: 320px;
 }
 
+.poolse-attachment__image-button {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  border-radius: var(--poolse-radius-md);
+  display: block;
+}
+
+.poolse-attachment__image-button:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 2px;
+}
+
 .poolse-attachment__image {
   display: block;
   max-width: 100%;
   max-height: 260px;
   border-radius: var(--poolse-radius-md);
-  cursor: zoom-in;
   background: var(--poolse-surface-2);
+}
+
+/* Image lightbox (Phase 4a-4) */
+.poolse-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 15, 14, 0.86);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: max(40px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+    max(40px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  cursor: zoom-out;
+  animation: poolse-lightbox-fade-in 0.14s ease-out;
+}
+
+.poolse-lightbox__image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--poolse-radius-md);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.6);
+  cursor: default;
+}
+
+.poolse-lightbox__close {
+  position: fixed;
+  top: max(20px, env(safe-area-inset-top));
+  right: max(24px, env(safe-area-inset-right));
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.12s;
+}
+
+.poolse-lightbox__close:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.poolse-lightbox__download {
+  position: fixed;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  text-decoration: none;
+  border-radius: var(--poolse-radius-pill);
+  font-family: var(--poolse-font-body);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.poolse-lightbox__download:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+@keyframes poolse-lightbox-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .poolse-attachment__file {
@@ -1381,9 +1517,44 @@
 }
 
 .poolse-message-row:hover .poolse-message-row__actions,
-.poolse-message-row:focus-within .poolse-message-row__actions {
+.poolse-message-row:focus-within .poolse-message-row__actions,
+.poolse-message-row[data-actions-open] .poolse-message-row__actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* Tap-reveal trigger for touch devices. Hidden where hover works
+   (desktop): the hover/focus reveal above already covers that case.
+   On touch, tap the `…` to open; tap outside the row to close. */
+.poolse-message-row__more {
+  display: none;
+  position: absolute;
+  top: -6px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--poolse-border);
+  border-radius: 50%;
+  background: var(--poolse-surface);
+  color: var(--poolse-ink-2);
+  padding: 0;
+  cursor: pointer;
+  z-index: 3;
+  align-items: center;
+  justify-content: center;
+}
+
+.poolse-message-row--right .poolse-message-row__more {
+  right: -6px;
+}
+
+.poolse-message-row:not(.poolse-message-row--right) .poolse-message-row__more {
+  left: -6px;
+}
+
+@media (hover: none) {
+  .poolse-message-row__more {
+    display: inline-flex;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -1609,6 +1780,9 @@
   gap: 0;
   border-top: 1px solid var(--poolse-border);
   background: var(--poolse-surface);
+  /* Clear the iPhone home-indicator strip when ConversationView sits
+     at the bottom of the viewport. No-op on devices without an inset. */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .poolse-conversation__composer-row > .poolse-attach-btn {
@@ -1714,4 +1888,199 @@
 /* Make the parent positioning context — the conversation container */
 .poolse-conversation {
   position: relative;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Drag-and-drop upload overlay (Phase 4a-2)
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-conversation__drop-overlay {
+  position: absolute;
+  inset: 6px;
+  border: 2px dashed var(--poolse-brand);
+  border-radius: var(--poolse-radius-lg);
+  background: color-mix(in oklab, var(--poolse-brand-soft) 92%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+  animation: poolse-drop-fade-in 0.12s ease-out;
+}
+
+.poolse-conversation__drop-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-conversation__drop-overlay-title {
+  font-family: var(--poolse-font-display);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+
+.poolse-conversation__drop-overlay-hint {
+  font-family: var(--poolse-font-body);
+  font-size: 13px;
+  color: var(--poolse-ink-2);
+}
+
+@keyframes poolse-drop-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Subtle visual cue on the surrounding container while dragging. */
+.poolse-conversation.is-drag-active .poolse-conversation__messages {
+  filter: blur(1px) saturate(0.9);
+  transition: filter 0.14s ease-out;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Upload queue strip — chips above the composer (Phase 4a-3)
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-upload-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--poolse-surface-2);
+  border-top: 1px solid var(--poolse-border);
+}
+
+.poolse-upload-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+  font-family: var(--poolse-font-body);
+  font-size: 13px;
+  color: var(--poolse-ink);
+  min-width: 0;
+}
+
+.poolse-upload-chip--error {
+  border-color: color-mix(in oklab, var(--poolse-error) 50%, var(--poolse-border));
+  background: color-mix(in oklab, var(--poolse-error) 8%, var(--poolse-surface));
+}
+
+.poolse-upload-chip__icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--poolse-ink-2);
+}
+
+.poolse-upload-chip--error .poolse-upload-chip__icon {
+  color: var(--poolse-error);
+}
+
+.poolse-upload-chip__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.poolse-upload-chip__filename {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poolse-upload-chip__bar {
+  height: 4px;
+  border-radius: var(--poolse-radius-pill);
+  background: var(--poolse-surface-2);
+  overflow: hidden;
+}
+
+.poolse-upload-chip__bar-fill {
+  height: 100%;
+  background: var(--poolse-brand);
+  transition: width 0.12s linear;
+  border-radius: inherit;
+}
+
+.poolse-upload-chip__error {
+  color: var(--poolse-error);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poolse-upload-chip__action {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--poolse-ink-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.12s;
+}
+
+.poolse-upload-chip__action:hover {
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Reduced motion — respect the user's OS preference (WCAG 2.3.3)
+   ───────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Scoped to the @poolse/react-ui surfaces — we don't want to
+     forcibly disable host-app animations from a third-party stylesheet. */
+  .poolse-conversation,
+  .poolse-conversation *,
+  .poolse-conversation-shell,
+  .poolse-conversation-shell *,
+  .poolse-thread,
+  .poolse-thread *,
+  .poolse-lightbox,
+  .poolse-lightbox *,
+  .poolse-upload-strip,
+  .poolse-upload-strip *,
+  .poolse-mention-menu,
+  .poolse-mention-menu *,
+  .poolse-reaction-picker,
+  .poolse-reaction-picker *,
+  .poolse-list,
+  .poolse-list * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The drag overlay's container blur reads as motion to some users
+     even though no transform actually moves — neutralize it. */
+  .poolse-conversation.is-drag-active .poolse-conversation__messages {
+    filter: none;
+  }
 }

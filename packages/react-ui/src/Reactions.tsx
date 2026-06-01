@@ -3,7 +3,7 @@
 
 import type { Uuid } from '@poolse/sdk';
 import { useReactions, type ReactionMap } from '@poolse/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { PoolseIcon } from './PoolseIcon.js';
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '😢', '🙏'] as const;
@@ -107,21 +107,65 @@ export function ReactionPicker({
   onPick: (emoji: string) => void;
   onClose?: () => void;
 }) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-focus first button on mount so keyboard users land inside
+  // the picker immediately. Without this, focus stays on the trigger
+  // and arrow keys do nothing useful.
+  useEffect(() => {
+    const firstBtn = rootRef.current?.querySelector('button');
+    if (firstBtn instanceof HTMLElement) firstBtn.focus();
+  }, []);
+
+  // Close on outside click. Listening in capture phase so the click
+  // on a sibling action button (e.g. the React toggle) reaches this
+  // first — otherwise the toggle re-opens it on the same click.
+  useEffect(() => {
+    if (!onClose) return;
+    const onPointer = (e: PointerEvent) => {
+      const t = e.target;
+      if (t instanceof Node && rootRef.current && !rootRef.current.contains(t)) {
+        onClose();
+      }
+    };
+    document.addEventListener('pointerdown', onPointer, true);
+    return () => document.removeEventListener('pointerdown', onPointer, true);
+  }, [onClose]);
+
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose?.();
+      return;
+    }
+    // Arrow-key roving focus across the row of emoji buttons.
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      const buttons = Array.from(
+        rootRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [],
+      );
+      const idx = buttons.findIndex((b) => b === document.activeElement);
+      if (idx === -1) return;
+      const nextIdx =
+        e.key === 'ArrowRight' ? (idx + 1) % buttons.length : (idx - 1 + buttons.length) % buttons.length;
+      buttons[nextIdx]?.focus();
+      e.preventDefault();
+    }
+  };
+
   return (
     <div
+      ref={rootRef}
       className="poolse-reaction-picker"
       role="menu"
+      aria-label="Pick a reaction"
       style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 6 }}
-      // Click-outside handled by the parent surface — picker stays
-      // simple. Esc closes via the keydown handler below.
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose?.();
-      }}
+      onKeyDown={onKey}
     >
       {COMMON_EMOJIS.map((e) => (
         <button
           key={e}
           type="button"
+          role="menuitem"
           className="poolse-reaction-picker__btn"
           onClick={() => onPick(e)}
           aria-label={`React with ${e}`}

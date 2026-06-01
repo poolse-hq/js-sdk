@@ -92,6 +92,31 @@ Need more control? Three escape hatches in order:
 2. **Component composition** — use individual pieces (`<MessageBubble>`, `<MessageComposer>`, `<TypingIndicator>`) directly.
 3. **Drop to `@poolse/react`** — write your own component using the same hooks `<ConversationView>` uses. No fork.
 
+## Wiring user identity
+
+The SDK doesn't store user names or avatars — that's your app's data. Pass `userResolver` once on the provider and every sender label, mention dropdown, member list, and read-receipt tooltip lights up automatically:
+
+```tsx
+<PoolseProvider
+  config={{
+    apiUrl,
+    getToken,
+    userResolver: async (userId) => {
+      const u = await fetch(`/api/users/by-poolse-id/${userId}`).then((r) => r.json());
+      return { displayName: u.full_name, avatarUrl: u.avatar_url };
+    },
+  }}
+>
+```
+
+See [`@poolse/react`](./packages/react#identity-resolution-userresolver) for caching semantics.
+
+## What's in v1
+
+- **A11y baseline** — `role="log"` messages, live regions for typing + status + connection, combobox ARIA on mentions, focus management on thread + lightbox, scoped `prefers-reduced-motion`.
+- **Mobile baseline** — 44px touch targets, 16px composer (no iOS auto-zoom), `safe-area-inset` on overlays + composer, `…` tap-reveal for message actions, full-screen thread pane <760px.
+- **Attachments** — multi-file picker, drag-and-drop a batch onto the conversation, XHR progress per item with cancel + retry-on-error dismissal, image lightbox with ESC + click-outside + body-scroll lock.
+
 ## Development
 
 All work runs inside Docker — nothing in this project should be installed on the host (matches the backend repo's rule).

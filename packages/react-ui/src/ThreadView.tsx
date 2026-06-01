@@ -40,6 +40,7 @@ export function ThreadView({
   );
 
   const listRef = useRef<HTMLDivElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const lastReplyIdRef = useRef<string | null>(null);
 
   // Auto-scroll on new reply (same pattern as ConversationView).
@@ -52,15 +53,34 @@ export function ThreadView({
     if (el) el.scrollTop = el.scrollHeight;
   }, [replies]);
 
+  // Focus the close button on open + ESC closes the pane. We do NOT
+  // restore focus to the previously-focused element on close — that's
+  // the parent's job (ConversationView focuses the message that
+  // spawned the thread), since the trigger isn't owned here.
+  useEffect(() => {
+    closeBtnRef.current?.focus();
+    if (!onClose) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const renderOne = renderMessage ?? defaultRenderReply;
 
   return (
-    <aside className="poolse-thread" aria-label="Thread">
+    <aside
+      className="poolse-thread"
+      role="complementary"
+      aria-label="Message thread"
+    >
       {/* Header */}
       <header className="poolse-thread__header">
         <div className="poolse-thread__title">Thread</div>
         {onClose && (
           <button
+            ref={closeBtnRef}
             type="button"
             className="poolse-icon-btn"
             onClick={onClose}

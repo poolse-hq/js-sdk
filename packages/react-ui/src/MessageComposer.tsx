@@ -116,6 +116,7 @@ export function MessageComposer({
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           disabled={disabled || sending}
+          aria-label={placeholder}
         />
         <button
           type="submit"

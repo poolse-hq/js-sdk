@@ -5,6 +5,7 @@
 
 import type { Attachment, Uuid } from '@poolse/sdk';
 import { useAttachmentUrl } from '@poolse/react';
+import { useEffect, useState } from 'react';
 import { PoolseIcon } from './PoolseIcon.js';
 
 export interface AttachmentPreviewProps {
@@ -23,6 +24,7 @@ export interface AttachmentPreviewProps {
 export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProps) {
   const isFullRow = 'content_type' in attachment;
   const { url, loading, error } = useAttachmentUrl(attachment.id);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   if (loading) {
     return (
@@ -49,17 +51,16 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
     const filename = isFullRow ? attachment.original_filename : null;
     return (
       <div className="poolse-attachment">
-        {/* Clicking opens the image in a new tab — same as a download
-            for raster formats. Customer can override via onClick. */}
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => {
+        <button
+          type="button"
+          className="poolse-attachment__image-button"
+          aria-label={filename ? `Open ${filename}` : 'Open image'}
+          onClick={() => {
             if (onClick) {
-              e.preventDefault();
               onClick({ id: attachment.id });
+              return;
             }
+            setLightboxOpen(true);
           }}
         >
           <img
@@ -68,7 +69,10 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
             alt={filename ?? 'attachment'}
             loading="lazy"
           />
-        </a>
+        </button>
+        {lightboxOpen && (
+          <Lightbox url={url} filename={filename} onClose={() => setLightboxOpen(false)} />
+        )}
       </div>
     );
   }
@@ -110,6 +114,76 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
           className="poolse-attachment__file-icon"
           label="Download"
         />
+      </a>
+    </div>
+  );
+}
+
+function Lightbox({
+  url,
+  filename,
+  onClose,
+}: {
+  url: string;
+  filename: string | null;
+  onClose: () => void;
+}) {
+  // ESC closes; lock background scroll while open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  // `position: fixed` escapes the scrollable messages container
+  // because nothing in that ancestor chain creates a new containing
+  // block (no transform / filter / perspective). If a host app wraps
+  // ConversationView in a `transform: ...` ancestor, this fixed
+  // overlay would scope to that — at which point a `createPortal`
+  // path is what they want (out of scope for the default surface).
+  return (
+    <div
+      className="poolse-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={filename ?? 'Image preview'}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        className="poolse-lightbox__close"
+        aria-label="Close"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        ×
+      </button>
+      {/* Clicking the image itself shouldn't close the lightbox — only
+          the backdrop. */}
+      <img
+        className="poolse-lightbox__image"
+        src={url}
+        alt={filename ?? 'attachment'}
+        onClick={(e) => e.stopPropagation()}
+      />
+      <a
+        className="poolse-lightbox__download"
+        href={url}
+        download={filename ?? undefined}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+      >
+        Download
       </a>
     </div>
   );

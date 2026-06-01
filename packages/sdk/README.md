@@ -48,12 +48,14 @@ chat.destroy();
 
 ## What it covers
 
-- **REST resources**: `me`, `conversations` (incl. members), `messages` (send / edit / delete / replies / reactions / mark-read), `attachments` (presigned upload + download + delete).
+- **REST resources**: `me`, `conversations` (incl. members), `messages` (send / edit / delete / replies / reactions / mark-read / quote-replies), `attachments` (presigned upload + download + delete with upload progress), `users` (customer-supplied profile cache).
 - **Realtime channels**: `message:new`, `message:updated`, `message:deleted`, `typing:start/stop`, `reaction:added/removed`, presence state + diff, per-user `mention:new` + `conversation:created`.
 - **Token caching** — `getToken` is called once per JWT lifetime, not per request. Auto-invalidates on 401 and re-issues.
 - **Idempotency** — every non-GET request carries an auto-generated `Idempotency-Key`, so retries (network or 5xx) never insert duplicates.
 - **Backoff** — exponential with full jitter, honors `Retry-After` on 429, never retries `AbortError`.
 - **Typed errors** — `AuthError` / `ApiError` / `NetworkError` / `RateLimitedError`, all `instanceof`-checkable.
+- **Upload progress** — pass `onProgress` to `attachments.upload(...)` and the SDK switches to XHR for the PUT so byte-level progress events fire during the upload to your storage backend.
+- **User resolution** — pass `userResolver(userId)` and `chat.users.get(userId)` returns customer-supplied `{ displayName, avatarUrl }` (in-memory cached + dedup'd). The React UI components pick this up automatically; vanilla callers can read it directly.
 
 ## Architecture pattern
 

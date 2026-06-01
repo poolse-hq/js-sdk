@@ -54,6 +54,24 @@ export interface AttachmentUploadInput {
 /** Options accepted by every attachment method. */
 export interface AttachmentOptions {
   signal?: AbortSignal;
+  /**
+   * Progress callback for `upload()`. Called periodically during the
+   * PUT phase (NOT during the presigned-URL request — that's a small
+   * JSON round-trip). When set, the SDK switches to XHR for the PUT
+   * since the standard `fetch` doesn't expose upload progress events.
+   *
+   * Customers using a custom `config.fetch` (e.g. node-fetch polyfill)
+   * lose progress reporting and the callback never fires — XHR is
+   * a browser-only API.
+   */
+  onProgress?: (event: AttachmentProgressEvent) => void;
+}
+
+export interface AttachmentProgressEvent {
+  /** Bytes uploaded so far. */
+  loaded: number;
+  /** Total bytes — equals `input.byteSize` (passed back for convenience). */
+  total: number;
 }
 
 /** Top-level `/v1/attachments` collection. */
@@ -122,6 +140,19 @@ export class AttachmentsResource {
 
     const { attachment, upload } = await this.requestUpload(req, opts);
 
+    // Progress reporting requires XHR — `fetch` doesn't expose upload
+    // events. Drop to XHR only when the caller actually wants progress;
+    // otherwise stick with `fetch` (handles streams + Node polyfills
+    // that XHR doesn't).
+    if (opts.onProgress && typeof XMLHttpRequest !== 'undefined') {
+      await xhrPut(upload.url, upload.method.toUpperCase(), upload.headers, input.body, {
+        byteSize: input.byteSize,
+        onProgress: opts.onProgress,
+        ...(opts.signal ? { signal: opts.signal } : {}),
+      });
+      return attachment;
+    }
+
     const putInit: RequestInit = {
       method: upload.method.toUpperCase(),
       headers: upload.headers,
@@ -177,3 +208,65 @@ export class AttachmentHandle {
     });
   }
 }
+
+/**
+ * XHR-based PUT with upload progress events. Used by `upload()` when
+ * the caller passes an `onProgress` callback — `fetch` doesn't
+ * expose upload progress.
+ *
+ * Browser-only: tests + Node polyfills don't define XMLHttpRequest,
+ * so the caller path that selects XHR vs fetch checks
+ * `typeof XMLHttpRequest !== 'undefined'` upstream.
+ */
+function xhrPut(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: BodyInit,
+  opts: {
+    byteSize: number;
+    onProgress: (e: AttachmentProgressEvent) => void;
+    signal?: AbortSignal;
+  },
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    for (const [k, v] of Object.entries(headers)) {
+      try {
+        xhr.setRequestHeader(k, v);
+      } catch {
+        // Some browsers refuse to set forbidden headers (Content-Length,
+        // etc.). The presigned URL still works without them.
+      }
+    }
+    xhr.upload.onprogress = (e) => {
+      // `lengthComputable` is true on R2 / S3; fall back to byteSize
+      // for older browsers that don't expose `total`.
+      const total = e.lengthComputable ? e.total : opts.byteSize;
+      opts.onProgress({ loaded: e.loaded, total });
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else
+        reject(new Error(`Poolse: presigned upload PUT failed (${xhr.status} ${xhr.statusText})`));
+    };
+    xhr.onerror = () => reject(new Error('Poolse: presigned upload PUT failed (network error)'));
+    xhr.onabort = () => {
+      // Surface as DOMException('AbortError') so callers can detect.
+      reject(new DOMException('Upload aborted', 'AbortError'));
+    };
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        xhr.abort();
+        return;
+      }
+      opts.signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    // body must be XHR-compatible: Blob, File, FormData, string,
+    // ArrayBufferView. Customers using a streaming body via fetch
+    // wouldn't pass `onProgress` (we'd be on the fetch path).
+    xhr.send(body as XMLHttpRequestBodyInit);
+  });
+}
+

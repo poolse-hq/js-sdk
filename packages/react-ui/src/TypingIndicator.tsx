@@ -17,20 +17,27 @@ export interface TypingIndicatorProps {
  */
 export function TypingIndicator({ typing, labelFor }: TypingIndicatorProps) {
   const ids = Array.from(typing);
+  const isTyping = ids.length > 0;
 
-  if (ids.length === 0) {
-    return <div className="poolse-typing" aria-hidden="true" />;
-  }
-
+  // Keep a single live region in the DOM at all times so screen
+  // readers announce the transition from idle → typing → idle.
+  // The dots are decorative + aria-hidden; only the label text is
+  // announced. `aria-atomic` ensures the whole sentence is read
+  // instead of just the diff (e.g. only "Alice").
   return (
-    <div className="poolse-typing">
-      <span className="poolse-typing__dots" role="status" aria-live="polite">
+    <div className="poolse-typing" data-typing={isTyping || undefined}>
+      <span className="poolse-typing__dots" aria-hidden="true">
         <span className="poolse-typing__dot" />
         <span className="poolse-typing__dot" />
         <span className="poolse-typing__dot" />
       </span>
-      <span className="poolse-typing__label">
-        <TypingLabel ids={ids} {...(labelFor ? { labelFor } : {})} />
+      <span
+        className="poolse-typing__label"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {isTyping ? <TypingLabel ids={ids} {...(labelFor ? { labelFor } : {})} /> : ''}
       </span>
     </div>
   );
