@@ -173,6 +173,7 @@ export function MessageRow({
         .join(' ')}
       data-message-id={msg.id}
       data-actions-open={actionsOpen || undefined}
+      data-avatar={showAvatar && !isSelf ? true : undefined}
       onClick={onRowClick}
     >
       {editing ? (
@@ -202,6 +203,27 @@ export function MessageRow({
             {...(readState ? { readState } : {})}
             {...(labelFor ? { labelFor } : {})}
             {...(onQuotedClick ? { onQuotedClick } : {})}
+            {...(showActions
+              ? {
+                  actionsTrigger: (
+                    <button
+                      type="button"
+                      className="poolse-message__chevron"
+                      aria-label="Show message actions"
+                      aria-expanded={actionsOpen}
+                      onClick={(e) => {
+                        // Chevron is a child of the row but we don't want the
+                        // row's tap-to-toggle to also fire on mobile (chevron
+                        // is hidden there anyway, but defensive).
+                        e.stopPropagation();
+                        setActionsOpen((o) => !o);
+                      }}
+                    >
+                      <PoolseIcon name="chevron-down" size={14} label={null} />
+                    </button>
+                  ),
+                }
+              : {})}
           />
         </BubbleWithAvatar>
       )}

@@ -12,6 +12,7 @@ import { useMe, useThread } from '@poolse/react';
 import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer } from './MessageComposer.js';
+import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
 export interface ThreadViewProps {
@@ -123,6 +124,21 @@ export function ThreadView({
   );
 }
 
+// Thread replies share the main-feed feature set (reactions,
+// attachments, action popover) so the popover affordances feel
+// consistent. Nested threads stay off — a thread can't spawn its
+// own thread — and edit/delete aren't wired in v1 since ThreadView
+// doesn't own that state.
 function defaultRenderReply(msg: Message, currentUserId: string | null) {
-  return <MessageBubble message={msg} currentUserId={currentUserId} />;
+  return (
+    <MessageRow
+      msg={msg}
+      meId={currentUserId}
+      reactions
+      attachments
+      actions
+      threads={false}
+      quotations={false}
+    />
+  );
 }

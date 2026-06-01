@@ -1,6 +1,6 @@
 import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
 import { useUser } from '@poolse/react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PoolseIcon } from './PoolseIcon.js';
@@ -63,6 +63,14 @@ export interface MessageBubbleProps {
    * `userResolver` config.
    */
   showSenderName?: boolean;
+  /**
+   * Slot for a "show actions" affordance — typically a chevron
+   * rendered by `<MessageRow>` that toggles the actions popover on
+   * desktop click. Positioned absolutely at the top-trailing corner
+   * inside the bubble so it overlays the message border; hidden by
+   * CSS until the row is hovered.
+   */
+  actionsTrigger?: ReactNode;
 }
 
 /**
@@ -84,6 +92,7 @@ export function MessageBubble({
   maxBodyLength = 0,
   markdown = false,
   showSenderName = false,
+  actionsTrigger,
 }: MessageBubbleProps) {
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
   const [expanded, setExpanded] = useState(false);
@@ -140,6 +149,7 @@ export function MessageBubble({
 
   return (
     <div className={className}>
+      {actionsTrigger}
       {renderSenderName && (
         <div className="poolse-message__sender" style={{ color: senderColorHex }}>
           {senderName}

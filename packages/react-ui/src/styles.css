@@ -366,6 +366,8 @@
   line-height: 1.4;
   word-wrap: break-word;
   overflow-wrap: anywhere;
+  /* Anchor for the chevron action-trigger overlay. */
+  position: relative;
 }
 
 .poolse-message--self {
@@ -1518,11 +1520,81 @@
   left: 0;
 }
 
-.poolse-message-row:hover .poolse-message-row__actions,
+/* Reveal the actions popover only on explicit open — keyboard focus
+   (focus-within) or click (data-actions-open via chevron on desktop /
+   tap-on-bubble on touch). Pure hover used to open it, but the gap
+   between bubble and popover was a no-mans-land that closed the popover
+   before the cursor reached it. The chevron trigger eliminates the
+   gap-crossing problem entirely. */
 .poolse-message-row:focus-within .poolse-message-row__actions,
 .poolse-message-row[data-actions-open] .poolse-message-row__actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* For other-side rows with avatar, the row spans avatar + gap + bubble.
+   Shift the popover right by the avatar slot (28px + 6px gap) so it
+   left-aligns with the bubble, not the avatar. */
+.poolse-message-row[data-avatar] .poolse-message-row__actions--left {
+  left: 34px;
+}
+
+/* Chevron action trigger — overlay at the bubble's top-trailing
+   corner. Hidden on touch (tap-on-bubble works there) and on screens
+   without hover. On desktop: hidden by default, visible on row hover
+   OR while the popover is open. WhatsApp-style affordance — discoverable
+   without being visually noisy. */
+.poolse-message__chevron {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--poolse-ink) 18%, transparent);
+  color: var(--poolse-on-brand);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.12s,
+    background-color 0.12s;
+  z-index: 2;
+}
+
+.poolse-message--other .poolse-message__chevron {
+  background: color-mix(in oklab, var(--poolse-ink-2) 18%, transparent);
+  color: var(--poolse-ink-2);
+}
+
+.poolse-message__chevron:hover {
+  background: color-mix(in oklab, var(--poolse-ink) 34%, transparent);
+}
+
+.poolse-message--other .poolse-message__chevron:hover {
+  background: color-mix(in oklab, var(--poolse-ink-2) 32%, transparent);
+  color: var(--poolse-ink);
+}
+
+.poolse-message-row:hover .poolse-message__chevron,
+.poolse-message-row:focus-within .poolse-message__chevron,
+.poolse-message-row[data-actions-open] .poolse-message__chevron {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Touch devices don't need the chevron — tap-on-bubble opens the
+   popover there. The chevron would also miss `:hover` on touch
+   anyway, but hiding it explicitly keeps the bubble visually clean. */
+@media (hover: none) {
+  .poolse-message__chevron {
+    display: none;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────
