@@ -1,12 +1,14 @@
 // React binding over `chat.users.get(userId)`.
 //
-// Subscribes to the cache via `useSyncExternalStore` so every bubble
-// rendering the same user re-renders together when the customer's
-// resolver lands. Concurrent requests for the same id share one
-// resolver call (dedup'd inside `UsersResource`).
+// Uses plain useState + useEffect (NOT `useSyncExternalStore`).
+// useSyncExternalStore reaches into React internals and surfaces
+// any latent React-duplication immediately as "Invalid hook call".
+// The pattern below works the same way for our purposes — read
+// from the cache on mount, subscribe for updates, update state —
+// without that fragility.
 
 import type { PoolseUserProfile, Uuid } from '@poolse/sdk';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import { usePoolse } from './provider.js';
 
 export interface UseUserState {
@@ -31,31 +33,37 @@ const EMPTY: UseUserState = { profile: null, loading: false };
  */
 export function useUser(userId: Uuid | null | undefined): UseUserState {
   const chat = usePoolse();
-
-  // Fire the fetch on mount + when the userId changes. UsersResource
-  // dedupes — N components asking for the same id on the same render
-  // tick share ONE resolver call.
-  useEffect(() => {
-    if (!userId) return;
-    // We don't need the resolved value here — the subscribe path
-    // below picks it up. Just trigger the lookup.
-    void chat.users.get(userId);
-  }, [chat, userId]);
-
-  const subscribe = (cb: () => void): (() => void) => {
-    if (!userId) return () => undefined;
-    return chat.users.subscribe(userId, cb);
-  };
-
-  const getSnapshot = (): UseUserState => {
+  const [state, setState] = useState<UseUserState>(() => {
     if (!userId) return EMPTY;
     const cached = chat.users.peek(userId);
-    if (cached === undefined) {
-      // Not in cache yet — useEffect above will fire the fetch.
-      return { profile: null, loading: true };
-    }
+    if (cached === undefined) return { profile: null, loading: true };
     return { profile: cached, loading: false };
-  };
+  });
 
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  useEffect(() => {
+    if (!userId) {
+      setState(EMPTY);
+      return;
+    }
+
+    const apply = () => {
+      const cached = chat.users.peek(userId);
+      if (cached === undefined) {
+        setState({ profile: null, loading: true });
+      } else {
+        setState({ profile: cached, loading: false });
+      }
+    };
+
+    // Subscribe BEFORE triggering the fetch so we never miss the
+    // notify if the resolver lands synchronously.
+    const off = chat.users.subscribe(userId, apply);
+    void chat.users.get(userId);
+    // Pull a fresh snapshot in case the cache already has the entry
+    // (subscribe doesn't fire for existing values).
+    apply();
+    return off;
+  }, [chat, userId]);
+
+  return state;
 }
