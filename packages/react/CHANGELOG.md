@@ -4,6 +4,15 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [1.0.0-beta.0] — 2026-06-01
+
+First beta of the stable API. Promotes the full 0.2.x hook surface
+(useMessages with reply_count routing, useThread with full-thread
+fetch, useMembers with buffered read-receipt events,
+useConversations with unreadCounts + markConversationRead) to a
+stable namespace. No breaking changes relative to `0.2.0-alpha.7`
+— version bump + removed verbose diagnostic logs.
+
 ## [0.2.0] — 2026-06-01
 
 ### Fixed

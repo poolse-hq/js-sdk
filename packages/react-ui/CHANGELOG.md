@@ -4,6 +4,16 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [1.0.0-beta.0] — 2026-06-01
+
+First beta of the stable component surface. Promotes the full 0.2.x
+UI kit (ConversationView with reactions / mentions / attachments /
+threads / quotations / readReceipts flags, MessageRow with thread
+pill + quote card, MessageComposer / MentionInput with the quote
+chip, MessageBubble with the WhatsApp-style QuotedCard + fallback
+placeholder, ConversationList with unread badges) to a stable
+namespace. No breaking changes relative to `0.2.0-alpha.7`.
+
 ## [0.2.0] — 2026-06-01
 
 ### Changed — quote card polish

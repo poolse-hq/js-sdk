@@ -122,10 +122,6 @@ export function useMembers(conversationId: Uuid): UseMembersState {
     if (!conversationId) return;
     const channel = chat.realtime.conversation(conversationId);
     const off = channel.onMemberRead((evt) => {
-      // Diagnostic log so the read-receipt path is observable from
-      // DevTools without source-mapped breakpoints. Removing once
-      // the realtime pipeline is verified stable in customer use.
-      console.log('[poolse] member:read received', evt);
       // Buffer if the initial fetch hasn't landed — the fetcher's
       // try-block drains the buffer once it has membership rows to
       // apply the read to. See the matching ref pair above.

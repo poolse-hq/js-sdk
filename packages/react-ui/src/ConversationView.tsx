@@ -359,6 +359,14 @@ export function ConversationView({
               // up in the local feed so the quote card renders
               // immediately instead of flashing in once the realtime
               // echo lands.
+              // When a message has a quote-reply target but the
+              // server-preloaded preview hasn't landed (optimistic temp
+              // pre-echo, or a long-lived chat where the original is
+              // paginated outside the loaded window), synthesize the
+              // preview from local state so the card renders
+              // immediately. `<MessageBubble>` falls back to a
+              // "Replying to a message · Loading preview…" placeholder
+              // when even the local lookup misses.
               const enriched =
                 quotations && msg.quoted_message_id && !msg.quoted_message
                   ? (() => {
@@ -387,30 +395,29 @@ export function ConversationView({
                     : ('sent' as const)
                   : undefined;
               return (
-                <div key={msg.id} data-message-id={msg.id}>
-                  <MessageRow
-                    msg={enriched}
-                    meId={me?.id ?? null}
-                    reactions={reactions}
-                    attachments={attachments}
-                    actions={actions}
-                    threads={threads}
-                    quotations={quotations}
-                    {...(readState ? { readState } : {})}
-                    {...(labelFor ? { labelFor } : {})}
-                    editing={editingId === msg.id}
-                    onStartEdit={() => setEditingId(msg.id)}
-                    onCancelEdit={() => setEditingId(null)}
-                    onSaveEdit={async (body: string) => {
-                      await edit(msg.id, body);
-                      setEditingId(null);
-                    }}
-                    onDelete={() => void deleteMsg(msg.id)}
-                    onOpenThread={() => setThreadRootId(msg.id)}
-                    onQuote={() => setReplyingTo(msg)}
-                    onQuotedClick={scrollToOriginal}
-                  />
-                </div>
+                <MessageRow
+                  key={msg.id}
+                  msg={enriched}
+                  meId={me?.id ?? null}
+                  reactions={reactions}
+                  attachments={attachments}
+                  actions={actions}
+                  threads={threads}
+                  quotations={quotations}
+                  {...(readState ? { readState } : {})}
+                  {...(labelFor ? { labelFor } : {})}
+                  editing={editingId === msg.id}
+                  onStartEdit={() => setEditingId(msg.id)}
+                  onCancelEdit={() => setEditingId(null)}
+                  onSaveEdit={async (body: string) => {
+                    await edit(msg.id, body);
+                    setEditingId(null);
+                  }}
+                  onDelete={() => void deleteMsg(msg.id)}
+                  onOpenThread={() => setThreadRootId(msg.id)}
+                  onQuote={() => setReplyingTo(msg)}
+                  onQuotedClick={scrollToOriginal}
+                />
               );
             })
           )}

@@ -4,6 +4,15 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [1.0.0-beta.0] — 2026-06-01
+
+First beta of the stable API surface. Consolidates everything from
+the 0.2.x line (realtime read receipts, per-conv unread counts,
+thread + reply_count, quote replies, MemberReadEvent, attachment
+preloads, the AbortError preservation fix). No breaking API changes
+relative to `0.2.0-alpha.7` — only a version promotion + diagnostic
+log cleanup.
+
 ## [0.2.0] — 2026-06-01
 
 ### Added — quote replies (WhatsApp-style)

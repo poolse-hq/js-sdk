@@ -56,15 +56,30 @@ export function MessageBubble({
       })
     : '';
 
+  // Show the quote card whenever the message HAS a quote, even if the
+  // preview hasn't landed yet (e.g., the optimistic temp before the
+  // server echo, or a message quoting something paginated out of the
+  // current window). The fallback variant just says "Replying to a
+  // message" — better than rendering nothing and confusing the sender.
+  const showQuoteCard =
+    message.quoted_message !== undefined && message.quoted_message !== null
+      ? 'full'
+      : message.quoted_message_id
+        ? 'placeholder'
+        : null;
+
   return (
     <div className={className}>
-      {message.quoted_message && (
+      {showQuoteCard === 'full' && (
         <QuotedCard
-          quoted={message.quoted_message}
+          quoted={message.quoted_message!}
           isSelf={isSelf}
           {...(labelFor ? { labelFor } : {})}
           {...(onQuotedClick ? { onClick: onQuotedClick } : {})}
         />
+      )}
+      {showQuoteCard === 'placeholder' && (
+        <QuotedPlaceholder isSelf={isSelf} quotedMessageId={message.quoted_message_id!} />
       )}
       {message.deleted_at ? (
         <span className="poolse-message__body--deleted">[deleted]</span>
@@ -85,6 +100,33 @@ export function MessageBubble({
           />
         ) : null}
       </span>
+    </div>
+  );
+}
+
+// Minimal placeholder rendered when we know a message IS a quote
+// (quoted_message_id is set) but the preview body/sender isn't
+// available yet. Happens optimistically before the server echo for
+// quote-replies where the original is paginated outside the loaded
+// window. The host's `useMembers`/`useMessages` will usually fill in
+// the preview within ~100ms; until then this keeps the bubble's
+// "this is a quote" affordance visible.
+function QuotedPlaceholder({
+  isSelf,
+  quotedMessageId: _quotedMessageId,
+}: {
+  isSelf: boolean;
+  quotedMessageId: Uuid;
+}) {
+  return (
+    <div
+      className={`poolse-quote poolse-quote--placeholder ${
+        isSelf ? 'poolse-quote--self' : 'poolse-quote--other'
+      }`}
+      aria-label="Quoted message"
+    >
+      <span className="poolse-quote__sender">Replying to a message</span>
+      <span className="poolse-quote__body">Loading preview…</span>
     </div>
   );
 }

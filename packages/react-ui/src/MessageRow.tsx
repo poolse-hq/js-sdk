@@ -93,7 +93,15 @@ export function MessageRow({
   const handleCancel = onCancelEdit ?? (() => undefined);
 
   return (
-    <div className={`poolse-message-row ${isSelf ? 'poolse-message-row--right' : ''}`}>
+    <div
+      className={`poolse-message-row ${isSelf ? 'poolse-message-row--right' : ''}`}
+      // data-message-id lets `<ConversationView>`'s scroll-to-original
+      // querySelector find this row without an extra wrapper div in
+      // between. The wrapper version broke flex alignment because it
+      // took 100% width and left an empty band to the right of self
+      // bubbles.
+      data-message-id={msg.id}
+    >
       {editing ? (
         <EditableMessageBubble
           message={msg}
