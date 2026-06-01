@@ -227,9 +227,36 @@ export class ConversationChannel {
   // ourselves — much cheaper than re-binding on every subscription.
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
 
+  // Phoenix.Presence pushes `presence_state` exactly ONCE right after
+  // join, then `presence_diff` for every change. Late subscribers
+  // (MemberList mounted after ConversationView has already joined the
+  // channel) would otherwise never see the initial snapshot and stay
+  // empty until somebody else joins or leaves. We cache the running
+  // state here and replay it on subscribe.
+  private presenceState: PresenceSnapshot = {};
+  private presenceStateSeen = false;
+
   constructor(conversationId: string, channel: Channel) {
     this.conversationId = conversationId;
     this.channel = channel;
+
+    // Bind presence handlers eagerly (not via the lazy `subscribe`
+    // path) so the cache fills regardless of subscriber timing.
+    channel.on('presence_state', (payload: unknown) => {
+      this.presenceState = (payload ?? {}) as PresenceSnapshot;
+      this.presenceStateSeen = true;
+      const listeners = this.listeners.get('presence_state');
+      if (listeners) listeners.forEach((l) => l(this.presenceState));
+    });
+    channel.on('presence_diff', (payload: unknown) => {
+      const diff = (payload ?? {}) as { joins?: PresenceSnapshot; leaves?: PresenceSnapshot };
+      const next: PresenceSnapshot = { ...this.presenceState };
+      if (diff.joins) for (const [k, v] of Object.entries(diff.joins)) next[k] = v;
+      if (diff.leaves) for (const k of Object.keys(diff.leaves)) delete next[k];
+      this.presenceState = next;
+      const listeners = this.listeners.get('presence_diff');
+      if (listeners) listeners.forEach((l) => l(payload));
+    });
   }
 
   /** New message pushed to the conversation. */
@@ -272,11 +299,28 @@ export class ConversationChannel {
   }
 
   onPresenceState(fn: (state: PresenceSnapshot) => void): Unsubscribe {
-    return this.subscribe('presence_state', fn as (p: unknown) => void);
+    let set = this.listeners.get('presence_state');
+    if (!set) {
+      set = new Set();
+      this.listeners.set('presence_state', set);
+    }
+    set.add(fn as (p: unknown) => void);
+    // Replay the cached presence_state to late subscribers — Phoenix
+    // pushes it once on join and never resends, so MemberList mounted
+    // after ConversationView would otherwise stay empty.
+    if (this.presenceStateSeen) fn(this.presenceState);
+    return () => {
+      set.delete(fn as (p: unknown) => void);
+    };
   }
 
   onPresenceDiff(fn: (diff: PresenceSnapshot) => void): Unsubscribe {
     return this.subscribe('presence_diff', fn as (p: unknown) => void);
+  }
+
+  /** Current presence snapshot for sync access — usually used in tests. */
+  getPresenceState(): PresenceSnapshot {
+    return this.presenceState;
   }
 
   /** Send a typing ping to the server. Debounced server-side. */
