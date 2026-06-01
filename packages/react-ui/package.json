@@ -52,7 +52,9 @@
   },
   "dependencies": {
     "@poolse/react": "workspace:*",
-    "@poolse/sdk": "workspace:*"
+    "@poolse/sdk": "workspace:*",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0"
   },
   "peerDependencies": {
     "react": ">=18"

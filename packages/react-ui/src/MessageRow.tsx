@@ -13,7 +13,7 @@ import { useReactions } from '@poolse/react';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
-import { MessageBubble } from './MessageBubble.js';
+import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
 export interface MessageRowProps {
@@ -46,6 +46,12 @@ export interface MessageRowProps {
   labelFor?: (userId: Uuid) => string;
   /** Click on the quoted card — typically scroll-to-original. */
   onQuotedClick?: (quotedMessageId: Uuid) => void;
+  /** Where this bubble sits in a same-sender cluster (WhatsApp-style grouping). */
+  groupPosition?: BubbleGroupPosition;
+  /** Trim threshold for long messages. 0 disables. */
+  maxBodyLength?: number;
+  /** Render body as GitHub-flavored Markdown. */
+  markdown?: boolean;
 }
 
 export function MessageRow({
@@ -66,6 +72,9 @@ export function MessageRow({
   onQuote,
   labelFor,
   onQuotedClick,
+  groupPosition = 'standalone',
+  maxBodyLength = 0,
+  markdown = false,
 }: MessageRowProps) {
   const isSelf = meId !== null && msg.sender_id === meId;
 
@@ -94,7 +103,17 @@ export function MessageRow({
 
   return (
     <div
-      className={`poolse-message-row ${isSelf ? 'poolse-message-row--right' : ''}`}
+      className={[
+        'poolse-message-row',
+        isSelf ? 'poolse-message-row--right' : '',
+        // Modifier mirrors the bubble's groupPosition so the CSS can
+        // tighten the inter-bubble gap inside a cluster (first/middle/
+        // last) and widen it between clusters (standalone or the
+        // first of a new run).
+        `poolse-message-row--${groupPosition}`,
+      ]
+        .filter(Boolean)
+        .join(' ')}
       // data-message-id lets `<ConversationView>`'s scroll-to-original
       // querySelector find this row without an extra wrapper div in
       // between. The wrapper version broke flex alignment because it
@@ -115,6 +134,9 @@ export function MessageRow({
         <MessageBubble
           message={msg}
           currentUserId={meId}
+          groupPosition={groupPosition}
+          maxBodyLength={maxBodyLength}
+          markdown={markdown}
           {...(readState ? { readState } : {})}
           {...(labelFor ? { labelFor } : {})}
           {...(onQuotedClick ? { onQuotedClick } : {})}

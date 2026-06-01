@@ -1,5 +1,17 @@
 import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
+import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { PoolseIcon } from './PoolseIcon.js';
+
+/**
+ * Position of this bubble within a same-sender, same-day, ≤5-min
+ * cluster. Drives the tail-corner rendering: only `last` and
+ * `standalone` get the asymmetric tail, matching the WhatsApp /
+ * iMessage convention where consecutive bursts read as a single
+ * unit with one trailing tail.
+ */
+export type BubbleGroupPosition = 'first' | 'middle' | 'last' | 'standalone';
 
 export interface MessageBubbleProps {
   message: Message;
@@ -24,6 +36,22 @@ export interface MessageBubbleProps {
    * No-op when omitted.
    */
   onQuotedClick?: (quotedMessageId: Uuid) => void;
+  /**
+   * Where this bubble sits within a same-sender cluster (see
+   * BubbleGroupPosition). Defaults to `standalone`.
+   */
+  groupPosition?: BubbleGroupPosition;
+  /**
+   * When > 0, truncates the body at this many characters and shows a
+   * "Read more" toggle to expand. Defaults to 0 (no truncation).
+   */
+  maxBodyLength?: number;
+  /**
+   * Render the body as GitHub-flavored Markdown (bold, italic, lists,
+   * fenced code, blockquotes, strikethrough, autolinks). Defaults to
+   * `false`. `<ConversationView>` flips this on by default.
+   */
+  markdown?: boolean;
 }
 
 /**
@@ -41,13 +69,29 @@ export function MessageBubble({
   readState,
   labelFor,
   onQuotedClick,
+  groupPosition = 'standalone',
+  maxBodyLength = 0,
+  markdown = false,
 }: MessageBubbleProps) {
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
+  const [expanded, setExpanded] = useState(false);
 
   const className = [
     'poolse-message',
     isSelf ? 'poolse-message--self' : 'poolse-message--other',
+    // Group-position modifier — CSS uses it to toggle which corners
+    // get the asymmetric tail vs. fully-rounded treatment.
+    `poolse-message--${groupPosition}`,
   ].join(' ');
+
+  // Long-message trim. Only kicks in when (a) caller opts in via
+  // `maxBodyLength > 0`, (b) the body is actually longer than the
+  // threshold (with a small buffer so we don't truncate by 5 chars
+  // for no gain), and (c) the user hasn't expanded.
+  const rawBody = message.body ?? '';
+  const TRIM_BUFFER = 40;
+  const shouldTrim = !expanded && maxBodyLength > 0 && rawBody.length > maxBodyLength + TRIM_BUFFER;
+  const displayBody = shouldTrim ? rawBody.slice(0, maxBodyLength).trimEnd() + '…' : rawBody;
 
   const time = message.inserted_at
     ? new Date(message.inserted_at).toLocaleTimeString(undefined, {
@@ -84,7 +128,48 @@ export function MessageBubble({
       {message.deleted_at ? (
         <span className="poolse-message__body--deleted">[deleted]</span>
       ) : (
-        <span>{message.body ?? ''}</span>
+        <div className="poolse-message__body">
+          {markdown ? (
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Force links to a new tab + no opener — chat content
+                // is user-supplied so security defaults matter.
+                a: ({ node: _node, ...props }) => (
+                  <a {...props} target="_blank" rel="noopener noreferrer nofollow" />
+                ),
+              }}
+            >
+              {displayBody}
+            </ReactMarkdown>
+          ) : (
+            <span>{displayBody}</span>
+          )}
+          {shouldTrim && (
+            <button
+              type="button"
+              className="poolse-message__read-more"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(true);
+              }}
+            >
+              Read more
+            </button>
+          )}
+          {!shouldTrim && expanded && rawBody.length > maxBodyLength + TRIM_BUFFER && (
+            <button
+              type="button"
+              className="poolse-message__read-more"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(false);
+              }}
+            >
+              Show less
+            </button>
+          )}
+        </div>
       )}
       <span className="poolse-message__meta">
         <span>{time}</span>

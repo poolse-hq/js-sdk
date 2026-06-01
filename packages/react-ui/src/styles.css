@@ -271,10 +271,53 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 18px;
+  padding: 16px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* Default tight gap — intra-cluster spacing. Rows that start a
+     NEW cluster (first / standalone) bump their own top margin via
+     the modifier below to create the inter-cluster gap. */
+  gap: 2px;
+}
+
+/* Inter-cluster gap: rows that start a new burst push themselves
+   down a bit so groups separate visually. The very first row in
+   the list doesn't need it (no preceding sibling), CSS handles
+   that via the :first-child override. */
+.poolse-message-row--first,
+.poolse-message-row--standalone {
+  margin-top: 10px;
+}
+
+.poolse-message-row--first:first-child,
+.poolse-message-row--standalone:first-child {
+  margin-top: 0;
+}
+
+/* Day separator — centered pill between messages whose calendar
+   day differs. Padded above/below so it visually clusters with the
+   first message of the new day. */
+.poolse-day-separator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 14px 0 4px;
+}
+
+.poolse-day-separator:first-child {
+  margin-top: 0;
+}
+
+.poolse-day-separator span {
+  display: inline-block;
+  padding: 3px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--poolse-ink-3);
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
 }
 
 .poolse-conversation__load-more {
@@ -311,8 +354,11 @@
   display: flex;
   flex-direction: column;
   max-width: 78%;
-  padding: 10px 13px;
-  border-radius: var(--poolse-radius-lg);
+  /* Tighter padding for a denser, more iMessage/WhatsApp-like read. */
+  padding: 7px 11px;
+  /* Default fully-rounded; the group-position modifiers below swap in
+     the asymmetric tail corner for `last` / `standalone`. */
+  border-radius: 16px;
   font-size: 14.5px;
   line-height: 1.4;
   word-wrap: break-word;
@@ -323,7 +369,6 @@
   align-self: flex-end;
   background: var(--poolse-brand);
   color: var(--poolse-on-brand);
-  border-bottom-right-radius: 5px;
 }
 
 .poolse-message--other {
@@ -331,6 +376,20 @@
   background: var(--poolse-surface);
   color: var(--poolse-ink);
   border: 1px solid var(--poolse-border);
+}
+
+/* ── Group-position corners ─────────────────────────────────────
+   Only `last` + `standalone` get the asymmetric tail. `first` and
+   `middle` keep all corners rounded so the cluster reads as a
+   single contiguous block. Self gets the tail on the bottom-right
+   (its own side); other gets it on the bottom-left. */
+.poolse-message--self.poolse-message--last,
+.poolse-message--self.poolse-message--standalone {
+  border-bottom-right-radius: 5px;
+}
+
+.poolse-message--other.poolse-message--last,
+.poolse-message--other.poolse-message--standalone {
   border-bottom-left-radius: 5px;
 }
 
@@ -340,8 +399,114 @@
   gap: 4px;
   justify-content: flex-end;
   font-size: 10.5px;
-  margin-top: 5px;
+  margin-top: 3px;
   opacity: 0.85;
+}
+
+.poolse-message__body {
+  white-space: pre-wrap;
+}
+
+/* Markdown overrides — react-markdown emits real <p>, <ul>, <code>,
+   etc. Tame them so the bubble doesn't blow up vertically and the
+   spacing matches the rest of the chat. */
+.poolse-message__body p {
+  margin: 0;
+}
+.poolse-message__body p + p {
+  margin-top: 6px;
+}
+.poolse-message__body ul,
+.poolse-message__body ol {
+  margin: 4px 0;
+  padding-left: 22px;
+}
+.poolse-message__body li + li {
+  margin-top: 2px;
+}
+.poolse-message__body code {
+  font-family: var(--poolse-font-mono);
+  font-size: 0.92em;
+  background: rgba(0, 0, 0, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.poolse-message--self .poolse-message__body code {
+  background: rgba(255, 255, 255, 0.2);
+}
+.poolse-message__body pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+.poolse-message--self .poolse-message__body pre {
+  background: rgba(0, 0, 0, 0.18);
+}
+.poolse-message__body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.poolse-message__body blockquote {
+  margin: 4px 0;
+  padding: 2px 10px;
+  border-left: 3px solid currentColor;
+  opacity: 0.85;
+}
+.poolse-message__body a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 600;
+}
+.poolse-message__body a:hover {
+  opacity: 0.85;
+}
+.poolse-message__body h1,
+.poolse-message__body h2,
+.poolse-message__body h3,
+.poolse-message__body h4 {
+  /* Headings in chat are unusual — keep them tight + inline-ish. */
+  margin: 4px 0 2px;
+  font-size: 1em;
+  font-weight: 700;
+}
+.poolse-message__body table {
+  border-collapse: collapse;
+  margin: 4px 0;
+  font-size: 0.92em;
+}
+.poolse-message__body th,
+.poolse-message__body td {
+  border: 1px solid currentColor;
+  padding: 2px 6px;
+}
+.poolse-message__body hr {
+  border: none;
+  border-top: 1px solid currentColor;
+  opacity: 0.3;
+  margin: 6px 0;
+}
+
+.poolse-message__read-more {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.poolse-message__read-more:hover {
+  opacity: 1;
 }
 
 .poolse-message--self .poolse-message__meta {

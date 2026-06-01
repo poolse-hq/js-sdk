@@ -81,6 +81,37 @@ export interface ConversationViewProps {
   readReceipts?: boolean;
 
   /**
+   * Render message bodies as Markdown (bold, italic, lists, code,
+   * blockquotes, strikethrough, autolinks, ==highlight==). Defaults
+   * to `true`. Set `false` for raw-text rendering.
+   */
+  markdown?: boolean;
+
+  /**
+   * Trim message bodies longer than this many characters and show a
+   * "Read more" toggle. Defaults to 600. Set 0 to disable.
+   */
+  maxBodyLength?: number;
+
+  /**
+   * Group consecutive messages from the same sender within
+   * `groupingWindowMs` (default 5 min) on the same day into a single
+   * visual cluster — only the LAST bubble in a cluster shows the
+   * asymmetric tail corner, matching WhatsApp / iMessage. Set false
+   * to render every bubble as standalone (uniform tails).
+   */
+  grouping?: boolean;
+
+  /** Milliseconds between same-sender messages to still count as a group. Default 5 min. */
+  groupingWindowMs?: number;
+
+  /**
+   * Insert a centered day-separator pill between messages whose
+   * calendar day differs. Defaults to true.
+   */
+  daySeparators?: boolean;
+
+  /**
    * Fired once after the caller's auto-mark-read fires for a fresh
    * message. Useful for clearing a sidebar unread badge before the
    * `member:read` realtime echo round-trips. Receives the conv id so
@@ -104,6 +135,11 @@ export function ConversationView({
   threads = TRUE,
   quotations = TRUE,
   readReceipts = TRUE,
+  markdown = TRUE,
+  maxBodyLength = 600,
+  grouping = TRUE,
+  groupingWindowMs = 5 * 60 * 1000,
+  daySeparators = TRUE,
   onMarkedRead,
 }: ConversationViewProps) {
   usePoolseFonts(loadFonts);
@@ -349,10 +385,18 @@ export function ConversationView({
           ) : messages.length === 0 ? (
             <div className="poolse-conversation__empty">{emptyState ?? 'No messages yet.'}</div>
           ) : (
-            messages.map((msg) => {
+            messages.map((msg, idx) => {
               if (renderMessage) {
                 return <Fragment key={msg.id}>{renderMessage(msg, me?.id ?? null)}</Fragment>;
               }
+              const prev: Message | null = idx > 0 ? (messages[idx - 1] ?? null) : null;
+              const next: Message | null =
+                idx < messages.length - 1 ? (messages[idx + 1] ?? null) : null;
+              const groupPosition = grouping
+                ? computeGroupPosition(msg, prev, next, groupingWindowMs)
+                : 'standalone';
+              const showDaySeparator =
+                daySeparators && (prev === null || !sameDay(msg.inserted_at, prev.inserted_at));
               // Optimistic quote preview: a message we JUST sent has
               // `quoted_message_id` set but no preloaded
               // `quoted_message` yet (server echo brings that). Look it
@@ -395,29 +439,38 @@ export function ConversationView({
                     : ('sent' as const)
                   : undefined;
               return (
-                <MessageRow
-                  key={msg.id}
-                  msg={enriched}
-                  meId={me?.id ?? null}
-                  reactions={reactions}
-                  attachments={attachments}
-                  actions={actions}
-                  threads={threads}
-                  quotations={quotations}
-                  {...(readState ? { readState } : {})}
-                  {...(labelFor ? { labelFor } : {})}
-                  editing={editingId === msg.id}
-                  onStartEdit={() => setEditingId(msg.id)}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSaveEdit={async (body: string) => {
-                    await edit(msg.id, body);
-                    setEditingId(null);
-                  }}
-                  onDelete={() => void deleteMsg(msg.id)}
-                  onOpenThread={() => setThreadRootId(msg.id)}
-                  onQuote={() => setReplyingTo(msg)}
-                  onQuotedClick={scrollToOriginal}
-                />
+                <Fragment key={msg.id}>
+                  {showDaySeparator && (
+                    <div className="poolse-day-separator" aria-hidden="false">
+                      <span>{formatDayLabel(msg.inserted_at)}</span>
+                    </div>
+                  )}
+                  <MessageRow
+                    msg={enriched}
+                    meId={me?.id ?? null}
+                    reactions={reactions}
+                    attachments={attachments}
+                    actions={actions}
+                    threads={threads}
+                    quotations={quotations}
+                    groupPosition={groupPosition}
+                    maxBodyLength={maxBodyLength}
+                    markdown={markdown}
+                    {...(readState ? { readState } : {})}
+                    {...(labelFor ? { labelFor } : {})}
+                    editing={editingId === msg.id}
+                    onStartEdit={() => setEditingId(msg.id)}
+                    onCancelEdit={() => setEditingId(null)}
+                    onSaveEdit={async (body: string) => {
+                      await edit(msg.id, body);
+                      setEditingId(null);
+                    }}
+                    onDelete={() => void deleteMsg(msg.id)}
+                    onOpenThread={() => setThreadRootId(msg.id)}
+                    onQuote={() => setReplyingTo(msg)}
+                    onQuotedClick={scrollToOriginal}
+                  />
+                </Fragment>
               );
             })
           )}
@@ -497,4 +550,63 @@ function AttachmentPickerButton({
       </button>
     </>
   );
+}
+
+// ── Grouping + day separator helpers ─────────────────────────────────────
+
+/**
+ * Where this message sits inside a same-sender, same-day, in-window
+ * cluster — feeds the bubble's corner treatment.
+ */
+function computeGroupPosition(
+  msg: Message,
+  prev: Message | null,
+  next: Message | null,
+  windowMs: number,
+): 'first' | 'middle' | 'last' | 'standalone' {
+  const continuesPrev = sameGroup(msg, prev, windowMs);
+  const continuesNext = sameGroup(next, msg, windowMs);
+  if (continuesPrev && continuesNext) return 'middle';
+  if (continuesPrev) return 'last';
+  if (continuesNext) return 'first';
+  return 'standalone';
+}
+
+function sameGroup(a: Message | null, b: Message | null, windowMs: number): boolean {
+  if (!a || !b) return false;
+  if (a.sender_id !== b.sender_id) return false;
+  if (!sameDay(a.inserted_at, b.inserted_at)) return false;
+  const ta = new Date(a.inserted_at).getTime();
+  const tb = new Date(b.inserted_at).getTime();
+  return Math.abs(ta - tb) <= windowMs;
+}
+
+function sameDay(a: string, b: string): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
+
+/**
+ * "Today" / "Yesterday" / "Mon, 26 May" / "26 May 2024" — same
+ * convention as iMessage / WhatsApp / Telegram.
+ */
+function formatDayLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.floor((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) {
+    return d.toLocaleDateString(undefined, { weekday: 'long' });
+  }
+  if (d.getFullYear() === now.getFullYear()) {
+    return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
