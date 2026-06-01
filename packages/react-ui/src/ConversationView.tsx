@@ -20,6 +20,7 @@ import {
 } from '@poolse/react';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePoolseFonts } from './fonts.js';
+import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageRow } from './MessageRow.js';
@@ -584,61 +585,5 @@ function AttachmentPickerButton({
   );
 }
 
-// ── Grouping + day separator helpers ─────────────────────────────────────
-
-/**
- * Where this message sits inside a same-sender, same-day, in-window
- * cluster — feeds the bubble's corner treatment.
- */
-function computeGroupPosition(
-  msg: Message,
-  prev: Message | null,
-  next: Message | null,
-  windowMs: number,
-): 'first' | 'middle' | 'last' | 'standalone' {
-  const continuesPrev = sameGroup(msg, prev, windowMs);
-  const continuesNext = sameGroup(next, msg, windowMs);
-  if (continuesPrev && continuesNext) return 'middle';
-  if (continuesPrev) return 'last';
-  if (continuesNext) return 'first';
-  return 'standalone';
-}
-
-function sameGroup(a: Message | null, b: Message | null, windowMs: number): boolean {
-  if (!a || !b) return false;
-  if (a.sender_id !== b.sender_id) return false;
-  if (!sameDay(a.inserted_at, b.inserted_at)) return false;
-  const ta = new Date(a.inserted_at).getTime();
-  const tb = new Date(b.inserted_at).getTime();
-  return Math.abs(ta - tb) <= windowMs;
-}
-
-function sameDay(a: string, b: string): boolean {
-  const da = new Date(a);
-  const db = new Date(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
-}
-
-/**
- * "Today" / "Yesterday" / "Mon, 26 May" / "26 May 2024" — same
- * convention as iMessage / WhatsApp / Telegram.
- */
-function formatDayLabel(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diffDays = Math.floor((startOfDay(now) - startOfDay(d)) / 86_400_000);
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) {
-    return d.toLocaleDateString(undefined, { weekday: 'long' });
-  }
-  if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-  }
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-}
+// Grouping helpers live in `./grouping.ts` so they're testable in
+// isolation. Re-imported above where they're used.

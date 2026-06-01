@@ -8,6 +8,7 @@ import { useMembers } from '@poolse/react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { UserName } from './UserName.js';
 
 export interface MentionInputProps {
   conversationId: Uuid;
@@ -259,7 +260,13 @@ export function MentionInput({
                 insertMention(m);
               }}
             >
-              <span>@{label(m.user_id)}</span>
+              {/* Display via the shared 3-tier chain so the customer's
+                  userResolver lights up names here. Filter still runs
+                  against the sync `labelFor` / userId slice (line 70)
+                  because we don't have a guarantee names are resolved
+                  in time to filter against. */}
+              <span>@</span>
+              <UserName userId={m.user_id} {...(labelFor ? { labelFor } : {})} />
             </div>
           ))}
         </div>

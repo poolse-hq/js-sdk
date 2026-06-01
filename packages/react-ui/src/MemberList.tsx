@@ -6,6 +6,7 @@ import { useMembers } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { useDisplayName } from './UserName.js';
 
 export interface MemberListProps {
   conversationId: Uuid;
@@ -71,8 +72,6 @@ export function MemberList({
     );
   }
 
-  const label = labelFor ?? ((id: Uuid) => id.slice(0, 8));
-
   return (
     <ul className="poolse-list" role="list" aria-label="Members">
       {members.map((m) => {
@@ -81,13 +80,13 @@ export function MemberList({
         ) : (
           <DefaultMemberRow
             membership={m}
-            name={label(m.user_id)}
             avatarUrl={avatarFor?.(m.user_id) ?? null}
             online={onlineUserIds?.has(m.user_id) ?? false}
             removable={canRemove?.(m) ?? false}
             onRemove={() => {
               void removeMember(m.user_id);
             }}
+            {...(labelFor ? { labelFor } : {})}
           />
         );
         return (
@@ -102,19 +101,23 @@ export function MemberList({
 
 function DefaultMemberRow({
   membership,
-  name,
   avatarUrl,
   online,
   removable,
   onRemove,
+  labelFor,
 }: {
   membership: Membership;
-  name: string;
   avatarUrl: string | null;
   online: boolean;
   removable: boolean;
   onRemove: () => void;
+  labelFor?: (userId: Uuid) => string;
 }) {
+  // Resolve via the shared 3-tier chain so labelFor still works for
+  // back-compat AND the customer's userResolver lights up names here
+  // automatically.
+  const name = useDisplayName(membership.user_id, labelFor);
   return (
     <div className="poolse-member-row">
       <Avatar src={avatarUrl} name={name} online={online} size="md" />

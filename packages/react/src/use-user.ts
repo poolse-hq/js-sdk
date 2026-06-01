@@ -49,7 +49,10 @@ export function useUser(userId: Uuid | null | undefined): UseUserState {
     const apply = () => {
       const cached = chat.users.peek(userId);
       if (cached === undefined) {
+        // Cache miss — either initial load or post-invalidate. Flip
+        // to loading + kick off a refetch.
         setState({ profile: null, loading: true });
+        void chat.users.get(userId);
       } else {
         setState({ profile: cached, loading: false });
       }
@@ -58,9 +61,8 @@ export function useUser(userId: Uuid | null | undefined): UseUserState {
     // Subscribe BEFORE triggering the fetch so we never miss the
     // notify if the resolver lands synchronously.
     const off = chat.users.subscribe(userId, apply);
-    void chat.users.get(userId);
-    // Pull a fresh snapshot in case the cache already has the entry
-    // (subscribe doesn't fire for existing values).
+    // Initial pull — also covers the case where the cache already
+    // had the entry (subscribe doesn't fire for existing values).
     apply();
     return off;
   }, [chat, userId]);

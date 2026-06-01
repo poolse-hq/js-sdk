@@ -83,6 +83,12 @@ export function PoolseProvider({ config, children }: PoolseProviderProps) {
       ...(initial.onSocketError
         ? { onSocketError: (err) => configRef.current.onSocketError!(err) }
         : {}),
+      // Customer's user metadata resolver — name + avatar lookup.
+      // Read through the ref so the customer can swap the closure
+      // (e.g. switch tenant context) without re-mounting.
+      ...(initial.userResolver
+        ? { userResolver: (id: string) => configRef.current.userResolver!(id) }
+        : {}),
     });
     // Mount-once: the `Poolse` instance owns a WebSocket and channel
     // subscriptions, so it MUST be stable for the life of the mount.

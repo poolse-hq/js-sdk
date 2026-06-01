@@ -417,6 +417,13 @@
   margin-bottom: 2px;
   /* color is set inline via the userColor() palette so each user
      keeps a stable identity tint. */
+  /* Defense-in-depth: the <UserName> component already truncates to
+     24 chars, but explicit overflow guards here keep a 50-char
+     value (e.g. passed via labelFor) from blowing the bubble width. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Bubble + avatar shell — flex row, avatar slot to the left,
@@ -503,6 +510,11 @@
   text-decoration: underline;
   text-underline-offset: 2px;
   font-weight: 600;
+  /* Long URLs without spaces (e.g. autolinked tracking links) would
+     otherwise blow the bubble's max-width. Allow word-break inside
+     the <a> so they wrap across lines. */
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .poolse-message__body a:hover {
   opacity: 0.85;
