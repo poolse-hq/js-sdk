@@ -2133,6 +2133,23 @@
   text-overflow: ellipsis;
 }
 
+/* Ready state — no progress bar (upload's done), just a caption that
+   reinforces the "staged, waiting on send" affordance. */
+.poolse-upload-chip__ready-label {
+  color: var(--poolse-success);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.poolse-upload-chip--ready {
+  border-color: color-mix(in oklab, var(--poolse-success) 40%, var(--poolse-border));
+  background: color-mix(in oklab, var(--poolse-success) 6%, var(--poolse-surface));
+}
+
+.poolse-upload-chip--ready .poolse-upload-chip__icon {
+  color: var(--poolse-success);
+}
+
 .poolse-upload-chip__action {
   flex-shrink: 0;
   width: 22px;

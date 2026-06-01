@@ -95,12 +95,11 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       remove: removeUpload,
     } = useAttachmentUpload();
 
-    // Show pending/uploading/errored chips above the textarea. Ready
-    // chips are not surfaced here — they live inside the queue waiting
-    // for the user to either send (attached + cleared) or remove.
-    const visibleUploads = queue.filter(
-      (it) => it.status === 'pending' || it.status === 'uploading' || it.status === 'error',
-    );
+    // Show every staged chip — pending, uploading, ready, errored.
+    // Ready chips are the user's "queued and waiting on send" signal;
+    // without them visible after upload, picking a file feels like
+    // nothing happened. They get swept out after the send completes.
+    const visibleUploads = queue.filter((it) => it.status !== 'cancelled');
     const readyCount = queue.filter((it) => it.status === 'ready').length;
     const uploading = queue.some(
       (it) => it.status === 'pending' || it.status === 'uploading',

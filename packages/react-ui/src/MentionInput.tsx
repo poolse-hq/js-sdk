@@ -88,9 +88,10 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
   useAutogrow(taRef, value);
 
   const { queue, uploadAll, cancel: cancelUpload, remove: removeUpload } = useAttachmentUpload();
-  const visibleUploads = queue.filter(
-    (it) => it.status === 'pending' || it.status === 'uploading' || it.status === 'error',
-  );
+  // Show every staged chip (pending / uploading / ready / errored) so
+  // the user has a clear "these will go out on send" indicator. The
+  // composer sweeps ready chips after a successful send.
+  const visibleUploads = queue.filter((it) => it.status !== 'cancelled');
   const readyCount = queue.filter((it) => it.status === 'ready').length;
   const uploading = queue.some((it) => it.status === 'pending' || it.status === 'uploading');
 
