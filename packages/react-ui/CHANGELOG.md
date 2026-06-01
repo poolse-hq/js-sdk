@@ -6,6 +6,14 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Added — unread badges on `<ConversationList>`
+
+- `<ConversationList unreadCounts>` now accepts a per-conversation
+  unread map and renders a small Pulse Coral pill on each row when
+  `unread > 0`. Auto-falls-back to `useConversations().unreadCounts`
+  when the component runs in uncontrolled mode, so sidebars work
+  out of the box with no extra wiring.
+
 ### Added — thread pill + copy action
 
 - `<MessageRow>` renders a subtle "💬 N replies" pill below any message

@@ -596,6 +596,25 @@
   white-space: nowrap;
 }
 
+.poolse-list__title--unread {
+  color: var(--poolse-ink);
+  font-weight: 700;
+}
+
+.poolse-list__unread-badge {
+  flex-shrink: 0;
+  align-self: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+  border-radius: var(--poolse-radius-pill);
+  font: 700 11px / 20px var(--poolse-font-body);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─────────────────────────────────────────────────────────────
    Member roster
    ───────────────────────────────────────────────────────────── */

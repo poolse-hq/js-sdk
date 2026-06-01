@@ -7,7 +7,7 @@
 // Powered by `useConversations` so the list updates in real time
 // when the user is added to a new conversation (no refetch).
 
-import type { Conversation } from '@poolse/sdk';
+import type { Conversation, Uuid } from '@poolse/sdk';
 import { useConversations } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
@@ -34,6 +34,12 @@ export interface ConversationListProps {
   conversations?: Conversation[];
   loading?: boolean;
   error?: Error | null;
+  /**
+   * Per-conversation unread message count. Rendered as a small Pulse
+   * Coral pill on each row when > 0. Typically wired from
+   * `useConversations().unreadCounts`; omit to disable badges.
+   */
+  unreadCounts?: Record<Uuid, number>;
 }
 
 export function ConversationList({
@@ -44,12 +50,17 @@ export function ConversationList({
   conversations: controlledConversations,
   loading: controlledLoading,
   error: controlledError,
+  unreadCounts,
 }: ConversationListProps) {
   const auto = useConversations();
   const isControlled = controlledConversations !== undefined;
   const conversations = isControlled ? controlledConversations : auto.conversations;
   const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
   const error = isControlled ? (controlledError ?? null) : auto.error;
+  // Fall back to the hook's own unreadCounts when in uncontrolled mode
+  // — saves callers from threading `useConversations().unreadCounts`
+  // through manually if they're already using the auto-fetch path.
+  const counts = unreadCounts ?? (isControlled ? undefined : auto.unreadCounts);
 
   if (loading && conversations.length === 0) {
     return <div className="poolse-list poolse-list--placeholder">Loading conversations…</div>;
@@ -75,10 +86,11 @@ export function ConversationList({
     <ul className="poolse-list" role="listbox" aria-label="Conversations">
       {conversations.map((conv) => {
         const selected = selectedId === conv.id;
+        const unread = counts?.[conv.id] ?? 0;
         const content = renderItem ? (
           renderItem(conv, selected)
         ) : (
-          <DefaultRow conv={conv} selected={selected} />
+          <DefaultRow conv={conv} selected={selected} unread={unread} />
         );
         return (
           <li
@@ -104,16 +116,27 @@ export function ConversationList({
   );
 }
 
-function DefaultRow({ conv, selected: _selected }: { conv: Conversation; selected: boolean }) {
+function DefaultRow({
+  conv,
+  selected: _selected,
+  unread,
+}: {
+  conv: Conversation;
+  selected: boolean;
+  unread: number;
+}) {
   const title = conv.name ?? 'Untitled conversation';
   const time = conv.last_message_at ? formatRelative(conv.last_message_at) : '';
+  const hasUnread = unread > 0;
 
   return (
     <>
       <Avatar src={conv.avatar_url ?? null} name={conv.name} size="md" />
       <div className="poolse-list__body">
         <div className="poolse-list__head">
-          <span className="poolse-list__title">{title}</span>
+          <span className={`poolse-list__title${hasUnread ? ' poolse-list__title--unread' : ''}`}>
+            {title}
+          </span>
           {time && <span className="poolse-list__time">{time}</span>}
         </div>
         <div className="poolse-list__preview">
@@ -122,6 +145,14 @@ function DefaultRow({ conv, selected: _selected }: { conv: Conversation; selecte
             : 'No messages yet'}
         </div>
       </div>
+      {hasUnread && (
+        <span
+          className="poolse-list__unread-badge"
+          aria-label={`${unread} unread ${unread === 1 ? 'message' : 'messages'}`}
+        >
+          {unread > 99 ? '99+' : unread}
+        </span>
+      )}
     </>
   );
 }
