@@ -9,7 +9,7 @@
 
 import type { Message, Uuid } from '@poolse/sdk';
 import { useMe, useThread } from '@poolse/react';
-import { Fragment, useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageRow } from './MessageRow.js';
@@ -35,10 +35,24 @@ export function ThreadView({
   renderMessage,
 }: ThreadViewProps) {
   const { me } = useMe();
-  const { replies, loading, error, hasMore, loadMore, sendReply } = useThread(
-    conversationId,
-    rootMessage.id,
-  );
+  const {
+    replies,
+    loading,
+    error,
+    hasMore,
+    loadMore,
+    sendReply,
+    edit,
+    delete: deleteReply,
+  } = useThread(conversationId, rootMessage.id);
+
+  // In-place edit state, owned by ThreadView so each reply row can
+  // surface the edit/delete affordances on its own action popover.
+  // Mirrors the same pattern ConversationView uses for the main feed.
+  const [editingId, setEditingId] = useState<Uuid | null>(null);
+  useEffect(() => {
+    setEditingId(null);
+  }, [rootMessage.id]);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -68,7 +82,34 @@ export function ThreadView({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const renderOne = renderMessage ?? defaultRenderReply;
+  // Default reply renderer — uses MessageRow with the same feature
+  // surface as the main feed (chevron-triggered action popover with
+  // edit + delete on own messages), minus nested threads and quote
+  // replies (no quote target inside the thread side-pane in v1).
+  // `renderMessage` callers retain full control and can ignore this.
+  const renderDefault = (msg: Message) => (
+    <MessageRow
+      msg={msg}
+      meId={me?.id ?? null}
+      reactions
+      attachments
+      actions
+      threads={false}
+      quotations={false}
+      editing={editingId === msg.id}
+      onStartEdit={() => setEditingId(msg.id)}
+      onCancelEdit={() => setEditingId(null)}
+      onSaveEdit={async (body: string) => {
+        await edit(msg.id, body);
+        setEditingId(null);
+      }}
+      onDelete={() => void deleteReply(msg.id)}
+    />
+  );
+
+  const renderOne = renderMessage
+    ? (msg: Message, currentUserId: string | null) => renderMessage(msg, currentUserId)
+    : (msg: Message) => renderDefault(msg);
 
   return (
     <aside
@@ -124,21 +165,3 @@ export function ThreadView({
   );
 }
 
-// Thread replies share the main-feed feature set (reactions,
-// attachments, action popover) so the popover affordances feel
-// consistent. Nested threads stay off — a thread can't spawn its
-// own thread — and edit/delete aren't wired in v1 since ThreadView
-// doesn't own that state.
-function defaultRenderReply(msg: Message, currentUserId: string | null) {
-  return (
-    <MessageRow
-      msg={msg}
-      meId={currentUserId}
-      reactions
-      attachments
-      actions
-      threads={false}
-      quotations={false}
-    />
-  );
-}

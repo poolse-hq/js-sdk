@@ -158,7 +158,6 @@ export function ReactionPicker({
       className="poolse-reaction-picker"
       role="menu"
       aria-label="Pick a reaction"
-      style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 6 }}
       onKeyDown={onKey}
     >
       {COMMON_EMOJIS.map((e) => (

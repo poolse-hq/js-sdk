@@ -1361,12 +1361,18 @@
 
 .poolse-reaction-picker {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 6px;
   background: var(--poolse-surface);
   border: 1px solid var(--poolse-border);
   border-radius: var(--poolse-radius-lg);
   box-shadow: var(--poolse-shadow-md);
+  /* Cap width so the picker can't overflow narrow viewports. Anchors
+     to the same edge as the actions toolbar via
+     .poolse-msg-actions__picker; if it would exceed the bubble's
+     side it wraps to a second row instead of clipping off-screen. */
+  max-width: min(280px, calc(100vw - 16px));
 }
 
 .poolse-reaction-picker__btn {
@@ -1476,6 +1482,10 @@
   color: var(--poolse-error);
 }
 
+/* Reactions picker — mirrors the actions popover's edge alignment so
+   it stays anchored to the same side as the toolbar (right for self,
+   left for other). On narrow viewports the picker wraps to two rows
+   so it never overflows the bubble's max-width. */
 .poolse-msg-actions__picker {
   position: absolute;
   /* Picker appears BELOW the actions toolbar so the stack is
@@ -1483,6 +1493,14 @@
   top: calc(100% + 6px);
   left: 0;
   z-index: 10;
+}
+
+/* When the row's actions are right-aligned (self bubbles), the picker
+   anchors to the right edge of the toolbar so it extends LEFT — same
+   "into available space" behavior the toolbar itself uses. */
+.poolse-message-row__actions--right .poolse-msg-actions__picker {
+  left: auto;
+  right: 0;
 }
 
 /* Default container that customers can wrap each message in for
@@ -1520,14 +1538,15 @@
   left: 0;
 }
 
-/* Reveal the actions popover only on explicit open — keyboard focus
-   (focus-within) or click (data-actions-open via chevron on desktop /
-   tap-on-bubble on touch). Pure hover used to open it, but the gap
-   between bubble and popover was a no-mans-land that closed the popover
-   before the cursor reached it. The chevron trigger eliminates the
-   gap-crossing problem entirely. */
-.poolse-message-row:focus-within .poolse-message-row__actions,
-.poolse-message-row[data-actions-open] .poolse-message-row__actions {
+/* Reveal the actions popover only on explicit open — click on chevron
+   (desktop) / tap-on-bubble (touch) sets data-actions-open; the
+   popover then stays open while any of its OWN buttons have focus
+   (so keyboard tabbing inside doesn't dismiss it).
+   We deliberately do NOT use `.poolse-message-row:focus-within` here:
+   that would also open on any other focusable descendant (e.g. the
+   thread-pill "N replies" button), which is the wrong UX. */
+.poolse-message-row[data-actions-open] .poolse-message-row__actions,
+.poolse-message-row__actions:focus-within {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1581,8 +1600,14 @@
   color: var(--poolse-ink);
 }
 
+/* Chevron reveal — show on row hover (desktop discoverability), on
+   its own focus (keyboard users tabbing through), or whenever the
+   popover is open. We can't use row :focus-within (that would also
+   reveal it while a thread-pill or reaction button has focus, which
+   isn't what we want) — focusing the chevron itself or a popover
+   button keeps both visible. */
 .poolse-message-row:hover .poolse-message__chevron,
-.poolse-message-row:focus-within .poolse-message__chevron,
+.poolse-message__chevron:focus,
 .poolse-message-row[data-actions-open] .poolse-message__chevron {
   opacity: 1;
   pointer-events: auto;
