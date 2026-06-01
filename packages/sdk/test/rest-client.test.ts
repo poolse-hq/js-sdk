@@ -347,9 +347,12 @@ describe('RestClient.request', () => {
       const fetchFn = scriptedFetch([{ throws: abort }]);
       const client = buildClient({ fetch: fetchFn });
 
-      await expect(client.request({ method: 'GET', path: '/v1/me' })).rejects.toBeInstanceOf(
-        NetworkError,
-      );
+      // AbortError surfaces AS-IS (not wrapped in NetworkError) so
+      // callers — useMembers, useConversation, etc. — can detect a
+      // caller-initiated abort and skip the "failed to load" branch.
+      // Regression test for the alpha.3 fix where StrictMode + the
+      // wrapped error caused spurious member-load failures.
+      await expect(client.request({ method: 'GET', path: '/v1/me' })).rejects.toBe(abort);
       expect(fetchFn.calls.length).toBe(1);
     });
   });

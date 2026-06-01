@@ -71,6 +71,15 @@ export class RestClient {
         if (opts.signal) init.signal = opts.signal;
         response = await this.config.fetch(url, init);
       } catch (err) {
+        // AbortError is caller intent (component unmount, conv switch,
+        // StrictMode double-effect). Re-throw AS-IS so callers can
+        // distinguish it from a real network failure. Wrapping it as
+        // NetworkError previously caused hooks like useMembers to fall
+        // into their "failed to load" branch whenever the aborted fetch
+        // resolved after a newly-mounted fetcher already cleared state.
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw err;
+        }
         if (attempt < maxRetries && isRetryableNetworkError(err)) {
           await sleep(this.backoffDelay(attempt));
           attempt += 1;

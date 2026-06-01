@@ -6,6 +6,15 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Fixed
+
+- `RestClient.request` no longer wraps `AbortError` as a `NetworkError`
+  — it now re-throws the `DOMException` as-is. The previous wrapping
+  defeated abort detection in `useMembers` / `useConversation` /
+  `useAttachmentUrl`, so a StrictMode-induced re-mount or a fast
+  conversation switch surfaced "Failed to load …" UI even though the
+  underlying request was cancelled, not failed.
+
 ### Added
 
 - `MemberReadEvent` — wire shape for the server's `member:read` push,
