@@ -9,9 +9,9 @@
 
 import type { Message, Uuid } from '@poolse/sdk';
 import { useMe, useThread } from '@poolse/react';
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import React, { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { MessageBubble } from './MessageBubble.js';
-import { MessageComposer } from './MessageComposer.js';
+import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
 import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
@@ -57,6 +57,42 @@ export function ThreadView({
   const listRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const lastReplyIdRef = useRef<string | null>(null);
+  // Composer ref so drag-and-dropped files on the thread pane forward
+  // into the same queue the paperclip + send flow consume.
+  const composerRef = useRef<MessageComposerHandle | null>(null);
+
+  // Drag-and-drop handlers — match ConversationView's behavior so
+  // dropping files anywhere on the thread pane enqueues them in the
+  // composer's upload queue.
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepthRef = useRef(0);
+  const isFileDrag = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setDragActive(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDragActive(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length > 0) composerRef.current?.addFiles(files);
+  };
 
   // Auto-scroll on new reply (same pattern as ConversationView).
   useEffect(() => {
@@ -113,9 +149,13 @@ export function ThreadView({
 
   return (
     <aside
-      className="poolse-thread"
+      className={`poolse-thread${dragActive ? ' is-drag-active' : ''}`}
       role="complementary"
       aria-label="Message thread"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       {/* Header */}
       <header className="poolse-thread__header">
@@ -159,8 +199,33 @@ export function ThreadView({
         {error && <div className="poolse-conversation__empty">Failed to load: {error.message}</div>}
       </div>
 
-      {/* Composer */}
-      <MessageComposer onSend={(body) => sendReply({ body })} placeholder="Reply in thread…" />
+      {/* Composer — full attachment surface (paperclip, queue chips,
+          text + files together). Drops onto the thread pane forward
+          into the same queue via composerRef. */}
+      <MessageComposer
+        ref={composerRef}
+        onSend={(body, opts) =>
+          sendReply({
+            body,
+            ...(opts?.attachment_ids && opts.attachment_ids.length > 0
+              ? { attachment_ids: opts.attachment_ids }
+              : {}),
+          })
+        }
+        placeholder="Reply in thread…"
+      />
+
+      {dragActive && (
+        <div className="poolse-conversation__drop-overlay" aria-hidden="true">
+          <div className="poolse-conversation__drop-overlay-inner">
+            <PoolseIcon name="attachment" size={40} label={null} />
+            <div className="poolse-conversation__drop-overlay-title">Drop files to upload</div>
+            <div className="poolse-conversation__drop-overlay-hint">
+              They'll be sent in one reply
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

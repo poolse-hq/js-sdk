@@ -660,8 +660,48 @@
 
 .poolse-composer__row {
   display: flex;
+  /* end-align so the buttons stay anchored to the bottom edge when
+     the textarea grows multi-line (lists, soft wraps). */
+  align-items: end;
+  gap: 8px;
+}
+
+/* In-composer paperclip — sits inside the composer row (left of the
+   textarea). Mirrors .poolse-attach-btn shape so the visual rhythm
+   matches the send button on the right. */
+.poolse-composer__attach {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--poolse-ink-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  transition:
+    background-color 0.12s,
+    color 0.12s;
+}
+
+.poolse-composer__attach:hover:not(:disabled) {
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+}
+
+.poolse-composer__attach:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Mobile: bump touch target to 44x44 alongside the other composer controls. */
+@media (max-width: 760px) {
+  .poolse-composer__attach {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 /* Quote-reply chip — sits above the textarea while the caller has
@@ -1646,8 +1686,9 @@
 
 .poolse-message--self .poolse-message__edit {
   /* Switch self-edit to a surface-color textarea — coral background
-     would make the cursor invisible. */
-  background: var(--poolse-on-brand);
+     would make the cursor invisible. Use --poolse-surface (theme-aware)
+     rather than --poolse-on-brand (always light, breaks dark theme). */
+  background: var(--poolse-surface);
   color: var(--poolse-ink);
 }
 

@@ -10,14 +10,7 @@
 // directly. ConversationView is just the canonical wiring.
 
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import {
-  useAttachmentUpload,
-  useMembers,
-  useMessages,
-  useMe,
-  useRealtimeStatus,
-  useTyping,
-} from '@poolse/react';
+import { useMembers, useMessages, useMe, useRealtimeStatus, useTyping } from '@poolse/react';
 import React, {
   Fragment,
   useEffect,
@@ -29,12 +22,11 @@ import React, {
 import { usePoolseFonts } from './fonts.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
 import { MentionInput } from './MentionInput.js';
-import { MessageComposer } from './MessageComposer.js';
+import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
 import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
-import { UploadQueueStrip } from './UploadQueueStrip.js';
 
 export interface ConversationViewProps {
   conversationId: Uuid;
@@ -384,43 +376,11 @@ export function ConversationView({
     setTimeout(() => el.classList.remove('poolse-message-row--highlight'), 1600);
   };
 
-  // Attachment upload state — multi-file capable. The hook's queue
-  // drives per-item UI (progress chips above the composer).
-  const { queue: uploadQueue, uploadAll, cancel: cancelUpload, remove: removeUpload, uploading } =
-    useAttachmentUpload();
-
-  // Errored items linger so the user can dismiss them; ready items
-  // get cleared by the parent right after the send completes.
-  const visibleUploads = uploadQueue.filter(
-    (it) => it.status === 'pending' || it.status === 'uploading' || it.status === 'error',
-  );
-
-  const onPickFiles = async (files: File[]) => {
-    if (files.length === 0) return;
-    try {
-      const atts = await uploadAll(
-        files.map((f) => ({
-          body: f,
-          contentType: f.type || 'application/octet-stream',
-          byteSize: f.size,
-          filename: f.name,
-        })),
-      );
-      // One message carries all the attachments — feels right for
-      // multi-pick + drag-drop (vs spamming one message per file).
-      // Empty body = attachment-only.
-      await send({ body: '', attachment_ids: atts.map((a) => a.id) });
-      // Clear ready chips now that the message is delivered. Errored
-      // chips stay until the user dismisses them.
-      for (const it of uploadQueue) {
-        if (it.status === 'ready') removeUpload(it.localId);
-      }
-    } catch {
-      // Errored items remain visible in the upload strip with a
-      // dismiss button — that IS the user-facing surface for the
-      // failure; no further reporting needed.
-    }
-  };
+  // Composer owns the attachment upload queue (paperclip + chip
+  // strip + send-with-attachments). We forward drag-dropped files
+  // into it via this imperative ref so dropping on the conversation
+  // pane behaves identically to clicking the paperclip.
+  const composerRef = useRef<MessageComposerHandle | null>(null);
 
   // Drag-and-drop state. `dragDepth` counts nested dragenter/dragleave
   // pairs so the overlay only hides when the drag truly leaves the
@@ -455,13 +415,19 @@ export function ConversationView({
     dragDepthRef.current = 0;
     setDragActive(false);
     const files = Array.from(e.dataTransfer?.files ?? []);
-    if (files.length > 0) void onPickFiles(files);
+    if (files.length > 0) composerRef.current?.addFiles(files);
   };
 
-  const onSendBody = async (body: string, opts?: { quoted_message_id?: Uuid }) => {
+  const onSendBody = async (
+    body: string,
+    opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] },
+  ) => {
     await send({
       body,
       ...(opts?.quoted_message_id ? { quoted_message_id: opts.quoted_message_id } : {}),
+      ...(opts?.attachment_ids && opts.attachment_ids.length > 0
+        ? { attachment_ids: opts.attachment_ids }
+        : {}),
     });
     setReplyingTo(null);
   };
@@ -473,20 +439,25 @@ export function ConversationView({
 
   // Mention input is only ergonomic when members are loaded. Falls back to
   // the plain composer otherwise. Both variants accept the same
-  // `replyingTo` / `onCancelReply` props for the quote-reply chip.
+  // `replyingTo` / `onCancelReply` props for the quote-reply chip, and
+  // both expose the same `addFiles` imperative handle for drag-drop.
   const Composer =
     mentions && members.length > 0 ? (
       <MentionInput
+        ref={composerRef}
         conversationId={conversationId}
         onSend={onSendWithMentions}
         onTyping={signalTyping}
+        attachments={attachments}
         {...(labelFor ? { labelFor } : {})}
         {...(quotations ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />
     ) : (
       <MessageComposer
+        ref={composerRef}
         onSend={onSendBody}
         onTyping={signalTyping}
+        attachments={attachments}
         {...(labelFor ? { labelFor } : {})}
         {...(quotations ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />
@@ -647,16 +618,11 @@ export function ConversationView({
 
         <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
 
-        {attachments && (
-          <UploadQueueStrip
-            items={visibleUploads}
-            onCancel={cancelUpload}
-            onDismiss={removeUpload}
-          />
-        )}
-
+        {/* Composer owns the paperclip + upload-queue chips internally
+            now (text + attachments sent as one message). The drag-drop
+            overlay on the conversation pane forwards dropped files
+            into it via `composerRef.addFiles`. */}
         <div className="poolse-conversation__composer-row">
-          {attachments && <AttachmentPickerButton onPick={onPickFiles} disabled={uploading} />}
           <div className="poolse-conversation__composer-flex">{Composer}</div>
         </div>
 
@@ -683,44 +649,6 @@ export function ConversationView({
         </div>
       )}
     </div>
-  );
-}
-
-// ── Attachment picker button ─────────────────────────────────────────────
-
-function AttachmentPickerButton({
-  onPick,
-  disabled,
-}: {
-  onPick: (files: File[]) => void;
-  disabled?: boolean;
-}) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  return (
-    <>
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        className="poolse-attach-input"
-        onChange={(e) => {
-          const files = Array.from(e.target.files ?? []);
-          if (files.length > 0) onPick(files);
-          // Reset so picking the same file twice still fires onChange.
-          e.target.value = '';
-        }}
-      />
-      <button
-        type="button"
-        className="poolse-attach-btn"
-        onClick={() => inputRef.current?.click()}
-        disabled={disabled}
-        aria-label="Attach files"
-        title="Attach files"
-      >
-        <PoolseIcon name="attachment" size={20} label={null} />
-      </button>
-    </>
   );
 }
 

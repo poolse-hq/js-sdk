@@ -4,11 +4,21 @@
 // `user_id` in the mentions array that gets POSTed with the send.
 
 import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import { useMembers } from '@poolse/react';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useAttachmentUpload, useMembers } from '@poolse/react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { UploadQueueStrip } from './UploadQueueStrip.js';
 import { UserName } from './UserName.js';
+import { useAutogrow } from './useAutogrow.js';
+import type { MessageComposerHandle } from './MessageComposer.js';
 
 export interface MentionInputProps {
   conversationId: Uuid;
@@ -35,6 +45,12 @@ export interface MentionInputProps {
   replyingTo?: Message | null;
   /** User clicked the (x) on the reply chip. Caller clears state. */
   onCancelReply?: () => void;
+  /**
+   * Same as `<MessageComposer attachments>`: enables the paperclip
+   * button + queue strip + ref-exposed `addFiles` for drag-drop.
+   * Defaults to `true`.
+   */
+  attachments?: boolean;
 }
 
 interface MentionState {
@@ -44,16 +60,21 @@ interface MentionState {
   query: string;
 }
 
-export function MentionInput({
-  conversationId,
-  onSend,
-  onTyping,
-  placeholder = 'Type a message…',
-  disabled = false,
-  labelFor,
-  replyingTo,
-  onCancelReply,
-}: MentionInputProps) {
+export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>(
+  function MentionInput(
+    {
+      conversationId,
+      onSend,
+      onTyping,
+      placeholder = 'Type a message…',
+      disabled = false,
+      labelFor,
+      replyingTo,
+      onCancelReply,
+      attachments = true,
+    },
+    ref,
+  ) {
   const { members } = useMembers(conversationId);
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
@@ -63,6 +84,30 @@ export function MentionInput({
   // payload we ship in MessageCreateRequest.mentions).
   const selectedMentions = useRef<Set<Uuid>>(new Set());
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  useAutogrow(taRef, value);
+
+  const { queue, uploadAll, cancel: cancelUpload, remove: removeUpload } = useAttachmentUpload();
+  const visibleUploads = queue.filter(
+    (it) => it.status === 'pending' || it.status === 'uploading' || it.status === 'error',
+  );
+  const readyCount = queue.filter((it) => it.status === 'ready').length;
+  const uploading = queue.some((it) => it.status === 'pending' || it.status === 'uploading');
+
+  const addFiles = (files: File[]) => {
+    if (!attachments || files.length === 0) return;
+    void uploadAll(
+      files.map((f) => ({
+        body: f,
+        contentType: f.type || 'application/octet-stream',
+        byteSize: f.size,
+        filename: f.name,
+      })),
+    ).catch(() => {
+      // Per-item error stays on chip.
+    });
+  };
+  useImperativeHandle(ref, () => ({ addFiles }), [addFiles, attachments]);
 
   const label = labelFor ?? ((id: Uuid) => id.slice(0, 8));
 
@@ -78,7 +123,9 @@ export function MentionInput({
 
   const submit = async () => {
     const trimmed = value.trim();
-    if (!trimmed || sending) return;
+    const ready = queue.filter((it) => it.status === 'ready');
+    const hasReady = ready.length > 0;
+    if ((!trimmed && !hasReady) || sending || uploading) return;
     setSending(true);
     try {
       const mentions = Array.from(selectedMentions.current);
@@ -86,9 +133,11 @@ export function MentionInput({
         body: trimmed,
         ...(mentions.length > 0 ? { mentions } : {}),
         ...(replyingTo ? { quoted_message_id: replyingTo.id } : {}),
+        ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
       });
       setValue('');
       selectedMentions.current = new Set();
+      for (const it of ready) removeUpload(it.localId);
     } finally {
       setSending(false);
     }
@@ -196,6 +245,9 @@ export function MentionInput({
     ? (labelFor?.(replyingTo.sender_id) ?? `User ${replyingTo.sender_id.slice(0, 6)}`)
     : 'Unknown';
 
+  const canSend =
+    !disabled && !sending && !uploading && (value.trim() !== '' || readyCount > 0);
+
   return (
     <form
       className="poolse-composer"
@@ -224,7 +276,39 @@ export function MentionInput({
           )}
         </div>
       )}
+      {attachments && visibleUploads.length > 0 && (
+        <UploadQueueStrip
+          items={visibleUploads}
+          onCancel={cancelUpload}
+          onDismiss={removeUpload}
+        />
+      )}
       <div className="poolse-composer__row">
+        {attachments && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="poolse-attach-input"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length > 0) addFiles(files);
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              className="poolse-composer__attach"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled || sending}
+              aria-label="Attach files"
+              title="Attach files"
+            >
+              <PoolseIcon name="attachment" size={20} label={null} />
+            </button>
+          </>
+        )}
         <textarea
           ref={taRef}
           className="poolse-composer__input"
@@ -246,8 +330,9 @@ export function MentionInput({
         <button
           type="submit"
           className="poolse-composer__send"
-          disabled={disabled || sending || value.trim() === ''}
+          disabled={!canSend}
           aria-label="Send message"
+          title={uploading ? 'Waiting for uploads…' : 'Send message'}
         >
           <PoolseIcon name="send-fill" label={null} />
         </button>
@@ -287,4 +372,5 @@ export function MentionInput({
       )}
     </form>
   );
-}
+  },
+);
