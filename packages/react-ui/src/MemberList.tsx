@@ -55,7 +55,12 @@ export function MemberList({
   if (error) {
     return (
       <div className="poolse-list poolse-list--placeholder poolse-list--error">
-        Failed to load members.
+        <div>Failed to load members.</div>
+        {error.message && (
+          <div className="poolse-list__error-detail">
+            <code>{error.message}</code>
+          </div>
+        )}
       </div>
     );
   }

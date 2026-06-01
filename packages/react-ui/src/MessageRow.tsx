@@ -14,6 +14,7 @@ import { AttachmentPreview } from './AttachmentPreview.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble } from './MessageBubble.js';
+import { PoolseIcon } from './PoolseIcon.js';
 
 export interface MessageRowProps {
   msg: Message;
@@ -69,6 +70,12 @@ export function MessageRow({
   const showAttachments =
     attachments && Array.isArray(msg.attachments) && msg.attachments.length > 0;
   const showActions = actions && !msg.deleted_at && !editing;
+  // Thread pill: only show on the root message of an existing thread
+  // (i.e. when reply_count > 0 AND this message isn't itself a reply).
+  // ThreadView passes threads={false} so the pill won't show inside the
+  // thread side-pane.
+  const replyCount = msg.reply_count ?? 0;
+  const showThreadPill = threads && !msg.deleted_at && !msg.thread_root_id && replyCount > 0;
 
   const handleSave = onSaveEdit ?? (async () => undefined);
   const handleCancel = onCancelEdit ?? (() => undefined);
@@ -109,6 +116,22 @@ export function MessageRow({
         </div>
       )}
 
+      {showThreadPill && (
+        <button
+          type="button"
+          className={`poolse-thread-pill ${
+            isSelf ? 'poolse-thread-pill--right' : 'poolse-thread-pill--left'
+          }`}
+          onClick={onOpenThread}
+          aria-label={`View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
+        >
+          <PoolseIcon name="messages" size={12} label={null} />
+          <span>
+            {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+          </span>
+        </button>
+      )}
+
       {showActions && (
         <div
           className={`poolse-message-row__actions ${
@@ -124,6 +147,17 @@ export function MessageRow({
                 }
               : {})}
             {...(threads && onOpenThread ? { onReply: onOpenThread } : {})}
+            {...(msg.body
+              ? {
+                  onCopy: () => {
+                    // Best-effort: navigator.clipboard isn't available in
+                    // older browsers / non-HTTPS contexts. Caller can wire
+                    // its own toast via the SDK if needed; we just fail
+                    // silently here rather than throw inside an onClick.
+                    void navigator?.clipboard?.writeText(msg.body ?? '').catch(() => undefined);
+                  },
+                }
+              : {})}
             {...(isSelf && onStartEdit ? { onEdit: onStartEdit } : {})}
             {...(isSelf && onDelete ? { onDelete } : {})}
           />

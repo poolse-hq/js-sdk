@@ -6,6 +6,22 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Added — thread pill + copy action
+
+- `<MessageRow>` renders a subtle "💬 N replies" pill below any message
+  whose `reply_count > 0`. Clicking the pill opens the thread side-pane
+  via the existing `onOpenThread` callback. Hidden in `<ThreadView>`
+  (threads-within-threads aren't supported in 0.2).
+- `<MessageActions>` gains an optional `onCopy` action. `<MessageRow>`
+  wires it to `navigator.clipboard.writeText(message.body)` whenever
+  the message has a non-empty body.
+
+### Changed — better error visibility
+
+- `<MemberList>` now renders `error.message` under the "Failed to load
+  members." headline so callers see the actual cause without opening
+  DevTools.
+
 ### Added — new components
 
 - `<MessageActions>` — hover-triggered popover with react / reply

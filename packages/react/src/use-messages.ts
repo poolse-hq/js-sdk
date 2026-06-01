@@ -105,7 +105,20 @@ export function useMessages(conversationId: string): UseMessagesState {
       //   2) Echo of our own optimistic send (id we generated below) →
       //      replace the temp row in place (preserves position).
       //   3) Re-delivery on channel rejoin → idempotent replace.
-      setMessages((prev) => upsertById(prev, msg));
+      setMessages((prev) => {
+        const next = upsertById(prev, msg);
+        // If this is a thread reply, bump the root's reply_count so the
+        // thread pill ("💬 N replies") updates live without a refetch.
+        // Skip when the broadcast IS the root being upserted (msg.id ===
+        // thread_root_id is impossible by construction — a root has no
+        // thread_root_id — but cheap to guard).
+        if (msg.thread_root_id && msg.thread_root_id !== msg.id) {
+          return next.map((m) =>
+            m.id === msg.thread_root_id ? { ...m, reply_count: (m.reply_count ?? 0) + 1 } : m,
+          );
+        }
+        return next;
+      });
     });
 
     const offUpdated = conv.onMessageUpdated((msg) => {
@@ -113,9 +126,23 @@ export function useMessages(conversationId: string): UseMessagesState {
     });
 
     const offDeleted = conv.onMessageDeleted((evt) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === evt.id ? { ...m, deleted_at: evt.deleted_at, body: null } : m)),
-      );
+      setMessages((prev) => {
+        // Capture the pre-delete row so we can find the thread root if
+        // this message was a reply — the delete payload doesn't carry
+        // `thread_root_id`, so we have to look it up locally.
+        const target = prev.find((m) => m.id === evt.id);
+        const updated = prev.map((m) =>
+          m.id === evt.id ? { ...m, deleted_at: evt.deleted_at, body: null } : m,
+        );
+        if (target?.thread_root_id) {
+          return updated.map((m) =>
+            m.id === target.thread_root_id
+              ? { ...m, reply_count: Math.max(0, (m.reply_count ?? 0) - 1) }
+              : m,
+          );
+        }
+        return updated;
+      });
     });
 
     return () => {

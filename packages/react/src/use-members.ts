@@ -60,6 +60,11 @@ export function useMembers(conversationId: Uuid): UseMembersState {
         setMembers(data);
       } catch (err) {
         if ((err as DOMException)?.name === 'AbortError') return;
+        // Surface to console with a recognisable prefix so callers can
+        // grep for it in production logs / DevTools. Without this the
+        // hook silently sets `error` state and the UI just shows a
+        // generic placeholder.
+        console.error('[poolse] useMembers fetch failed:', err);
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
         setLoading(false);

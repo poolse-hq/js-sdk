@@ -137,6 +137,13 @@ export interface Message {
   body: string | null;
   reply_to_id: Uuid | null;
   thread_root_id: Uuid | null;
+  /**
+   * Number of replies in the thread rooted at this message. Server
+   * populates on REST list + initial fetch; defaults to 0 for new
+   * messages broadcast over realtime. SDK increments locally when a
+   * new reply lands so the thread pill ("💬 N replies") updates live.
+   */
+  reply_count?: number;
   mentions: Uuid[];
   reactions: Record<string, Uuid[]>;
   /**

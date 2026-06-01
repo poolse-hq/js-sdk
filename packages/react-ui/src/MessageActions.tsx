@@ -12,6 +12,8 @@ export interface MessageActionsProps {
   onReact?: (emoji: string) => void;
   /** Triggered when the user wants to reply in thread. */
   onReply?: () => void;
+  /** Triggered when the user wants to copy the message body to the clipboard. */
+  onCopy?: () => void;
   /** Triggered when the user wants to edit. Only show on own messages. */
   onEdit?: () => void;
   /** Triggered when the user wants to delete. Only show on own messages. */
@@ -23,6 +25,7 @@ export interface MessageActionsProps {
 export function MessageActions({
   onReact,
   onReply,
+  onCopy,
   onEdit,
   onDelete,
   children,
@@ -53,6 +56,7 @@ export function MessageActions({
         </>
       )}
       {onReply && <ActionButton label="Reply in thread" icon="reply" onClick={onReply} />}
+      {onCopy && <ActionButton label="Copy" icon="copy" onClick={onCopy} />}
       {onEdit && <ActionButton label="Edit" icon="edit" onClick={onEdit} />}
       {onDelete && <ActionButton label="Delete" icon="trash" danger onClick={onDelete} />}
       {children}

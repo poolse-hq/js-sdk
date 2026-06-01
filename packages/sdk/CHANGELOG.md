@@ -6,6 +6,14 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Added
+
+- `Message.reply_count?: number` — number of replies in the thread
+  rooted at this message. Populated by REST list; defaults to 0 over
+  realtime (a brand-new message can't have replies yet). Drives the
+  thread pill in `<MessageRow>` and increments locally in
+  `useMessages` when a reply lands.
+
 ### Fixed
 
 - `RestClient.request` no longer wraps `AbortError` as a `NetworkError`

@@ -8,6 +8,18 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ### Added
 
+- `useMessages` now maintains `Message.reply_count` live — increments
+  on inbound thread reply, decrements on reply soft-delete. No server
+  round-trip; the thread pill in `<MessageRow>` updates immediately.
+
+### Fixed
+
+- `useMembers` catch path now `console.error`s the underlying error
+  with a `[poolse]` prefix so silent failures are debuggable from
+  DevTools.
+
+### Added (continued)
+
 - `useMessages.edit(messageId, body)` — optimistic edit with rollback
   on server error. Server enforces sender-only authorization.
 - `useMessages.delete(messageId)` — optimistic soft-delete (sets
