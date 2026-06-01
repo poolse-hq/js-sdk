@@ -10,8 +10,14 @@ import { ReactionPicker } from './Reactions.js';
 export interface MessageActionsProps {
   /** Triggered when the user picks an emoji. */
   onReact?: (emoji: string) => void;
-  /** Triggered when the user wants to reply in thread. */
+  /** Triggered when the user wants to reply in thread (opens side-pane). */
   onReply?: () => void;
+  /**
+   * Triggered when the user wants to quote-reply (WhatsApp-style).
+   * Distinct from `onReply`: quote replies stay in the main feed,
+   * threads open a side-pane.
+   */
+  onQuote?: () => void;
   /** Triggered when the user wants to copy the message body to the clipboard. */
   onCopy?: () => void;
   /** Triggered when the user wants to edit. Only show on own messages. */
@@ -25,6 +31,7 @@ export interface MessageActionsProps {
 export function MessageActions({
   onReact,
   onReply,
+  onQuote,
   onCopy,
   onEdit,
   onDelete,
@@ -55,7 +62,8 @@ export function MessageActions({
           )}
         </>
       )}
-      {onReply && <ActionButton label="Reply in thread" icon="reply" onClick={onReply} />}
+      {onReply && <ActionButton label="Reply in thread" icon="messages" onClick={onReply} />}
+      {onQuote && <ActionButton label="Reply" icon="reply" onClick={onQuote} />}
       {onCopy && <ActionButton label="Copy" icon="copy" onClick={onCopy} />}
       {onEdit && <ActionButton label="Edit" icon="edit" onClick={onEdit} />}
       {onDelete && <ActionButton label="Delete" icon="trash" danger onClick={onDelete} />}
@@ -73,7 +81,7 @@ function ActionButton({
 }: {
   label: string;
   // Restrict to the iconography we actually use here so the type stays useful.
-  icon: 'emoji' | 'reply' | 'edit' | 'trash' | 'more-h' | 'pin' | 'copy';
+  icon: 'emoji' | 'reply' | 'messages' | 'edit' | 'trash' | 'more-h' | 'pin' | 'copy';
   onClick: () => void;
   active?: boolean;
   danger?: boolean;

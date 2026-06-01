@@ -29,7 +29,11 @@ interface UseThreadState {
   delete: (messageId: Uuid) => Promise<void>;
 }
 
-const PAGE_SIZE = 50;
+// Threads load top-down all-at-once: most discussions stay well under
+// 500 replies, the side-pane has no infinite-scroll affordance, and
+// avoiding pagination keeps the UX simple. `loadMore` remains as an
+// escape hatch in case a thread does exceed this on the rare day.
+const PAGE_SIZE = 500;
 
 /**
  * Thread view rooted at `rootMessageId`. Loads replies oldest-first

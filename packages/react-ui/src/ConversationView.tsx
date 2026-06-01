@@ -69,6 +69,14 @@ export interface ConversationViewProps {
   /** "Reply in thread" opens a right-side ThreadView. */
   threads?: boolean;
 
+  /**
+   * WhatsApp-style quote-reply. Adds a "Reply" action to the hover
+   * menu — the new message stays in the main feed with a quoted card
+   * above its body, distinct from `threads` (which opens the
+   * side-pane). Defaults ON.
+   */
+  quotations?: boolean;
+
   /** Check-double glyph on own messages once another member's read cursor advances past them. */
   readReceipts?: boolean;
 
@@ -94,6 +102,7 @@ export function ConversationView({
   attachments = TRUE,
   actions = TRUE,
   threads = TRUE,
+  quotations = TRUE,
   readReceipts = TRUE,
   onMarkedRead,
 }: ConversationViewProps) {
@@ -237,6 +246,30 @@ export function ConversationView({
     () => (threadRootId ? (messages.find((m) => m.id === threadRootId) ?? null) : null),
     [threadRootId, messages],
   );
+  // Quote-reply state — caller-owned per the MessageComposer contract.
+  // Lifted here so any row's "Reply" action can flip the composer into
+  // quote mode, and so the chip dismisses when the conversation changes.
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  useEffect(() => {
+    setReplyingTo(null);
+    setEditingId(null);
+    setThreadRootId(null);
+  }, [conversationId]);
+
+  // Scroll-to-original handler for the quoted card. Tries to find the
+  // target row in the loaded window and scrolls it into view. If the
+  // original isn't in the loaded window (older than our pagination
+  // depth), no-op — quote previews stay readable on the bubble itself
+  // so missing the scroll isn't blocking.
+  const scrollToOriginal = (id: Uuid) => {
+    const root = listRef.current;
+    if (!root) return;
+    const el = root.querySelector(`[data-message-id="${id}"]`);
+    if (!(el instanceof HTMLElement)) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('poolse-message-row--highlight');
+    setTimeout(() => el.classList.remove('poolse-message-row--highlight'), 1600);
+  };
 
   // Attachment upload state — null between uploads, populated while one is in flight.
   const { upload, uploading } = useAttachmentUpload();
@@ -259,25 +292,38 @@ export function ConversationView({
     }
   };
 
-  const onSendBody = async (body: string) => {
-    await send({ body });
+  const onSendBody = async (body: string, opts?: { quoted_message_id?: Uuid }) => {
+    await send({
+      body,
+      ...(opts?.quoted_message_id ? { quoted_message_id: opts.quoted_message_id } : {}),
+    });
+    setReplyingTo(null);
   };
 
   const onSendWithMentions = async (req: MessageCreateRequest) => {
     await send(req);
+    setReplyingTo(null);
   };
 
   // Mention input is only ergonomic when members are loaded. Falls back to
-  // the plain composer otherwise.
+  // the plain composer otherwise. Both variants accept the same
+  // `replyingTo` / `onCancelReply` props for the quote-reply chip.
   const Composer =
     mentions && members.length > 0 ? (
       <MentionInput
         conversationId={conversationId}
         onSend={onSendWithMentions}
         onTyping={signalTyping}
+        {...(labelFor ? { labelFor } : {})}
+        {...(quotations ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />
     ) : (
-      <MessageComposer onSend={onSendBody} onTyping={signalTyping} />
+      <MessageComposer
+        onSend={onSendBody}
+        onTyping={signalTyping}
+        {...(labelFor ? { labelFor } : {})}
+        {...(quotations ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
+      />
     );
 
   return (
@@ -318,25 +364,30 @@ export function ConversationView({
                     : ('sent' as const)
                   : undefined;
               return (
-                <MessageRow
-                  key={msg.id}
-                  msg={msg}
-                  meId={me?.id ?? null}
-                  reactions={reactions}
-                  attachments={attachments}
-                  actions={actions}
-                  threads={threads}
-                  {...(readState ? { readState } : {})}
-                  editing={editingId === msg.id}
-                  onStartEdit={() => setEditingId(msg.id)}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSaveEdit={async (body: string) => {
-                    await edit(msg.id, body);
-                    setEditingId(null);
-                  }}
-                  onDelete={() => void deleteMsg(msg.id)}
-                  onOpenThread={() => setThreadRootId(msg.id)}
-                />
+                <div key={msg.id} data-message-id={msg.id}>
+                  <MessageRow
+                    msg={msg}
+                    meId={me?.id ?? null}
+                    reactions={reactions}
+                    attachments={attachments}
+                    actions={actions}
+                    threads={threads}
+                    quotations={quotations}
+                    {...(readState ? { readState } : {})}
+                    {...(labelFor ? { labelFor } : {})}
+                    editing={editingId === msg.id}
+                    onStartEdit={() => setEditingId(msg.id)}
+                    onCancelEdit={() => setEditingId(null)}
+                    onSaveEdit={async (body: string) => {
+                      await edit(msg.id, body);
+                      setEditingId(null);
+                    }}
+                    onDelete={() => void deleteMsg(msg.id)}
+                    onOpenThread={() => setThreadRootId(msg.id)}
+                    onQuote={() => setReplyingTo(msg)}
+                    onQuotedClick={scrollToOriginal}
+                  />
+                </div>
               );
             })
           )}

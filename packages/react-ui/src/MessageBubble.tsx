@@ -1,4 +1,4 @@
-import type { Message } from '@poolse/sdk';
+import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
 import { PoolseIcon } from './PoolseIcon.js';
 
 export interface MessageBubbleProps {
@@ -12,6 +12,18 @@ export interface MessageBubbleProps {
    * map to "sent" and "read" respectively per brand conventions.
    */
   readState?: 'sent' | 'read';
+  /**
+   * Optional friendly label for a quoted message's sender. Same shape
+   * as `<MemberList labelFor>` — usually a `(userId) => string` that
+   * looks up a display name from the local member roster.
+   */
+  labelFor?: (userId: Uuid) => string;
+  /**
+   * Called when the user clicks the quoted card. Typically used to
+   * scroll the chat to the original message + flash a highlight.
+   * No-op when omitted.
+   */
+  onQuotedClick?: (quotedMessageId: Uuid) => void;
 }
 
 /**
@@ -23,7 +35,13 @@ export interface MessageBubbleProps {
  * (coral for self, surface-with-border for others), matching the
  * brand-kit chat showcase.
  */
-export function MessageBubble({ message, currentUserId, readState }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  currentUserId,
+  readState,
+  labelFor,
+  onQuotedClick,
+}: MessageBubbleProps) {
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
 
   const className = [
@@ -40,6 +58,14 @@ export function MessageBubble({ message, currentUserId, readState }: MessageBubb
 
   return (
     <div className={className}>
+      {message.quoted_message && (
+        <QuotedCard
+          quoted={message.quoted_message}
+          isSelf={isSelf}
+          {...(labelFor ? { labelFor } : {})}
+          {...(onQuotedClick ? { onClick: onQuotedClick } : {})}
+        />
+      )}
       {message.deleted_at ? (
         <span className="poolse-message__body--deleted">[deleted]</span>
       ) : (
@@ -60,5 +86,41 @@ export function MessageBubble({ message, currentUserId, readState }: MessageBubb
         ) : null}
       </span>
     </div>
+  );
+}
+
+function QuotedCard({
+  quoted,
+  isSelf,
+  labelFor,
+  onClick,
+}: {
+  quoted: QuotedMessagePreview;
+  isSelf: boolean;
+  labelFor?: (userId: Uuid) => string;
+  onClick?: (quotedMessageId: Uuid) => void;
+}) {
+  const senderLabel = quoted.sender_id
+    ? (labelFor?.(quoted.sender_id) ?? `User ${quoted.sender_id.slice(0, 6)}`)
+    : 'Unknown';
+  const isDeleted = !!quoted.deleted_at;
+  const handleClick = onClick ? () => onClick(quoted.id) : undefined;
+
+  return (
+    <button
+      type="button"
+      className={`poolse-quote ${isSelf ? 'poolse-quote--self' : 'poolse-quote--other'}`}
+      onClick={handleClick}
+      // No tabbing / click affordance when the host doesn't wire a
+      // scroll-to-original handler — keeps the card static rather than
+      // misleading the user with a pressable look.
+      disabled={!handleClick}
+      aria-label={`Quoted message from ${senderLabel}`}
+    >
+      <span className="poolse-quote__sender">{senderLabel}</span>
+      <span className="poolse-quote__body">
+        {isDeleted ? 'Original message deleted' : (quoted.body ?? '')}
+      </span>
+    </button>
   );
 }

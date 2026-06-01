@@ -35,7 +35,10 @@ describe('<MessageComposer>', () => {
     // The onSend is awaited inside submit(); flush microtasks.
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(onSend).toHaveBeenCalledWith('hello');
+    // Second arg is undefined when no `replyingTo` is set — the
+    // composer passes `(body, opts | undefined)` so a quote-reply chip
+    // can attach `quoted_message_id` without changing the call site.
+    expect(onSend).toHaveBeenCalledWith('hello', undefined);
   });
 
   it('Shift+Enter does NOT submit', () => {

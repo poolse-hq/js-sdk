@@ -417,11 +417,155 @@
 
 .poolse-composer {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  /* Column so the optional reply-chip can sit ABOVE the textarea+send
+     row when the caller passes `replyingTo`. The chip + row each
+     manage their own horizontal layout. */
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
   background: var(--poolse-surface);
   border-top: 1px solid var(--poolse-border);
+}
+
+.poolse-composer__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Quote-reply chip — sits above the textarea while the caller has
+   `replyingTo` set. Pulse Coral accent stripe on the left mirrors the
+   WhatsApp / iMessage convention. */
+.poolse-composer__reply {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--poolse-brand-soft);
+  border-left: 3px solid var(--poolse-brand);
+  border-radius: 0 var(--poolse-radius-md) var(--poolse-radius-md) 0;
+  min-width: 0;
+}
+
+.poolse-composer__reply-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.poolse-composer__reply-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--poolse-brand-strong);
+  letter-spacing: 0.01em;
+}
+
+.poolse-composer__reply-preview {
+  font-size: 12.5px;
+  color: var(--poolse-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-composer__reply-cancel {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--poolse-ink-2);
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s;
+}
+
+.poolse-composer__reply-cancel:hover {
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+}
+
+/* Quoted card rendered INSIDE a message bubble (a quote-reply's
+   reference to the original). Self-vs-other variants tint differently
+   so the card reads as part of the bubble on either side. */
+.poolse-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: var(--poolse-radius-sm, 6px);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  max-width: 100%;
+  min-width: 0;
+  font-family: var(--poolse-font-body);
+  transition: filter 0.12s;
+}
+
+.poolse-quote:disabled {
+  cursor: default;
+}
+
+.poolse-quote--other {
+  background: var(--poolse-surface-2);
+  border-left: 3px solid var(--poolse-brand);
+  color: var(--poolse-ink);
+}
+
+.poolse-quote--self {
+  /* Inside a coral self-bubble — invert so the quote stays readable. */
+  background: rgba(255, 255, 255, 0.18);
+  border-left: 3px solid rgba(255, 255, 255, 0.6);
+  color: inherit;
+}
+
+.poolse-quote:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.poolse-quote__sender {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.poolse-quote--other .poolse-quote__sender {
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-quote__body {
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Brief highlight pulse when a quote card scrolls the original into
+   view — cues the user that "this is the message you tapped." */
+.poolse-message-row--highlight {
+  animation: poolse-row-highlight 1.6s ease-out;
+}
+
+@keyframes poolse-row-highlight {
+  0% {
+    background-color: color-mix(in oklab, var(--poolse-brand) 22%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 .poolse-composer__input {

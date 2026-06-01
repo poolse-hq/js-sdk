@@ -6,6 +6,22 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Changed — thread replies routed to reply_count only
+
+- `useMessages` no longer adds incoming thread replies to the main
+  feed — replies belong to the side-pane that `useThread` populates.
+  Realtime `message:new` with `thread_root_id` set now bumps the
+  root's `reply_count` and skips the upsert. Matches the new server
+  behavior (`WHERE thread_root_id IS NULL` on `list_messages`), so
+  refresh and realtime stay consistent.
+- `useThread` default page size raised from 50 → 500 so a typical
+  thread loads in one round-trip. `loadMore` remains as an escape
+  hatch.
+- `useMembers` now buffers `member:read` events that fire before the
+  initial fetch lands, then replays them once members are loaded.
+  Fixes the realtime read-receipt race where reads arriving in the
+  subscribe → fetch-response window were silently dropped.
+
 ### Added
 
 - `useMessages` now maintains `Message.reply_count` live — increments

@@ -6,6 +6,23 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Added — quote replies (WhatsApp-style)
+
+- `<ConversationView quotations?>` (default `true`) — new feature
+  toggle. Adds a "Reply" action to the hover menu distinct from
+  "Reply in thread". Reply pre-fills the composer with a quote chip
+  above the input; on send, the new message carries `quoted_message_id`
+  and stays in the main feed (no thread promotion).
+- `<MessageBubble>` renders a small quoted-message card above the body
+  when `message.quoted_message` is set. Click → scroll-to-original
+  with a 1.6s highlight pulse on the target row.
+- `<MessageComposer>` + `<MentionInput>` gain controlled
+  `replyingTo?: Message` and `onCancelReply?: () => void` props.
+  Renders a quote chip above the input with an (x) to cancel; Esc
+  also dismisses.
+- `<MessageActions>` gains `onQuote?: () => void` — wired in
+  `<MessageRow>` to call back to the caller's quote state.
+
 ### Added — unread badges on `<ConversationList>`
 
 - `<ConversationList unreadCounts>` now accepts a per-conversation

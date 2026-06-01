@@ -100,25 +100,26 @@ export function useMessages(conversationId: string): UseMessagesState {
     const conv = chat.realtime.conversation(conversationId);
 
     const offNew = conv.onMessage((msg) => {
-      // Simple by-id upsert. Covers three cases with one expression:
+      // Thread replies don't live in the main feed — they belong to
+      // the side-pane that `useThread` populates. So when a reply
+      // arrives over realtime, route it to the root's reply_count
+      // ONLY, and skip the main-list upsert. The server now mirrors
+      // this rule on the REST list (`WHERE thread_root_id IS NULL`),
+      // so post-refresh state matches realtime behavior.
+      if (msg.thread_root_id) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msg.thread_root_id ? { ...m, reply_count: (m.reply_count ?? 0) + 1 } : m,
+          ),
+        );
+        return;
+      }
+      // Top-level message: standard by-id upsert. Covers three cases:
       //   1) Brand-new message from another user → append.
       //   2) Echo of our own optimistic send (id we generated below) →
       //      replace the temp row in place (preserves position).
       //   3) Re-delivery on channel rejoin → idempotent replace.
-      setMessages((prev) => {
-        const next = upsertById(prev, msg);
-        // If this is a thread reply, bump the root's reply_count so the
-        // thread pill ("💬 N replies") updates live without a refetch.
-        // Skip when the broadcast IS the root being upserted (msg.id ===
-        // thread_root_id is impossible by construction — a root has no
-        // thread_root_id — but cheap to guard).
-        if (msg.thread_root_id && msg.thread_root_id !== msg.id) {
-          return next.map((m) =>
-            m.id === msg.thread_root_id ? { ...m, reply_count: (m.reply_count ?? 0) + 1 } : m,
-          );
-        }
-        return next;
-      });
+      setMessages((prev) => upsertById(prev, msg));
     });
 
     const offUpdated = conv.onMessageUpdated((msg) => {
@@ -194,6 +195,12 @@ export function useMessages(conversationId: string): UseMessagesState {
         body: attrs.body ?? null,
         reply_to_id: attrs.reply_to_id ?? null,
         thread_root_id: null,
+        // Optimistic quote: keep the id locally so the bubble can flag
+        // itself as a quote-reply immediately. `quoted_message` (the
+        // preview card body/sender) only lands when the server echo
+        // arrives — the UI can render a placeholder ("Quoted message")
+        // in the gap or wait silently; current bubble does the latter.
+        quoted_message_id: attrs.quoted_message_id ?? null,
         mentions: attrs.mentions ?? [],
         reactions: {},
         edited_at: null,

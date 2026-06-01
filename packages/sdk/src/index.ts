@@ -62,6 +62,7 @@ export type {
   MessageList,
   MessageType,
   MessageUpdateRequest,
+  QuotedMessagePreview,
   ReactionRequest,
   ReadRequest,
   Uuid,

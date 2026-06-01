@@ -8,7 +8,7 @@
 // reuse the full feature surface (reactions, attachments, hover
 // actions, edit/delete, read receipts) without re-wiring.
 
-import type { Attachment, Message } from '@poolse/sdk';
+import type { Attachment, Message, Uuid } from '@poolse/sdk';
 import { useReactions } from '@poolse/react';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
@@ -27,6 +27,8 @@ export interface MessageRowProps {
   actions?: boolean;
   /** Pass false in ThreadView since nested threads aren't a thing in v1. */
   threads?: boolean;
+  /** WhatsApp-style quote-reply. Defaults true on ConversationView. */
+  quotations?: boolean;
 
   /** Set to `'sent' | 'read'` to render the read-receipt glyph on self messages. */
   readState?: 'sent' | 'read';
@@ -38,6 +40,12 @@ export interface MessageRowProps {
   onSaveEdit?: (body: string) => Promise<unknown> | void;
   onDelete?: () => void;
   onOpenThread?: () => void;
+  /** Quote-reply pressed. Caller stores the message id and renders the composer chip. */
+  onQuote?: () => void;
+  /** Caller-supplied display-name lookup for the quoted-card sender. */
+  labelFor?: (userId: Uuid) => string;
+  /** Click on the quoted card — typically scroll-to-original. */
+  onQuotedClick?: (quotedMessageId: Uuid) => void;
 }
 
 export function MessageRow({
@@ -47,6 +55,7 @@ export function MessageRow({
   attachments = true,
   actions = true,
   threads = true,
+  quotations = true,
   readState,
   editing = false,
   onStartEdit,
@@ -54,6 +63,9 @@ export function MessageRow({
   onSaveEdit,
   onDelete,
   onOpenThread,
+  onQuote,
+  labelFor,
+  onQuotedClick,
 }: MessageRowProps) {
   const isSelf = meId !== null && msg.sender_id === meId;
 
@@ -92,7 +104,13 @@ export function MessageRow({
           onCancel={handleCancel}
         />
       ) : (
-        <MessageBubble message={msg} currentUserId={meId} {...(readState ? { readState } : {})} />
+        <MessageBubble
+          message={msg}
+          currentUserId={meId}
+          {...(readState ? { readState } : {})}
+          {...(labelFor ? { labelFor } : {})}
+          {...(onQuotedClick ? { onQuotedClick } : {})}
+        />
       )}
 
       {showAttachments && (
@@ -147,6 +165,7 @@ export function MessageRow({
                 }
               : {})}
             {...(threads && onOpenThread ? { onReply: onOpenThread } : {})}
+            {...(quotations && onQuote ? { onQuote } : {})}
             {...(msg.body
               ? {
                   onCopy: () => {

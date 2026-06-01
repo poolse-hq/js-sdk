@@ -144,6 +144,19 @@ export interface Message {
    * new reply lands so the thread pill ("💬 N replies") updates live.
    */
   reply_count?: number;
+  /**
+   * Quote reply (WhatsApp-style): id of the message being quoted.
+   * Independent of `reply_to_id` (which drives thread promotion).
+   * Quoted replies stay in the main feed, NOT in a thread side-pane.
+   */
+  quoted_message_id?: Uuid | null;
+  /**
+   * Trimmed preview of the quoted message — server preloads on
+   * REST list + realtime broadcast so the SDK can render the inline
+   * quote card without a per-message lookup. `body` is truncated
+   * to ~200 chars; null when the quoted message was deleted post-quote.
+   */
+  quoted_message?: QuotedMessagePreview | null;
   mentions: Uuid[];
   reactions: Record<string, Uuid[]>;
   /**
@@ -160,6 +173,20 @@ export interface Message {
   updated_at: IsoDateTime;
 }
 
+/**
+ * Compact preview of a quoted message, embedded on the quoting
+ * message when `Message.quoted_message_id` is set. Just enough for
+ * the UI to render the inline quote card.
+ */
+export interface QuotedMessagePreview {
+  id: Uuid;
+  sender_id: Uuid | null;
+  /** Truncated to ~200 chars server-side; null when the original was deleted. */
+  body: string | null;
+  deleted_at: IsoDateTime | null;
+  inserted_at: IsoDateTime;
+}
+
 export interface MessageList {
   data: Message[];
 }
@@ -174,6 +201,13 @@ export interface MessageCreateRequest {
   body?: string | null;
   type?: MessageType;
   reply_to_id?: Uuid;
+  /**
+   * Quote-reply target. The new message keeps `thread_root_id` null
+   * (no thread promotion) and is delivered alongside other top-level
+   * messages, with a preview card pointing at this id. Must reference
+   * a message in the same conversation.
+   */
+  quoted_message_id?: Uuid;
   mentions?: Uuid[];
   /**
    * Attach previously-uploaded attachments to this message. Each id

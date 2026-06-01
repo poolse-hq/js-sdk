@@ -6,6 +6,17 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ## [0.2.0] — 2026-06-01
 
+### Added — quote replies (WhatsApp-style)
+
+- `Message.quoted_message_id?: Uuid | null` + `Message.quoted_message?:
+QuotedMessagePreview` — server preloads on REST list + realtime
+  broadcast so the SDK can render the inline quote card without a
+  per-message lookup. Body truncated to ~200 chars server-side.
+- `MessageCreateRequest.quoted_message_id?: Uuid` — quote a message
+  on send. Stays in the main feed (independent of `reply_to_id`,
+  which still drives thread promotion).
+- New `QuotedMessagePreview` type exported from the package root.
+
 ### Added
 
 - `Message.reply_count?: number` — number of replies in the thread

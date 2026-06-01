@@ -3,7 +3,7 @@
 // member inserts `@display-name` into the text and records the
 // `user_id` in the mentions array that gets POSTed with the send.
 
-import type { Membership, MessageCreateRequest, Uuid } from '@poolse/sdk';
+import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { useMembers } from '@poolse/react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { PoolseIcon } from './PoolseIcon.js';
@@ -25,6 +25,14 @@ export interface MentionInputProps {
    * Defaults to the first 8 chars of the id.
    */
   labelFor?: (userId: Uuid) => string;
+  /**
+   * Caller-owned "I'm replying to this message" state. Mirrors
+   * `<MessageComposer replyingTo>` — renders a quote chip above the
+   * input and includes `quoted_message_id` on send.
+   */
+  replyingTo?: Message | null;
+  /** User clicked the (x) on the reply chip. Caller clears state. */
+  onCancelReply?: () => void;
 }
 
 interface MentionState {
@@ -41,6 +49,8 @@ export function MentionInput({
   placeholder = 'Type a message…',
   disabled = false,
   labelFor,
+  replyingTo,
+  onCancelReply,
 }: MentionInputProps) {
   const { members } = useMembers(conversationId);
   const [value, setValue] = useState('');
@@ -73,6 +83,7 @@ export function MentionInput({
       await onSend({
         body: trimmed,
         ...(mentions.length > 0 ? { mentions } : {}),
+        ...(replyingTo ? { quoted_message_id: replyingTo.id } : {}),
       });
       setValue('');
       selectedMentions.current = new Set();
@@ -157,7 +168,17 @@ export function MentionInput({
       e.preventDefault();
       void submit();
     }
+    // Esc clears the reply chip when one is active (and the mention
+    // menu is closed — that branch is handled above).
+    if (e.key === 'Escape' && replyingTo && onCancelReply && !mention) {
+      e.preventDefault();
+      onCancelReply();
+    }
   };
+
+  const replyLabel = replyingTo?.sender_id
+    ? (labelFor?.(replyingTo.sender_id) ?? `User ${replyingTo.sender_id.slice(0, 6)}`)
+    : 'Unknown';
 
   return (
     <form
@@ -168,24 +189,45 @@ export function MentionInput({
       }}
       style={{ position: 'relative' }}
     >
-      <textarea
-        ref={taRef}
-        className="poolse-composer__input"
-        rows={1}
-        value={value}
-        onChange={onChange}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        disabled={disabled || sending}
-      />
-      <button
-        type="submit"
-        className="poolse-composer__send"
-        disabled={disabled || sending || value.trim() === ''}
-        aria-label="Send message"
-      >
-        <PoolseIcon name="send-fill" label={null} />
-      </button>
+      {replyingTo && (
+        <div className="poolse-composer__reply" role="status">
+          <div className="poolse-composer__reply-body">
+            <span className="poolse-composer__reply-label">Replying to {replyLabel}</span>
+            <span className="poolse-composer__reply-preview">{replyingTo.body ?? ''}</span>
+          </div>
+          {onCancelReply && (
+            <button
+              type="button"
+              className="poolse-composer__reply-cancel"
+              onClick={onCancelReply}
+              aria-label="Cancel reply"
+              title="Cancel reply"
+            >
+              <PoolseIcon name="close" size={14} label={null} />
+            </button>
+          )}
+        </div>
+      )}
+      <div className="poolse-composer__row">
+        <textarea
+          ref={taRef}
+          className="poolse-composer__input"
+          rows={1}
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          disabled={disabled || sending}
+        />
+        <button
+          type="submit"
+          className="poolse-composer__send"
+          disabled={disabled || sending || value.trim() === ''}
+          aria-label="Send message"
+        >
+          <PoolseIcon name="send-fill" label={null} />
+        </button>
+      </div>
 
       {mention && filtered.length > 0 && (
         <div className="poolse-mention-menu" role="listbox" aria-label="Members">

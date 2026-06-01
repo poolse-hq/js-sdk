@@ -1,4 +1,4 @@
-import type { AddMemberOptions, MemberRole, Membership, Uuid } from '@poolse/sdk';
+import type { AddMemberOptions, MemberReadEvent, MemberRole, Membership, Uuid } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 
@@ -41,6 +41,27 @@ export function useMembers(conversationId: Uuid): UseMembersState {
   const membersRef = useRef<Membership[]>([]);
   membersRef.current = members;
 
+  // Buffer for `member:read` events that arrive BEFORE the initial
+  // fetch lands. The realtime subscription runs almost immediately on
+  // mount; the HTTP fetch takes a roundtrip. If another user reads in
+  // that window, the broadcast fires while local state is still empty
+  // and the `prev.map` no-ops — leaving the read invisible forever.
+  // We buffer here and replay inside the fetcher after `setMembers`
+  // commits the snapshot.
+  const pendingReadsRef = useRef<MemberReadEvent[]>([]);
+  const hasFetchedRef = useRef(false);
+
+  const applyRead = (list: Membership[], evt: MemberReadEvent): Membership[] =>
+    list.map((m) =>
+      m.user_id === evt.user_id
+        ? {
+            ...m,
+            last_read_message_id: evt.last_read_message_id,
+            last_read_at: evt.last_read_at,
+          }
+        : m,
+    );
+
   const fetcher = useCallback(
     async (signal?: AbortSignal): Promise<void> => {
       // Empty id = "skip fetch" — used by callers that conditionally
@@ -57,7 +78,16 @@ export function useMembers(conversationId: Uuid): UseMembersState {
       setError(null);
       try {
         const { data } = await chat.conversations.one(conversationId).listMembers(signal);
-        setMembers(data);
+        // Drain any buffered `member:read` events that fired before the
+        // fetch landed. Without this, reads that arrive in the
+        // subscribe→response gap would be lost.
+        let next = data;
+        if (pendingReadsRef.current.length > 0) {
+          for (const evt of pendingReadsRef.current) next = applyRead(next, evt);
+          pendingReadsRef.current = [];
+        }
+        setMembers(next);
+        hasFetchedRef.current = true;
       } catch (err) {
         if ((err as DOMException)?.name === 'AbortError') return;
         // Surface to console with a recognisable prefix so callers can
@@ -74,6 +104,10 @@ export function useMembers(conversationId: Uuid): UseMembersState {
   );
 
   useEffect(() => {
+    // Reset per-conversation state so a swap of `conversationId`
+    // doesn't carry stale buffered reads from a previous channel.
+    hasFetchedRef.current = false;
+    pendingReadsRef.current = [];
     const controller = new AbortController();
     void fetcher(controller.signal);
     return () => controller.abort();
@@ -88,17 +122,14 @@ export function useMembers(conversationId: Uuid): UseMembersState {
     if (!conversationId) return;
     const channel = chat.realtime.conversation(conversationId);
     const off = channel.onMemberRead((evt) => {
-      setMembers((prev) =>
-        prev.map((m) =>
-          m.user_id === evt.user_id
-            ? {
-                ...m,
-                last_read_message_id: evt.last_read_message_id,
-                last_read_at: evt.last_read_at,
-              }
-            : m,
-        ),
-      );
+      // Buffer if the initial fetch hasn't landed — the fetcher's
+      // try-block drains the buffer once it has membership rows to
+      // apply the read to. See the matching ref pair above.
+      if (!hasFetchedRef.current) {
+        pendingReadsRef.current.push(evt);
+        return;
+      }
+      setMembers((prev) => applyRead(prev, evt));
     });
     return () => off();
   }, [chat, conversationId]);
