@@ -13,6 +13,15 @@
 
 import { vi } from 'vitest';
 
+// happy-dom defines a working XMLHttpRequest. The SDK's attachment
+// `upload()` switches to XHR when `onProgress` is set (the React
+// hook always sets it for the queue UI), which would otherwise
+// bypass `scriptedFetch` and attempt a real network PUT to
+// `storage.test`. Force the fetch branch in tests by removing XHR
+// from the test global — the XHR path is browser-only behavior and
+// is exercised end-to-end by the showcase, not these unit tests.
+(globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = undefined;
+
 vi.mock('phoenix', () => {
   class StubChannel {
     on() {

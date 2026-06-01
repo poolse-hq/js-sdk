@@ -19,6 +19,11 @@ export function usePresence(conversationId: string): UsePresenceState {
   useEffect(() => {
     setOnline(new Set());
 
+    // Empty id = "do nothing" — same convention as `useMembers` /
+    // `useMessages`. Lets callers conditionally enable presence
+    // tracking without re-mounting the hook.
+    if (!conversationId) return;
+
     const conv = chat.realtime.conversation(conversationId);
 
     const applyState = (state: PresenceSnapshot) => {

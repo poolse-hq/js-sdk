@@ -2,7 +2,7 @@
 // with avatars, role badges, and an optional remove action.
 
 import type { MemberRole, Membership, Uuid } from '@poolse/sdk';
-import { useMembers } from '@poolse/react';
+import { useMembers, usePresence } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { PoolseIcon } from './PoolseIcon.js';
@@ -22,8 +22,11 @@ export interface MemberListProps {
    */
   avatarFor?: (userId: Uuid) => string | null;
   /**
-   * Set of currently-online user_ids. Drives the green presence dot.
-   * Typically wired from `usePresence(conversationId).online`.
+   * Override the online set with a caller-supplied source. By default
+   * MemberList wires `usePresence(conversationId).online` itself, so the
+   * presence dots light up out-of-the-box. Pass an explicit `Set` when
+   * you want to merge presence with other signals (typing, focus, etc),
+   * or an empty `new Set()` to disable the dots entirely.
    */
   onlineUserIds?: Set<Uuid>;
   /**
@@ -48,6 +51,14 @@ export function MemberList({
   emptyState,
 }: MemberListProps) {
   const { members, loading, error, removeMember } = useMembers(conversationId);
+  // Auto-wire presence when no caller-supplied set was passed. The hook
+  // joins the conversation channel idempotently; if ConversationView is
+  // mounted alongside MemberList (the common case) they share the same
+  // channel subscription, so this is free.
+  const { online: presenceOnline } = usePresence(
+    onlineUserIds === undefined ? conversationId : '',
+  );
+  const effectiveOnline = onlineUserIds ?? presenceOnline;
 
   if (loading && members.length === 0) {
     return <div className="poolse-list poolse-list--placeholder">Loading members…</div>;
@@ -81,7 +92,7 @@ export function MemberList({
           <DefaultMemberRow
             membership={m}
             avatarUrl={avatarFor?.(m.user_id) ?? null}
-            online={onlineUserIds?.has(m.user_id) ?? false}
+            online={effectiveOnline.has(m.user_id)}
             removable={canRemove?.(m) ?? false}
             onRemove={() => {
               void removeMember(m.user_id);
