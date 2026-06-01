@@ -1,8 +1,10 @@
 import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
+import { useUser } from '@poolse/react';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PoolseIcon } from './PoolseIcon.js';
+import { userColor } from './userColor.js';
 
 /**
  * Position of this bubble within a same-sender, same-day, ≤5-min
@@ -52,6 +54,15 @@ export interface MessageBubbleProps {
    * `false`. `<ConversationView>` flips this on by default.
    */
   markdown?: boolean;
+  /**
+   * Show a colored sender label above the body for other-side
+   * bubbles. Only meaningful in group chats (3+ participants) and
+   * only on the FIRST / STANDALONE bubble of a cluster (continuation
+   * bubbles share the cluster's identity). The label name comes
+   * from the SDK's `useUser` hook via the customer's
+   * `userResolver` config.
+   */
+  showSenderName?: boolean;
 }
 
 /**
@@ -72,9 +83,24 @@ export function MessageBubble({
   groupPosition = 'standalone',
   maxBodyLength = 0,
   markdown = false,
+  showSenderName = false,
 }: MessageBubbleProps) {
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
   const [expanded, setExpanded] = useState(false);
+
+  // Resolve the sender's display name + avatar via the customer's
+  // `userResolver`. For self bubbles we don't bother — you know who
+  // you are; pass null to short-circuit the hook.
+  const { profile: sender } = useUser(!isSelf ? message.sender_id : null);
+  const senderFallbackName = message.sender_id
+    ? `User ${message.sender_id.slice(0, 6)}`
+    : 'Unknown';
+  const senderName = sender?.displayName ?? senderFallbackName;
+  const senderColorHex = message.sender_id ? userColor(message.sender_id) : 'currentColor';
+
+  // First-of-cluster / standalone get the sender label.
+  const renderSenderName =
+    showSenderName && !isSelf && (groupPosition === 'first' || groupPosition === 'standalone');
 
   const className = [
     'poolse-message',
@@ -114,6 +140,11 @@ export function MessageBubble({
 
   return (
     <div className={className}>
+      {renderSenderName && (
+        <div className="poolse-message__sender" style={{ color: senderColorHex }}>
+          {senderName}
+        </div>
+      )}
       {showQuoteCard === 'full' && (
         <QuotedCard
           quoted={message.quoted_message!}

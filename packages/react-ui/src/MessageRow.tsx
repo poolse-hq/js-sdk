@@ -9,8 +9,10 @@
 // actions, edit/delete, read receipts) without re-wiring.
 
 import type { Attachment, Message, Uuid } from '@poolse/sdk';
-import { useReactions } from '@poolse/react';
+import { useReactions, useUser } from '@poolse/react';
+import type { ReactNode } from 'react';
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { Avatar } from './Avatar.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
@@ -52,6 +54,20 @@ export interface MessageRowProps {
   maxBodyLength?: number;
   /** Render body as GitHub-flavored Markdown. */
   markdown?: boolean;
+  /**
+   * Show a colored sender label above the bubble body (other-side
+   * only, first / standalone bubbles only). Powered by the SDK's
+   * `useUser` hook via the customer's `userResolver`.
+   */
+  showSenderName?: boolean;
+  /**
+   * Render an avatar to the LEFT of other-side bubbles. The avatar
+   * appears on the LAST / STANDALONE bubble of a cluster;
+   * continuation bubbles keep an empty slot the same width so the
+   * column stays aligned. Self bubbles get no avatar — your own
+   * identity is implicit from the bubble color/side.
+   */
+  showAvatar?: boolean;
 }
 
 export function MessageRow({
@@ -75,7 +91,16 @@ export function MessageRow({
   groupPosition = 'standalone',
   maxBodyLength = 0,
   markdown = false,
+  showSenderName = false,
+  showAvatar = false,
 }: MessageRowProps) {
+  // Resolve the sender once at the row level so both the avatar slot
+  // (rendered here) and the bubble's inline sender label (rendered
+  // by `<MessageBubble>` which calls `useUser` itself) hit the same
+  // dedup'd cache.
+  const { profile: senderProfile } = useUser(msg.sender_id);
+  const senderFallbackName = msg.sender_id ? `User ${msg.sender_id.slice(0, 6)}` : 'Unknown';
+  const senderName = senderProfile?.displayName ?? senderFallbackName;
   const isSelf = meId !== null && msg.sender_id === meId;
 
   // Single useReactions instance — both the inline strip and the
@@ -131,16 +156,25 @@ export function MessageRow({
           onCancel={handleCancel}
         />
       ) : (
-        <MessageBubble
-          message={msg}
-          currentUserId={meId}
+        <BubbleWithAvatar
+          isSelf={isSelf}
+          showAvatar={showAvatar}
           groupPosition={groupPosition}
-          maxBodyLength={maxBodyLength}
-          markdown={markdown}
-          {...(readState ? { readState } : {})}
-          {...(labelFor ? { labelFor } : {})}
-          {...(onQuotedClick ? { onQuotedClick } : {})}
-        />
+          senderName={senderName}
+          avatarUrl={senderProfile?.avatarUrl ?? null}
+        >
+          <MessageBubble
+            message={msg}
+            currentUserId={meId}
+            groupPosition={groupPosition}
+            maxBodyLength={maxBodyLength}
+            markdown={markdown}
+            showSenderName={showSenderName}
+            {...(readState ? { readState } : {})}
+            {...(labelFor ? { labelFor } : {})}
+            {...(onQuotedClick ? { onQuotedClick } : {})}
+          />
+        </BubbleWithAvatar>
       )}
 
       {showAttachments && (
@@ -256,6 +290,42 @@ function InlineReactions({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Wraps the bubble in a flex row with an avatar slot to the left
+// (other-side bubbles only). Self bubbles and group-chat-off
+// configurations pass through unchanged.
+//
+// The slot is ALWAYS the same width (28px + 6px gap) when `showAvatar`
+// is on — even on continuation bubbles where the avatar itself is
+// hidden — so the column stays aligned across a multi-bubble cluster.
+function BubbleWithAvatar({
+  isSelf,
+  showAvatar,
+  groupPosition,
+  senderName,
+  avatarUrl,
+  children,
+}: {
+  isSelf: boolean;
+  showAvatar: boolean;
+  groupPosition: BubbleGroupPosition;
+  senderName: string;
+  avatarUrl: string | null;
+  children: ReactNode;
+}) {
+  if (isSelf || !showAvatar) return <>{children}</>;
+
+  const isLastOfCluster = groupPosition === 'last' || groupPosition === 'standalone';
+
+  return (
+    <div className="poolse-bubble-shell">
+      <div className="poolse-bubble-shell__avatar">
+        {isLastOfCluster ? <Avatar src={avatarUrl} name={senderName} size="sm" /> : null}
+      </div>
+      {children}
     </div>
   );
 }

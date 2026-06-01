@@ -89,7 +89,7 @@ export interface ConversationViewProps {
 
   /**
    * Trim message bodies longer than this many characters and show a
-   * "Read more" toggle. Defaults to 600. Set 0 to disable.
+   * "Read more" toggle. Defaults to 200. Set 0 to disable.
    */
   maxBodyLength?: number;
 
@@ -110,6 +110,23 @@ export interface ConversationViewProps {
    * calendar day differs. Defaults to true.
    */
   daySeparators?: boolean;
+
+  /**
+   * Show a colored sender label above other-side bubbles in group
+   * chats. Resolved via the customer's `userResolver`.
+   *   * `'auto'`   — on when the conversation has more than 2 members
+   *   * `'always'` — even in DMs (rarely useful)
+   *   * `'never'`  — disable entirely
+   * Defaults to `'auto'`.
+   */
+  senderLabels?: 'auto' | 'always' | 'never';
+
+  /**
+   * Show participant avatars to the LEFT of other-side bubbles in
+   * group chats. Same `auto | always | never` semantics as
+   * `senderLabels`. Defaults to `'auto'`.
+   */
+  avatars?: 'auto' | 'always' | 'never';
 
   /**
    * Fired once after the caller's auto-mark-read fires for a fresh
@@ -136,10 +153,12 @@ export function ConversationView({
   quotations = TRUE,
   readReceipts = TRUE,
   markdown = TRUE,
-  maxBodyLength = 600,
+  maxBodyLength = 200,
   grouping = TRUE,
   groupingWindowMs = 5 * 60 * 1000,
   daySeparators = TRUE,
+  senderLabels = 'auto',
+  avatars = 'auto',
   onMarkedRead,
 }: ConversationViewProps) {
   usePoolseFonts(loadFonts);
@@ -158,11 +177,22 @@ export function ConversationView({
   } = useMessages(conversationId);
   const { typing, signalTyping } = useTyping(conversationId);
   const status = useRealtimeStatus();
-  // Members are needed for mentions + read-receipt auto-compute. We
-  // always pull them when EITHER feature is on — useMembers is
-  // server-fetch-once + idempotent, so the cost is one REST call.
-  const membersOn = mentions || readReceipts;
+  // Members are needed for mentions + read-receipt auto-compute +
+  // the `auto` resolution of senderLabels / avatars in group chats.
+  // We always pull them when ANY of those features wants the count
+  // — useMembers is server-fetch-once + idempotent, so the cost is
+  // one REST call.
+  const wantsMemberCount = senderLabels === 'auto' || avatars === 'auto';
+  const membersOn = mentions || readReceipts || wantsMemberCount;
   const { members } = useMembers(membersOn ? conversationId : '');
+
+  // Group-chat heuristic: 3+ members triggers per-bubble sender
+  // identification (label + avatar) under the `'auto'` setting.
+  // `'always'` forces them on, `'never'` forces off.
+  const isGroupChat = members.length > 2;
+  const showSenderLabelsResolved =
+    senderLabels === 'always' || (senderLabels === 'auto' && isGroupChat);
+  const showAvatarsResolved = avatars === 'always' || (avatars === 'auto' && isGroupChat);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -456,6 +486,8 @@ export function ConversationView({
                     groupPosition={groupPosition}
                     maxBodyLength={maxBodyLength}
                     markdown={markdown}
+                    showSenderName={showSenderLabelsResolved}
+                    showAvatar={showAvatarsResolved}
                     {...(readState ? { readState } : {})}
                     {...(labelFor ? { labelFor } : {})}
                     editing={editingId === msg.id}

@@ -6,6 +6,7 @@
 import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { useMembers } from '@poolse/react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
 export interface MentionInputProps {
@@ -165,6 +166,20 @@ export function MentionInput({
     }
 
     if (e.key === 'Enter' && !e.shiftKey) {
+      // Smart list continuation — same behavior as MessageComposer.
+      // Only kicks in when the mention menu is closed (the menu's own
+      // Enter handler is in the block above and returns early).
+      const ta = e.currentTarget;
+      const caret = ta.selectionStart;
+      const result = handleListEnter(value, caret);
+      if (result) {
+        e.preventDefault();
+        setValue(result.value);
+        requestAnimationFrame(() => {
+          taRef.current?.setSelectionRange(result.caret, result.caret);
+        });
+        return;
+      }
       e.preventDefault();
       void submit();
     }

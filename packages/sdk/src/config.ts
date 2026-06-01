@@ -6,6 +6,8 @@
  */
 export const POOLSE_API_URL = 'https://api.poolse.dev';
 
+import type { PoolseUserProfile } from './types.js';
+
 /**
  * SDK configuration passed to `new Poolse(config)`.
  */
@@ -80,6 +82,34 @@ export interface PoolseConfig {
    * banners in the UI without coupling to socket internals.
    */
   onSocketError?: (err: Error) => void;
+
+  /**
+   * Resolve a poolse `user_id` to the customer's own user metadata
+   * (display name + avatar). Called by `chat.users.get(userId)` and
+   * the `useUser(userId)` React hook whenever a UI component needs
+   * to render a participant.
+   *
+   * The SDK caches results in-memory and dedupes concurrent calls,
+   * so a busy chat with 50 messages from 5 senders fires the
+   * resolver 5 times — once per unique sender — not 50.
+   *
+   * Customers typically hit their OWN backend here:
+   *
+   *   userResolver: async (userId) => {
+   *     const u = await fetch(`/api/users/by-poolse-id/${userId}`)
+   *       .then((r) => r.json());
+   *     return { displayName: u.full_name, avatarUrl: u.avatar_url };
+   *   }
+   *
+   * Sync returns are fine when the customer already has the user
+   * data in memory (e.g., from a directory loaded at app boot):
+   *
+   *   userResolver: (userId) => directory[userId] ?? null
+   *
+   * Return `null` when the user can't be found — components fall
+   * back to a userId-derived label and an initials avatar.
+   */
+  userResolver?: (userId: string) => Promise<PoolseUserProfile | null> | PoolseUserProfile | null;
 }
 
 /** Internal resolved config — all the defaults filled in. */
@@ -94,6 +124,7 @@ export interface ResolvedConfig {
   wsUrl: string | undefined;
   socketPath: string;
   onSocketError: ((err: Error) => void) | undefined;
+  userResolver: PoolseConfig['userResolver'];
 }
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -131,6 +162,7 @@ export function resolveConfig(config: PoolseConfig): ResolvedConfig {
     wsUrl: config.wsUrl,
     socketPath: config.socketPath ?? '/socket',
     onSocketError: config.onSocketError,
+    userResolver: config.userResolver,
   };
 }
 

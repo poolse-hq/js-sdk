@@ -174,6 +174,31 @@ export interface Message {
 }
 
 /**
+ * Customer-supplied user metadata — the SDK doesn't know your users'
+ * names or where their avatars live. Customers wire a
+ * `PoolseConfig.userResolver` that maps a poolse `Uuid` to whatever
+ * their app already stores: a display name, an avatar URL.
+ *
+ * The SDK caches resolved profiles in-memory (deduplicating
+ * concurrent lookups) so a 50-message render only fires one
+ * resolver call per unique sender.
+ */
+export interface PoolseUserProfile {
+  /**
+   * The name shown in sender labels, mention dropdowns, member
+   * lists, and read-receipt tooltips. Customers usually pass their
+   * app's `display_name` / `username` / `full_name`.
+   */
+  displayName: string;
+  /**
+   * Square avatar URL (any size — the UI scales). Null = render the
+   * fallback `<Avatar>` with initials. Optional so customers that
+   * don't track avatars can omit the field.
+   */
+  avatarUrl?: string | null;
+}
+
+/**
  * Compact preview of a quoted message, embedded on the quoting
  * message when `Message.quoted_message_id` is set. Just enough for
  * the UI to render the inline quote card.

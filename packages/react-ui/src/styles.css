@@ -407,6 +407,48 @@
   white-space: pre-wrap;
 }
 
+/* Sender label — small, bold, per-user color. Only renders on the
+   first (or standalone) bubble of an other-side cluster when
+   `showSenderName` is true. Sits inside the bubble, above the body. */
+.poolse-message__sender {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin-bottom: 2px;
+  /* color is set inline via the userColor() palette so each user
+     keeps a stable identity tint. */
+}
+
+/* Bubble + avatar shell — flex row, avatar slot to the left,
+   bubble to the right. Self bubbles + no-avatar configurations
+   bypass this wrapper entirely (Fragment passthrough). */
+.poolse-bubble-shell {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  /* Inherit max-width from .poolse-message-row so the bubble +
+     avatar combined never exceed the row's cap. */
+  max-width: 100%;
+  min-width: 0;
+}
+
+.poolse-bubble-shell__avatar {
+  /* Fixed width regardless of avatar presence so continuation
+     bubbles line up under the first one. */
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Avatar is anchored to the bottom of the cluster — visually
+   pairs with the bubble's tail corner on the last bubble. */
+.poolse-bubble-shell__avatar > * {
+  align-self: flex-end;
+}
+
 /* Markdown overrides — react-markdown emits real <p>, <ul>, <code>,
    etc. Tame them so the bubble doesn't blow up vertically and the
    spacing matches the rest of the chat. */
@@ -1300,18 +1342,30 @@
 
 .poolse-message-row__actions {
   position: absolute;
-  top: -16px;
+  /* Vertically align with the bubble's top edge, slightly inset so
+     the toolbar visually centers on the first line of a multi-line
+     message. */
+  top: 4px;
+  z-index: 3;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s;
 }
 
+/* The toolbar sits BESIDE the bubble — never over it. That keeps
+   the entire bubble body clickable (links, embedded UI, etc.) and
+   sidesteps the messages-container overflow clipping that bit the
+   "float above" approach when a bubble was near the top of the
+   scrollable area.
+   - Self (right-aligned) bubble  → toolbar on the LEFT
+   - Other (left-aligned) bubble  → toolbar on the RIGHT
+   Both directions point INTO the messages container's free space. */
 .poolse-message-row__actions--right {
-  right: 0;
+  right: calc(100% + 6px);
 }
 
 .poolse-message-row__actions--left {
-  left: 0;
+  left: calc(100% + 6px);
 }
 
 .poolse-message-row:hover .poolse-message-row__actions,

@@ -1,5 +1,6 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import type { Message, Uuid } from '@poolse/sdk';
+import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
 export interface MessageComposerProps {
@@ -44,6 +45,7 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
 
   const submit = async () => {
     const trimmed = value.trim();
@@ -59,6 +61,20 @@ export function MessageComposer({
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      // Smart list continuation: if the caret is on a list item line,
+      // Enter extends/ends the list instead of submitting. Falls
+      // through to submit() when not in a list.
+      const ta = e.currentTarget;
+      const caret = ta.selectionStart;
+      const result = handleListEnter(value, caret);
+      if (result) {
+        e.preventDefault();
+        setValue(result.value);
+        requestAnimationFrame(() => {
+          taRef.current?.setSelectionRange(result.caret, result.caret);
+        });
+        return;
+      }
       e.preventDefault();
       void submit();
     }
@@ -92,6 +108,7 @@ export function MessageComposer({
       )}
       <div className="poolse-composer__row">
         <textarea
+          ref={taRef}
           className="poolse-composer__input"
           rows={1}
           value={value}

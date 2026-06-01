@@ -8,6 +8,7 @@ import { AttachmentsResource } from './resources/attachments.js';
 import { ConversationsResource } from './resources/conversations.js';
 import { MeResource } from './resources/me.js';
 import { MessagesResource } from './resources/messages.js';
+import { UsersResource } from './resources/users.js';
 import { RestClient } from './rest-client.js';
 import { TokenCache } from './token-cache.js';
 
@@ -20,6 +21,18 @@ export class Poolse {
   public readonly messages: MessagesResource;
   /** `/v1/attachments/*` — presigned-URL uploads/downloads. */
   public readonly attachments: AttachmentsResource;
+
+  /**
+   * Customer-supplied user metadata, cached + dedup'd.
+   * `chat.users.get(userId)` returns `{ displayName, avatarUrl }`
+   * via the optional `config.userResolver`. UI components
+   * (`MessageBubble`, `MemberList`, `TypingIndicator`) pick this up
+   * automatically via the `useUser` hook in `@poolse/react`.
+   *
+   * If no resolver is configured, `get` always returns `null` and
+   * UI falls back to the userId slice + initials avatar.
+   */
+  public readonly users: UsersResource;
 
   /**
    * Low-level REST client. Exposed for advanced use cases (custom endpoints,
@@ -57,6 +70,7 @@ export class Poolse {
     this.conversations = new ConversationsResource(this.rest);
     this.messages = new MessagesResource(this.rest);
     this.attachments = new AttachmentsResource(this.rest, cachedConfig.fetch);
+    this.users = new UsersResource(cachedConfig);
 
     this.realtime = new PoolseRealtime(cachedConfig, this.tokenCache, {
       ...(this.resolved.wsUrl !== undefined ? { wsUrl: this.resolved.wsUrl } : {}),

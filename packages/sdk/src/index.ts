@@ -16,6 +16,7 @@ export {
 } from './resources/conversations.js';
 export { MeResource } from './resources/me.js';
 export { ConversationMessages, MessageHandle, MessagesResource } from './resources/messages.js';
+export { UsersResource } from './resources/users.js';
 export {
   AttachmentHandle,
   AttachmentsResource,
@@ -62,6 +63,7 @@ export type {
   MessageList,
   MessageType,
   MessageUpdateRequest,
+  PoolseUserProfile,
   QuotedMessagePreview,
   ReactionRequest,
   ReadRequest,

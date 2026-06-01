@@ -17,6 +17,7 @@ export { usePresence } from './use-presence.js';
 export { useRealtimeStatus } from './use-realtime-status.js';
 export { useAttachmentUpload } from './use-attachment-upload.js';
 export { useAttachmentUrl } from './use-attachment-url.js';
+export { useUser, type UseUserState } from './use-user.js';
 
 // Re-export the SDK so consumers can pull in types / errors from one
 // package — saves a second `npm install @poolse/sdk` for React-only apps.
@@ -35,6 +36,7 @@ export type {
   MessageCreateRequest,
   MessageType,
   PoolseConfig,
+  PoolseUserProfile,
   RealtimeStatus,
   Uuid,
 } from '@poolse/sdk';
