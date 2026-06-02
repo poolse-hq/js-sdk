@@ -8,10 +8,9 @@
 // reuse the full feature surface (reactions, attachments, hover
 // actions, edit/delete, read receipts) without re-wiring.
 
-import type { Attachment, Message, Uuid } from '@poolse/sdk';
+import type { Message, Uuid } from '@poolse/sdk';
 import { useReactions, useUser } from '@poolse/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AttachmentPreview } from './AttachmentPreview.js';
 import { Avatar } from './Avatar.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
@@ -113,8 +112,6 @@ export function MessageRow({
   });
 
   const showReactions = reactions && !msg.deleted_at;
-  const showAttachments =
-    attachments && Array.isArray(msg.attachments) && msg.attachments.length > 0;
   const showActions = actions && !msg.deleted_at && !editing;
   // Thread pill: only show on the root message of an existing thread
   // (i.e. when reply_count > 0 AND this message isn't itself a reply).
@@ -200,6 +197,7 @@ export function MessageRow({
             maxBodyLength={maxBodyLength}
             markdown={markdown}
             showSenderName={showSenderName}
+            showAttachments={attachments}
             {...(readState ? { readState } : {})}
             {...(labelFor ? { labelFor } : {})}
             {...(onQuotedClick ? { onQuotedClick } : {})}
@@ -226,14 +224,6 @@ export function MessageRow({
               : {})}
           />
         </BubbleWithAvatar>
-      )}
-
-      {showAttachments && (
-        <div className={`poolse-message-row__attachments ${isSelf ? 'is-self' : ''}`}>
-          {msg.attachments!.map((att: Attachment) => (
-            <AttachmentPreview key={att.id} attachment={att} />
-          ))}
-        </div>
       )}
 
       {showReactions && (

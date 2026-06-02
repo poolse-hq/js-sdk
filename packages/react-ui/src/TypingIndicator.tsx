@@ -31,12 +31,7 @@ export function TypingIndicator({ typing, labelFor }: TypingIndicatorProps) {
         <span className="poolse-typing__dot" />
         <span className="poolse-typing__dot" />
       </span>
-      <span
-        className="poolse-typing__label"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
+      <span className="poolse-typing__label" role="status" aria-live="polite" aria-atomic="true">
         {isTyping ? <TypingLabel ids={ids} {...(labelFor ? { labelFor } : {})} /> : ''}
       </span>
     </div>

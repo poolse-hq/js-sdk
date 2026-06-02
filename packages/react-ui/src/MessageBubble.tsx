@@ -1,8 +1,9 @@
-import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
+import type { Attachment, Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
 import { useUser } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { AttachmentPreview } from './AttachmentPreview.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { userColor } from './userColor.js';
 
@@ -71,6 +72,13 @@ export interface MessageBubbleProps {
    * CSS until the row is hovered.
    */
   actionsTrigger?: ReactNode;
+  /**
+   * Render the message's attachments INSIDE the bubble (WhatsApp-
+   * style): images mosaic at the top, file cards below, then the
+   * message body. Defaults to `true`. Pass `false` if you're rendering
+   * attachments yourself outside the bubble.
+   */
+  showAttachments?: boolean;
 }
 
 /**
@@ -93,6 +101,7 @@ export function MessageBubble({
   markdown = false,
   showSenderName = false,
   actionsTrigger,
+  showAttachments = true,
 }: MessageBubbleProps) {
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
   const [expanded, setExpanded] = useState(false);
@@ -111,14 +120,6 @@ export function MessageBubble({
   const renderSenderName =
     showSenderName && !isSelf && (groupPosition === 'first' || groupPosition === 'standalone');
 
-  const className = [
-    'poolse-message',
-    isSelf ? 'poolse-message--self' : 'poolse-message--other',
-    // Group-position modifier — CSS uses it to toggle which corners
-    // get the asymmetric tail vs. fully-rounded treatment.
-    `poolse-message--${groupPosition}`,
-  ].join(' ');
-
   // Long-message trim. Only kicks in when (a) caller opts in via
   // `maxBodyLength > 0`, (b) the body is actually longer than the
   // threshold (with a small buffer so we don't truncate by 5 chars
@@ -127,6 +128,40 @@ export function MessageBubble({
   const TRIM_BUFFER = 40;
   const shouldTrim = !expanded && maxBodyLength > 0 && rawBody.length > maxBodyLength + TRIM_BUFFER;
   const displayBody = shouldTrim ? rawBody.slice(0, maxBodyLength).trimEnd() + '…' : rawBody;
+
+  // Attachment partitioning — images go into the mosaic; files
+  // stack as cards below the mosaic. Both groups still live INSIDE
+  // the bubble (the WhatsApp convention), with the message body
+  // rendered underneath.
+  const attachmentList: Attachment[] =
+    showAttachments && !message.deleted_at && Array.isArray(message.attachments)
+      ? message.attachments
+      : [];
+  const imageAttachments = attachmentList.filter((a) => isImageContentType(a.content_type));
+  const fileAttachments = attachmentList.filter((a) => !isImageContentType(a.content_type));
+  const hasAnyAttachment = imageAttachments.length > 0 || fileAttachments.length > 0;
+  const hasVisibleBody = !message.deleted_at && rawBody.length > 0;
+  // Image-only (no body, no file cards) → meta floats over the
+  // bottom-right of the last image as a pill overlay (WhatsApp style).
+  const metaOverlay =
+    hasAnyAttachment &&
+    imageAttachments.length > 0 &&
+    !hasVisibleBody &&
+    fileAttachments.length === 0;
+
+  const className = [
+    'poolse-message',
+    isSelf ? 'poolse-message--self' : 'poolse-message--other',
+    // Group-position modifier — CSS uses it to toggle which corners
+    // get the asymmetric tail vs. fully-rounded treatment.
+    `poolse-message--${groupPosition}`,
+    // Tells the CSS to round the image mosaic's bottom corners to
+    // match the bubble's outer corner when nothing follows the media.
+    hasAnyAttachment ? 'poolse-message--has-media' : '',
+    metaOverlay ? 'poolse-message--media-only' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const time = message.inserted_at
     ? new Date(message.inserted_at).toLocaleTimeString(undefined, {
@@ -166,9 +201,17 @@ export function MessageBubble({
       {showQuoteCard === 'placeholder' && (
         <QuotedPlaceholder isSelf={isSelf} quotedMessageId={message.quoted_message_id!} />
       )}
+      {imageAttachments.length > 0 && <ImageMosaic images={imageAttachments} />}
+      {fileAttachments.length > 0 && (
+        <div className="poolse-message__files">
+          {fileAttachments.map((att) => (
+            <AttachmentPreview key={att.id} attachment={att} />
+          ))}
+        </div>
+      )}
       {message.deleted_at ? (
         <span className="poolse-message__body--deleted">[deleted]</span>
-      ) : (
+      ) : hasVisibleBody ? (
         <div className="poolse-message__body">
           {markdown ? (
             <ReactMarkdown
@@ -211,8 +254,14 @@ export function MessageBubble({
             </button>
           )}
         </div>
-      )}
-      <span className="poolse-message__meta">
+      ) : null}
+      <span
+        className={
+          metaOverlay
+            ? 'poolse-message__meta poolse-message__meta--overlay'
+            : 'poolse-message__meta'
+        }
+      >
         <span>{time}</span>
         {message.edited_at ? <span> · edited</span> : null}
         {/* Read-receipt glyph — only meaningful for self-sent rows.
@@ -226,6 +275,51 @@ export function MessageBubble({
           />
         ) : null}
       </span>
+    </div>
+  );
+}
+
+// Whether a content-type string represents an image. The Attachment
+// row always carries `content_type` from the server — for messages
+// authored on older clients (or partially-populated rows during a
+// realtime echo race) we fall back to "treat as file" which is the
+// safer of the two paths.
+function isImageContentType(ct: string | null | undefined): boolean {
+  return typeof ct === 'string' && ct.toLowerCase().startsWith('image/');
+}
+
+// Image mosaic — WhatsApp-style layout for one or more images inside
+// the bubble. Picks a grid template by count:
+//   1  → single full-bleed tile (image keeps its natural aspect, capped)
+//   2  → two equal squares side-by-side
+//   3  → one wide tile on top, two equal squares beneath
+//   4+ → 2×2 grid; the 4th tile shows a "+N more" overlay when there
+//        are more than four images.
+function ImageMosaic({ images }: { images: Attachment[] }) {
+  const total = images.length;
+  // Cap the visible tiles at 4; anything past that surfaces via the
+  // overflow badge on the last tile.
+  const visible = images.slice(0, 4);
+  const layout = Math.min(total, 4); // 1 | 2 | 3 | 4
+  const overflow = Math.max(0, total - 4);
+  return (
+    <div
+      className={`poolse-message__media poolse-message__media--n${layout}`}
+      aria-label={total === 1 ? 'Image' : `${total} images`}
+    >
+      {visible.map((att, i) => {
+        const isOverflowTile = i === visible.length - 1 && overflow > 0;
+        return (
+          <div className="poolse-message__media-tile" key={att.id}>
+            <AttachmentPreview attachment={att} />
+            {isOverflowTile && (
+              <div className="poolse-message__media-overflow" aria-hidden="true">
+                +{overflow}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

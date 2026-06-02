@@ -269,4 +269,3 @@ function xhrPut(
     xhr.send(body as XMLHttpRequestBodyInit);
   });
 }
-

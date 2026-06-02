@@ -173,14 +173,11 @@ export function useAttachmentUpload(): UseAttachmentUploadState {
     if (inf) inf.controller.abort();
   }, []);
 
-  const remove = useCallback(
-    (localId: string) => {
-      const inf = inFlightRef.current.get(localId);
-      if (inf) inf.controller.abort();
-      setQueue((q) => q.filter((it) => it.localId !== localId));
-    },
-    [],
-  );
+  const remove = useCallback((localId: string) => {
+    const inf = inFlightRef.current.get(localId);
+    if (inf) inf.controller.abort();
+    setQueue((q) => q.filter((it) => it.localId !== localId));
+  }, []);
 
   const reset = useCallback(() => {
     for (const v of inFlightRef.current.values()) v.controller.abort();

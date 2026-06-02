@@ -24,14 +24,14 @@ Your application backend owns the api key and brokers JWTs to the browser. On an
 // auth applies BEFORE this call. The API key proves YOUR identity to
 // poolse; the JWT is for ONE specific End User.
 async function POST(req: Request) {
-  const session = await yourAuth(req);  // returns { user_id: '...', ... }
+  const session = await yourAuth(req); // returns { user_id: '...', ... }
   if (!session) return new Response('unauthorized', { status: 401 });
 
   // First time? Create the user in poolse. Idempotent on external_id.
   const userRes = await fetch('https://api.poolse.dev/v1/users', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.POOLSE_API_KEY}`,
+      Authorization: `Bearer ${process.env.POOLSE_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -42,13 +42,10 @@ async function POST(req: Request) {
   const { id: poolseUserId } = await userRes.json();
 
   // Mint a 1h JWT for that user.
-  const tokenRes = await fetch(
-    `https://api.poolse.dev/v1/users/${poolseUserId}/tokens`,
-    {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${process.env.POOLSE_API_KEY}` },
-    },
-  );
+  const tokenRes = await fetch(`https://api.poolse.dev/v1/users/${poolseUserId}/tokens`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.POOLSE_API_KEY}` },
+  });
   const { token } = await tokenRes.json();
   return Response.json({ token, user_id: poolseUserId });
 }
@@ -96,12 +93,12 @@ poolse doesn't store user names or avatars. The SDK only knows a `user_id` (uuid
 {
   userResolver: async (poolseUserId) => {
     const u = await db.users.findOne({ poolse_user_id: poolseUserId });
-    if (!u) return null;  // SDK falls back to "User abc123" + initials avatar
+    if (!u) return null; // SDK falls back to "User abc123" + initials avatar
     return {
       displayName: u.full_name,
       avatarUrl: u.avatar_url,
     };
-  }
+  };
 }
 ```
 
@@ -120,7 +117,7 @@ Attachment uploads go directly from the browser to your storage bucket via presi
   "AllowedMethods": ["GET", "PUT", "HEAD"],
   "AllowedHeaders": ["*"],
   "ExposeHeaders": ["ETag"],
-  "MaxAgeSeconds": 3600
+  "MaxAgeSeconds": 3600,
 }
 ```
 
@@ -165,14 +162,14 @@ Browsers cache failed CORS preflights for a few minutes per origin. After fixing
 
 The live showcase at <https://poolse.dev/chat> is the closest thing to a copy-pasteable production app — it's a Next.js 15 app deployed against the hosted poolse backend. Read it to see each piece of this guide wired up for real:
 
-| File                                        | What it demonstrates                                                                                                  |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `app/api/chat-token/route.ts`               | Backend JWT-mint endpoint — creates the poolse user idempotently, then mints a token via the API key                  |
-| `app/api/conversations/route.ts`            | Creating a conversation as an admin "bot" so the bot retains `:manage_members` for invite-link joins                  |
-| `app/chat/showcase-shell.tsx`               | Client provider wiring: `getToken`, `userResolver`, `apiUrl` override, sidebar + main pane + collapsible member panel |
-| `app/chat/c/[id]/page.tsx`                  | Invite-link landing — joins the visitor to the linked conversation before rendering chat                              |
-| `lib/session.ts`                            | Per-browser session id stored in localStorage (stands in for "your auth system's user id")                            |
-| `next.config.mjs`                           | Minimal Next config — note the deliberate absence of `transpilePackages: ['@poolse/*']`                               |
+| File                             | What it demonstrates                                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `app/api/chat-token/route.ts`    | Backend JWT-mint endpoint — creates the poolse user idempotently, then mints a token via the API key                  |
+| `app/api/conversations/route.ts` | Creating a conversation as an admin "bot" so the bot retains `:manage_members` for invite-link joins                  |
+| `app/chat/showcase-shell.tsx`    | Client provider wiring: `getToken`, `userResolver`, `apiUrl` override, sidebar + main pane + collapsible member panel |
+| `app/chat/c/[id]/page.tsx`       | Invite-link landing — joins the visitor to the linked conversation before rendering chat                              |
+| `lib/session.ts`                 | Per-browser session id stored in localStorage (stands in for "your auth system's user id")                            |
+| `next.config.mjs`                | Minimal Next config — note the deliberate absence of `transpilePackages: ['@poolse/*']`                               |
 
 ## Reference
 

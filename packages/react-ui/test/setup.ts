@@ -6,6 +6,16 @@
 
 import { vi } from 'vitest';
 
+// `@poolse/sdk` is consumed from its built `dist/` (tsup bundles
+// `phoenix` inline), so the `vi.mock('phoenix', …)` below doesn't
+// intercept the inlined copy that the dist ships with. To stop the
+// real Phoenix client from scheduling a LongPoll setTimeout that
+// fires after happy-dom is torn down (and then throws "No suitable
+// XMLHttpRequest implementation found"), kill XHR up front — Phoenix
+// fails its first poll synchronously and never reschedules. Mirrors
+// the same trick used in `packages/react/test/setup.ts`.
+(globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = undefined;
+
 vi.mock('phoenix', () => {
   class StubChannel {
     on() {

@@ -4,6 +4,84 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [1.1.0] — 2026-06-02
+
+Lockstep release with `@poolse/sdk@1.1.0` and `@poolse/react@1.1.0`.
+`@poolse/react-ui` carries the actual feature work this version; the
+other two packages bumped to keep the three in sync, so customers can
+pin one version across the whole client surface.
+
+### Added — attachments inside the bubble (WhatsApp-style)
+
+- `<MessageBubble>` now renders attachments INSIDE the bubble rather
+  than as a separate block underneath. Images compose a mosaic at the
+  top of the bubble, file cards stack below the mosaic, and the
+  message body (if any) sits beneath them all. Layout chooses a grid
+  template by image count: n1 → single full-bleed tile (natural
+  aspect, capped at 360px), n2 → two equal squares, n3 → one 16:9
+  hero + two squares beneath, n4+ → 2×2 grid with the 4th tile
+  showing a `+N more` overlay. The bubble has `overflow: hidden` so
+  the mosaic is clipped to the bubble's rounded corners and the
+  asymmetric tail.
+- `<MessageBubble showAttachments?: boolean>` — new prop, defaults
+  to `true`. Pass `false` if you want the bubble to skip the
+  in-bubble attachments (so you can render them yourself).
+  `<MessageRow>` forwards its existing `attachments` flag to this
+  prop, and `<ConversationView>`'s `attachments` flag forwards to
+  `<MessageRow>`. Existing callers don't need to do anything to get
+  the new layout.
+- New CSS classes: `.poolse-message__media`,
+  `.poolse-message__media--n1` / `--n2` / `--n3` / `--n4`,
+  `.poolse-message__media-tile`, `.poolse-message__media-overflow`,
+  `.poolse-message__files`, `.poolse-message__meta--overlay`, plus
+  the parent-state modifiers `.poolse-message--has-media` and
+  `.poolse-message--media-only`.
+- When a message has only images (no body text and no file cards),
+  the meta (time + read tick) renders as a small dark pill overlaid
+  on the bottom-right of the mosaic, matching the WhatsApp
+  convention.
+- File-card attachments on self bubbles get a tinted white-on-coral
+  variant so they read against the brand colour.
+
+### Changed
+
+- `<MessageRow>` no longer renders the standalone attachments block
+  below the bubble — attachments now live inside the bubble via the
+  new `showAttachments` plumbing.
+- README rewritten as a full component reference with the in-bubble
+  attachment layout documented, the migration note for the removed
+  CSS class, the full design-token list, the customization layers,
+  and the accessibility surface.
+
+### Removed
+
+- CSS class `.poolse-message-row__attachments` and its `--self`
+  modifier are no longer rendered or defined. Any customer rule that
+  selected on them will silently no-op. Re-target the new classes
+  above to restore custom styling.
+
+### Migration notes
+
+- If you never touched the `.poolse-message-row__attachments`
+  selector and you don't pass `attachments={false}` to
+  `<ConversationView>` / `<MessageRow>`, nothing changes for you —
+  attachments still appear, just inside the bubble.
+- If you styled the old class, switch your selectors to
+  `.poolse-message__media` / `.poolse-message__files`. The new
+  classes carry the same semantic content (images and file cards
+  respectively), and the design-token-driven defaults already match
+  the surrounding bubble styling.
+- If you previously rendered your own attachments outside the bubble
+  while passing a `<MessageBubble>` directly, pass
+  `showAttachments={false}` to keep that arrangement.
+
+### Internal
+
+- Test harness: `XMLHttpRequest` is undefined'd in `test/setup.ts`
+  so the bundled Phoenix LongPoll fallback can't schedule a
+  setTimeout that fires after happy-dom teardown. Resolves the
+  unhandled-error exits previously seen on `pnpm test`.
+
 ## [1.0.0-beta.0] — 2026-06-01
 
 First beta of the stable component surface. Promotes the full 0.2.x

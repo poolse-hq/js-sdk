@@ -4,6 +4,21 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [1.1.0] — 2026-06-02
+
+Lockstep release with `@poolse/react@1.1.0` and `@poolse/react-ui@1.1.0`.
+No API changes in `@poolse/sdk` itself — version bumped to keep the
+three packages in sync, so customers can pin one version across the
+whole client surface.
+
+### Changed
+
+- README rewritten as a full reference: authentication model, every
+  resource and method with its HTTP path, the realtime channel event
+  catalogue with payload shapes, token caching semantics, idempotency
+  conventions, retry behaviour, and the typed error hierarchy.
+- Repo-wide prettier formatting fixes (whitespace only).
+
 ## [1.0.0-beta.0] — 2026-06-01
 
 First beta of the stable API surface. Consolidates everything from

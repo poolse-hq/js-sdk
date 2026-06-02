@@ -146,7 +146,9 @@ export function ReactionPicker({
       const idx = buttons.findIndex((b) => b === document.activeElement);
       if (idx === -1) return;
       const nextIdx =
-        e.key === 'ArrowRight' ? (idx + 1) % buttons.length : (idx - 1 + buttons.length) % buttons.length;
+        e.key === 'ArrowRight'
+          ? (idx + 1) % buttons.length
+          : (idx - 1 + buttons.length) % buttons.length;
       buttons[nextIdx]?.focus();
       e.preventDefault();
     }

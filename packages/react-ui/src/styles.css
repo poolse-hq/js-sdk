@@ -366,8 +366,14 @@
   line-height: 1.4;
   word-wrap: break-word;
   overflow-wrap: anywhere;
-  /* Anchor for the chevron action-trigger overlay. */
+  /* Anchor for the chevron action-trigger overlay AND the in-bubble
+     image mosaic's overlaid meta pill (WhatsApp-style). */
   position: relative;
+  /* Clip the in-bubble image mosaic to the bubble's rounded corners
+     so the media reads as part of the bubble rather than an island
+     pasted on top. The chevron + actions overlay sit well within the
+     interior so they aren't affected by the clip. */
+  overflow: hidden;
 }
 
 .poolse-message--self {
@@ -1322,6 +1328,215 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
+   In-bubble attachment mosaic — WhatsApp-style
+   ─────────────────────────────────────────────────────────────
+   Images render in a CSS grid INSIDE the bubble. The grid bleeds
+   into the bubble's padding (negative side margins + overflow:hidden
+   on the bubble) so each image hugs the bubble's rounded corners.
+   File-type attachments stack below the mosaic as cards sitting in
+   the bubble's normal padded area.
+
+   Layouts by image count (see ImageMosaic in MessageBubble.tsx):
+     n1 → single tile, natural aspect, capped height
+     n2 → two square tiles side-by-side
+     n3 → one wide tile on top, two squares beneath
+     n4 → 2×2 grid; "+N more" overlay surfaces extras past 4
+*/
+
+.poolse-message__media {
+  display: grid;
+  /* 2px hairline gutters between tiles mirror the WA chat look — the
+     bubble's background bleeds through and reads as a tasteful seam. */
+  gap: 2px;
+  /* Full-bleed: cancel the bubble's 7px/11px padding so each image
+     touches the bubble border. The bubble's `overflow: hidden` +
+     border-radius clip the mosaic to the bubble shape. */
+  margin: -7px -11px 0 -11px;
+  /* Minimum width so a tiny solo image doesn't collapse the bubble
+     into a thumbnail-narrow strip. Capped naturally by the row's
+     78% max-width. */
+  min-width: 220px;
+  /* Subtle backing color in case an image is transparent / still
+     loading — keeps the seam color consistent with the bubble seams. */
+  background: var(--poolse-surface-2);
+}
+
+/* When the bubble has only the media + meta overlay (no body, no file
+   cards), extend the mosaic into the bubble's bottom padding too so
+   the image fully fills the bubble. The bubble's rounded corners +
+   overflow:hidden handle the bottom shape. */
+.poolse-message--media-only .poolse-message__media {
+  margin-bottom: -7px;
+}
+
+/* When body text or file cards follow the mosaic, add a small gap so
+   they don't kiss the image. The mosaic still bleeds into the side
+   padding; only the bottom rejoins the padded text area. */
+.poolse-message__media + .poolse-message__files,
+.poolse-message__media + .poolse-message__body,
+.poolse-message__media + .poolse-message__body--deleted {
+  margin-top: 6px;
+}
+
+.poolse-message__files + .poolse-message__body,
+.poolse-message__files + .poolse-message__body--deleted {
+  margin-top: 6px;
+}
+
+/* Layout templates by image count */
+.poolse-message__media--n1 {
+  grid-template-columns: 1fr;
+}
+
+.poolse-message__media--n2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.poolse-message__media--n3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+}
+.poolse-message__media--n3 > .poolse-message__media-tile:nth-child(1) {
+  /* First tile spans the full top row (wide hero). */
+  grid-column: 1 / span 2;
+  aspect-ratio: 16 / 9;
+}
+
+.poolse-message__media--n4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+/* Tile — wraps a single AttachmentPreview and the optional +N overlay.
+   Grid-layout tiles are forced to a square aspect so the mosaic stays
+   tidy; the solo tile keeps the image's natural shape. */
+.poolse-message__media-tile {
+  position: relative;
+  overflow: hidden;
+  background: var(--poolse-surface-2);
+  /* Force the AttachmentPreview's inner button + img to fill the tile
+     by stretching their flex/grid sizing constraints. */
+  display: block;
+  min-width: 0;
+  min-height: 0;
+}
+
+.poolse-message__media--n2 .poolse-message__media-tile,
+.poolse-message__media--n3 .poolse-message__media-tile:not(:nth-child(1)),
+.poolse-message__media--n4 .poolse-message__media-tile {
+  aspect-ratio: 1 / 1;
+}
+
+/* Override AttachmentPreview's defaults so the image stretches edge-
+   to-edge inside the tile. Outside the mosaic (e.g. ThreadView's
+   composer preview) the original `.poolse-attachment` rules still
+   apply unchanged. */
+.poolse-message__media-tile .poolse-attachment {
+  display: block;
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  gap: 0;
+}
+.poolse-message__media-tile .poolse-attachment__image-button {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  /* The mosaic provides the rounded corners via the bubble's clip;
+     individual tiles stay rectangular for the grid seams. */
+}
+.poolse-message__media-tile .poolse-attachment__image {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  object-fit: cover;
+}
+
+/* Solo image keeps its natural aspect so portraits don't get squashed
+   into a square — capped to a comfortable max-height. */
+.poolse-message__media--n1 .poolse-attachment__image {
+  height: auto;
+  max-height: 360px;
+  object-fit: contain;
+}
+
+/* "+N more" overlay on the last visible tile of an over-capacity
+   mosaic. Sits above the image with a darkened scrim so the count
+   reads regardless of the underlying photo. */
+.poolse-message__media-overflow {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  pointer-events: none;
+  font-family: var(--poolse-font-body);
+}
+
+/* File-type attachment cards inside the bubble — stacked, full-width,
+   sit in the bubble's padded interior. Self bubbles tint the card
+   slightly so it reads against the brand background. */
+.poolse-message__files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.poolse-message__files .poolse-attachment {
+  max-width: none;
+  width: 100%;
+}
+
+.poolse-message__files .poolse-attachment__file {
+  width: 100%;
+  min-width: 0;
+}
+
+.poolse-message--self .poolse-message__files .poolse-attachment__file {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--poolse-on-brand);
+}
+
+.poolse-message--self .poolse-message__files .poolse-attachment__file-icon {
+  color: var(--poolse-on-brand);
+}
+
+.poolse-message--self .poolse-message__files .poolse-attachment__file-meta {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* Image-only message: float meta (time + read tick) as a pill on the
+   bottom-right of the mosaic, WhatsApp-style. Dark scrim keeps it
+   readable against any image. */
+.poolse-message__meta--overlay {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  padding: 2px 8px;
+  border-radius: var(--poolse-radius-pill);
+  background: rgba(0, 0, 0, 0.42);
+  color: #fff !important;
+  font-size: 10.5px;
+  line-height: 1.2;
+  opacity: 1;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.poolse-message--self .poolse-message__meta--overlay,
+.poolse-message--other .poolse-message__meta--overlay {
+  color: #fff;
+}
+
+/* ─────────────────────────────────────────────────────────────
    Reactions
    ───────────────────────────────────────────────────────────── */
 
@@ -1857,17 +2072,6 @@
   /* Bubble's own max-width was on the bubble itself; lift the
      row-level cap and let the row decide. */
   max-width: 100%;
-}
-
-.poolse-message-row__attachments {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  align-items: flex-start;
-}
-
-.poolse-message-row__attachments.is-self {
-  align-items: flex-end;
 }
 
 .poolse-message-row__reactions {

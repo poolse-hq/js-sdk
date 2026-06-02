@@ -9,10 +9,7 @@ import { useEffect, type RefObject } from 'react';
  * without it, multi-line content (list continuations, soft-wrapped
  * markdown, etc.) hides behind the single visible row.
  */
-export function useAutogrow(
-  ref: RefObject<HTMLTextAreaElement | null>,
-  value: string,
-): void {
+export function useAutogrow(ref: RefObject<HTMLTextAreaElement | null>, value: string): void {
   useEffect(() => {
     const ta = ref.current;
     if (!ta) return;

@@ -57,9 +57,7 @@ function UploadChip({
           {item.filename}
         </div>
         {isError ? (
-          <div className="poolse-upload-chip__error">
-            {item.error?.message ?? 'Upload failed'}
-          </div>
+          <div className="poolse-upload-chip__error">{item.error?.message ?? 'Upload failed'}</div>
         ) : isReady ? (
           // No progress bar once the upload is done — the chip itself
           // is the "staged, waiting on send" signal. A short caption

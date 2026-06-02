@@ -55,9 +55,7 @@ export function MemberList({
   // joins the conversation channel idempotently; if ConversationView is
   // mounted alongside MemberList (the common case) they share the same
   // channel subscription, so this is free.
-  const { online: presenceOnline } = usePresence(
-    onlineUserIds === undefined ? conversationId : '',
-  );
+  const { online: presenceOnline } = usePresence(onlineUserIds === undefined ? conversationId : '');
   const effectiveOnline = onlineUserIds ?? presenceOnline;
 
   if (loading && members.length === 0) {

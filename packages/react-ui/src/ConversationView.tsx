@@ -11,14 +11,7 @@
 
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { useMembers, useMessages, useMe, useRealtimeStatus, useTyping } from '@poolse/react';
-import React, {
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import React, { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePoolseFonts } from './fonts.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
 import { MentionInput } from './MentionInput.js';
@@ -496,9 +489,7 @@ export function ConversationView({
           {/* Top sentinel for the auto-load IntersectionObserver.
               Rendered only while there's more history to fetch so IO
               doesn't observe a dead element. */}
-          {hasMore && (
-            <div ref={topSentinelRef} aria-hidden="true" style={{ height: 1 }} />
-          )}
+          {hasMore && <div ref={topSentinelRef} aria-hidden="true" style={{ height: 1 }} />}
 
           {loading && messages.length === 0 ? (
             <div className="poolse-conversation__empty">Loading…</div>

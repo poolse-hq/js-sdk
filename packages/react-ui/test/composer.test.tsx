@@ -62,9 +62,7 @@ describe('<MessageComposer>', () => {
 
   it('onTyping fires on each keystroke', () => {
     const onTyping = vi.fn();
-    const { container } = renderComposer(
-      <MessageComposer onSend={vi.fn()} onTyping={onTyping} />,
-    );
+    const { container } = renderComposer(<MessageComposer onSend={vi.fn()} onTyping={onTyping} />);
     const input = container.querySelector('.poolse-composer__input') as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: 'a' } });
     fireEvent.change(input, { target: { value: 'ab' } });

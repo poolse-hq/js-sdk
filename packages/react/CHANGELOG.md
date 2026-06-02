@@ -4,6 +4,23 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [1.1.0] — 2026-06-02
+
+Lockstep release with `@poolse/sdk@1.1.0` and `@poolse/react-ui@1.1.0`.
+No API changes in `@poolse/react` itself — version bumped to keep the
+three packages in sync, so customers can pin one version across the
+whole client surface.
+
+### Changed
+
+- README rewritten with a full per-hook reference: signatures, return
+  shapes, the realtime channels each hook subscribes to, the optimistic
+  send + thread routing strategy in `useMessages`, the buffered-reads
+  race fix in `useMembers`, the cache + dedup semantics in `useUser`,
+  and the synchronous-snapshot rollback pattern used by edits and
+  optimistic removes.
+- Repo-wide prettier formatting fixes (whitespace only).
+
 ## [1.0.0-beta.0] — 2026-06-01
 
 First beta of the stable API. Promotes the full 0.2.x hook surface

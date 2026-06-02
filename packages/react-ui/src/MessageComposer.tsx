@@ -1,10 +1,4 @@
-import {
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, type KeyboardEvent } from 'react';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useAttachmentUpload } from '@poolse/react';
 import { handleListEnter } from './listAutocomplete.js';
@@ -88,12 +82,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     useAutogrow(taRef, value);
 
-    const {
-      queue,
-      uploadAll,
-      cancel: cancelUpload,
-      remove: removeUpload,
-    } = useAttachmentUpload();
+    const { queue, uploadAll, cancel: cancelUpload, remove: removeUpload } = useAttachmentUpload();
 
     // Show every staged chip — pending, uploading, ready, errored.
     // Ready chips are the user's "queued and waiting on send" signal;
@@ -101,9 +90,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     // nothing happened. They get swept out after the send completes.
     const visibleUploads = queue.filter((it) => it.status !== 'cancelled');
     const readyCount = queue.filter((it) => it.status === 'ready').length;
-    const uploading = queue.some(
-      (it) => it.status === 'pending' || it.status === 'uploading',
-    );
+    const uploading = queue.some((it) => it.status === 'pending' || it.status === 'uploading');
 
     const addFiles = (files: File[]) => {
       if (!attachments || files.length === 0) return;
@@ -177,8 +164,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       onTyping?.();
     };
 
-    const canSend =
-      !disabled && !sending && !uploading && (value.trim() !== '' || readyCount > 0);
+    const canSend = !disabled && !sending && !uploading && (value.trim() !== '' || readyCount > 0);
 
     return (
       <form
