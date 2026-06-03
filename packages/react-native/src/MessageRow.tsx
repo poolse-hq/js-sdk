@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useState, type ReactNode } from 'react';
 
@@ -97,7 +98,19 @@ export function MessageRow({
 
       <View style={styles.bubbleCol}>
         <Pressable
-          onLongPress={() => actions && setActionsOpen(true)}
+          onLongPress={() => {
+            if (!actions) return;
+            // Tactile confirmation that the long-press registered, like
+            // every native messaging app. Wrapped in try/catch because
+            // Haptics is unavailable in some emulators / web targets
+            // and we'd rather miss the buzz than crash the row.
+            try {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            } catch {
+              /* no haptics, no problem */
+            }
+            setActionsOpen(true);
+          }}
           accessibilityRole="button"
           accessibilityLabel="Message actions"
         >

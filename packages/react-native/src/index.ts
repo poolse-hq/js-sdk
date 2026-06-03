@@ -40,6 +40,7 @@ export {
 } from './Reactions.js';
 export { MentionInput, type MentionInputProps } from './MentionInput.js';
 export { AttachmentPicker, type AttachmentPickerProps } from './AttachmentPicker.js';
+export { ImageMosaic, type ImageMosaicProps } from './ImageMosaic.js';
 
 // ── Brand chrome ──────────────────────────────────────────────
 export { primitives as Primitives } from './primitives/index.js';

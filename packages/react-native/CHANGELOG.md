@@ -4,6 +4,40 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [0.1.4] — 2026-06-03
+
+### Breaking
+
+- **`expo-image-picker`, `expo-document-picker`, and `expo-haptics`
+  are now REQUIRED peer dependencies** (were optional). The
+  attachment picker + long-press haptics rely on them, and almost
+  every Expo app has them anyway — making them required lets us
+  drop the dynamic-import dance and ship a more "complete bundle"
+  feel. Install with `npx expo install expo-image-picker
+  expo-document-picker expo-haptics` alongside the package.
+
+### Added
+
+- **`<ImageMosaic>`** — WhatsApp-style multi-image grid (n1 / n2 /
+  n3 / n4+ with `+N more` overlay) used inside `<MessageBubble>`
+  whenever a message has more than one image attachment. Tapping a
+  tile opens a full-screen modal viewer with tap-anywhere-to-close.
+  Exported standalone so you can use the layout outside the bubble
+  if you want.
+- **Haptic feedback on long-press** in `<MessageRow>` —
+  `Haptics.impactAsync(ImpactFeedbackStyle.Medium)` fires when the
+  action sheet opens, matching native messaging UX. Wrapped in
+  try/catch for environments without haptics (Android emulators,
+  web targets).
+
+### Changed
+
+- **Cleaner bubble meta row**: relative timestamp formatting
+  (`HH:MM`, `Yesterday HH:MM`, `Mon HH:MM`, `MMM D`), tabular-num
+  font variant so the time width stays stable, the read tick sits
+  flush with the timestamp, and `edited` is its own italic pill
+  rather than inline text.
+
 ## [0.1.0] — 2026-06-03
 
 First release. Plug-and-play React Native UI for poolse, mirroring

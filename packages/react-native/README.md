@@ -15,9 +15,13 @@ Works out of the box with Expo (SDK 50+) and bare React Native
 
 ```bash
 npm install @poolse/sdk @poolse/react @poolse/react-native react-native-svg
-# optional — only required if you mount <AttachmentPicker>:
-npx expo install expo-image-picker expo-document-picker
+npx expo install expo-image-picker expo-document-picker expo-haptics
 ```
+
+All four Expo modules are required peer dependencies — `expo-haptics`
+powers long-press feedback in `<MessageRow>`, and the two pickers
+back `<AttachmentPicker>`. The `npx expo install` form picks
+versions compatible with your installed Expo SDK automatically.
 
 ## Quick start
 

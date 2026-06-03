@@ -12,6 +12,7 @@ export default defineConfig({
     'react',
     'react-native',
     'react-native-svg',
+    'expo-haptics',
     'expo-image-picker',
     'expo-document-picker',
     '@poolse/sdk',

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { ImageMosaic } from './ImageMosaic.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { userColor } from './primitives/userColor.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
@@ -130,13 +131,7 @@ export function MessageBubble({
           />
         ) : null}
 
-        {renderAttachments && images.length > 0 ? (
-          <View style={{ gap: theme.spacing.xs, marginBottom: theme.spacing.xs }}>
-            {images.map((att) => (
-              <AttachmentPreview key={att.id} attachment={att} />
-            ))}
-          </View>
-        ) : null}
+        {renderAttachments && images.length > 0 ? <ImageMosaic images={images} /> : null}
 
         {renderAttachments && files.length > 0 ? (
           <View style={{ gap: theme.spacing.xs, marginBottom: theme.spacing.xs }}>
@@ -179,19 +174,33 @@ export function MessageBubble({
         <View style={styles.metaRow}>
           {isEdited ? (
             <Text
-              style={[styles.meta, { color: isSelf ? theme.colors.onBrand : theme.colors.ink3 }]}
+              style={[
+                styles.editedTag,
+                {
+                  color: isSelf ? theme.colors.onBrand : theme.colors.ink3,
+                  opacity: 0.7,
+                },
+              ]}
             >
-              edited ·{' '}
+              edited
             </Text>
           ) : null}
-          <Text style={[styles.meta, { color: isSelf ? theme.colors.onBrand : theme.colors.ink3 }]}>
+          <Text
+            style={[
+              styles.meta,
+              {
+                color: isSelf ? theme.colors.onBrand : theme.colors.ink3,
+                opacity: isSelf ? 0.85 : 1,
+              },
+            ]}
+          >
             {time}
           </Text>
           {isSelf && readState ? (
-            <View style={{ marginLeft: 4 }}>
+            <View style={styles.readTick}>
               <PoolseIcon
                 name={readState === 'read' ? 'check-double' : 'check'}
-                size={12}
+                size={13}
                 color={theme.colors.onBrand}
               />
             </View>
@@ -247,13 +256,39 @@ function isImageContentType(ct: string | null | undefined): boolean {
   return ct.startsWith('image/');
 }
 
+// HH:MM if same calendar day, "Yesterday HH:MM" if yesterday, "Mon DD"
+// if older than a week, otherwise weekday abbreviation. Matches the
+// WhatsApp / iMessage convention — short enough to fit in the meta
+// row, long enough to be useful at a glance.
 function formatTime(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const now = new Date();
+    const sameDay = isSameDay(d, now);
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (sameDay) return time;
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (isSameDay(d, yesterday)) return `Yesterday ${time}`;
+
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / 86_400_000);
+    if (diffDays < 7) {
+      return `${d.toLocaleDateString([], { weekday: 'short' })} ${time}`;
+    }
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
   } catch {
     return '';
   }
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 const styles = StyleSheet.create({
@@ -281,10 +316,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     marginTop: 4,
+    gap: 4,
   },
   meta: {
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
+  },
+  editedTag: {
     fontSize: 10,
-    opacity: 0.7,
+    fontStyle: 'italic',
+    marginRight: 2,
+  },
+  readTick: {
+    marginLeft: 2,
   },
   actionsSlot: {
     position: 'absolute',
