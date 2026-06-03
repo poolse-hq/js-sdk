@@ -93,6 +93,20 @@ export function AttachmentPicker({ visible, onClose, onPickInputs }: AttachmentP
   );
 }
 
+// RN gives us a local file URI. The SDK's upload PUTs the `body` raw
+// to a presigned S3/R2 URL — those only accept raw bytes, NOT
+// multipart. If we passed the `{ uri, name, type }` object directly,
+// fetch would serialize it as multipart and the bucket would reject
+// the upload silently. So we read the URI as a Blob first (same shape
+// that `<input type="file">` would give on web) and pass that.
+async function uriToBlob(uri: string): Promise<Blob> {
+  const res = await fetch(uri);
+  if (!res.ok && res.status !== 0) {
+    throw new Error(`failed to read picked file (HTTP ${res.status})`);
+  }
+  return res.blob();
+}
+
 async function defaultAdapter(kind: 'image' | 'document') {
   if (kind === 'image') {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -100,32 +114,36 @@ async function defaultAdapter(kind: 'image' | 'document') {
       quality: 0.85,
     });
     if (res.canceled) return [];
-    return res.assets.map((asset) => ({
-      body: {
-        uri: asset.uri,
-        name: asset.fileName ?? 'image.jpg',
-        type: asset.mimeType ?? 'image/jpeg',
-      },
-      contentType: asset.mimeType ?? 'image/jpeg',
-      byteSize: asset.fileSize ?? 0,
-      filename: asset.fileName ?? 'image.jpg',
-    }));
+    return Promise.all(
+      res.assets.map(async (asset) => {
+        const blob = await uriToBlob(asset.uri);
+        const contentType = asset.mimeType ?? blob.type ?? 'image/jpeg';
+        return {
+          body: blob,
+          contentType,
+          byteSize: asset.fileSize ?? blob.size,
+          filename: asset.fileName ?? `image-${Date.now()}.jpg`,
+        };
+      }),
+    );
   }
   const res = await DocumentPicker.getDocumentAsync({
     copyToCacheDirectory: true,
     multiple: true,
   });
   if (res.canceled) return [];
-  return res.assets.map((asset) => ({
-    body: {
-      uri: asset.uri,
-      name: asset.name,
-      type: asset.mimeType ?? 'application/octet-stream',
-    },
-    contentType: asset.mimeType ?? 'application/octet-stream',
-    byteSize: asset.size ?? 0,
-    filename: asset.name,
-  }));
+  return Promise.all(
+    res.assets.map(async (asset) => {
+      const blob = await uriToBlob(asset.uri);
+      const contentType = asset.mimeType ?? blob.type ?? 'application/octet-stream';
+      return {
+        body: blob,
+        contentType,
+        byteSize: asset.size ?? blob.size,
+        filename: asset.name,
+      };
+    }),
+  );
 }
 
 const styles = StyleSheet.create({
