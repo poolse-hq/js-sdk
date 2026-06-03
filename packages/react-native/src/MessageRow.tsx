@@ -1,13 +1,4 @@
-import {
-  Animated,
-  PanResponder,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  Vibration,
-  View,
-} from 'react-native';
+import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -20,19 +11,9 @@ import { ReactionPicker, ReactionStrip } from './Reactions.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 import { useReactions } from '@poolse/react';
 
-// Swipe-to-reply triggers at this many pixels of horizontal pull.
-// WhatsApp uses ~70; iMessage ~60. 60 feels right on the iPhone 14
-// pro — short enough for a thumb-only one-handed motion, long enough
-// not to fire on accidental scroll-margin drift.
-const SWIPE_REPLY_THRESHOLD = 60;
-// Soft 8ms tap to confirm "you crossed the threshold, releasing will
-// open the reply chip." Mirrors WhatsApp; short enough to not trigger
-// iOS's audible vibration thud.
-function quietHaptic() {
-  if (Platform.OS === 'ios' || Platform.OS === 'android') {
-    Vibration.vibrate(8);
-  }
-}
+// Swipe-to-reply triggers at this much horizontal pull. iOS / WhatsApp
+// use 50–60px; the lower bound feels lighter for one-handed thumb use.
+const SWIPE_REPLY_THRESHOLD = 50;
 
 export interface MessageRowProps {
   msg: Message;
@@ -115,7 +96,6 @@ export function MessageRow({
   // Animation runs on the JS thread because we need to read the value
   // synchronously on release — native driver would prevent that.
   const translateX = useRef(new Animated.Value(0)).current;
-  const hapticFiredRef = useRef(false);
   const swipeEnabled = quotations && !!onQuote && !editing;
 
   const panResponder = useMemo(
@@ -127,39 +107,39 @@ export function MessageRow({
           // vertical scrolls flow through to the FlatList.
           return Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 2;
         },
+        // 1:1 finger-follow up to the threshold, then square-root
+        // damping past it so the bubble never slides off-screen.
+        // Matches iMessage / WhatsApp — feels weightless during the
+        // committed range and stiffens once you've already triggered.
         onPanResponderMove: (_, g) => {
-          // Other-side bubbles swipe right; self bubbles swipe left.
-          // Multiply by 0.6 so the drag feels rubber-banded.
-          const raw = isSelf ? Math.min(0, g.dx) : Math.max(0, g.dx);
-          translateX.setValue(raw * 0.6);
-          // Haptic the moment we cross the threshold (once per drag).
-          if (!hapticFiredRef.current && Math.abs(raw) >= SWIPE_REPLY_THRESHOLD) {
-            hapticFiredRef.current = true;
-            try {
-              quietHaptic();
-            } catch {
-              /* no-op */
-            }
+          const dx = isSelf ? Math.min(0, g.dx) : Math.max(0, g.dx);
+          const abs = Math.abs(dx);
+          let translated: number;
+          if (abs <= SWIPE_REPLY_THRESHOLD) {
+            translated = dx;
+          } else {
+            const excess = abs - SWIPE_REPLY_THRESHOLD;
+            const dampened = SWIPE_REPLY_THRESHOLD + Math.sqrt(excess * 6);
+            translated = dx < 0 ? -dampened : dampened;
           }
+          translateX.setValue(translated);
         },
         onPanResponderRelease: (_, g) => {
           const past = Math.abs(g.dx) >= SWIPE_REPLY_THRESHOLD;
-          hapticFiredRef.current = false;
           if (past && onQuote) onQuote();
           Animated.spring(translateX, {
             toValue: 0,
             useNativeDriver: false,
-            speed: 18,
-            bounciness: 6,
+            speed: 28,
+            bounciness: 4,
           }).start();
         },
         onPanResponderTerminate: () => {
-          hapticFiredRef.current = false;
           Animated.spring(translateX, {
             toValue: 0,
             useNativeDriver: false,
-            speed: 18,
-            bounciness: 6,
+            speed: 28,
+            bounciness: 4,
           }).start();
         },
       }),
