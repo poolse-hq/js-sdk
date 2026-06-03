@@ -1,10 +1,28 @@
-import type { PresenceSnapshot, Uuid } from '@poolse/sdk';
+import type { PresenceSnapshot } from '@poolse/sdk';
 import { useEffect, useState } from 'react';
 import { usePoolse } from './provider.js';
 
 interface UsePresenceState {
-  /** Set of user_ids currently online in this conversation. */
-  online: Set<Uuid>;
+  /**
+   * Set of `external_id`s currently online in this conversation —
+   * the tenant's own user identifiers. Empty set when no one is on
+   * the channel (note: an empty result during reconnect is normal;
+   * pair with `useRealtimeStatus()` if you need to distinguish).
+   */
+  online: Set<string>;
+}
+
+// Pull external_id out of the first meta entry for each user_id key.
+// Phoenix.Presence supports multiple metas per join (e.g. same user
+// in two tabs); we surface the external_id once since it's identical
+// across the user's metas.
+function externalIdsFrom(state: PresenceSnapshot): string[] {
+  const out: string[] = [];
+  for (const presence of Object.values(state)) {
+    const meta = presence?.metas?.[0];
+    if (meta?.external_id) out.push(meta.external_id);
+  }
+  return out;
 }
 
 /**
@@ -14,27 +32,24 @@ interface UsePresenceState {
  */
 export function usePresence(conversationId: string): UsePresenceState {
   const chat = usePoolse();
-  const [online, setOnline] = useState<Set<Uuid>>(new Set());
+  const [online, setOnline] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setOnline(new Set());
 
-    // Empty id = "do nothing" — same convention as `useMembers` /
-    // `useMessages`. Lets callers conditionally enable presence
-    // tracking without re-mounting the hook.
     if (!conversationId) return;
 
     const conv = chat.realtime.conversation(conversationId);
 
     const applyState = (state: PresenceSnapshot) => {
-      setOnline(new Set(Object.keys(state)));
+      setOnline(new Set(externalIdsFrom(state)));
     };
 
     const applyDiff = (diff: { joins?: PresenceSnapshot; leaves?: PresenceSnapshot }) => {
       setOnline((prev) => {
         const next = new Set(prev);
-        if (diff.joins) Object.keys(diff.joins).forEach((id) => next.add(id));
-        if (diff.leaves) Object.keys(diff.leaves).forEach((id) => next.delete(id));
+        if (diff.joins) externalIdsFrom(diff.joins).forEach((ext) => next.add(ext));
+        if (diff.leaves) externalIdsFrom(diff.leaves).forEach((ext) => next.delete(ext));
         return next;
       });
     };

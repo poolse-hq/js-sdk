@@ -8,15 +8,17 @@ interface UseMembersState {
   error: Error | null;
   refetch: () => Promise<void>;
   /**
-   * Add one or more users by external_id. The returned memberships
-   * are appended to local state on success.
+   * Add one or more users by `external_id`. Unknown ids are
+   * auto-provisioned on the server. Returned memberships are
+   * appended to local state on success.
    */
   addMembers: (externalIds: string[], opts?: { role?: MemberRole }) => Promise<Membership[]>;
   /**
-   * Remove a member by user_id. Optimistically removes from state;
-   * rolls back on server error.
+   * Remove a member by `external_id`. The SDK translates to the
+   * internal user_id under the hood. Optimistically removes from
+   * state; rolls back on server error.
    */
-  removeMember: (userId: Uuid) => Promise<void>;
+  removeMember: (externalId: string) => Promise<void>;
 }
 
 /**
@@ -150,11 +152,18 @@ export function useMembers(conversationId: Uuid): UseMembersState {
   );
 
   const removeMember = useCallback(
-    async (userId: Uuid) => {
+    async (externalId: string) => {
       const snapshot = membersRef.current;
-      setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+      // Translate external_id → internal user_id via the loaded member
+      // list. The DELETE endpoint takes user_id in the path, but the
+      // consumer never has to know that.
+      const target = snapshot.find((m) => m.external_id === externalId);
+      if (!target) return; // not a member; idempotent no-op
+
+      const targetUserId: Uuid = target.user_id;
+      setMembers((prev) => prev.filter((m) => m.external_id !== externalId));
       try {
-        await chat.conversations.one(conversationId).removeMember(userId);
+        await chat.conversations.one(conversationId).removeMember(targetUserId);
       } catch (err) {
         setMembers(snapshot);
         throw err;

@@ -4,6 +4,48 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.0.0] — 2026-06-03
+
+Lockstep release with `@poolse/react@2.0.0` and `@poolse/react-ui@2.0.0`.
+Single load-bearing change: the SDK no longer surfaces poolse-internal
+user uuids in identity-shaped APIs — everything is keyed by the
+tenant's own `external_id` instead.
+
+### Breaking
+
+- **`PoolseConfig.userResolver` signature changes.** Was
+  `(userId: string) => UserProfile | null`; now
+  `(externalId: string) => UserProfile | null`. Your resolver receives
+  YOUR user id (the same string you pass when minting JWTs and as
+  `member_external_ids`), so no `poolse_user_id` column is needed.
+- **`Message.sender_external_id`** added (string | null, required on
+  every wire payload that carries a sender).
+- **`Membership.external_id`** added (string, required).
+- **`QuotedMessagePreview.sender_external_id`** added.
+- **`TypingEvent.external_id`** added — `useTyping` returns
+  `Set<externalId>` instead of `Set<userId>`.
+- **`UsersResource.{peek, get, subscribe, invalidate}`** all keyed by
+  `externalId` (was `userId`). Same semantics; same caching.
+
+### Migration
+
+See `MIGRATING.md` at the repo root. For most apps it's a rename of
+the resolver argument plus deleting the `poolse_user_id` column if
+you stored one.
+
+### Backend coupling
+
+Pairs with the `poolse-server` change that:
+- lazy-provisions unknown `external_id`s referenced in
+  `POST /v1/conversations` (`member_external_ids`) and
+  `POST /v1/conversations/:id/members` (`external_ids`), abuse-capped
+  at 50/hour per JWT,
+- emits `sender_external_id` / `external_id` on every user-shaped
+  wire payload (REST, webhook, realtime).
+
+Self-hosted `@poolse/sdk@2.0.0` against an older backend will get
+`sender_external_id: null` everywhere — degraded display, but no crash.
+
 ## [1.1.0] — 2026-06-02
 
 Lockstep release with `@poolse/react@1.1.0` and `@poolse/react-ui@1.1.0`.

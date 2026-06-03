@@ -29,10 +29,10 @@ export interface MessageBubbleProps {
   readState?: 'sent' | 'read';
   /**
    * Optional friendly label for a quoted message's sender. Same shape
-   * as `<MemberList labelFor>` — usually a `(userId) => string` that
-   * looks up a display name from the local member roster.
+   * as `<MemberList labelFor>` — `(externalId) => string` looking up a
+   * display name from the local member roster.
    */
-  labelFor?: (userId: Uuid) => string;
+  labelFor?: (externalId: string) => string;
   /**
    * Called when the user clicks the quoted card. Typically used to
    * scroll the chat to the original message + flash a highlight.
@@ -108,13 +108,14 @@ export function MessageBubble({
 
   // Resolve the sender's display name + avatar via the customer's
   // `userResolver`. For self bubbles we don't bother — you know who
-  // you are; pass null to short-circuit the hook.
-  const { profile: sender } = useUser(!isSelf ? message.sender_id : null);
-  const senderFallbackName = message.sender_id
-    ? `User ${message.sender_id.slice(0, 6)}`
-    : 'Unknown';
+  // you are; pass null to short-circuit the hook. The resolver is keyed
+  // by `external_id` (the tenant's own user id), not the poolse uuid,
+  // so customers never need a `poolse_user_id` column on their side.
+  const { profile: sender } = useUser(!isSelf ? message.sender_external_id : null);
+  const senderFallbackName = message.sender_external_id ?? 'Unknown';
   const senderName = sender?.displayName ?? senderFallbackName;
-  const senderColorHex = message.sender_id ? userColor(message.sender_id) : 'currentColor';
+  const senderColorKey = message.sender_external_id ?? message.sender_id ?? '';
+  const senderColorHex = senderColorKey ? userColor(senderColorKey) : 'currentColor';
 
   // First-of-cluster / standalone get the sender label.
   const renderSenderName =
@@ -359,11 +360,11 @@ function QuotedCard({
 }: {
   quoted: QuotedMessagePreview;
   isSelf: boolean;
-  labelFor?: (userId: Uuid) => string;
+  labelFor?: (externalId: string) => string;
   onClick?: (quotedMessageId: Uuid) => void;
 }) {
-  const senderLabel = quoted.sender_id
-    ? (labelFor?.(quoted.sender_id) ?? `User ${quoted.sender_id.slice(0, 6)}`)
+  const senderLabel = quoted.sender_external_id
+    ? (labelFor?.(quoted.sender_external_id) ?? quoted.sender_external_id)
     : 'Unknown';
   const isDeleted = !!quoted.deleted_at;
   const handleClick = onClick ? () => onClick(quoted.id) : undefined;

@@ -33,10 +33,11 @@ export interface MentionInputProps {
   placeholder?: string;
   disabled?: boolean;
   /**
-   * Resolve a user_id to a display name for the @ dropdown.
-   * Defaults to the first 8 chars of the id.
+   * Resolve a member's `external_id` to a display name for the @
+   * dropdown. Defaults to the SDK's `userResolver`, falling back to
+   * the external_id itself when no resolver is configured.
    */
-  labelFor?: (userId: Uuid) => string;
+  labelFor?: (externalId: string) => string;
   /**
    * Caller-owned "I'm replying to this message" state. Mirrors
    * `<MessageComposer replyingTo>` — renders a quote chip above the
@@ -110,11 +111,13 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     };
     useImperativeHandle(ref, () => ({ addFiles }), [addFiles, attachments]);
 
-    const label = labelFor ?? ((id: Uuid) => id.slice(0, 8));
+    const label = labelFor ?? ((id: string) => id);
 
     // Filter the member list to the current query.
     const filtered = mention
-      ? members.filter((m) => label(m.user_id).toLowerCase().includes(mention.query.toLowerCase()))
+      ? members.filter((m) =>
+          label(m.external_id).toLowerCase().includes(mention.query.toLowerCase()),
+        )
       : [];
 
     // Reset active selection whenever the candidate list changes.
@@ -146,7 +149,11 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
 
     const insertMention = (m: Membership) => {
       if (!mention) return;
-      const name = label(m.user_id);
+      // Display by external_id (what the dev wired through `labelFor` /
+      // userResolver). The mention array shipped on the wire is still
+      // poolse user_ids for backwards compatibility with the backend's
+      // `messages.mentions` column — the consumer doesn't see those.
+      const name = label(m.external_id);
       const before = value.slice(0, mention.start);
       const after = value.slice(mention.start + 1 + mention.query.length);
       const inserted = `@${name} `;
@@ -242,8 +249,8 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       }
     };
 
-    const replyLabel = replyingTo?.sender_id
-      ? (labelFor?.(replyingTo.sender_id) ?? `User ${replyingTo.sender_id.slice(0, 6)}`)
+    const replyLabel = replyingTo?.sender_external_id
+      ? (labelFor?.(replyingTo.sender_external_id) ?? replyingTo.sender_external_id)
       : 'Unknown';
 
     const canSend = !disabled && !sending && !uploading && (value.trim() !== '' || readyCount > 0);
@@ -365,7 +372,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
                   because we don't have a guarantee names are resolved
                   in time to filter against. */}
                 <span>@</span>
-                <UserName userId={m.user_id} {...(labelFor ? { labelFor } : {})} />
+                <UserName externalId={m.external_id} {...(labelFor ? { labelFor } : {})} />
               </div>
             ))}
           </div>

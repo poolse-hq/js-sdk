@@ -1,4 +1,4 @@
-// React binding over `chat.users.get(userId)`.
+// React binding over `chat.users.get(externalId)`.
 //
 // Uses plain useState + useEffect (NOT `useSyncExternalStore`).
 // useSyncExternalStore reaches into React internals and surfaces
@@ -7,7 +7,7 @@
 // from the cache on mount, subscribe for updates, update state —
 // without that fragility.
 
-import type { PoolseUserProfile, Uuid } from '@poolse/sdk';
+import type { PoolseUserProfile } from '@poolse/sdk';
 import { useEffect, useState } from 'react';
 import { usePoolse } from './provider.js';
 
@@ -21,51 +21,46 @@ export interface UseUserState {
 const EMPTY: UseUserState = { profile: null, loading: false };
 
 /**
- * Resolve a poolse user_id to the customer's display name + avatar
- * URL via the configured `userResolver`. Returns `{ profile: null,
- * loading: false }` when:
- *   * no resolver is configured (customer hasn't wired one up)
+ * Resolve the tenant's `external_id` (your own user id) to
+ * `{ displayName, avatarUrl }` via the configured `userResolver`.
+ *
+ * Returns `{ profile: null, loading: false }` when:
+ *   * no resolver is configured
  *   * resolver returned null (user not found)
  *   * resolver threw (logged once, then cached as null)
  *
  * Pass `null` / empty string to opt out (the hook becomes a no-op).
  * Useful for self bubbles (you already know who you are).
  */
-export function useUser(userId: Uuid | null | undefined): UseUserState {
+export function useUser(externalId: string | null | undefined): UseUserState {
   const chat = usePoolse();
   const [state, setState] = useState<UseUserState>(() => {
-    if (!userId) return EMPTY;
-    const cached = chat.users.peek(userId);
+    if (!externalId) return EMPTY;
+    const cached = chat.users.peek(externalId);
     if (cached === undefined) return { profile: null, loading: true };
     return { profile: cached, loading: false };
   });
 
   useEffect(() => {
-    if (!userId) {
+    if (!externalId) {
       setState(EMPTY);
       return;
     }
 
     const apply = () => {
-      const cached = chat.users.peek(userId);
+      const cached = chat.users.peek(externalId);
       if (cached === undefined) {
-        // Cache miss — either initial load or post-invalidate. Flip
-        // to loading + kick off a refetch.
         setState({ profile: null, loading: true });
-        void chat.users.get(userId);
+        void chat.users.get(externalId);
       } else {
         setState({ profile: cached, loading: false });
       }
     };
 
-    // Subscribe BEFORE triggering the fetch so we never miss the
-    // notify if the resolver lands synchronously.
-    const off = chat.users.subscribe(userId, apply);
-    // Initial pull — also covers the case where the cache already
-    // had the entry (subscribe doesn't fire for existing values).
+    const off = chat.users.subscribe(externalId, apply);
     apply();
     return off;
-  }, [chat, userId]);
+  }, [chat, externalId]);
 
   return state;
 }

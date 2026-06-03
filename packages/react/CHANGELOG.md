@@ -4,6 +4,27 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.0.0] — 2026-06-03
+
+Lockstep release with `@poolse/sdk@2.0.0` and `@poolse/react-ui@2.0.0`.
+
+### Breaking
+
+- **`useUser(externalId)`** — was `useUser(userId)`. The hook now
+  consumes the tenant's own user id. Pass the value from
+  `message.sender_external_id`, `membership.external_id`, or any
+  other external_id-shaped field on the wire.
+- **`useTyping(conversationId).typing`** now returns `Set<externalId>`
+  (was `Set<userId>`). Same for `usePresence(conversationId).online`.
+- **`useMembers(conversationId).removeMember(externalId)`** — was
+  `removeMember(userId)`. The hook translates external_id → user_id
+  internally; the DELETE endpoint still takes user_id but you don't
+  see it.
+
+### Migration
+
+See `MIGRATING.md` at the repo root.
+
 ## [1.1.0] — 2026-06-02
 
 Lockstep release with `@poolse/sdk@1.1.0` and `@poolse/react-ui@1.1.0`.

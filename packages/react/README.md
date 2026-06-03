@@ -2,6 +2,8 @@
 
 React hooks for [poolse](https://poolse.dev). Wraps the [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk) client in a provider + a hook per resource — `useMessages`, `useThread`, `useReactions`, `useTyping`, `usePresence`, `useMembers`, `useAttachmentUpload`, and so on. No UI. If you want components, see [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui).
 
+> **⚠️ Upgrading from 1.x?** See [MIGRATING.md](https://github.com/poolse-hq/js-sdk/blob/main/MIGRATING.md). `useUser`, `useTyping`, `usePresence`, and `useMembers().removeMember` all key by your `external_id` now instead of poolse uuids.
+
 ## Install
 
 ```bash

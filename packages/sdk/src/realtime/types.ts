@@ -16,7 +16,10 @@ export interface MessageDeletedEvent {
 
 /** `typing:start` / `typing:stop`. */
 export interface TypingEvent {
+  /** Internal poolse user id. Most consumer code uses `external_id` instead. */
   user_id: Uuid;
+  /** The tenant's own id — what your `userResolver` consumes. */
+  external_id: string | null;
 }
 
 /** `reaction:added` / `reaction:removed`. */

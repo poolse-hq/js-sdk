@@ -96,7 +96,16 @@ export type MemberRole = 'owner' | 'admin' | 'member';
 export interface Membership {
   id: Uuid;
   conversation_id: Uuid;
+  /** Internal poolse user id. Most consumer code uses `external_id` instead. */
   user_id: Uuid;
+  /**
+   * The tenant's own user identifier (the same string you pass as
+   * `external_id` when minting JWTs or referencing users in
+   * `member_external_ids`). Every user reference on the wire carries
+   * this so the SDK's `userResolver(externalId)` is a complete API
+   * — no need to maintain a `poolse_user_id` mapping on your side.
+   */
+  external_id: string;
   role: MemberRole;
   last_read_message_id: Uuid | null;
   last_read_at: IsoDateTime | null;
@@ -132,7 +141,15 @@ export interface Message {
   id: Uuid;
   tenant_id: Uuid;
   conversation_id: Uuid;
+  /** Internal poolse user id of the sender. Null for system messages. */
   sender_id: Uuid | null;
+  /**
+   * The tenant's own user identifier for the sender — passed straight
+   * to `userResolver(externalId)` to render display name + avatar.
+   * Null for system messages, and null on read paths that didn't
+   * preload the sender (very rare; every client-facing path preloads).
+   */
+  sender_external_id: string | null;
   type: MessageType;
   body: string | null;
   reply_to_id: Uuid | null;
@@ -206,6 +223,8 @@ export interface PoolseUserProfile {
 export interface QuotedMessagePreview {
   id: Uuid;
   sender_id: Uuid | null;
+  /** Same external-id story as `Message.sender_external_id`. */
+  sender_external_id: string | null;
   /** Truncated to ~200 chars server-side; null when the original was deleted. */
   body: string | null;
   deleted_at: IsoDateTime | null;

@@ -68,6 +68,8 @@ export function useMessages(conversationId: string): UseMessagesState {
   // would re-create handlers in calling components).
   const meIdRef = useRef<string | null>(me?.id ?? null);
   meIdRef.current = me?.id ?? null;
+  const meExternalIdRef = useRef<string | null>(me?.external_id ?? null);
+  meExternalIdRef.current = me?.external_id ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -191,6 +193,7 @@ export function useMessages(conversationId: string): UseMessagesState {
         // here would briefly flash the row on the "other" side until
         // the realtime echo replaced it with the canonical row.
         sender_id: meIdRef.current,
+        sender_external_id: meExternalIdRef.current,
         type: attrs.type ?? 'text',
         body: attrs.body ?? null,
         reply_to_id: attrs.reply_to_id ?? null,

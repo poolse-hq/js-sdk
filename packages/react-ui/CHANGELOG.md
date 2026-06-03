@@ -4,6 +4,32 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.0.0] — 2026-06-03
+
+Lockstep release with `@poolse/sdk@2.0.0` and `@poolse/react@2.0.0`.
+
+### Breaking
+
+- **`UserNameProps.externalId`** — was `userId`. Same applies to
+  `useDisplayName(externalId, …)`.
+- **`MemberListProps.labelFor: (externalId) => string`** — was keyed
+  by uuid. Same change to `avatarFor`.
+- **`MemberListProps.onlineExternalIds`** — was `onlineUserIds`.
+- **`TypingIndicatorProps.labelFor: (externalId) => string`**.
+- **`MessageBubbleProps.labelFor: (externalId) => string`** — both
+  the main `labelFor` and the QuotedCard's. The bubble reads
+  `message.sender_external_id` to drive `useUser`.
+- **`MessageComposerProps.labelFor: (externalId) => string`**.
+- **`MentionInputProps.labelFor: (externalId) => string`**. The
+  dropdown filters and inserts by external_id; the wire `mentions`
+  array stays uuid-keyed (backend storage hasn't changed there).
+- **`ConversationViewProps.labelFor: (externalId) => string`** —
+  passes through to every consuming child.
+
+### Migration
+
+See `MIGRATING.md` at the repo root.
+
 ## [1.1.0] — 2026-06-02
 
 Lockstep release with `@poolse/sdk@1.1.0` and `@poolse/react@1.1.0`.

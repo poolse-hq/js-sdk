@@ -126,6 +126,7 @@ export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadS
         tenant_id: '',
         conversation_id: conversationId,
         sender_id: null,
+        sender_external_id: null,
         type: attrs.type ?? 'text',
         body: attrs.body ?? null,
         reply_to_id: rootMessageId,

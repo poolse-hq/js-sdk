@@ -1,47 +1,41 @@
 // Resolved display-name renderer with a 3-tier fallback chain. Used by
 // MemberList, MentionInput's dropdown, TypingIndicator — anywhere a
-// user_id needs to become a human name.
+// user identifier needs to become a human name.
 //
 // Priority:
 //   1. Caller-supplied `labelFor` (sync, fast path) — back-compat with
-//      the v0.2 API + the way most apps already pass directory data
-//      through props.
+//      apps that pass directory data through props.
 //   2. Customer-configured `userResolver` via the `useUser` hook
 //      (async, cached, dedup'd across components).
-//   3. `User abc123` derived from the userId slice — the always-renders
-//      fallback when neither path produced a name. Truncates the
-//      visible name to 24 chars so a runaway value can't blow out
-//      the surrounding layout.
+//   3. The external_id itself, truncated. Always renders something.
 //
 // Each instance is its own component so calling `<UserName>` inside a
 // map() doesn't violate the Rules of Hooks — each gets its own
 // useUser cell.
 
-import type { Uuid } from '@poolse/sdk';
 import { useUser } from '@poolse/react';
 
 const MAX_NAME_CHARS = 24;
 
 export interface UserNameProps {
-  userId: Uuid | null | undefined;
+  /** The tenant's user identifier — what your `userResolver` consumes. */
+  externalId: string | null | undefined;
   /** Sync override. When set, skips the async resolver entirely. */
-  labelFor?: (userId: Uuid) => string;
-  /** What to render when the userId itself is null (e.g. system messages). */
+  labelFor?: (externalId: string) => string;
+  /** What to render when `externalId` itself is null (e.g. system messages). */
   emptyFallback?: string;
   className?: string;
 }
 
 export function UserName({
-  userId,
+  externalId,
   labelFor,
   emptyFallback = 'Unknown',
   className,
 }: UserNameProps) {
-  // Skip the resolver when labelFor is given OR userId is missing —
-  // useUser handles the empty userId case internally (passing null),
-  // so it's safe to call unconditionally.
-  const { profile } = useUser(labelFor ? null : userId);
-  const name = resolveDisplayName(userId, profile?.displayName, labelFor, emptyFallback);
+  // Skip the resolver when labelFor is given OR externalId is missing.
+  const { profile } = useUser(labelFor ? null : externalId);
+  const name = resolveDisplayName(externalId, profile?.displayName, labelFor, emptyFallback);
   return <span className={className}>{truncate(name)}</span>;
 }
 
@@ -51,24 +45,26 @@ export function UserName({
  * tooltip, etc.) don't have to render an extra element.
  */
 export function useDisplayName(
-  userId: Uuid | null | undefined,
-  labelFor?: (userId: Uuid) => string,
+  externalId: string | null | undefined,
+  labelFor?: (externalId: string) => string,
   emptyFallback = 'Unknown',
 ): string {
-  const { profile } = useUser(labelFor ? null : userId);
-  return resolveDisplayName(userId, profile?.displayName, labelFor, emptyFallback);
+  const { profile } = useUser(labelFor ? null : externalId);
+  return resolveDisplayName(externalId, profile?.displayName, labelFor, emptyFallback);
 }
 
 function resolveDisplayName(
-  userId: Uuid | null | undefined,
+  externalId: string | null | undefined,
   resolved: string | undefined,
-  labelFor: ((id: Uuid) => string) | undefined,
+  labelFor: ((id: string) => string) | undefined,
   emptyFallback: string,
 ): string {
-  if (!userId) return emptyFallback;
-  if (labelFor) return labelFor(userId);
+  if (!externalId) return emptyFallback;
+  if (labelFor) return labelFor(externalId);
   if (resolved) return resolved;
-  return `User ${userId.slice(0, 6)}`;
+  // Last resort — show the tenant's id rather than a slice of a uuid
+  // the dev never sees in their own DB.
+  return externalId;
 }
 
 function truncate(s: string): string {

@@ -32,8 +32,8 @@ export interface MessageComposerProps {
   replyingTo?: Message | null;
   /** User clicked the (x) on the reply chip. Caller clears `replyingTo`. */
   onCancelReply?: () => void;
-  /** Friendly display label for the quoted sender. Defaults to user id slice. */
-  labelFor?: (userId: Uuid) => string;
+  /** Friendly display label for the quoted sender, keyed by `external_id`. */
+  labelFor?: (externalId: string) => string;
   /**
    * Show the paperclip + queue strip + accept dropped files via
    * `ref.current.addFiles(files)`. Default `true`. Set `false` to
@@ -247,11 +247,11 @@ function ReplyChip({
   onCancel,
 }: {
   message: Message;
-  labelFor?: (userId: Uuid) => string;
+  labelFor?: (externalId: string) => string;
   onCancel?: () => void;
 }) {
-  const senderLabel = message.sender_id
-    ? (labelFor?.(message.sender_id) ?? `User ${message.sender_id.slice(0, 6)}`)
+  const senderLabel = message.sender_external_id
+    ? (labelFor?.(message.sender_external_id) ?? message.sender_external_id)
     : 'Unknown';
   const preview = message.body ?? '';
   return (

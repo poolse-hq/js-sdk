@@ -3,10 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { MentionInput } from '../src/MentionInput.js';
 import { jsonResponse, renderWithProvider, scriptedFetch } from './_helpers.js';
 
-const member = (uid: string) => ({
-  id: `m-${uid}`,
+// 2.0: memberships carry both uuid (user_id) and the tenant's
+// external_id. MentionInput surfaces external_id to consumers; the
+// inserted text uses external_id (or the labelFor-transformed version)
+// while the wire payload's `mentions` array still uses user_id.
+const member = (ext: string, uid = `uid-${ext}`) => ({
+  id: `m-${ext}`,
   conversation_id: 'c-1',
   user_id: uid,
+  external_id: ext,
   role: 'member' as const,
   last_read_message_id: null,
   last_read_at: null,
@@ -27,7 +32,6 @@ describe('<MentionInput>', () => {
       />,
       fetchFn,
     );
-    // Wait for members fetch to resolve.
     await waitFor(() => expect(fetchFn.calls.length).toBeGreaterThan(0));
 
     const input = container.querySelector('.poolse-composer__input') as HTMLTextAreaElement;
@@ -82,7 +86,7 @@ describe('<MentionInput>', () => {
     expect(container.querySelector('.poolse-mention-menu')).toBeNull();
   });
 
-  it('submit passes mentions array to onSend', async () => {
+  it('submit passes mentions array (poolse user_ids) to onSend', async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const fetchFn = scriptedFetch([jsonResponse({ data: [member('alice-1')] })]);
     const { container } = renderWithProvider(
@@ -97,15 +101,18 @@ describe('<MentionInput>', () => {
     });
     await waitFor(() => expect(container.querySelector('.poolse-mention-menu')).not.toBeNull());
     fireEvent.keyDown(input, { key: 'Enter' });
-    // Now type the rest of the message.
     act(() => {
       fireEvent.change(input, { target: { value: '@alice hi there' } });
     });
     fireEvent.keyDown(input, { key: 'Enter' });
     await new Promise((r) => setTimeout(r, 0));
+    // mentions on the wire still uses internal user_id (backend
+    // `messages.mentions` column is uuid-typed). Consumer-facing
+    // identifiers in display + dedupe are external_id; the wire
+    // mention array remains uuid-keyed.
     expect(onSend).toHaveBeenCalledWith({
       body: '@alice hi there',
-      mentions: ['alice-1'],
+      mentions: ['uid-alice-1'],
     });
   });
 });

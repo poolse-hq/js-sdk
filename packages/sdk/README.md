@@ -4,6 +4,8 @@ Headless TypeScript SDK for [poolse](https://poolse.dev) — REST + WebSocket cl
 
 If you're using React, you'll usually want [`@poolse/react`](https://www.npmjs.com/package/@poolse/react) (hooks) or [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui) (prebuilt chat surface). Both sit on top of this package; you can drop down to it whenever you outgrow them.
 
+> **⚠️ Upgrading from 1.x?** See [MIGRATING.md](https://github.com/poolse-hq/js-sdk/blob/main/MIGRATING.md). 2.0 is a breaking change: identity APIs are now keyed by your `external_id` instead of poolse uuids — `userResolver`, `useUser`, member operations all flip.
+
 ## Install
 
 ```bash
@@ -73,7 +75,7 @@ chat.destroy(); // closes WebSocket, leaves every joined channel
 | `maxBackoffMs`           | `number`                                                                              | `30000`                           | Hard ceiling on a single retry delay.                                                                                                              |
 | `generateIdempotencyKey` | `() => string`                                                                        | `crypto.randomUUID()`             | Override the key generator. Defaults throws at construction time if no `crypto.randomUUID` is available.                                           |
 | `onSocketError`          | `(err: Error) => void`                                                                | —                                 | Fired on non-fatal socket errors (Phoenix handles reconnect internally; this is for surface-level banners).                                        |
-| `userResolver`           | `(userId: string) => Promise<PoolseUserProfile \| null> \| PoolseUserProfile \| null` | —                                 | Optional. Resolve a poolse `user_id` to a `{ displayName, avatarUrl }` pair from your app's user data. The UI packages pick this up automatically. |
+| `userResolver`           | `(externalId: string) => Promise<PoolseUserProfile \| null> \| PoolseUserProfile \| null` | —                                 | Optional. Resolve the tenant's own user identifier (`external_id` — same string you pass when minting JWTs) to `{ displayName, avatarUrl }` from your app's user data. The UI packages pick this up automatically. |
 
 ## REST surface
 

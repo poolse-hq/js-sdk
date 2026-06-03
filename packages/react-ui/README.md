@@ -4,6 +4,8 @@ React components for [poolse](https://poolse.dev). A composed `<ConversationView
 
 Sits on top of [`@poolse/react`](https://www.npmjs.com/package/@poolse/react) (hooks) and [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk) (client).
 
+> **⚠️ Upgrading from 1.x?** See [MIGRATING.md](https://github.com/poolse-hq/js-sdk/blob/main/MIGRATING.md). Every `labelFor` / `avatarFor` / `onlineUserIds` prop is now keyed by `external_id`. `<UserName>` and `useDisplayName` switched from `userId` to `externalId`.
+
 ## Install
 
 ```bash

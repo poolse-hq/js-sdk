@@ -11,24 +11,25 @@ import { useDisplayName } from './UserName.js';
 export interface MemberListProps {
   conversationId: Uuid;
   /**
-   * Resolve a `user_id` to a friendly display name. When omitted,
-   * shows the truncated user_id (good enough for testing; real apps
-   * pass a name lookup).
+   * Resolve an `external_id` to a friendly display name. When omitted,
+   * the SDK's `userResolver` is used (and the external_id is shown as
+   * a fallback while the resolver loads / returns null).
    */
-  labelFor?: (userId: Uuid) => string;
+  labelFor?: (externalId: string) => string;
   /**
-   * Resolve an avatar URL by user_id. Optional — initials fallback
-   * is used when not provided or when this returns null.
+   * Resolve an avatar URL by `external_id`. Optional — initials
+   * fallback is used when not provided or when this returns null.
    */
-  avatarFor?: (userId: Uuid) => string | null;
+  avatarFor?: (externalId: string) => string | null;
   /**
-   * Override the online set with a caller-supplied source. By default
-   * MemberList wires `usePresence(conversationId).online` itself, so the
-   * presence dots light up out-of-the-box. Pass an explicit `Set` when
-   * you want to merge presence with other signals (typing, focus, etc),
-   * or an empty `new Set()` to disable the dots entirely.
+   * Override the online set with a caller-supplied source of
+   * `external_id`s. By default MemberList wires
+   * `usePresence(conversationId).online` itself, so the presence dots
+   * light up out-of-the-box. Pass an explicit `Set` when you want to
+   * merge presence with other signals (typing, focus, etc), or an
+   * empty `new Set()` to disable the dots entirely.
    */
-  onlineUserIds?: Set<Uuid>;
+  onlineExternalIds?: Set<string>;
   /**
    * If provided, surfaces a "remove" icon next to each member that
    * the caller is allowed to remove. The caller is responsible for
@@ -45,7 +46,7 @@ export function MemberList({
   conversationId,
   labelFor,
   avatarFor,
-  onlineUserIds,
+  onlineExternalIds,
   canRemove,
   renderItem,
   emptyState,
@@ -55,8 +56,10 @@ export function MemberList({
   // joins the conversation channel idempotently; if ConversationView is
   // mounted alongside MemberList (the common case) they share the same
   // channel subscription, so this is free.
-  const { online: presenceOnline } = usePresence(onlineUserIds === undefined ? conversationId : '');
-  const effectiveOnline = onlineUserIds ?? presenceOnline;
+  const { online: presenceOnline } = usePresence(
+    onlineExternalIds === undefined ? conversationId : '',
+  );
+  const effectiveOnline = onlineExternalIds ?? presenceOnline;
 
   if (loading && members.length === 0) {
     return <div className="poolse-list poolse-list--placeholder">Loading members…</div>;
@@ -89,11 +92,13 @@ export function MemberList({
         ) : (
           <DefaultMemberRow
             membership={m}
-            avatarUrl={avatarFor?.(m.user_id) ?? null}
-            online={effectiveOnline.has(m.user_id)}
+            avatarUrl={avatarFor?.(m.external_id) ?? null}
+            online={effectiveOnline.has(m.external_id)}
             removable={canRemove?.(m) ?? false}
             onRemove={() => {
-              void removeMember(m.user_id);
+              // SDK exposes removeMember by external_id (was user_id);
+              // see @poolse/react@2.0.0 migration notes.
+              void removeMember(m.external_id);
             }}
             {...(labelFor ? { labelFor } : {})}
           />
@@ -121,12 +126,9 @@ function DefaultMemberRow({
   online: boolean;
   removable: boolean;
   onRemove: () => void;
-  labelFor?: (userId: Uuid) => string;
+  labelFor?: (externalId: string) => string;
 }) {
-  // Resolve via the shared 3-tier chain so labelFor still works for
-  // back-compat AND the customer's userResolver lights up names here
-  // automatically.
-  const name = useDisplayName(membership.user_id, labelFor);
+  const name = useDisplayName(membership.external_id, labelFor);
   return (
     <div className="poolse-member-row">
       <Avatar src={avatarUrl} name={name} online={online} size="md" />

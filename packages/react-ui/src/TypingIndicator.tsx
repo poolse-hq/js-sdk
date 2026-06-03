@@ -1,10 +1,14 @@
 import { useDisplayName } from './UserName.js';
 
 export interface TypingIndicatorProps {
-  /** Set of user_ids currently typing. */
+  /** Set of `external_id`s currently typing — what `useTyping` returns. */
   typing: Set<string>;
-  /** Resolves a user_id to a display label. Defaults to the id's first 6 chars. */
-  labelFor?: (userId: string) => string;
+  /**
+   * Resolves an `external_id` to a display label. Defaults to the
+   * SDK's `userResolver` (and falls back to the external_id itself
+   * when the resolver isn't configured).
+   */
+  labelFor?: (externalId: string) => string;
 }
 
 /**
@@ -42,7 +46,13 @@ export function TypingIndicator({ typing, labelFor }: TypingIndicatorProps) {
 // typing" / "N people are typing" sentence. Pulls each name through
 // the shared 3-tier chain so the customer's userResolver lights up
 // here automatically.
-function TypingLabel({ ids, labelFor }: { ids: string[]; labelFor?: (userId: string) => string }) {
+function TypingLabel({
+  ids,
+  labelFor,
+}: {
+  ids: string[];
+  labelFor?: (externalId: string) => string;
+}) {
   // Only render names for the first two — beyond that we collapse
   // to a count and don't need lookups.
   const id1 = ids[0] ?? null;

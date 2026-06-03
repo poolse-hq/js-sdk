@@ -84,32 +84,35 @@ export interface PoolseConfig {
   onSocketError?: (err: Error) => void;
 
   /**
-   * Resolve a poolse `user_id` to the customer's own user metadata
-   * (display name + avatar). Called by `chat.users.get(userId)` and
-   * the `useUser(userId)` React hook whenever a UI component needs
-   * to render a participant.
+   * Resolve the tenant's user identifier (`external_id` — same string
+   * you pass when minting JWTs and referencing users in
+   * `member_external_ids`) to the customer's own user metadata
+   * (display name + avatar). Called by `chat.users.get(externalId)`
+   * and the `useUser(externalId)` React hook whenever a UI component
+   * needs to render a participant.
    *
    * The SDK caches results in-memory and dedupes concurrent calls,
    * so a busy chat with 50 messages from 5 senders fires the
    * resolver 5 times — once per unique sender — not 50.
    *
-   * Customers typically hit their OWN backend here:
+   * Customers hit their OWN backend / store here, keyed by **their own
+   * user id** (no poolse uuid mapping required):
    *
-   *   userResolver: async (userId) => {
-   *     const u = await fetch(`/api/users/by-poolse-id/${userId}`)
-   *       .then((r) => r.json());
+   *   userResolver: async (externalId) => {
+   *     const u = await fetch(`/api/users/${externalId}`).then((r) => r.json());
    *     return { displayName: u.full_name, avatarUrl: u.avatar_url };
    *   }
    *
-   * Sync returns are fine when the customer already has the user
-   * data in memory (e.g., from a directory loaded at app boot):
+   * Sync returns are fine when the data's already in memory:
    *
-   *   userResolver: (userId) => directory[userId] ?? null
+   *   userResolver: (externalId) => directory[externalId] ?? null
    *
-   * Return `null` when the user can't be found — components fall
-   * back to a userId-derived label and an initials avatar.
+   * Return `null` when the user can't be found — components fall back
+   * to the external_id as a label and an initials avatar.
    */
-  userResolver?: (userId: string) => Promise<PoolseUserProfile | null> | PoolseUserProfile | null;
+  userResolver?: (
+    externalId: string,
+  ) => Promise<PoolseUserProfile | null> | PoolseUserProfile | null;
 }
 
 /** Internal resolved config — all the defaults filled in. */

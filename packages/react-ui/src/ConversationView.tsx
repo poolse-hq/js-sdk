@@ -36,8 +36,13 @@ export interface ConversationViewProps {
    */
   renderMessage?: (msg: Message, currentUserId: string | null) => ReactNode;
 
-  /** Translate a typing user_id into a display name. */
-  labelFor?: (userId: string) => string;
+  /**
+   * Translate an `external_id` into a display name. Passed through to
+   * `MessageBubble`, `TypingIndicator`, `MentionInput`, `MemberList`.
+   * Falls back to the SDK's `userResolver` (and then the external_id
+   * itself) when omitted.
+   */
+  labelFor?: (externalId: string) => string;
 
   /**
    * Auto-load the brand fonts on mount. Defaults to `true`. Set to
@@ -532,6 +537,7 @@ export function ConversationView({
                         quoted_message: {
                           id: original.id,
                           sender_id: original.sender_id,
+                          sender_external_id: original.sender_external_id,
                           body: original.body,
                           deleted_at: original.deleted_at,
                           inserted_at: original.inserted_at,
