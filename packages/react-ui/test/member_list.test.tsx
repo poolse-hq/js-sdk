@@ -62,7 +62,10 @@ describe('<MemberList>', () => {
   });
 
   it('clicking remove triggers the DELETE request keyed by internal user_id', async () => {
-    const fetchFn = scriptedFetch([jsonResponse({ data: [member('alice', 'admin')] }), noContent()]);
+    const fetchFn = scriptedFetch([
+      jsonResponse({ data: [member('alice', 'admin')] }),
+      noContent(),
+    ]);
     const { container } = renderWithProvider(
       <MemberList conversationId="c-1" canRemove={() => true} />,
       fetchFn,

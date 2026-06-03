@@ -36,6 +36,7 @@ you stored one.
 ### Backend coupling
 
 Pairs with the `poolse-server` change that:
+
 - lazy-provisions unknown `external_id`s referenced in
   `POST /v1/conversations` (`member_external_ids`) and
   `POST /v1/conversations/:id/members` (`external_ids`), abuse-capped
