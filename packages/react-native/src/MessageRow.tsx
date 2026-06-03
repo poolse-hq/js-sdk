@@ -16,7 +16,9 @@ import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { ReactionPicker, ReactionStrip } from './Reactions.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useReactions } from '@poolse/react';
 
 // Swipe-to-reply triggers at this many pixels of horizontal pull.
 // WhatsApp uses ~70; iMessage ~60. 60 feels right on the iPhone 14
@@ -93,6 +95,19 @@ export function MessageRow({
   const theme = usePoolseTheme();
   const isSelf = meId !== null && msg.sender_id === meId;
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Per-row useReactions subscription so the long-press → React picker
+  // and the inline ReactionStrip share the same realtime state. Adds
+  // one realtime listener per visible row, which is fine — they're
+  // server-filtered by messageId and the FlatList only mounts rows in
+  // view. Initial seed comes from msg.reactions so the strip renders
+  // immediately without waiting for the first echo.
+  const reactionsApi = useReactions(msg.id, {
+    conversationId: msg.conversation_id,
+    currentUserId: meId,
+    ...(msg.reactions ? { initialReactions: msg.reactions } : {}),
+  });
 
   // Swipe-to-reply state. The bubble's translateX is driven by a pan
   // gesture; when the user releases past SWIPE_REPLY_THRESHOLD we fire
@@ -263,25 +278,14 @@ export function MessageRow({
           </Pressable>
         ) : null}
 
-        {reactions && msg.reactions && Object.keys(msg.reactions).length > 0 ? (
-          <View style={styles.reactionsRow}>
-            {Object.entries(msg.reactions).map(([emoji, userIds]) => (
-              <View
-                key={emoji}
-                style={[
-                  styles.reactionChip,
-                  {
-                    backgroundColor: theme.colors.surface2,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <Text style={styles.reactionEmoji}>{emoji}</Text>
-                <Text style={[styles.reactionCount, { color: theme.colors.ink2 }]}>
-                  {Array.isArray(userIds) ? userIds.length : 0}
-                </Text>
-              </View>
-            ))}
+        {reactions ? (
+          <View style={[styles.reactionsRow, { alignSelf: isSelf ? 'flex-end' : 'flex-start' }]}>
+            <ReactionStrip
+              messageId={msg.id}
+              conversationId={msg.conversation_id}
+              meId={meId}
+              {...(msg.reactions ? { initialReactions: msg.reactions } : {})}
+            />
           </View>
         ) : null}
       </View>
@@ -291,6 +295,16 @@ export function MessageRow({
           visible={actionsOpen}
           onClose={() => setActionsOpen(false)}
           isSelf={isSelf}
+          {...(reactions
+            ? {
+                onReact: () => {
+                  setActionsOpen(false);
+                  // Defer one tick so the action sheet's close
+                  // animation can begin before the picker mounts.
+                  setTimeout(() => setPickerOpen(true), 80);
+                },
+              }
+            : {})}
           {...(onStartEdit
             ? {
                 onEdit: () => {
@@ -323,6 +337,16 @@ export function MessageRow({
                 },
               }
             : {})}
+        />
+      ) : null}
+
+      {reactions ? (
+        <ReactionPicker
+          visible={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onPick={(emoji) => {
+            void reactionsApi.addReaction(emoji);
+          }}
         />
       ) : null}
     </View>
@@ -373,25 +397,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   reactionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 4,
-    gap: 4,
-  },
-  reactionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  reactionEmoji: {
-    fontSize: 13,
-    marginRight: 3,
-  },
-  reactionCount: {
-    fontSize: 11,
-    fontWeight: '600',
+    marginTop: 2,
   },
 });

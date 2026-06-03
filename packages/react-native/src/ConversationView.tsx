@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AttachmentPicker } from './AttachmentPicker.js';
+import { ChatHeader } from './ChatHeader.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageList } from './MessageList.js';
@@ -18,6 +19,18 @@ export interface ConversationViewProps {
   renderMessage?: (msg: Message, currentUserId: string | null) => ReactElement;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
+
+  /**
+   * Renders the default `<ChatHeader>` at the top of the chat surface.
+   *   * `true` (default)  — auto chat header (other user / group name).
+   *   * `false`           — no header (you supply your own above).
+   *   * `ReactElement`    — custom header node, rendered as-is.
+   */
+  header?: boolean | ReactElement;
+  /** Tap on the header's members icon — typically opens a sheet. */
+  onHeaderMembersPress?: () => void;
+  /** Tap on the header itself — typically opens a conversation profile. */
+  onHeaderPress?: () => void;
 
   // Feature toggles — all default ON, identical names + defaults to web.
   reactions?: boolean;
@@ -44,6 +57,9 @@ export function ConversationView({
   renderMessage,
   labelFor,
   avatarFor,
+  header = true,
+  onHeaderMembersPress,
+  onHeaderPress,
   reactions = true,
   mentions = true,
   attachments = true,
@@ -158,8 +174,22 @@ export function ConversationView({
     [send, signalTyping, attachments, replyingTo, labelFor],
   );
 
+  const headerNode =
+    header === false ? null : header === true ? (
+      <ChatHeader
+        conversationId={conversationId}
+        {...(labelFor ? { labelFor } : {})}
+        {...(avatarFor ? { avatarFor } : {})}
+        {...(onHeaderMembersPress ? { onMembersPress: onHeaderMembersPress } : {})}
+        {...(onHeaderPress ? { onPress: onHeaderPress } : {})}
+      />
+    ) : (
+      header
+    );
+
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.paper }]}>
+      {headerNode}
       <View style={styles.listWrap}>
         <MessageList
           messages={messages}

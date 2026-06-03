@@ -13,6 +13,7 @@
 
 // ── Chat surface (composed conversation view) ─────────────────
 export { ConversationView, type ConversationViewProps } from './ConversationView.js';
+export { ChatHeader, type ChatHeaderProps } from './ChatHeader.js';
 
 // ── Pieces of the chat surface ────────────────────────────────
 export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';
