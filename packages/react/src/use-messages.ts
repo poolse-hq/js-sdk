@@ -184,7 +184,7 @@ export function useMessages(conversationId: string): UseMessagesState {
       // Generate the message id client-side and pass it through, so
       // the optimistic row, the REST response, and the realtime echo
       // ALL share one id — id-based upsert handles every race.
-      const id = attrs.id ?? crypto.randomUUID();
+      const id = attrs.id ?? safeUuid();
       const tempMsg: Message = {
         id,
         tenant_id: '',

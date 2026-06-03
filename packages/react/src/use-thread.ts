@@ -121,7 +121,7 @@ export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadS
 
   const sendReply = useCallback(
     async (attrs: Omit<MessageCreateRequest, 'reply_to_id'>) => {
-      const id = attrs.id ?? crypto.randomUUID();
+      const id = attrs.id ?? safeUuid();
       const tempMsg: Message = {
         id,
         tenant_id: '',
