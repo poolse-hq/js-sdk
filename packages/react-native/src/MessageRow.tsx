@@ -1,22 +1,15 @@
-import { Platform, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
+import {
+  Animated,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  Vibration,
+  View,
+} from 'react-native';
 import type { Message, Uuid } from '@poolse/sdk';
-import { useState, type ReactNode } from 'react';
-
-// We used to lazy-`require('expo-haptics')` here, but Metro can't
-// statically trace tsup's wrapped require shim so the module never
-// landed in the bundle. Switching to react-native's built-in
-// `Vibration` instead — works everywhere, zero deps, no Metro
-// resolver workarounds. Customers who want the silky iOS taptic
-// feel can install expo-haptics themselves and wrap MessageRow's
-// onLongPress via a render prop in a future release.
-function pulseHaptic() {
-  // 12ms is a soft tap on both iOS and Android — closer to Haptics
-  // Light/Medium than the default 400ms vibration that triggers an
-  // audible thud on iOS.
-  if (Platform.OS === 'ios' || Platform.OS === 'android') {
-    Vibration.vibrate(12);
-  }
-}
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { Avatar } from './primitives/Avatar.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
@@ -24,6 +17,20 @@ import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
+
+// Swipe-to-reply triggers at this many pixels of horizontal pull.
+// WhatsApp uses ~70; iMessage ~60. 60 feels right on the iPhone 14
+// pro — short enough for a thumb-only one-handed motion, long enough
+// not to fire on accidental scroll-margin drift.
+const SWIPE_REPLY_THRESHOLD = 60;
+// Soft 8ms tap to confirm "you crossed the threshold, releasing will
+// open the reply chip." Mirrors WhatsApp; short enough to not trigger
+// iOS's audible vibration thud.
+function quietHaptic() {
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    Vibration.vibrate(8);
+  }
+}
 
 export interface MessageRowProps {
   msg: Message;
@@ -87,6 +94,79 @@ export function MessageRow({
   const isSelf = meId !== null && msg.sender_id === meId;
   const [actionsOpen, setActionsOpen] = useState(false);
 
+  // Swipe-to-reply state. The bubble's translateX is driven by a pan
+  // gesture; when the user releases past SWIPE_REPLY_THRESHOLD we fire
+  // onQuote (which the parent wires to setReplyingTo on the composer).
+  // Animation runs on the JS thread because we need to read the value
+  // synchronously on release — native driver would prevent that.
+  const translateX = useRef(new Animated.Value(0)).current;
+  const hapticFiredRef = useRef(false);
+  const swipeEnabled = quotations && !!onQuote && !editing;
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => {
+          if (!swipeEnabled) return false;
+          // Only claim the gesture for clear horizontal pulls — let
+          // vertical scrolls flow through to the FlatList.
+          return Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 2;
+        },
+        onPanResponderMove: (_, g) => {
+          // Other-side bubbles swipe right; self bubbles swipe left.
+          // Multiply by 0.6 so the drag feels rubber-banded.
+          const raw = isSelf ? Math.min(0, g.dx) : Math.max(0, g.dx);
+          translateX.setValue(raw * 0.6);
+          // Haptic the moment we cross the threshold (once per drag).
+          if (!hapticFiredRef.current && Math.abs(raw) >= SWIPE_REPLY_THRESHOLD) {
+            hapticFiredRef.current = true;
+            try {
+              quietHaptic();
+            } catch {
+              /* no-op */
+            }
+          }
+        },
+        onPanResponderRelease: (_, g) => {
+          const past = Math.abs(g.dx) >= SWIPE_REPLY_THRESHOLD;
+          hapticFiredRef.current = false;
+          if (past && onQuote) onQuote();
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: false,
+            speed: 18,
+            bounciness: 6,
+          }).start();
+        },
+        onPanResponderTerminate: () => {
+          hapticFiredRef.current = false;
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: false,
+            speed: 18,
+            bounciness: 6,
+          }).start();
+        },
+      }),
+    [swipeEnabled, isSelf, onQuote, translateX],
+  );
+
+  // Reply icon fades + scales in as the bubble drags past ~half the
+  // threshold. Sits on the SAME side the swipe is coming FROM (so
+  // it's revealed behind the bubble as the bubble slides away).
+  const replyIconOpacity = translateX.interpolate({
+    inputRange: isSelf
+      ? [-SWIPE_REPLY_THRESHOLD, -SWIPE_REPLY_THRESHOLD / 2, 0]
+      : [0, SWIPE_REPLY_THRESHOLD / 2, SWIPE_REPLY_THRESHOLD],
+    outputRange: isSelf ? [1, 0.3, 0] : [0, 0.3, 1],
+    extrapolate: 'clamp',
+  });
+  const replyIconScale = translateX.interpolate({
+    inputRange: isSelf ? [-SWIPE_REPLY_THRESHOLD, 0] : [0, SWIPE_REPLY_THRESHOLD],
+    outputRange: isSelf ? [1, 0.5] : [0.5, 1],
+    extrapolate: 'clamp',
+  });
+
   const showAvatarSlot = showAvatar && !isSelf;
   const showAvatarRender =
     showAvatarSlot && (groupPosition === 'last' || groupPosition === 'standalone');
@@ -112,51 +192,68 @@ export function MessageRow({
       ) : null}
 
       <View style={styles.bubbleCol}>
-        <Pressable
-          onLongPress={() => {
-            if (!actions) return;
-            try {
-              pulseHaptic();
-            } catch {
-              /* vibration disabled / unavailable — no-op */
-            }
-            setActionsOpen(true);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Message actions"
+        {swipeEnabled ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.replyHint,
+              isSelf ? styles.replyHintRight : styles.replyHintLeft,
+              {
+                opacity: replyIconOpacity,
+                transform: [{ scale: replyIconScale }],
+                backgroundColor: theme.colors.surface2,
+              },
+            ]}
+          >
+            <PoolseIcon name="reply" size={16} color={theme.colors.brand} />
+          </Animated.View>
+        ) : null}
+
+        <Animated.View
+          {...(swipeEnabled ? panResponder.panHandlers : {})}
+          style={{ transform: [{ translateX }] }}
         >
-          {editing ? (
-            <EditableMessageBubble
-              message={msg}
-              currentUserId={meId}
-              onCancel={onCancelEdit ?? (() => undefined)}
-              onSave={onSaveEdit ?? (() => undefined)}
-            />
-          ) : (
-            <MessageBubble
-              message={msg}
-              currentUserId={meId}
-              {...(readState ? { readState } : {})}
-              {...(labelFor ? { labelFor } : {})}
-              {...(onQuotedClick ? { onQuotedClick } : {})}
-              groupPosition={groupPosition}
-              maxBodyLength={maxBodyLength}
-              showSenderName={showSenderName}
-              showAttachments={attachments}
-              actionsTrigger={
-                actions ? (
-                  <Pressable onPress={() => setActionsOpen(true)} hitSlop={8}>
-                    <PoolseIcon
-                      name="chevron-down"
-                      size={14}
-                      color={isSelf ? theme.colors.onBrand : theme.colors.ink3}
-                    />
-                  </Pressable>
-                ) : null
-              }
-            />
-          )}
-        </Pressable>
+          <Pressable
+            onLongPress={() => {
+              if (!actions) return;
+              setActionsOpen(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Message actions"
+          >
+            {editing ? (
+              <EditableMessageBubble
+                message={msg}
+                currentUserId={meId}
+                onCancel={onCancelEdit ?? (() => undefined)}
+                onSave={onSaveEdit ?? (() => undefined)}
+              />
+            ) : (
+              <MessageBubble
+                message={msg}
+                currentUserId={meId}
+                {...(readState ? { readState } : {})}
+                {...(labelFor ? { labelFor } : {})}
+                {...(onQuotedClick ? { onQuotedClick } : {})}
+                groupPosition={groupPosition}
+                maxBodyLength={maxBodyLength}
+                showSenderName={showSenderName}
+                showAttachments={attachments}
+                actionsTrigger={
+                  actions ? (
+                    <Pressable onPress={() => setActionsOpen(true)} hitSlop={8}>
+                      <PoolseIcon
+                        name="chevron-down"
+                        size={14}
+                        color={isSelf ? theme.colors.onBrand : theme.colors.ink3}
+                      />
+                    </Pressable>
+                  ) : null
+                }
+              />
+            )}
+          </Pressable>
+        </Animated.View>
 
         {threads && (msg.reply_count ?? 0) > 0 && onOpenThread ? (
           <Pressable onPress={onOpenThread} style={styles.threadPill}>
@@ -246,6 +343,24 @@ const styles = StyleSheet.create({
   },
   bubbleCol: {
     flexShrink: 1,
+    position: 'relative',
+  },
+  replyHint: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: -1,
+  },
+  replyHintLeft: {
+    left: -44,
+  },
+  replyHintRight: {
+    right: -44,
   },
   threadPill: {
     alignSelf: 'flex-start',
