@@ -103,11 +103,13 @@ chat.conversations.one(id): ConversationHandle;
   name?: string | null;
   avatar_url?: string | null;
   member_limit?: number | null;
-  member_external_ids?: string[];   // your IDs; poolse looks them up by tenant
+  member_external_ids?: string[];
   custom_data?: Record<string, unknown>;
   settings?: Record<string, unknown>;
 }
 ```
+
+`member_external_ids` is your tenant's own ids — poolse looks them up by tenant and lazily provisions any that don't exist yet. The returned `Conversation` carries `member_external_ids` (the array of external_ids for every member) and `last_message_preview` (server-denormalized first ~80 chars of the most recent message body, used to render inbox rows without a per-row decrypt round-trip).
 
 `ConversationHandle` (returned by `chat.conversations.one(id)`):
 
@@ -300,11 +302,16 @@ Payload shapes are exact:
 Returned by `chat.realtime.user(id)`. Only the user matching the JWT can join their own channel — the server rejects other ids.
 
 ```ts
-channel.onMention(fn): Unsubscribe;                    // mention:new
-channel.onConversationCreated(fn): Unsubscribe;        // conversation:created
+channel.onMention(fn): Unsubscribe;
+channel.onConversationCreated(fn): Unsubscribe;
+channel.onConversationUpdated(fn): Unsubscribe;
 ```
 
-`mention:new` carries `{ message_id, conversation_id, sender_id }` — fetch the full message via REST if you need the body. `conversation:created` fires whenever the user is added to a conversation (including ones they created themselves) and carries the full `Conversation`.
+`onMention` corresponds to the `mention:new` push and carries `{ message_id, conversation_id, sender_id }` — fetch the full message via REST if you need the body.
+
+`onConversationCreated` corresponds to the `conversation:created` push, which fires whenever the user is added to a conversation (including ones they created themselves) and carries the full `Conversation` row with `member_external_ids` preloaded.
+
+`onConversationUpdated` corresponds to the `conversation:updated` push and fires after every message sent in any of the user's conversations. Payload shape is `{ conversation: Conversation, by_user_id: Uuid | null }` — `by_user_id` is the sender's id, so a client can avoid bumping its own unread when the server already advanced its read cursor in the same transaction. The `conversation` carries the freshly written `last_message_preview`, `last_message_at`, and `last_sequence` so an inbox UI can update without a refetch.
 
 ## Token caching
 

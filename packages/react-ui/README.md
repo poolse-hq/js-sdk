@@ -112,10 +112,19 @@ If you want to keep most of the default behavior, render `<MessageRow>` yourself
 
 ### Composed surfaces
 
-| Component            | What                                                                                                                                                  |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<ConversationView>` | Full chat (above) — `useMessages` + `useMembers` + `useTyping` + composer + thread pane wired together.                                               |
-| `<ThreadView>`       | The right-side reply pane. `useThread`-driven; close button + Esc + drag-drop. Used internally by `<ConversationView>`; export it for custom layouts. |
+| Component            | What                                                                                                                                                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `<PoolseInbox>`      | Full inbox shell — two-column side-by-side list + detail on wide viewports, push-pane on ≤720px. Imperative ref API for `open`, `openDirect`, `openGroup`, `promptNewChat`, `promptNewGroup`, `close`. Built-in user picker + group-details sheet when a `users` directory is provided.    |
+| `<ConversationView>` | Full chat (above) — `useMessages` + `useMembers` + `useTyping` + composer + thread pane wired together.                                                                                                                                                                                    |
+| `<ChatHeader>`       | Standalone title bar — direct chats resolve the OTHER member's name + avatar via `labelFor` / `avatarFor`, groups show member count, presence-driven green dot. Optional `onBack`, `onPress`, `onMembersPress`, plus a free-form `rightSlot` for custom actions (e.g. an "Invite" button). |
+| `<ThreadView>`       | The right-side reply pane. `useThread`-driven; close button + Esc + drag-drop. Used internally by `<ConversationView>`; export it for custom layouts.                                                                                                                                      |
+
+### Sheets / modals
+
+| Component             | What                                                                                                                                                                                   |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<UserPickerSheet>`   | Modal for picking a direct-chat target or a group's members. `mode: 'single'` is one-tap-to-start, `mode: 'group'` adds a name input + multi-select. Accepts an `InboxUser` directory. |
+| `<GroupDetailsSheet>` | Modal showing a group's name, avatar, and the existing `<MemberList>` roster with presence dots. Optional `footer` slot for "Leave group" / "Invite" actions.                          |
 
 ### Message surface
 
@@ -143,10 +152,10 @@ If you want to keep most of the default behavior, render `<MessageRow>` yourself
 
 ### Conversation roster
 
-| Component            | What                                                                                                                                                                                                              |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<ConversationList>` | Sidebar list of the user's conversations. Avatar + name + last-message time + unread pill. Controlled mode: pass `conversations`/`loading`/`error` to render from external state instead of `useConversations()`. |
-| `<MemberList>`       | Roster for one conversation. Role badges, online dot, optional remove button gated by a `canRemove(membership)` predicate.                                                                                        |
+| Component            | What                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<ConversationList>` | Sidebar list of the user's conversations. Avatar + name + `last_message_preview` + timestamp + unread pill. Direct rows resolve the other member's name/avatar via `labelFor` / `avatarFor` (the same resolvers `<ChatHeader>` and `<PoolseInbox>` take), so a customer can wire one mapping everywhere. Controlled mode: pass `conversations`/`loading`/`error` to render from external state instead of `useConversations()`. |
+| `<MemberList>`       | Roster for one conversation. Role badges, online dot, optional remove button gated by a `canRemove(membership)` predicate.                                                                                                                                                                                                                                                                                                      |
 
 ### Reactions
 

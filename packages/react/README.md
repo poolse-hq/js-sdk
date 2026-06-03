@@ -85,27 +85,22 @@ Fetches `GET /v1/me` once on mount. Identity is stable for the JWT's lifetime, s
 
 ### `useConversation(id): { conversation, loading, error, refetch }`
 
-Single conversation, REST-only. The server doesn't broadcast `conversation:updated` today, so changes (name, settings) won't show up live — call `refetch()` after a mutation. Pass `null` to skip the fetch.
+Single conversation, REST-only. Settings changes (name, avatar) won't show up live on this hook — call `refetch()` after a mutation. Live message activity for the same conversation flows through `useMessages` instead. Pass `null` to skip the fetch.
 
 ### `useConversations(): { conversations, create, unreadCounts, markConversationRead, ... }`
 
-The user's conversation list. On mount: fetches `GET /v1/conversations` and subscribes to the user's own `user:<id>` channel for `conversation:created` events (fires both when this user creates a conversation and when someone else adds them to one). `unreadCounts` is populated from `Conversation.unread_count` on the initial fetch.
+The user's conversation list. On mount it fetches `GET /v1/conversations` and subscribes to the user's own `user:<id>` channel for two events: `conversation:created` (fires both when this user creates a conversation and when someone else adds them to one) and `conversation:updated` (fires after every message sent in any of their conversations).
+
+Return shape:
 
 ```ts
-const {
-  conversations, // Conversation[]
-  loading,
-  error,
-  refetch, // () => Promise<void>
-  create, // (attrs: ConversationCreateRequest) => Promise<Conversation>
-  unreadCounts, // Record<Uuid, number>
-  markConversationRead, // (conversationId: Uuid) => void — zeroes the badge locally
-} = useConversations();
+const { conversations, loading, error, refetch, create, unreadCounts, markConversationRead } =
+  useConversations();
 ```
 
-`create()` optimistically prepends the conversation to local state. When the realtime echo arrives with the same id, an id-based dedup replaces the row in place — no double-insert.
+`conversations` is the list of `Conversation` rows. `refetch()` does an explicit re-sync. `create(attrs)` calls `POST /v1/conversations` and optimistically prepends the result; when the realtime echo arrives with the same id, id-based dedup replaces the row in place so there's no double-insert.
 
-Unread counts only stay correct for the conversation the user is actually viewing (`useMessages` advances the read cursor) plus whatever was fresh at fetch time. The hook doesn't subscribe to every conversation in the list — that would mean N channels just to keep N sidebar badges live. Refetch on tab focus or accept the drift.
+`unreadCounts` is `Record<Uuid, number>`. Initial values come from the server's `Conversation.unread_count`. The `conversation:updated` subscription keeps them live without polling: when another member sends a message, the corresponding row's preview, timestamp, and unread badge update in place; when YOU send (`by_user_id` equals your id) the row floats to the top and unread stays at 0 (the server already advanced your read cursor in the same transaction). `markConversationRead(conversationId)` zeroes the badge locally — wire this from `ConversationView.onMarkedRead` so the sidebar clears immediately, before the server's read-receipt echo round-trips.
 
 ### `useMessages(conversationId): { messages, send, edit, delete, loadMore, hasMore, markReadUpTo, ... }`
 

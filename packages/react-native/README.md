@@ -25,6 +25,39 @@ versions compatible with your installed Expo SDK automatically.
 
 ## Quick start
 
+The drop-in inbox — list + detail with a slide animation between them, edge-swipe back, plus built-in pickers when you provide a user directory:
+
+```tsx
+import { PoolseProvider } from '@poolse/react';
+import { PoolseInbox, PoolseTheme } from '@poolse/react-native';
+
+const users = [
+  { externalId: 'alice', name: 'Alice', avatarUrl: 'https://…' },
+  { externalId: 'bob', name: 'Bob', avatarUrl: 'https://…' },
+];
+
+export default function InboxScreen() {
+  return (
+    <PoolseProvider config={{ getToken, userResolver }}>
+      <PoolseTheme>
+        <PoolseInbox
+          title="Chats"
+          users={users}
+          labelFor={(externalId) =>
+            users.find((u) => u.externalId === externalId)?.name ?? externalId
+          }
+          avatarFor={(externalId) =>
+            users.find((u) => u.externalId === externalId)?.avatarUrl ?? null
+          }
+        />
+      </PoolseTheme>
+    </PoolseProvider>
+  );
+}
+```
+
+If you'd rather render a single conversation (your app already owns the navigation), use `<ConversationView>` directly:
+
 ```tsx
 import { PoolseProvider } from '@poolse/react';
 import { PoolseTheme, ConversationView } from '@poolse/react-native';
@@ -40,33 +73,32 @@ export default function ChatScreen({ conversationId }: { conversationId: string 
 }
 ```
 
-The same `<PoolseProvider>` you use on web. Wrap it once at the app
-root if you have multiple chat screens. Drop the `<PoolseTheme>`
-wrapper if you don't need to override the brand defaults — every
-component has a fallback theme baked in.
+The same `<PoolseProvider>` you use on web. Wrap it once at the app root if you have multiple chat screens. Drop the `<PoolseTheme>` wrapper if you don't need to override the brand defaults — every component has a fallback theme baked in.
 
 ## What ships
 
-| Component                                     | What it does                                                                                    |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `<ConversationView>`                          | Composed chat surface — message list + composer + typing strip. Feature flags identical to web. |
-| `<MessageBubble>` / `<EditableMessageBubble>` | Single message render — body, meta, read receipt, quoted card, in-bubble attachments.           |
-| `<MessageRow>`                                | Bubble + alignment + actions slot.                                                              |
-| `<MessageList>`                               | Inverted `FlatList` wrapper — stick-to-bottom, hold-position, auto-load-more.                   |
-| `<MessageComposer>`                           | Text input with auto-grow, send button, attach button, quote chip.                              |
-| `<MessageActions>`                            | Long-press menu (reply / quote / edit / delete / copy / react).                                 |
-| `<TypingIndicator>`                           | Animated three-dot indicator + labels.                                                          |
-| `<ThreadView>`                                | Modal screen for thread replies.                                                                |
-| `<ConversationList>`                          | `FlatList` of conversation rows with unread badges.                                             |
-| `<MemberList>`                                | Member roster with avatars + remove action.                                                     |
-| `<MentionInput>`                              | `TextInput` + autocomplete popover.                                                             |
-| `<ReactionStrip>` / `<ReactionPicker>`        | Reaction summary + emoji picker sheet.                                                          |
-| `<AttachmentPreview>`                         | Image or file card.                                                                             |
-| `<AttachmentPicker>`                          | Wraps `expo-image-picker` + `expo-document-picker`.                                             |
-| `<UploadQueueStrip>`                          | Pending uploads with cancel.                                                                    |
-| `<UserName>` / `useDisplayName(externalId)`   | Display name resolution via the SDK's `userResolver`.                                           |
-| `<Avatar>`                                    | Initials + URL fallback, stable color per user.                                                 |
-| `<PoolseIcon>` / `<PoolseLogo>`               | Brand chrome via `react-native-svg`.                                                            |
+| Component                                     | What it does                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<PoolseInbox>`                               | Full inbox shell — list + detail with an iOS-style slide animation between them, left-edge-swipe-back to return to the list, built-in `New chat` / `New group` picker sheets when `users` is provided. Imperative ref API: `open`, `openDirect`, `openGroup`, `promptNewChat`, `promptNewGroup`, `close`. |
+| `<ChatHeader>`                                | Title bar — direct chats resolve the other member's name + avatar via `labelFor` / `avatarFor`, groups show member count, presence-driven green dot. Optional `onBack` button.                                                                                                                            |
+| `<ConversationView>`                          | Composed chat surface — message list + composer + typing strip + thread modal. Single `KeyboardAvoidingView` covers the whole thing so the composer stays above the keyboard on both platforms.                                                                                                           |
+| `<ThreadView>`                                | Bottom-sheet modal for thread replies. Reactions + attachments + pull-down-to-close via a 60-pt header drag strip. Composer reuses the same `UploadProvider` queue as the picker.                                                                                                                         |
+| `<GroupDetailsSheet>`                         | Bottom sheet showing a group's name, avatar, and member roster with presence. Opened from `<ChatHeader>`'s members button.                                                                                                                                                                                |
+| `<MessageBubble>` / `<EditableMessageBubble>` | Single message render — body, meta, read receipt, quoted card, in-bubble attachments.                                                                                                                                                                                                                     |
+| `<MessageRow>`                                | Bubble + alignment + swipe-to-reply (capture-phase, 1:1 finger follow, sqrt-damped past 50pt threshold).                                                                                                                                                                                                  |
+| `<MessageList>`                               | Inverted `FlatList` wrapper — stick-to-bottom, hold-position, auto-load-more.                                                                                                                                                                                                                             |
+| `<MessageComposer>`                           | Text input with auto-grow, send button, attach button, quote chip.                                                                                                                                                                                                                                        |
+| `<MessageActions>`                            | Long-press menu (reply / quote / edit / delete / copy / react).                                                                                                                                                                                                                                           |
+| `<TypingIndicator>`                           | Animated three-dot indicator + labels.                                                                                                                                                                                                                                                                    |
+| `<ConversationList>`                          | `FlatList` of conversation rows. Direct rows pull the other member's name + avatar via `labelFor` / `avatarFor`; preview reads `last_message_preview` updated in realtime by the SDK's `conversation:updated` subscription. Unread badges.                                                                |
+| `<MemberList>`                                | Member roster with avatars + remove action.                                                                                                                                                                                                                                                               |
+| `<MentionInput>`                              | `TextInput` + autocomplete popover.                                                                                                                                                                                                                                                                       |
+| `<ReactionStrip>` / `<ReactionPicker>`        | Reaction summary + emoji picker sheet.                                                                                                                                                                                                                                                                    |
+| `<AttachmentPreview>` / `<AttachmentPicker>`  | Image or file card. Picker wraps `expo-image-picker` + `expo-document-picker`.                                                                                                                                                                                                                            |
+| `<UploadQueueStrip>`                          | Pending uploads with cancel.                                                                                                                                                                                                                                                                              |
+| `<UserName>` / `useDisplayName(externalId)`   | Display name resolution via the SDK's `userResolver`.                                                                                                                                                                                                                                                     |
+| `<Avatar>`                                    | Initials + URL fallback, stable color per user.                                                                                                                                                                                                                                                           |
+| `<PoolseIcon>` / `<PoolseLogo>`               | Brand chrome via `react-native-svg`.                                                                                                                                                                                                                                                                      |
 
 ## Theming
 
@@ -141,8 +173,18 @@ The wire still carries `user_id` (the poolse uuid) alongside
 | Mention picker      | Inline dropdown               | Modal sheet                                  |
 | Attachment picker   | `<input type=file>`           | `expo-image-picker` + `expo-document-picker` |
 | Message list        | Reversed CSS flexbox          | Inverted `FlatList`                          |
-| Markdown            | `react-markdown`              | Plain text in 0.1 (markdown coming in 0.2)   |
+| Markdown            | `react-markdown`              | Plain text                                   |
 
-Everything else — feature flags, prop names, callback shapes,
-hook signatures — is intentionally identical so a web codebase
-ports across with mostly mechanical changes.
+Everything else — feature flags, prop names, callback shapes, hook signatures — is intentionally identical so a web codebase ports across with mostly mechanical changes.
+
+## Links
+
+- Docs: [poolse.dev/docs/sdk/react-native](https://poolse.dev/docs/sdk/react-native)
+- Source: [github.com/poolse-hq/js-sdk](https://github.com/poolse-hq/js-sdk/tree/main/packages/react-native)
+- Web sibling: [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui)
+- Hooks (used internally): [`@poolse/react`](https://www.npmjs.com/package/@poolse/react)
+- Core client: [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk)
+
+## License
+
+MIT
