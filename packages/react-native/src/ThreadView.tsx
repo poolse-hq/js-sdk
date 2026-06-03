@@ -6,6 +6,7 @@ import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageList } from './MessageList.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { useSafeInsets } from './lifecycle/safeArea.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface ThreadViewProps {
@@ -99,12 +100,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingBottom: 10,
+    // paddingTop set inline so it can compose with the safe-area inset.
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
+    gap: 10,
   },
   closeBtn: {
-    padding: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 16,

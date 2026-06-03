@@ -93,7 +93,9 @@ export function MessageBubble({
         styles.wrap,
         {
           alignSelf: isSelf ? 'flex-end' : 'flex-start',
-          maxWidth: '80%',
+          // Wider cap so long messages don't break into 5+ short lines.
+          // Matches WhatsApp / iMessage which sit around 85–88%.
+          maxWidth: '88%',
         },
       ]}
     >
@@ -108,8 +110,15 @@ export function MessageBubble({
             borderTopRightRadius: radii.topRight,
             borderBottomLeftRadius: radii.bottomLeft,
             borderBottomRightRadius: radii.bottomRight,
-            paddingHorizontal: theme.spacing.md,
-            paddingVertical: theme.spacing.sm,
+            // Slightly more breathing room — 14/10 reads tighter and
+            // matches the iMessage / WhatsApp bubble density.
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            // Floor the bubble at a width that always fits the meta row
+            // ("edited HH:MM ✓✓" → ~110px). Without this, short bodies
+            // like "ok" produce a bubble too narrow for the meta to lay
+            // out, and `edited` or the time gets clipped.
+            minWidth: isSelf && isEdited ? 130 : 90,
           },
           theme.shadows.sm,
         ]}
@@ -315,20 +324,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    marginTop: 4,
-    gap: 4,
+    marginTop: 6,
+    gap: 5,
+    flexShrink: 0,
   },
   meta: {
     fontSize: 11,
     fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
   },
   editedTag: {
     fontSize: 10,
     fontStyle: 'italic',
-    marginRight: 2,
+    letterSpacing: 0.1,
   },
   readTick: {
     marginLeft: 2,
+    marginTop: 1,
   },
   actionsSlot: {
     position: 'absolute',

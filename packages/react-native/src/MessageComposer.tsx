@@ -13,6 +13,7 @@ import { useAttachmentUpload } from '@poolse/react';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
+import { useSafeInsets } from './lifecycle/safeArea.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface MessageComposerProps {
@@ -70,6 +71,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     ref,
   ) {
     const theme = usePoolseTheme();
+    const insets = useSafeInsets();
     const inputRef = useRef<TextInput>(null);
     const [value, setValue] = useState('');
     const [sending, setSending] = useState(false);
@@ -129,6 +131,15 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             {
               backgroundColor: theme.colors.surface,
               borderTopColor: theme.colors.border,
+              // Respect the home-indicator inset on iPhone X+ — without
+              // this the send button sits flush against the bottom edge
+              // and the row reads visually cramped. Floor at 8 so even
+              // older devices have breathing room.
+              paddingBottom: Math.max(insets.bottom, 8),
+              // Side insets so the row clears rounded notch corners on
+              // landscape orientation.
+              paddingLeft: 12 + insets.left,
+              paddingRight: 12 + insets.right,
             },
           ]}
         >
@@ -241,8 +252,9 @@ function ReplyChip({
 const styles = StyleSheet.create({
   wrap: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 8,
+    // paddingBottom / left / right set inline so they can compose
+    // with the device's safe-area insets.
   },
   row: {
     flexDirection: 'row',
