@@ -1,7 +1,7 @@
 import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
 import { useUser } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { ImageMosaic } from './ImageMosaic.js';
@@ -46,8 +46,22 @@ export function MessageBubble({
   showAttachments = true,
 }: MessageBubbleProps) {
   const theme = usePoolseTheme();
+  const { width: screenWidth } = useWindowDimensions();
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
   const [expanded, setExpanded] = useState(false);
+
+  // Pixel-based bubble cap pinned to screen width, not to a
+  // percentage of an ambiguously-sized parent. Was '88%' on the
+  // wrap which resolves to 88% of the bubbleCol — and bubbleCol's
+  // width changes with the row's padding, so bumping row padding
+  // shrunk multi-line bubbles disproportionately. With a fixed
+  // pixel maxWidth + alignSelf:flex-end, single-line and multi-line
+  // both hit the same right edge regardless of nesting.
+  const bubbleMaxWidth = Math.floor(screenWidth * 0.78);
+  // Image / file preview width is bubble width minus the 28px
+  // horizontal padding. Use flex '100%' style with a numeric ceiling
+  // so the mosaic adapts to the actual rendered bubble.
+  const contentMaxWidth = bubbleMaxWidth - 28;
 
   const sender = useUser(!isSelf ? message.sender_external_id : null);
   const senderFallbackName = message.sender_external_id ?? 'Unknown';
@@ -93,9 +107,11 @@ export function MessageBubble({
         styles.wrap,
         {
           alignSelf: isSelf ? 'flex-end' : 'flex-start',
-          // Wider cap so long messages don't break into 5+ short lines.
-          // Matches WhatsApp / iMessage which sit around 85–88%.
-          maxWidth: '88%',
+          // Pixel maxWidth (not percentage) so single-line and
+          // multi-line bubbles land at the same right edge — was
+          // 88% of the bubbleCol which produced inconsistent right
+          // padding when the row padding changed.
+          maxWidth: bubbleMaxWidth,
         },
       ]}
     >
@@ -140,12 +156,14 @@ export function MessageBubble({
           />
         ) : null}
 
-        {renderAttachments && images.length > 0 ? <ImageMosaic images={images} /> : null}
+        {renderAttachments && images.length > 0 ? (
+          <ImageMosaic images={images} maxWidth={contentMaxWidth} />
+        ) : null}
 
         {renderAttachments && files.length > 0 ? (
           <View style={{ gap: theme.spacing.xs, marginBottom: theme.spacing.xs }}>
             {files.map((att) => (
-              <AttachmentPreview key={att.id} attachment={att} />
+              <AttachmentPreview key={att.id} attachment={att} maxWidth={contentMaxWidth} />
             ))}
           </View>
         ) : null}
@@ -302,7 +320,7 @@ function isSameDay(a: Date, b: Date): boolean {
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 4,
+    marginBottom: 2,
   },
   bubble: {
     position: 'relative',

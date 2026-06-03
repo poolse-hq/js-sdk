@@ -50,6 +50,18 @@ export interface Conversation {
   settings: Record<string, unknown>;
   /** Most recent message's `inserted_at`; null until first message. */
   last_message_at: IsoDateTime | null;
+  /**
+   * Plaintext preview of the most recent message body, truncated to
+   * 80 chars. Updated server-side by `send_message`. Null when the
+   * conversation has no messages, or when the last message had no
+   * body (in which case `"📎 Attachment"` etc is returned).
+   *
+   * Note: stored unencrypted on the server (deliberate denorm so
+   * the conversation list doesn't pay a per-row decrypt). Apps with
+   * full at-rest-encryption requirements should ignore this field
+   * and render their own preview client-side.
+   */
+  last_message_preview: string | null;
   /** Monotonic per-conversation sequence counter (last message's `sequence`). */
   last_sequence: number;
   /**
@@ -59,6 +71,15 @@ export interface Conversation {
    * conversation is fetched via other paths.
    */
   unread_count?: number;
+  /**
+   * Tenant `external_id`s of every member, in no particular order.
+   * Populated by code paths that preload the memberships
+   * (`chat.conversations.list()`); may be `[]` on responses where
+   * memberships weren't preloaded (webhook payloads, some create
+   * responses). Use this to render the other-party name on a direct
+   * conversation row without a separate `useMembers` call.
+   */
+  member_external_ids?: string[];
   inserted_at: IsoDateTime;
   updated_at: IsoDateTime;
 }

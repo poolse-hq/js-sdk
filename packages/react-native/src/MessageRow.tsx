@@ -1,13 +1,13 @@
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Message, Uuid } from '@poolse/sdk';
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { Avatar } from './primitives/Avatar.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { ReactionPicker, ReactionStrip } from './Reactions.js';
+import { ReactionStrip } from './Reactions.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 import { useReactions } from '@poolse/react';
 
@@ -76,7 +76,6 @@ export function MessageRow({
   const theme = usePoolseTheme();
   const isSelf = meId !== null && msg.sender_id === meId;
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Per-row useReactions subscription so the long-press → React picker
   // and the inline ReactionStrip share the same realtime state. Adds
@@ -101,12 +100,29 @@ export function MessageRow({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => {
+        // Tap / long-press still go to the inner Pressable.
+        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
+        // Capture-phase claim: we intercept the gesture BEFORE the
+        // child Pressable as soon as the move shows clear horizontal
+        // intent. Without capture-phase, the Pressable's touch handling
+        // wins first and the pan never starts (this is why self-bubble
+        // left swipes felt totally dead — the Pressable was attached
+        // to a touch that started with the user's finger over the
+        // bubble center, and we never got a turn).
+        onMoveShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponderCapture: (_, g) => {
           if (!swipeEnabled) return false;
-          // Only claim the gesture for clear horizontal pulls — let
-          // vertical scrolls flow through to the FlatList.
-          return Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy) * 2;
+          // 4px is plenty to disambiguate from an accidental jitter
+          // during a tap. `dx > dy` (not `dx > dy * 2`) so a slightly
+          // diagonal pull still counts as horizontal — the user isn't
+          // going to hold their finger to a perfect axis.
+          return Math.abs(g.dx) > 4 && Math.abs(g.dx) > Math.abs(g.dy);
         },
+        // Don't surrender the gesture mid-swipe (e.g. parent FlatList
+        // asking for it back) — once we're translating the bubble we
+        // hold on until release.
+        onPanResponderTerminationRequest: () => false,
         // 1:1 finger-follow up to the threshold, then square-root
         // damping past it so the bubble never slides off-screen.
         // Matches iMessage / WhatsApp — feels weightless during the
@@ -277,11 +293,10 @@ export function MessageRow({
           isSelf={isSelf}
           {...(reactions
             ? {
-                onReact: () => {
-                  setActionsOpen(false);
-                  // Defer one tick so the action sheet's close
-                  // animation can begin before the picker mounts.
-                  setTimeout(() => setPickerOpen(true), 80);
+                // Inline quick-react row at the top of the sheet —
+                // one tap = react + close, no second modal needed.
+                onPickReaction: (emoji: string) => {
+                  void reactionsApi.addReaction(emoji);
                 },
               }
             : {})}
@@ -319,16 +334,6 @@ export function MessageRow({
             : {})}
         />
       ) : null}
-
-      {reactions ? (
-        <ReactionPicker
-          visible={pickerOpen}
-          onClose={() => setPickerOpen(false)}
-          onPick={(emoji) => {
-            void reactionsApi.addReaction(emoji);
-          }}
-        />
-      ) : null}
     </View>
   );
 }
@@ -337,8 +342,14 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginVertical: 2,
-    paddingHorizontal: 8,
+    // Tighter vertical rhythm — was 2px each side (4px between rows)
+    // plus the bubble's 4px marginBottom = 8px. Now 1+1+2 = 4px,
+    // closer to iMessage / WhatsApp density.
+    marginVertical: 1,
+    // 10px on each side — tight enough to use the available width
+    // for content, loose enough to keep bubbles off the screen edge
+    // on every device.
+    paddingHorizontal: 10,
     maxWidth: '95%',
   },
   avatarSlot: {

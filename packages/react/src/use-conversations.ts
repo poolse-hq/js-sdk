@@ -76,16 +76,23 @@ export function useConversations(): UseConversationsState {
     void refetch();
   }, [refetch]);
 
-  // Realtime: subscribe to `user:<me.id>:conversation:created` once we
-  // know who "me" is. Re-subscribes if `me.id` changes (rare — only on
-  // sign-in/sign-out within the same provider, which is itself rare).
+  // Realtime: subscribe to `user:<me.id>` for both `conversation:created`
+  // (new membership) and `conversation:updated` (a member of an existing
+  // conversation sent a message). Re-subscribes if `me.id` changes.
   useEffect(() => {
     if (!me) return;
     const userChan = chat.realtime.user(me.id);
-    const off = userChan.onConversationCreated((conv) => {
+    const offCreated = userChan.onConversationCreated((conv) => {
       setConversations((prev) => prepend(prev, conv));
     });
-    return off;
+    const offUpdated = userChan.onConversationUpdated(({ conversation, by_user_id }) => {
+      const fromMe = by_user_id === me.id;
+      setConversations((prev) => mergeUpdated(prev, conversation, fromMe));
+    });
+    return () => {
+      offCreated();
+      offUpdated();
+    };
   }, [chat, me]);
 
   // Force-zero an unread count without mutating the conversation row.
@@ -122,4 +129,31 @@ function prepend(prev: Conversation[], conv: Conversation): Conversation[] {
   const next = prev.slice();
   next[idx] = conv;
   return next;
+}
+
+/**
+ * Apply a `conversation:updated` realtime payload: merge the fresh
+ * surface fields (preview, timestamp, sequence) into the existing
+ * row and float it to the top. Increment `unread_count` only when
+ * the triggering message wasn't from the current user — the server
+ * already advanced the sender's read cursor, so their own unread
+ * stays at 0.
+ *
+ * If the conversation isn't in our local list yet (rare — joined
+ * via a different tab, or we just signed in), prepend the wire row
+ * as-is.
+ */
+function mergeUpdated(prev: Conversation[], next: Conversation, fromMe: boolean): Conversation[] {
+  const idx = prev.findIndex((c) => c.id === next.id);
+  if (idx === -1) return [next, ...prev];
+  const existing = prev[idx]!;
+  const merged: Conversation = {
+    ...existing,
+    last_message_at: next.last_message_at,
+    last_message_preview: next.last_message_preview,
+    last_sequence: next.last_sequence,
+    unread_count: fromMe ? 0 : (existing.unread_count ?? 0) + 1,
+  };
+  const rest = prev.slice(0, idx).concat(prev.slice(idx + 1));
+  return [merged, ...rest];
 }

@@ -1,18 +1,10 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AttachmentUploadInput, Message, Uuid } from '@poolse/sdk';
-import { useAttachmentUpload } from '@poolse/react';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
+import { useSharedUpload } from './internal/uploadContext.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface MessageComposerProps {
@@ -40,6 +32,15 @@ export interface MessageComposerProps {
   attachments?: boolean;
   /** Tap on the paperclip — wire to `<AttachmentPicker>` from the same package. */
   onAttachPress?: () => void;
+  /**
+   * Distance from the top of the screen to the top of the
+   * KeyboardAvoidingView — typically the height of any navigation
+   * header sitting above the chat. Pass this when the iOS keyboard
+   * suggestions strip ends up covering the composer (a sign the
+   * computed offset is wrong). Defaults to 0; on Android it's
+   * ignored.
+   */
+  keyboardOffset?: number;
 }
 
 /**
@@ -66,6 +67,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       labelFor,
       attachments = true,
       onAttachPress,
+      keyboardOffset: _keyboardOffset = 0,
     },
     ref,
   ) {
@@ -73,7 +75,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const inputRef = useRef<TextInput>(null);
     const [value, setValue] = useState('');
     const [sending, setSending] = useState(false);
-    const upload = useAttachmentUpload();
+    const upload = useSharedUpload();
 
     useImperativeHandle(
       ref,
@@ -118,82 +120,82 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       }
     };
 
+    // No KeyboardAvoidingView here — ConversationView wraps the whole
+    // chat surface in a single KAV so the list + composer shift up
+    // together. Wrapping only the composer inside a flex:1 parent
+    // with no headroom pushed it below the visible area on iPhone
+    // home-indicator devices.
     return (
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      <View
+        style={[
+          styles.wrap,
+          {
+            backgroundColor: theme.colors.surface,
+            borderTopColor: theme.colors.border,
+          },
+        ]}
       >
-        <View
-          style={[
-            styles.wrap,
-            {
-              backgroundColor: theme.colors.surface,
-              borderTopColor: theme.colors.border,
-            },
-          ]}
-        >
-          {replyingTo ? (
-            <ReplyChip
-              message={replyingTo}
-              {...(labelFor ? { labelFor } : {})}
-              {...(onCancelReply ? { onCancel: onCancelReply } : {})}
-            />
+        {replyingTo ? (
+          <ReplyChip
+            message={replyingTo}
+            {...(labelFor ? { labelFor } : {})}
+            {...(onCancelReply ? { onCancel: onCancelReply } : {})}
+          />
+        ) : null}
+
+        {attachments ? <UploadQueueStrip /> : null}
+
+        <View style={styles.row}>
+          {attachments && onAttachPress ? (
+            <Pressable
+              onPress={onAttachPress}
+              hitSlop={8}
+              style={styles.iconBtn}
+              accessibilityLabel="Attach file"
+            >
+              <PoolseIcon name="attachment" size={22} color={theme.colors.ink2} />
+            </Pressable>
           ) : null}
 
-          {attachments ? <UploadQueueStrip /> : null}
+          <TextInput
+            ref={inputRef}
+            value={value}
+            onChangeText={(text) => {
+              setValue(text);
+              onTyping?.();
+            }}
+            placeholder={placeholder}
+            placeholderTextColor={theme.colors.ink3}
+            multiline
+            editable={!disabled}
+            style={[
+              styles.input,
+              {
+                color: theme.colors.ink,
+                backgroundColor: theme.colors.surface2,
+                borderRadius: theme.radii.lg,
+                fontFamily: theme.type.fontBody,
+                fontSize: theme.type.bodySize,
+              },
+            ]}
+          />
 
-          <View style={styles.row}>
-            {attachments && onAttachPress ? (
-              <Pressable
-                onPress={onAttachPress}
-                hitSlop={8}
-                style={styles.iconBtn}
-                accessibilityLabel="Attach file"
-              >
-                <PoolseIcon name="attachment" size={22} color={theme.colors.ink2} />
-              </Pressable>
-            ) : null}
-
-            <TextInput
-              ref={inputRef}
-              value={value}
-              onChangeText={(text) => {
-                setValue(text);
-                onTyping?.();
-              }}
-              placeholder={placeholder}
-              placeholderTextColor={theme.colors.ink3}
-              multiline
-              editable={!disabled}
-              style={[
-                styles.input,
-                {
-                  color: theme.colors.ink,
-                  backgroundColor: theme.colors.surface2,
-                  borderRadius: theme.radii.lg,
-                  fontFamily: theme.type.fontBody,
-                  fontSize: theme.type.bodySize,
-                },
-              ]}
-            />
-
-            <Pressable
-              onPress={handleSend}
-              disabled={submitDisabled}
-              style={[
-                styles.sendBtn,
-                {
-                  backgroundColor: submitDisabled ? theme.colors.ink3 : theme.colors.brand,
-                  opacity: submitDisabled ? 0.6 : 1,
-                },
-              ]}
-              accessibilityLabel="Send message"
-            >
-              <PoolseIcon name="send" size={18} color={theme.colors.onBrand} />
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={handleSend}
+            disabled={submitDisabled}
+            style={[
+              styles.sendBtn,
+              {
+                backgroundColor: submitDisabled ? theme.colors.ink3 : theme.colors.brand,
+                opacity: submitDisabled ? 0.6 : 1,
+              },
+            ]}
+            accessibilityLabel="Send message"
+          >
+            <PoolseIcon name="send" size={18} color={theme.colors.onBrand} />
+          </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     );
   },
 );

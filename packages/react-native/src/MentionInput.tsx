@@ -1,4 +1,4 @@
-import type { Membership, Message, Uuid } from '@poolse/sdk';
+import type { Membership, Uuid } from '@poolse/sdk';
 import { useMembers } from '@poolse/react';
 import { useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -30,7 +30,7 @@ export function MentionInput({ conversationId, onSend, ...composerProps }: Menti
   const theme = usePoolseTheme();
   const { members } = useMembers(conversationId);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerQuery, setPickerQuery] = useState('');
+  const [pickerQuery, _setPickerQuery] = useState('');
   const [pendingMentionUuids, setPendingMentionUuids] = useState<Uuid[]>([]);
   const [text, setText] = useState('');
 

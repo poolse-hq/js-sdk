@@ -8,25 +8,30 @@ import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface ImageMosaicProps {
   images: Attachment[];
-  /** Max width the mosaic should render to. Defaults to 280. */
+  /**
+   * Pixel ceiling on the mosaic's width. The mosaic itself fills its
+   * parent (`width: '100%'`) and caps at this value, so it always
+   * fits inside whatever the bubble's actual content area is at
+   * render time — no more hardcoded 280px overflowing on small
+   * screens or inside narrow bubbles.
+   */
   maxWidth?: number;
-  /** Border radius applied to the outer mosaic. Defaults to theme.radii.md. */
   radius?: number;
 }
 
 /**
  * WhatsApp-style multi-image grid for inside the message bubble.
- *   * n = 1 → single full-bleed tile capped at maxWidth × 200
- *   * n = 2 → two equal squares side-by-side
- *   * n = 3 → one 16:9 hero on top, two squares beneath
- *   * n ≥ 4 → 2×2 grid; 4th tile carries a "+N more" overlay when n > 4
+ * Uses flex-based widths (with `%` and `aspectRatio`) so the layout
+ * scales to whatever the bubble's content area is — no fixed pixel
+ * positioning that can overflow when the bubble is narrower than
+ * the configured max.
  *
- * Tapping any tile opens a full-screen modal viewer with a close X
- * and tap-anywhere-to-close. Swiping between images is not in 0.1 —
- * tap-out, pick another. Reuses `useAttachmentUrl` for cached + auto-
- * refreshed presigned download URLs.
+ *   * n = 1 → single tile, 16:10 aspect.
+ *   * n = 2 → row of 2 squares.
+ *   * n = 3 → 16:9 hero on top + row of 2 squares below.
+ *   * n ≥ 4 → 2×2 grid with "+N more" overlay on the 4th tile.
  */
-export function ImageMosaic({ images, maxWidth = 280, radius }: ImageMosaicProps) {
+export function ImageMosaic({ images, maxWidth, radius }: ImageMosaicProps) {
   const theme = usePoolseTheme();
   const r = radius ?? theme.radii.md;
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
@@ -35,7 +40,7 @@ export function ImageMosaic({ images, maxWidth = 280, radius }: ImageMosaicProps
 
   const visible = images.slice(0, 4);
   const overflow = images.length > 4 ? images.length - 4 : 0;
-  const layout = pickLayout(visible.length);
+  const n = visible.length as 1 | 2 | 3 | 4;
 
   return (
     <>
@@ -43,21 +48,94 @@ export function ImageMosaic({ images, maxWidth = 280, radius }: ImageMosaicProps
         style={[
           styles.root,
           {
-            width: maxWidth,
-            height: layoutHeight(layout, maxWidth),
             borderRadius: r,
+            ...(maxWidth ? { maxWidth } : {}),
           },
         ]}
       >
-        {visible.map((att, i) => (
+        {n === 1 ? (
           <Tile
-            key={att.id}
-            attachment={att}
-            style={tileStyle(layout, i, maxWidth)}
-            overlay={overflow > 0 && i === visible.length - 1 ? `+${overflow}` : null}
-            onPress={() => setViewerIndex(i)}
+            attachment={visible[0]!}
+            style={styles.tileFull}
+            onPress={() => setViewerIndex(0)}
+            overlay={null}
           />
-        ))}
+        ) : null}
+
+        {n === 2 ? (
+          <View style={styles.rowEven}>
+            <Tile
+              attachment={visible[0]!}
+              style={styles.tileHalfSquare}
+              onPress={() => setViewerIndex(0)}
+              overlay={null}
+            />
+            <Tile
+              attachment={visible[1]!}
+              style={styles.tileHalfSquare}
+              onPress={() => setViewerIndex(1)}
+              overlay={null}
+            />
+          </View>
+        ) : null}
+
+        {n === 3 ? (
+          <>
+            <Tile
+              attachment={visible[0]!}
+              style={styles.tileHero}
+              onPress={() => setViewerIndex(0)}
+              overlay={null}
+            />
+            <View style={[styles.rowEven, { marginTop: 2 }]}>
+              <Tile
+                attachment={visible[1]!}
+                style={styles.tileHalfSquare}
+                onPress={() => setViewerIndex(1)}
+                overlay={null}
+              />
+              <Tile
+                attachment={visible[2]!}
+                style={styles.tileHalfSquare}
+                onPress={() => setViewerIndex(2)}
+                overlay={null}
+              />
+            </View>
+          </>
+        ) : null}
+
+        {n === 4 ? (
+          <>
+            <View style={styles.rowEven}>
+              <Tile
+                attachment={visible[0]!}
+                style={styles.tileHalfSquare}
+                onPress={() => setViewerIndex(0)}
+                overlay={null}
+              />
+              <Tile
+                attachment={visible[1]!}
+                style={styles.tileHalfSquare}
+                onPress={() => setViewerIndex(1)}
+                overlay={null}
+              />
+            </View>
+            <View style={[styles.rowEven, { marginTop: 2 }]}>
+              <Tile
+                attachment={visible[2]!}
+                style={styles.tileHalfSquare}
+                onPress={() => setViewerIndex(2)}
+                overlay={null}
+              />
+              <Tile
+                attachment={visible[3]!}
+                style={styles.tileHalfSquare}
+                onPress={() => setViewerIndex(3)}
+                overlay={overflow > 0 ? `+${overflow}` : null}
+              />
+            </View>
+          </>
+        ) : null}
       </View>
 
       <Modal
@@ -77,64 +155,6 @@ export function ImageMosaic({ images, maxWidth = 280, radius }: ImageMosaicProps
   );
 }
 
-type Layout = 'one' | 'two' | 'three' | 'four';
-
-function pickLayout(n: number): Layout {
-  if (n === 1) return 'one';
-  if (n === 2) return 'two';
-  if (n === 3) return 'three';
-  return 'four';
-}
-
-function layoutHeight(layout: Layout, w: number): number {
-  switch (layout) {
-    case 'one':
-      return 200;
-    case 'two':
-      return w / 2;
-    case 'three':
-      return Math.floor(w * 0.5625) + Math.floor(w / 2) + 2;
-    case 'four':
-      return w;
-  }
-}
-
-function tileStyle(layout: Layout, i: number, w: number) {
-  const gap = 2;
-  switch (layout) {
-    case 'one':
-      return { left: 0, top: 0, width: w, height: 200 };
-    case 'two': {
-      const tw = (w - gap) / 2;
-      return { left: i === 0 ? 0 : tw + gap, top: 0, width: tw, height: w / 2 };
-    }
-    case 'three': {
-      const heroH = Math.floor(w * 0.5625);
-      const tw = (w - gap) / 2;
-      const tileH = Math.floor(w / 2);
-      if (i === 0) return { left: 0, top: 0, width: w, height: heroH };
-      const bottomTop = heroH + gap;
-      return {
-        left: i === 1 ? 0 : tw + gap,
-        top: bottomTop,
-        width: tw,
-        height: tileH,
-      };
-    }
-    case 'four': {
-      const tw = (w - gap) / 2;
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      return {
-        left: col === 0 ? 0 : tw + gap,
-        top: row === 0 ? 0 : tw + gap,
-        width: tw,
-        height: tw,
-      };
-    }
-  }
-}
-
 function Tile({
   attachment,
   style,
@@ -142,14 +162,14 @@ function Tile({
   onPress,
 }: {
   attachment: Attachment;
-  style: { left: number; top: number; width: number; height: number };
+  style: object;
   overlay: string | null;
   onPress: () => void;
 }) {
   const theme = usePoolseTheme();
   const { url } = useAttachmentUrl(attachment.id);
   return (
-    <Pressable onPress={onPress} style={[styles.tile, style]}>
+    <Pressable onPress={onPress} style={[styles.tileBase, style]}>
       {url ? (
         <Image
           source={{ uri: url }}
@@ -204,13 +224,31 @@ function FullScreenViewer({
 
 const styles = StyleSheet.create({
   root: {
-    position: 'relative',
+    width: '100%',
     overflow: 'hidden',
     marginBottom: 4,
   },
-  tile: {
-    position: 'absolute',
+  rowEven: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  tileBase: {
     overflow: 'hidden',
+  },
+  // n=1: full bleed at the bubble's available width, 16:10 aspect.
+  tileFull: {
+    width: '100%',
+    aspectRatio: 16 / 10,
+  },
+  // n=2 / n=4 (per row): two equal squares side-by-side.
+  tileHalfSquare: {
+    flex: 1,
+    aspectRatio: 1,
+  },
+  // n=3 hero: full-bleed top tile, 16:9.
+  tileHero: {
+    width: '100%',
+    aspectRatio: 16 / 9,
   },
   tileImage: {
     width: '100%',

@@ -5,10 +5,11 @@
 // via `renderItem` for full layout control.
 //
 // Powered by `useConversations` so the list updates in real time
-// when the user is added to a new conversation (no refetch).
+// when the user is added to a new conversation OR when a member
+// sends a message into an existing one (no refetch).
 
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { useConversations } from '@poolse/react';
+import { useConversations, useMe } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 
@@ -40,6 +41,15 @@ export interface ConversationListProps {
    * `useConversations().unreadCounts`; omit to disable badges.
    */
   unreadCounts?: Record<Uuid, number>;
+  /**
+   * Resolve a user's display name from their `external_id`. Used to
+   * render direct-conversation rows (the conversation row picks the
+   * OTHER member's external_id and labels the row with their name).
+   * Falls back to the external_id itself when omitted.
+   */
+  labelFor?: (externalId: string) => string;
+  /** Avatar URL resolver — same role as `labelFor`, for the direct-chat avatar. */
+  avatarFor?: (externalId: string) => string | null;
 }
 
 export function ConversationList({
@@ -51,8 +61,12 @@ export function ConversationList({
   loading: controlledLoading,
   error: controlledError,
   unreadCounts,
+  labelFor,
+  avatarFor,
 }: ConversationListProps) {
   const auto = useConversations();
+  const { me } = useMe();
+  const meExternalId = me?.external_id ?? null;
   const isControlled = controlledConversations !== undefined;
   const conversations = isControlled ? controlledConversations : auto.conversations;
   const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
@@ -90,7 +104,14 @@ export function ConversationList({
         const content = renderItem ? (
           renderItem(conv, selected)
         ) : (
-          <DefaultRow conv={conv} selected={selected} unread={unread} />
+          <DefaultRow
+            conv={conv}
+            selected={selected}
+            unread={unread}
+            meExternalId={meExternalId}
+            {...(labelFor ? { labelFor } : {})}
+            {...(avatarFor ? { avatarFor } : {})}
+          />
         );
         return (
           <li
@@ -120,18 +141,54 @@ function DefaultRow({
   conv,
   selected: _selected,
   unread,
+  meExternalId,
+  labelFor,
+  avatarFor,
 }: {
   conv: Conversation;
   selected: boolean;
   unread: number;
+  meExternalId: string | null;
+  labelFor?: (externalId: string) => string;
+  avatarFor?: (externalId: string) => string | null;
 }) {
-  const title = conv.name ?? 'Untitled conversation';
+  // For directs, derive display from the OTHER member's external_id —
+  // matches the RN PoolseInbox row behavior so a customer can pass the
+  // same `labelFor` / `avatarFor` resolvers to both platforms.
+  const isDirect = conv.type === 'direct';
+  const otherExtId =
+    isDirect && meExternalId
+      ? (conv.member_external_ids ?? []).find((x) => x !== meExternalId)
+      : null;
+
+  const title = isDirect
+    ? otherExtId
+      ? (labelFor?.(otherExtId) ?? otherExtId)
+      : (conv.name ?? 'Direct chat')
+    : (conv.name ?? 'Untitled group');
+
+  const avatarUrl = isDirect
+    ? otherExtId
+      ? (avatarFor?.(otherExtId) ?? null)
+      : (conv.avatar_url ?? null)
+    : (conv.avatar_url ?? null);
+
   const time = conv.last_message_at ? formatRelative(conv.last_message_at) : '';
   const hasUnread = unread > 0;
 
+  // Preview: server-denormalized `last_message_preview` (set by
+  // Messaging.send_message) is the source of truth. Fall back to a
+  // sequence-count blurb when the server hasn't filled it in yet
+  // (legacy rooms before the column was added).
+  const preview =
+    conv.last_message_preview ??
+    (conv.last_sequence > 0
+      ? `${conv.last_sequence} message${conv.last_sequence === 1 ? '' : 's'}`
+      : 'No messages yet');
+
   return (
     <>
-      <Avatar src={conv.avatar_url ?? null} name={conv.name} size="md" />
+      <Avatar src={avatarUrl} name={title} size="md" />
       <div className="poolse-list__body">
         <div className="poolse-list__head">
           <span className={`poolse-list__title${hasUnread ? ' poolse-list__title--unread' : ''}`}>
@@ -139,11 +196,7 @@ function DefaultRow({
           </span>
           {time && <span className="poolse-list__time">{time}</span>}
         </div>
-        <div className="poolse-list__preview">
-          {conv.last_sequence > 0
-            ? `${conv.last_sequence} message${conv.last_sequence === 1 ? '' : 's'}`
-            : 'No messages yet'}
-        </div>
+        <div className="poolse-list__preview">{preview}</div>
       </div>
       {hasUnread && (
         <span

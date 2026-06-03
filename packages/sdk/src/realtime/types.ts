@@ -58,6 +58,22 @@ export interface MentionEvent {
  */
 export type ConversationCreatedEvent = Conversation;
 
+/**
+ * Pushed on `user:<id>` whenever a conversation's surface state
+ * changes — currently fires after every `send_message`. Lets the
+ * conversation-list view update `last_message_preview` /
+ * `last_message_at` / `last_sequence` and bump the unread badge
+ * without a refetch.
+ *
+ * `by_user_id` is the message sender's internal id, so clients can
+ * leave their own unread at 0 (the server already advanced their
+ * read cursor in the same transaction).
+ */
+export interface ConversationUpdatedEvent {
+  conversation: Conversation;
+  by_user_id: Uuid | null;
+}
+
 /** Phoenix Presence list shape. */
 export type PresenceSnapshot = Record<
   Uuid,

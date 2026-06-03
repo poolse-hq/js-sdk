@@ -1,11 +1,25 @@
 import type { Message, Uuid } from '@poolse/sdk';
 import { useMe, useThread } from '@poolse/react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
+import {
+  Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
-import { MessageBubble } from './MessageBubble.js';
+import { AttachmentPicker } from './AttachmentPicker.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageList } from './MessageList.js';
+import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { UploadProvider } from './internal/uploadContext.js';
+import { useDismissableSheet } from './internal/useDismissableSheet.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface ThreadViewProps {
@@ -14,15 +28,24 @@ export interface ThreadViewProps {
   conversationId: Uuid;
   rootMessage: Message;
   labelFor?: (externalId: string) => string;
+  avatarFor?: (externalId: string) => string | null;
 }
 
+// Sheet covers the bottom 88% of the screen. The remaining 12% is the
+// pull-down gutter (also the keyboardVerticalOffset for iOS).
+const SHEET_HEIGHT_FRACTION = 0.88;
+
 /**
- * Bottom-sheet modal for thread replies. Sits at the bottom 85% of
- * the screen with a translucent backdrop above; tap the backdrop or
- * the close button to dismiss. Drag handle pill at the top is
- * decorative — drag-to-dismiss isn't implemented yet (would need
- * react-native-gesture-handler). Reply composer sits at the bottom
- * of the sheet with its own KeyboardAvoidingView.
+ * Bottom-sheet modal for thread replies. Pull the drag handle / header
+ * down to dismiss; tap the backdrop or close button too. The composer
+ * inside the sheet supports attachments (paperclip → picker, shared
+ * upload queue) and the reply rows support reactions, swipe-to-reply,
+ * long-press actions, edit, delete — same surface as ConversationView.
+ *
+ * Keyboard handling: inside a Modal the OS doesn't auto-resize the
+ * sheet's children, so the composer needs its own KeyboardAvoidingView
+ * with `keyboardVerticalOffset` set to the distance between the screen
+ * top and the sheet top (the gutter above the sheet).
  */
 export function ThreadView({
   visible,
@@ -30,12 +53,8 @@ export function ThreadView({
   conversationId,
   rootMessage,
   labelFor,
+  avatarFor,
 }: ThreadViewProps) {
-  const theme = usePoolseTheme();
-  const { me } = useMe();
-  const meId = me?.id ?? null;
-  const { replies, sendReply, loadMore, hasMore } = useThread(conversationId, rootMessage.id);
-
   return (
     <Modal
       visible={visible}
@@ -44,32 +63,127 @@ export function ThreadView({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.modalRoot}>
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close thread" />
+      {/* Each open of the thread gets its own UploadProvider so the
+          composer's queue is isolated from the parent ConversationView's
+          composer queue. */}
+      <UploadProvider>
+        <ThreadSheet
+          onClose={onClose}
+          conversationId={conversationId}
+          rootMessage={rootMessage}
+          {...(labelFor ? { labelFor } : {})}
+          {...(avatarFor ? { avatarFor } : {})}
+        />
+      </UploadProvider>
+    </Modal>
+  );
+}
 
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.colors.paper,
-              borderTopLeftRadius: theme.radii.xl,
-              borderTopRightRadius: theme.radii.xl,
-            },
-            theme.shadows.lg,
-          ]}
-        >
+function ThreadSheet({
+  onClose,
+  conversationId,
+  rootMessage,
+  labelFor,
+  avatarFor,
+}: {
+  onClose: () => void;
+  conversationId: Uuid;
+  rootMessage: Message;
+  labelFor?: (externalId: string) => string;
+  avatarFor?: (externalId: string) => string | null;
+}) {
+  const theme = usePoolseTheme();
+  const { me } = useMe();
+  const meId = me?.id ?? null;
+  const {
+    replies,
+    sendReply,
+    edit,
+    delete: deleteReply,
+    loadMore,
+    hasMore,
+  } = useThread(conversationId, rootMessage.id);
+  const { height: screenHeight } = useWindowDimensions();
+  const sheetHeight = Math.round(screenHeight * SHEET_HEIGHT_FRACTION);
+  const gutter = screenHeight - sheetHeight;
+  const { translateY, panHandlers } = useDismissableSheet({ onClose, sheetHeight });
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const renderReply = useCallback(
+    (msg: Message): ReactElement => (
+      <MessageRow
+        msg={msg}
+        meId={meId}
+        // Reactions + actions on by default; nested threads off (you
+        // can't thread inside a thread in v1).
+        reactions
+        attachments
+        actions
+        threads={false}
+        // Quote-to-reply doesn't make sense inside a single-root thread.
+        quotations={false}
+        editing={editingId === msg.id}
+        onStartEdit={() => setEditingId(msg.id)}
+        onCancelEdit={() => setEditingId(null)}
+        onSaveEdit={async (body) => {
+          await edit(msg.id, body);
+          setEditingId(null);
+        }}
+        onDelete={() => {
+          void deleteReply(msg.id);
+        }}
+        {...(labelFor ? { labelFor } : {})}
+        {...(avatarFor ? { avatarFor } : {})}
+      />
+    ),
+    [meId, editingId, edit, deleteReply, labelFor, avatarFor],
+  );
+
+  const rootRow = useMemo(
+    () => (
+      <MessageRow
+        msg={rootMessage}
+        meId={meId}
+        reactions
+        attachments
+        actions={false}
+        threads={false}
+        quotations={false}
+        {...(labelFor ? { labelFor } : {})}
+        {...(avatarFor ? { avatarFor } : {})}
+      />
+    ),
+    [rootMessage, meId, labelFor, avatarFor],
+  );
+
+  return (
+    <View style={styles.modalRoot}>
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close thread" />
+
+      <Animated.View
+        style={[
+          styles.sheet,
+          {
+            height: sheetHeight,
+            backgroundColor: theme.colors.paper,
+            borderTopLeftRadius: theme.radii.xl,
+            borderTopRightRadius: theme.radii.xl,
+            transform: [{ translateY }],
+          },
+          theme.shadows.lg,
+        ]}
+      >
+        {/* Wrap the header + drag pill in the pan handler so users can
+            pull from a comfortable 60-pt-tall strip — the bare 16-pt
+            pill on its own was nearly invisible to fingers. */}
+        <View {...panHandlers}>
           <View style={styles.dragHandle}>
             <View style={[styles.dragPill, { backgroundColor: theme.colors.ink3 }]} />
           </View>
 
-          <View
-            style={[
-              styles.header,
-              {
-                borderBottomColor: theme.colors.border,
-              },
-            ]}
-          >
+          <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Pressable
               onPress={onClose}
               hitSlop={16}
@@ -87,29 +201,28 @@ export function ThreadView({
               Thread
             </Text>
           </View>
+        </View>
 
+        {/* KAV scope: just the scrolling area + composer. Keyboard pushes
+            the composer up by the keyboard height minus the gutter
+            (since the gutter is already "free" space above the sheet
+            top). On Android we use `height` behavior — works inside a
+            Modal because the modal window itself responds to adjustResize. */}
+        <KeyboardAvoidingView
+          style={styles.kavBody}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? gutter : 0}
+        >
           <View style={[styles.rootPreview, { backgroundColor: theme.colors.surface2 }]}>
-            <MessageBubble
-              message={rootMessage}
-              currentUserId={meId}
-              {...(labelFor ? { labelFor } : {})}
-            />
+            {rootRow}
           </View>
 
-          <View style={{ flex: 1 }}>
+          <View style={styles.listWrap}>
             <MessageList
               messages={replies}
               hasMore={hasMore}
               onLoadMore={loadMore}
-              renderItem={(msg) => (
-                <View key={msg.id} style={{ paddingHorizontal: 8 }}>
-                  <MessageBubble
-                    message={msg}
-                    currentUserId={meId}
-                    {...(labelFor ? { labelFor } : {})}
-                  />
-                </View>
-              )}
+              renderItem={renderReply}
             />
           </View>
 
@@ -118,10 +231,14 @@ export function ThreadView({
               await sendReply({ body, ...opts });
             }}
             placeholder="Reply to thread…"
+            attachments
+            onAttachPress={() => setPickerOpen(true)}
           />
-        </View>
-      </View>
-    </Modal>
+        </KeyboardAvoidingView>
+
+        <AttachmentPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} />
+      </Animated.View>
+    </View>
   );
 }
 
@@ -135,7 +252,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
-    height: '85%',
     overflow: 'hidden',
   },
   dragHandle: {
@@ -172,5 +288,11 @@ const styles = StyleSheet.create({
   rootPreview: {
     paddingVertical: 8,
     paddingHorizontal: 8,
+  },
+  kavBody: {
+    flex: 1,
+  },
+  listWrap: {
+    flex: 1,
   },
 });

@@ -11,9 +11,18 @@
 //       <ConversationView conversationId={id} />
 //     </PoolseTheme>
 
+// ── Inbox (composed list + detail with navigation) ────────────
+export {
+  PoolseInbox,
+  type PoolseInboxProps,
+  type PoolseInboxHandle,
+  type InboxUser,
+} from './PoolseInbox.js';
+
 // ── Chat surface (composed conversation view) ─────────────────
 export { ConversationView, type ConversationViewProps } from './ConversationView.js';
 export { ChatHeader, type ChatHeaderProps } from './ChatHeader.js';
+export { GroupDetailsSheet, type GroupDetailsSheetProps } from './GroupDetailsSheet.js';
 
 // ── Pieces of the chat surface ────────────────────────────────
 export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';

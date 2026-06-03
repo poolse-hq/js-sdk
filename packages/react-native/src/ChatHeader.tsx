@@ -1,8 +1,10 @@
 import type { Uuid } from '@poolse/sdk';
 import { useConversation, useMe, useMembers, usePresence, useUser } from '@poolse/react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from './primitives/Avatar.js';
+import { GroupDetailsSheet } from './GroupDetailsSheet.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
@@ -20,8 +22,21 @@ export interface ChatHeaderProps {
   avatarFor?: (externalId: string) => string | null;
   /** Right-side icon button — typically opens a member-list sheet. */
   onMembersPress?: () => void;
-  /** Tap on the whole header (title + avatar) — open a profile screen. */
+  /**
+   * Tap handler for the whole header. Behavior:
+   *   * Direct chat → calls this if provided, otherwise no-op.
+   *   * Group chat  → calls this if provided. If omitted, the header
+   *     opens a built-in group-details sheet showing the member
+   *     roster with live presence.
+   */
   onPress?: () => void;
+  /**
+   * When provided, renders a back arrow on the LEFT of the header
+   * that calls this handler on tap. Used by `<PoolseInbox>` to
+   * navigate back to the conversation list; safe to wire from your
+   * own navigator too.
+   */
+  onBack?: () => void;
 }
 
 /**
@@ -38,12 +53,14 @@ export function ChatHeader({
   avatarFor,
   onMembersPress,
   onPress,
+  onBack,
 }: ChatHeaderProps) {
   const theme = usePoolseTheme();
   const { conversation } = useConversation(conversationId);
   const { members } = useMembers(conversationId);
   const { me } = useMe();
   const { online } = usePresence(conversationId);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const isDirect = conversation?.type === 'direct';
   const otherMember = isDirect ? members.find((m) => m.user_id !== me?.id) : null;
@@ -85,44 +102,68 @@ export function ChatHeader({
       : null;
   const avatarSeed = isDirect ? (otherExtId ?? conversationId) : conversationId;
 
-  const Wrapper: typeof View | typeof Pressable = onPress ? Pressable : View;
+  // For groups, default tap = open the built-in details sheet.
+  // For directs (or when caller supplied onPress), call onPress.
+  // A View wrapper is used only when there's no tap target at all
+  // (direct chat with no onPress) so we don't render a no-op
+  // Pressable that swallows touches.
+  const isGroup = !isDirect;
+  const headerOnPress = onPress ?? (isGroup ? () => setDetailsOpen(true) : undefined);
+  const Wrapper: typeof View | typeof Pressable = headerOnPress ? Pressable : View;
 
   return (
-    <Wrapper
-      {...(onPress ? { onPress } : {})}
-      style={[
-        styles.root,
-        {
-          backgroundColor: theme.colors.surface,
-          borderBottomColor: theme.colors.border,
-        },
-      ]}
-    >
-      <Avatar src={avatarUrl} name={title} seed={avatarSeed} online={isOnline} size="md" />
-      <View style={styles.titleCol}>
-        <Text
-          style={[styles.title, { color: theme.colors.ink, fontFamily: theme.type.fontDisplay }]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text style={[styles.subtitle, { color: theme.colors.ink3 }]} numberOfLines={1}>
-            {subtitle}
-          </Text>
+    <>
+      <Wrapper
+        {...(headerOnPress ? { onPress: headerOnPress } : {})}
+        style={[
+          styles.root,
+          {
+            backgroundColor: theme.colors.surface,
+            borderBottomColor: theme.colors.border,
+          },
+        ]}
+      >
+        {onBack ? (
+          <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn} accessibilityLabel="Back">
+            <PoolseIcon name="reply" size={20} color={theme.colors.ink} />
+          </Pressable>
         ) : null}
-      </View>
-      {onMembersPress ? (
-        <Pressable
-          onPress={onMembersPress}
-          hitSlop={12}
-          style={styles.actionBtn}
-          accessibilityLabel="Show members"
-        >
-          <PoolseIcon name="users" size={20} color={theme.colors.ink2} />
-        </Pressable>
+        <Avatar src={avatarUrl} name={title} seed={avatarSeed} online={isOnline} size="md" />
+        <View style={styles.titleCol}>
+          <Text
+            style={[styles.title, { color: theme.colors.ink, fontFamily: theme.type.fontDisplay }]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text style={[styles.subtitle, { color: theme.colors.ink3 }]} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+        {onMembersPress ? (
+          <Pressable
+            onPress={onMembersPress}
+            hitSlop={12}
+            style={styles.actionBtn}
+            accessibilityLabel="Show members"
+          >
+            <PoolseIcon name="users" size={20} color={theme.colors.ink2} />
+          </Pressable>
+        ) : null}
+      </Wrapper>
+
+      {isGroup ? (
+        <GroupDetailsSheet
+          visible={detailsOpen}
+          onClose={() => setDetailsOpen(false)}
+          conversationId={conversationId}
+          {...(labelFor ? { labelFor } : {})}
+          {...(avatarFor ? { avatarFor } : {})}
+        />
       ) : null}
-    </Wrapper>
+    </>
   );
 }
 
@@ -153,5 +194,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -6,
   },
 });

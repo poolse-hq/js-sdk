@@ -8,5 +8,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    // No `test/` dir today (integration coverage lives in the Expo
+    // example app). passWithNoTests keeps `pnpm test` green in CI
+    // until a vitest-able utility lands here.
+    passWithNoTests: true,
   },
 });

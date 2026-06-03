@@ -1,4 +1,3 @@
-import { useAttachmentUpload } from '@poolse/react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 // Static imports — Metro's bundle graph can only trace literal
 // `import` / `require` calls. The earlier `new Function('m', 'return
@@ -17,6 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { useSharedUpload, useUploadPreview } from './internal/uploadContext.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface AttachmentPickerProps {
@@ -46,13 +46,24 @@ export interface AttachmentPickerProps {
  */
 export function AttachmentPicker({ visible, onClose, onPickInputs }: AttachmentPickerProps) {
   const theme = usePoolseTheme();
-  const upload = useAttachmentUpload();
+  // Shared queue (via UploadProvider) so the composer sees these
+  // uploads and can include them in the next send. Falls back to a
+  // local queue when the picker is mounted outside ConversationView.
+  const upload = useSharedUpload();
+  const { setPreview } = useUploadPreview();
 
   const pickFromKind = async (kind: 'image' | 'document') => {
     try {
       const adapter = onPickInputs ?? defaultAdapter;
       const inputs = await adapter(kind);
       for (const input of inputs) {
+        // Stash the original local URI on the shared context so the
+        // UploadQueueStrip can render a real thumbnail. The SDK only
+        // sees the Blob from here on out.
+        const previewUri = (input as { _previewUri?: string })._previewUri ?? null;
+        if (previewUri && input.filename) {
+          setPreview(input.filename, previewUri);
+        }
         void upload.upload(input as never);
       }
     } catch (err) {
@@ -118,11 +129,14 @@ async function defaultAdapter(kind: 'image' | 'document') {
       res.assets.map(async (asset) => {
         const blob = await uriToBlob(asset.uri);
         const contentType = asset.mimeType ?? blob.type ?? 'image/jpeg';
+        // _previewUri is read by the picker before passing the input
+        // to the SDK; the SDK ignores unknown fields.
         return {
           body: blob,
           contentType,
           byteSize: asset.fileSize ?? blob.size,
           filename: asset.fileName ?? `image-${Date.now()}.jpg`,
+          _previewUri: asset.uri,
         };
       }),
     );
@@ -141,6 +155,7 @@ async function defaultAdapter(kind: 'image' | 'document') {
         contentType,
         byteSize: asset.size ?? blob.size,
         filename: asset.name,
+        _previewUri: asset.uri,
       };
     }),
   );

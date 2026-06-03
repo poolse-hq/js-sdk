@@ -5,7 +5,6 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 
 import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { useDisplayName } from './UserName.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface MemberListProps {
@@ -111,16 +110,19 @@ function MemberRow({
   onRemove?: () => void;
 }) {
   const theme = usePoolseTheme();
-  const displayName = useDisplayName(externalId) || name;
+  // `name` is already labelFor()'d by the parent (or falls back to
+  // externalId when no labelFor was passed). Use it directly — don't
+  // round-trip through useDisplayName, which would otherwise force
+  // the SDK's userResolver and ignore the labelFor we already have.
   return (
     <View style={styles.row}>
-      <Avatar src={avatarUrl} name={displayName} seed={externalId} online={online} size="md" />
+      <Avatar src={avatarUrl} name={name} seed={externalId} online={online} size="md" />
       <View style={styles.body}>
         <Text
           style={[styles.name, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
           numberOfLines={1}
         >
-          {displayName}
+          {name}
         </Text>
         <Text style={[styles.role, { color: theme.colors.ink3 }]}>{role}</Text>
       </View>

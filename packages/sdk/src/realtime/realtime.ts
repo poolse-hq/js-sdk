@@ -20,6 +20,7 @@ import { PoolseError } from '../errors.js';
 import type { TokenCache } from '../token-cache.js';
 import type {
   ConversationCreatedEvent,
+  ConversationUpdatedEvent,
   MemberReadEvent,
   MentionEvent,
   MessageDeletedEvent,
@@ -365,8 +366,12 @@ export class UserChannel {
   private readonly conversationCreatedListeners = new Set<
     (evt: ConversationCreatedEvent) => void
   >();
+  private readonly conversationUpdatedListeners = new Set<
+    (evt: ConversationUpdatedEvent) => void
+  >();
   private mentionBound = false;
   private conversationCreatedBound = false;
+  private conversationUpdatedBound = false;
 
   constructor(userId: string, channel: Channel) {
     this.userId = userId;
@@ -407,6 +412,29 @@ export class UserChannel {
     };
   }
 
+  /**
+   * Subscribe to "an existing conversation changed" notifications —
+   * fires after every `send_message` in any conversation you're a
+   * member of. Use this to update the conversation-list row's last
+   * message preview, timestamp, and unread badge without polling.
+   *
+   * Compare `evt.by_user_id` to your own user id to decide whether
+   * to increment a local unread counter; the server already keeps
+   * your own outbound messages out of your unread count.
+   */
+  onConversationUpdated(fn: (evt: ConversationUpdatedEvent) => void): Unsubscribe {
+    if (!this.conversationUpdatedBound) {
+      this.conversationUpdatedBound = true;
+      this.channel.on('conversation:updated', (payload: unknown) => {
+        this.conversationUpdatedListeners.forEach((l) => l(payload as ConversationUpdatedEvent));
+      });
+    }
+    this.conversationUpdatedListeners.add(fn);
+    return () => {
+      this.conversationUpdatedListeners.delete(fn);
+    };
+  }
+
   /** @internal */
   _join(): void {
     this.channel.join();
@@ -416,6 +444,7 @@ export class UserChannel {
   _destroy(): void {
     this.mentionListeners.clear();
     this.conversationCreatedListeners.clear();
+    this.conversationUpdatedListeners.clear();
     this.channel.leave();
   }
 }

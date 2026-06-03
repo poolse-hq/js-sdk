@@ -14,6 +14,12 @@
 
 // ── Chat surface (composed conversation view) ─────────────────
 export { ConversationView, type ConversationViewProps } from './ConversationView.js';
+export { ChatHeader, type ChatHeaderProps } from './ChatHeader.js';
+
+// ── Inbox shell (composed list + detail) ──────────────────────
+export { PoolseInbox, type PoolseInboxProps, type PoolseInboxHandle } from './PoolseInbox.js';
+export { UserPickerSheet, type UserPickerSheetProps, type InboxUser } from './UserPickerSheet.js';
+export { GroupDetailsSheet, type GroupDetailsSheetProps } from './GroupDetailsSheet.js';
 
 // ── Pieces of the chat surface ────────────────────────────────
 export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';

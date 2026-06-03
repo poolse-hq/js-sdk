@@ -2411,3 +2411,408 @@
     filter: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   ChatHeader — title bar above a ConversationView. Standalone
+   so PoolseInbox can mount it without ConversationView wrapping
+   its own header.
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--poolse-surface);
+  border-bottom: 1px solid var(--poolse-border);
+}
+
+.poolse-chat-header__back {
+  /* Re-uses the `reply` glyph rotated to point left — matches RN. */
+  transform: scaleX(-1);
+}
+
+.poolse-chat-header__title-btn,
+.poolse-chat-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.poolse-chat-header__title-btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.poolse-chat-header__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.poolse-chat-header__title {
+  font-family: var(--poolse-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--poolse-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-chat-header__subtitle {
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-chat-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PoolseInbox — composed list + detail shell.
+   Wide viewport: two-column. Mobile: detail slides over list.
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-inbox {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) 1fr;
+  height: 100%;
+  min-height: 0;
+  background: var(--poolse-paper);
+  color: var(--poolse-ink);
+  font-family: var(--poolse-font-body);
+}
+
+.poolse-inbox__list-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--poolse-border);
+  background: var(--poolse-surface);
+}
+
+.poolse-inbox__list-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--poolse-border);
+}
+
+.poolse-inbox__list-title {
+  flex: 1;
+  font-family: var(--poolse-font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--poolse-ink);
+}
+
+.poolse-inbox__list-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.poolse-inbox__list-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.poolse-inbox__detail-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--poolse-paper);
+}
+
+.poolse-inbox__detail-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-inbox__detail-empty-title {
+  font-size: 14px;
+  font-family: var(--poolse-font-display);
+  font-weight: 600;
+}
+
+/* Mobile-web: stack panes, slide detail over list when one is open. */
+@media (max-width: 720px) {
+  .poolse-inbox {
+    grid-template-columns: 1fr;
+    position: relative;
+  }
+
+  .poolse-inbox__detail-pane {
+    position: absolute;
+    inset: 0;
+    transform: translateX(100%);
+    transition: transform 220ms ease;
+    z-index: 2;
+  }
+
+  .poolse-inbox--detail-open .poolse-inbox__detail-pane {
+    transform: translateX(0);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Modal shell — used by UserPickerSheet, GroupDetailsSheet.
+   Centered card with a dimming backdrop.
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.poolse-modal__sheet {
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  border-radius: var(--poolse-radius-lg);
+  box-shadow: var(--poolse-shadow-lg);
+  width: 100%;
+  max-width: 440px;
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.poolse-modal__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--poolse-border);
+}
+
+.poolse-modal__title {
+  flex: 1;
+  font-family: var(--poolse-font-display);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.poolse-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.poolse-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--poolse-border);
+  background: var(--poolse-surface-2);
+}
+
+.poolse-modal__footer-hint {
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-modal__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--poolse-surface-2);
+  border-radius: var(--poolse-radius-md);
+  color: var(--poolse-ink-2);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Inputs + buttons — generic primitives used by modals.
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-input {
+  appearance: none;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+  border: 1px solid transparent;
+  border-radius: var(--poolse-radius-md);
+  font-family: var(--poolse-font-body);
+  font-size: 14px;
+  outline: none;
+}
+
+.poolse-input:focus-visible {
+  border-color: var(--poolse-brand);
+}
+
+.poolse-input--bare {
+  background: transparent;
+  padding: 0;
+  border: 0;
+}
+
+.poolse-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+  border: 0;
+  border-radius: var(--poolse-radius-md);
+  font-family: var(--poolse-font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.poolse-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.poolse-btn--brand {
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   UserPickerSheet — list of users for new-chat / new-group.
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-user-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.poolse-user-picker__empty {
+  padding: 20px 4px;
+  color: var(--poolse-ink-3);
+  font-size: 13px;
+  text-align: center;
+}
+
+.poolse-user-picker__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-radius: var(--poolse-radius-md);
+  cursor: pointer;
+}
+
+.poolse-user-picker__row:hover,
+.poolse-user-picker__row--selected {
+  background: var(--poolse-surface-2);
+}
+
+.poolse-user-picker__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.poolse-user-picker__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--poolse-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-user-picker__subtitle {
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-user-picker__check {
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  border: 1.5px solid var(--poolse-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--poolse-on-brand);
+}
+
+.poolse-user-picker__check--on {
+  background: var(--poolse-brand);
+  border-color: var(--poolse-brand);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   GroupDetailsSheet — hero + member list inside the modal shell.
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-group-details__hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.poolse-group-details__hero-text {
+  min-width: 0;
+}
+
+.poolse-group-details__title {
+  font-family: var(--poolse-font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--poolse-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-group-details__subtitle {
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-group-details__members {
+  border-top: 1px solid var(--poolse-border);
+  padding-top: 8px;
+}
