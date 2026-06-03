@@ -1,4 +1,5 @@
 import type { Attachment, AttachmentUploadInput } from '@poolse/sdk';
+import { safeUuid } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 
@@ -196,8 +197,5 @@ export function useAttachmentUpload(): UseAttachmentUploadState {
 }
 
 function generateLocalId(): string {
-  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
-  // Fallback for older runtimes (tests on Node 18 without crypto, etc).
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return safeUuid();
 }

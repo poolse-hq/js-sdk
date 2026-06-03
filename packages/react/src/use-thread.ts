@@ -1,4 +1,5 @@
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
+import { safeUuid } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 

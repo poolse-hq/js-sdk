@@ -27,7 +27,8 @@
     "paths": {
       "@poolse/sdk": ["packages/sdk/src/index.ts"],
       "@poolse/react": ["packages/react/src/index.ts"],
-      "@poolse/react-ui": ["packages/react-ui/src/index.ts"]
+      "@poolse/react-ui": ["packages/react-ui/src/index.ts"],
+      "@poolse/react-native": ["packages/react-native/src/index.ts"]
     }
   }
 }

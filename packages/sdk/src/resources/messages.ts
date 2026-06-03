@@ -7,6 +7,7 @@ import type {
   ReactionRequest,
   Uuid,
 } from '../types.js';
+import { safeUuid } from '../uuid.js';
 
 /** Per-conversation message collection: send, list, mark-read. */
 export class ConversationMessages {
@@ -134,20 +135,12 @@ export class MessagesResource {
 }
 
 /**
- * Client-side message id generator. Uses `globalThis.crypto.randomUUID()`
- * when available (browsers in secure contexts, Node 19+, RN 0.74+).
- * In runtimes without it (older RN, sandboxed workers) the caller
- * should generate ids themselves and pass via `attrs.id` — failing
- * loud here is better than silently shipping non-unique ids that
- * would cause server-side dedup collisions across users.
+ * Client-side message id generator. Delegates to the SDK's `safeUuid`
+ * which works in every supported runtime (browsers, Node ≥ 19, RN /
+ * Hermes — with or without a crypto polyfill). Server enforces real
+ * auth + dedup; in-process collisions are effectively impossible at
+ * any practical message volume.
  */
 function generateClientMessageId(): Uuid {
-  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (c && typeof c.randomUUID === 'function') {
-    return c.randomUUID();
-  }
-  throw new Error(
-    'Poolse: globalThis.crypto.randomUUID() unavailable — pass `id` ' +
-      'explicitly in MessageCreateRequest (your env lacks a built-in UUID generator).',
-  );
+  return safeUuid();
 }

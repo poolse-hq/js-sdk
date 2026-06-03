@@ -1,12 +1,13 @@
 {
-  "name": "@poolse/react-ui",
-  "version": "2.0.1",
-  "description": "Plug-and-play React components for poolse — realtime chat infrastructure. Brand-aligned defaults, CSS-variable theming, render-prop escape hatches.",
+  "name": "@poolse/react-native",
+  "version": "0.1.1",
+  "description": "Plug-and-play React Native components for poolse — realtime chat infrastructure. Brand-aligned defaults, JS theme tokens, Expo-friendly out of the box.",
   "license": "MIT",
   "keywords": [
     "poolse",
     "chat",
-    "react",
+    "react-native",
+    "expo",
     "ui",
     "components",
     "messaging",
@@ -16,7 +17,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/poolse-hq/js-sdk.git",
-    "directory": "packages/react-ui"
+    "directory": "packages/react-native"
   },
   "bugs": {
     "url": "https://github.com/poolse-hq/js-sdk/issues"
@@ -35,8 +36,7 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
-    },
-    "./styles.css": "./dist/styles.css"
+    }
   },
   "files": [
     "dist",
@@ -52,19 +52,26 @@
   },
   "dependencies": {
     "@poolse/react": "workspace:*",
-    "@poolse/sdk": "workspace:*",
-    "react-markdown": "^9.0.1",
-    "remark-gfm": "^4.0.0"
+    "@poolse/sdk": "workspace:*"
   },
   "peerDependencies": {
-    "react": ">=18"
+    "react": ">=18",
+    "react-native": ">=0.73",
+    "react-native-svg": ">=14"
+  },
+  "peerDependenciesMeta": {
+    "expo-document-picker": {
+      "optional": true
+    },
+    "expo-image-picker": {
+      "optional": true
+    }
   },
   "devDependencies": {
-    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.0",
-    "happy-dom": "^15.11.7",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-native": "^0.76.0",
+    "react-native-svg": "^15.8.0"
   },
   "publishConfig": {
     "access": "public"

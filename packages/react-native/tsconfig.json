@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "jsx": "react-jsx",
+    // DOM is kept in the lib list ONLY for cross-package type
+    // compatibility — `@poolse/sdk` and `@poolse/react` reference
+    // `DOMException`, `BodyInit`, `atob`, etc. The RN runtime
+    // provides all of these (or polyfills); we just need TS to
+    // resolve the names during this package's typecheck.
+    "lib": ["ES2022", "DOM"],
+    // `node` is included only to satisfy `process.env.NODE_ENV`
+    // references in upstream `@poolse/react` source during
+    // workspace typecheck. RN runtime has its own `process` shim,
+    // so this has no consumer-visible effect.
+    "types": ["react-native", "node"]
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

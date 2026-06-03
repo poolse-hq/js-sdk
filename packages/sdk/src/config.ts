@@ -173,16 +173,12 @@ function trimTrailingSlash(s: string): string {
   return s.endsWith('/') ? s.slice(0, -1) : s;
 }
 
+// Delegates to `safeUuid` so the default works in every supported
+// runtime — browsers, Node, Bun, Deno, React Native (with or without
+// a crypto polyfill). Consumers can still override via
+// `config.generateIdempotencyKey` when they need a different source.
+import { safeUuid } from './uuid.js';
+
 function defaultIdempotencyKey(): string {
-  // crypto.randomUUID() is on globalThis in Node 19+ and browsers (where
-  // available, in secure contexts). If a runtime lacks it, the caller
-  // must supply `generateIdempotencyKey` in config.
-  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (c && typeof c.randomUUID === 'function') {
-    return c.randomUUID();
-  }
-  throw new Error(
-    'Poolse: globalThis.crypto.randomUUID() is not available; supply ' +
-      '`config.generateIdempotencyKey` instead.',
-  );
+  return safeUuid();
 }

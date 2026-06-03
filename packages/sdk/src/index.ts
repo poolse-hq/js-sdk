@@ -72,3 +72,8 @@ export type {
 } from './types.js';
 
 export { version } from './version.js';
+
+// Cross-runtime UUID v4 used internally for idempotency keys, client
+// message ids, upload queue local ids. Exported so RN consumers can
+// reuse the same fallback in their own config callbacks if they want.
+export { safeUuid } from './uuid.js';
