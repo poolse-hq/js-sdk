@@ -12,13 +12,9 @@ export default defineConfig({
     'react',
     'react-native',
     'react-native-svg',
-    'expo-haptics',
     'expo-image-picker',
     'expo-document-picker',
     '@poolse/sdk',
     '@poolse/react',
   ],
-  // Suppress tsup's "Could not resolve" warnings for the optional
-  // expo modules — they're intentionally not statically imported.
-  noExternal: [],
 });

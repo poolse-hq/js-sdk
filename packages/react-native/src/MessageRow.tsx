@@ -1,26 +1,21 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useState, type ReactNode } from 'react';
 
-// Static `import * as Haptics from 'expo-haptics'` forces npm/expo
-// to install it as a hard dep — that triggers tree reorganization
-// in nested installs and ends up with two copies of @poolse/react
-// (which breaks PoolseProvider context resolution). Resolve it
-// lazily instead so the long-press path falls back to a silent
-// no-op if expo-haptics isn't present in the consumer's app.
-type HapticsModule = {
-  impactAsync: (style?: unknown) => void;
-  ImpactFeedbackStyle?: { Medium?: unknown };
-};
-let cachedHaptics: HapticsModule | null | undefined;
-function getHaptics(): HapticsModule | null {
-  if (cachedHaptics !== undefined) return cachedHaptics;
-  try {
-    cachedHaptics = require('expo-haptics') as HapticsModule;
-  } catch {
-    cachedHaptics = null;
+// We used to lazy-`require('expo-haptics')` here, but Metro can't
+// statically trace tsup's wrapped require shim so the module never
+// landed in the bundle. Switching to react-native's built-in
+// `Vibration` instead — works everywhere, zero deps, no Metro
+// resolver workarounds. Customers who want the silky iOS taptic
+// feel can install expo-haptics themselves and wrap MessageRow's
+// onLongPress via a render prop in a future release.
+function pulseHaptic() {
+  // 12ms is a soft tap on both iOS and Android — closer to Haptics
+  // Light/Medium than the default 400ms vibration that triggers an
+  // audible thud on iOS.
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    Vibration.vibrate(12);
   }
-  return cachedHaptics;
 }
 
 import { Avatar } from './primitives/Avatar.js';
@@ -120,13 +115,10 @@ export function MessageRow({
         <Pressable
           onLongPress={() => {
             if (!actions) return;
-            const h = getHaptics();
-            if (h) {
-              try {
-                h.impactAsync(h.ImpactFeedbackStyle?.Medium);
-              } catch {
-                /* no haptics, no problem */
-              }
+            try {
+              pulseHaptic();
+            } catch {
+              /* vibration disabled / unavailable — no-op */
             }
             setActionsOpen(true);
           }}
