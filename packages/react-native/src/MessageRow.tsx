@@ -1,7 +1,27 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useState, type ReactNode } from 'react';
+
+// Static `import * as Haptics from 'expo-haptics'` forces npm/expo
+// to install it as a hard dep — that triggers tree reorganization
+// in nested installs and ends up with two copies of @poolse/react
+// (which breaks PoolseProvider context resolution). Resolve it
+// lazily instead so the long-press path falls back to a silent
+// no-op if expo-haptics isn't present in the consumer's app.
+type HapticsModule = {
+  impactAsync: (style?: unknown) => void;
+  ImpactFeedbackStyle?: { Medium?: unknown };
+};
+let cachedHaptics: HapticsModule | null | undefined;
+function getHaptics(): HapticsModule | null {
+  if (cachedHaptics !== undefined) return cachedHaptics;
+  try {
+    cachedHaptics = require('expo-haptics') as HapticsModule;
+  } catch {
+    cachedHaptics = null;
+  }
+  return cachedHaptics;
+}
 
 import { Avatar } from './primitives/Avatar.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
@@ -100,14 +120,13 @@ export function MessageRow({
         <Pressable
           onLongPress={() => {
             if (!actions) return;
-            // Tactile confirmation that the long-press registered, like
-            // every native messaging app. Wrapped in try/catch because
-            // Haptics is unavailable in some emulators / web targets
-            // and we'd rather miss the buzz than crash the row.
-            try {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            } catch {
-              /* no haptics, no problem */
+            const h = getHaptics();
+            if (h) {
+              try {
+                h.impactAsync(h.ImpactFeedbackStyle?.Medium);
+              } catch {
+                /* no haptics, no problem */
+              }
             }
             setActionsOpen(true);
           }}

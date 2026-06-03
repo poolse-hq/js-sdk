@@ -4,17 +4,7 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
-## [0.1.4] — 2026-06-03
-
-### Breaking
-
-- **`expo-image-picker`, `expo-document-picker`, and `expo-haptics`
-  are now REQUIRED peer dependencies** (were optional). The
-  attachment picker + long-press haptics rely on them, and almost
-  every Expo app has them anyway — making them required lets us
-  drop the dynamic-import dance and ship a more "complete bundle"
-  feel. Install with `npx expo install expo-image-picker
-  expo-document-picker expo-haptics` alongside the package.
+## [0.1.5] — 2026-06-03
 
 ### Added
 
@@ -26,9 +16,10 @@ versions follow [semver](https://semver.org).
   if you want.
 - **Haptic feedback on long-press** in `<MessageRow>` —
   `Haptics.impactAsync(ImpactFeedbackStyle.Medium)` fires when the
-  action sheet opens, matching native messaging UX. Wrapped in
-  try/catch for environments without haptics (Android emulators,
-  web targets).
+  action sheet opens. `expo-haptics` is loaded via a cached lazy
+  `require()` — falls back to a silent no-op if you haven't
+  installed it, so no peer dep is forced on consumers that don't
+  want haptics.
 
 ### Changed
 
@@ -37,6 +28,16 @@ versions follow [semver](https://semver.org).
   font variant so the time width stays stable, the read tick sits
   flush with the timestamp, and `edited` is its own italic pill
   rather than inline text.
+
+### Notes
+
+- `expo-image-picker`, `expo-document-picker`, and `expo-haptics`
+  remain OPTIONAL peer dependencies. (0.1.4 briefly promoted them
+  to required — that caused npm to reorganize the dep tree on
+  consumer installs, ended up with two copies of `@poolse/react` in
+  Metro's bundle, and broke `PoolseProvider` context resolution.
+  0.1.5 reverts that. 0.1.3 and 0.1.4 were both burned slots and
+  should not be used.)
 
 ## [0.1.0] — 2026-06-03
 

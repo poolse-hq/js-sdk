@@ -18,4 +18,7 @@ export default defineConfig({
     '@poolse/sdk',
     '@poolse/react',
   ],
+  // Suppress tsup's "Could not resolve" warnings for the optional
+  // expo modules — they're intentionally not statically imported.
+  noExternal: [],
 });
