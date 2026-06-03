@@ -18,28 +18,39 @@
 // want, but the default already uses it — no setup required.
 
 export function safeUuid(): string {
-  const c = (
-    globalThis as {
-      crypto?: {
-        randomUUID?: () => string;
-        getRandomValues?: (a: Uint8Array) => Uint8Array;
-      };
+  // Every property access of `globalThis.crypto` is wrapped in
+  // try/catch because some older Hermes / Quickjs builds throw a
+  // ReferenceError on the bare identifier `crypto` even via
+  // globalThis property lookup. We don't care which path succeeds —
+  // we just need a unique string.
+  try {
+    const c = (globalThis as { crypto?: { randomUUID?: () => string; getRandomValues?: (a: Uint8Array) => Uint8Array } }).crypto;
+    if (c && typeof c.randomUUID === 'function') {
+      const out = c.randomUUID();
+      if (typeof out === 'string') return out;
     }
-  ).crypto;
-
-  if (c?.randomUUID) return c.randomUUID();
-
-  const bytes = new Uint8Array(16);
-  if (c?.getRandomValues) {
-    c.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < 16; i++) {
-      bytes[i] = Math.floor(Math.random() * 256);
+    if (c && typeof c.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16);
+      c.getRandomValues(bytes);
+      return formatV4(bytes);
     }
+  } catch {
+    /* fall through to Math.random path */
   }
+
+  // Math.random fallback — not cryptographically strong but
+  // perfectly sufficient for idempotency keys and in-process
+  // bookkeeping. The server enforces real dedup and auth.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function formatV4(bytes: Uint8Array): string {
   bytes[6] = (bytes[6]! & 0x0f) | 0x40;
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-
   const hex: string[] = [];
   for (let i = 0; i < 16; i++) {
     hex.push(bytes[i]!.toString(16).padStart(2, '0'));
