@@ -1,3 +1,3 @@
 // Single source of truth for the SDK version at runtime. Kept in sync
 // with package.json by the release process.
-export const version = '2.0.2';
+export const version = '2.0.7';

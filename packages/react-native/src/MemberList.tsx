@@ -1,5 +1,5 @@
 import type { MemberRole, Membership, Uuid } from '@poolse/sdk';
-import { useMembers, usePresence } from '@poolse/react';
+import { useMembers, usePresence, useUser } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -75,17 +75,15 @@ export function MemberList({
       style={{ backgroundColor: theme.colors.paper }}
       renderItem={({ item }) => {
         if (renderItem) return <>{renderItem(item)}</>;
-        const name = labelFor?.(item.external_id) ?? item.external_id;
-        const avatarUrl = avatarFor?.(item.external_id) ?? null;
         const isOnline = effectiveOnline.has(item.external_id);
         const showRemove = canRemove?.(item) ?? false;
         return (
           <MemberRow
-            name={name}
             externalId={item.external_id}
-            avatarUrl={avatarUrl}
             role={item.role}
             online={isOnline}
+            {...(labelFor ? { labelFor } : {})}
+            {...(avatarFor ? { avatarFor } : {})}
             {...(showRemove ? { onRemove: () => removeMember(item.external_id) } : {})}
           />
         );
@@ -95,25 +93,31 @@ export function MemberList({
 }
 
 function MemberRow({
-  name,
   externalId,
-  avatarUrl,
   role,
   online,
+  labelFor,
+  avatarFor,
   onRemove,
 }: {
-  name: string;
   externalId: string;
-  avatarUrl: string | null;
   role: MemberRole;
   online: boolean;
+  labelFor?: (externalId: string) => string;
+  avatarFor?: (externalId: string) => string | null;
   onRemove?: () => void;
 }) {
   const theme = usePoolseTheme();
-  // `name` is already labelFor()'d by the parent (or falls back to
-  // externalId when no labelFor was passed). Use it directly — don't
-  // round-trip through useDisplayName, which would otherwise force
-  // the SDK's userResolver and ignore the labelFor we already have.
+  // Priority: explicit prop > SDK userResolver > externalId fallback.
+  // The previous version used `labelFor?.(id) ?? id` and skipped the
+  // resolver entirely when labelFor wasn't passed, defeating the
+  // PoolseConfig.userResolver contract for consumers who configured
+  // one and expected names + avatars to flow through automatically.
+  const resolved = useUser(externalId);
+  const name =
+    labelFor?.(externalId) ?? resolved.profile?.displayName ?? externalId;
+  const avatarUrl =
+    avatarFor?.(externalId) ?? resolved.profile?.avatarUrl ?? null;
   return (
     <View style={styles.row}>
       <Avatar src={avatarUrl} name={name} seed={externalId} online={online} size="md" />

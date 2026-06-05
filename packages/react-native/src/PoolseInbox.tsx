@@ -1,5 +1,5 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { useConversations, useMe } from '@poolse/react';
+import { useConversations, useMe, useUser } from '@poolse/react';
 import {
   forwardRef,
   useCallback,
@@ -494,13 +494,21 @@ function DefaultConversationRow({
       ? (conv.member_external_ids ?? []).find((x) => x !== meExternalId)
       : null;
 
+  // Priority: explicit prop > SDK userResolver > externalId fallback.
+  // Inbox rows are typically the first place an avatar / name shows up
+  // for a conversation, so the resolver must run here too — not only
+  // inside ConversationView's bubbles.
+  const resolvedOther = useUser(isDirect ? (otherExtId ?? null) : null);
   const title = isDirect
     ? otherExtId
-      ? (labelFor?.(otherExtId) ?? otherExtId)
+      ? (labelFor?.(otherExtId) ?? resolvedOther.profile?.displayName ?? otherExtId)
       : 'Direct chat'
     : (conv.name ?? 'Untitled group');
 
-  const avatarUrl = isDirect && otherExtId ? (avatarFor?.(otherExtId) ?? null) : null;
+  const avatarUrl =
+    isDirect && otherExtId
+      ? (avatarFor?.(otherExtId) ?? resolvedOther.profile?.avatarUrl ?? null)
+      : null;
   const avatarSeed = isDirect ? (otherExtId ?? conv.id) : conv.id;
 
   return (

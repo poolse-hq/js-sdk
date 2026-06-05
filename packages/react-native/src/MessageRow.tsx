@@ -9,7 +9,7 @@ import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { ReactionStrip } from './Reactions.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
-import { useReactions } from '@poolse/react';
+import { useReactions, useUser } from '@poolse/react';
 
 // Swipe-to-reply triggers at this much horizontal pull. iOS / WhatsApp
 // use 50–60px; the lower bound feels lighter for one-handed thumb use.
@@ -181,11 +181,20 @@ export function MessageRow({
   const showAvatarSlot = showAvatar && !isSelf;
   const showAvatarRender =
     showAvatarSlot && (groupPosition === 'last' || groupPosition === 'standalone');
-  const avatarUrl = avatarFor && msg.sender_external_id ? avatarFor(msg.sender_external_id) : null;
-  const senderLabel =
-    msg.sender_external_id && labelFor
-      ? labelFor(msg.sender_external_id)
-      : (msg.sender_external_id ?? null);
+  // Resolve avatar / label with the same priority as MessageBubble /
+  // ChatHeader: explicit prop > SDK userResolver > externalId fallback.
+  // Without the useUser fallback, omitting `avatarFor` / `labelFor` on
+  // <ConversationView> bypassed the resolver at the row level even
+  // when `PoolseConfig.userResolver` was configured.
+  const rowSender = useUser(showAvatarSlot ? msg.sender_external_id : null);
+  const avatarUrl = msg.sender_external_id
+    ? (avatarFor?.(msg.sender_external_id) ?? rowSender.profile?.avatarUrl ?? null)
+    : null;
+  const senderLabel = msg.sender_external_id
+    ? (labelFor?.(msg.sender_external_id) ??
+      rowSender.profile?.displayName ??
+      msg.sender_external_id)
+    : null;
 
   return (
     <View style={[styles.row, { alignSelf: isSelf ? 'flex-end' : 'flex-start' }]}>
