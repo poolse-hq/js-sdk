@@ -252,8 +252,12 @@ function QuotedCard({
   onPress?: () => void;
 }) {
   const theme = usePoolseTheme();
+  // Priority: explicit prop > SDK userResolver > externalId fallback.
+  const resolved = useUser(quoted.sender_external_id);
   const senderName = quoted.sender_external_id
-    ? (labelFor?.(quoted.sender_external_id) ?? quoted.sender_external_id)
+    ? (labelFor?.(quoted.sender_external_id) ??
+      resolved.profile?.displayName ??
+      quoted.sender_external_id)
     : 'Unknown';
   const bg = isSelf ? 'rgba(255,255,255,0.18)' : theme.colors.surface2;
   const accent = isSelf ? theme.colors.onBrand : theme.colors.brand;

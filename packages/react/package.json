@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "Headless React hooks for poolse — realtime chat infrastructure. Provider + useMessages / useTyping / usePresence / useReactions / useAttachmentUpload / etc. NO UI.",
   "license": "MIT",
   "keywords": [

@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AttachmentUploadInput, Message, Uuid } from '@poolse/sdk';
+import { useUser } from '@poolse/react';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
@@ -210,8 +211,12 @@ function ReplyChip({
   onCancel?: () => void;
 }) {
   const theme = usePoolseTheme();
+  // Priority: explicit prop > SDK userResolver > externalId fallback.
+  const resolved = useUser(message.sender_external_id);
   const senderName = message.sender_external_id
-    ? (labelFor?.(message.sender_external_id) ?? message.sender_external_id)
+    ? (labelFor?.(message.sender_external_id) ??
+      resolved.profile?.displayName ??
+      message.sender_external_id)
     : 'Unknown';
   return (
     <View

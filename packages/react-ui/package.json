@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react-ui",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "Plug-and-play React components for poolse — realtime chat infrastructure. Brand-aligned defaults, CSS-variable theming, render-prop escape hatches.",
   "license": "MIT",
   "keywords": [
