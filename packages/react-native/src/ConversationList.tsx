@@ -1,7 +1,7 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { useConversations } from '@poolse/react';
+import { useConversations, useMe, useUser } from '@poolse/react';
 import { type ReactNode } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from './primitives/Avatar.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
@@ -19,6 +19,13 @@ export interface ConversationListProps {
   error?: Error | null;
   /** Per-conversation unread counts rendered as a Pulse Coral pill. */
   unreadCounts?: Record<Uuid, number>;
+  /**
+   * Explicit overrides for direct-chat names + avatars, keyed by the
+   * OTHER member's external_id. When omitted, the row falls back to
+   * `PoolseConfig.userResolver` and finally to the external_id.
+   */
+  labelFor?: (externalId: string) => string;
+  avatarFor?: (externalId: string) => string | null;
 }
 
 export function ConversationList({
@@ -30,9 +37,13 @@ export function ConversationList({
   loading: controlledLoading,
   error: controlledError,
   unreadCounts,
+  labelFor,
+  avatarFor,
 }: ConversationListProps) {
   const theme = usePoolseTheme();
   const auto = useConversations();
+  const { me } = useMe();
+  const meExternalId = me?.external_id ?? null;
   const isControlled = controlled !== undefined;
   const conversations = isControlled ? controlled : auto.conversations;
   const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
@@ -81,42 +92,103 @@ export function ConversationList({
         if (renderItem) {
           return <>{renderItem(item, selected)}</>;
         }
-        const unread = counts?.[item.id] ?? 0;
         return (
-          <Pressable
-            onPress={() => onSelect?.(item)}
-            style={[
-              styles.row,
-              {
-                backgroundColor: selected ? theme.colors.surface2 : 'transparent',
-              },
-            ]}
-          >
-            <Avatar src={null} name={item.name ?? null} seed={item.id} size="md" />
-            <View style={styles.body}>
-              <Text
-                style={[styles.name, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
-                numberOfLines={1}
-              >
-                {item.name ?? 'Untitled conversation'}
-              </Text>
-              {item.last_message_at ? (
-                <Text style={[styles.preview, { color: theme.colors.ink3 }]} numberOfLines={1}>
-                  {formatRelative(item.last_message_at)}
-                </Text>
-              ) : null}
-            </View>
-            {unread > 0 ? (
-              <View style={[styles.unreadPill, { backgroundColor: theme.colors.unreadPill }]}>
-                <Text style={[styles.unreadText, { color: theme.colors.unreadPillText }]}>
-                  {unread > 99 ? '99+' : String(unread)}
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
+          <ConversationRow
+            conv={item}
+            selected={selected}
+            meExternalId={meExternalId}
+            unread={counts?.[item.id] ?? 0}
+            {...(labelFor ? { labelFor } : {})}
+            {...(avatarFor ? { avatarFor } : {})}
+            {...(onSelect ? { onSelect } : {})}
+          />
         );
       }}
     />
+  );
+}
+
+function ConversationRow({
+  conv,
+  selected,
+  meExternalId,
+  unread,
+  labelFor,
+  avatarFor,
+  onSelect,
+}: {
+  conv: Conversation;
+  selected: boolean;
+  meExternalId: string | null;
+  unread: number;
+  labelFor?: (externalId: string) => string;
+  avatarFor?: (externalId: string) => string | null;
+  onSelect?: (conv: Conversation) => void;
+}) {
+  const theme = usePoolseTheme();
+
+  // For direct conversations the row title + avatar come from the OTHER
+  // member, NOT the conversation itself (which has `name: null` for
+  // directs). Find the counterparty's external_id and resolve via the
+  // standard priority: explicit prop > userResolver > external_id.
+  const isDirect = conv.type === 'direct';
+  const otherExtId =
+    isDirect && meExternalId
+      ? (conv.member_external_ids ?? []).find((x) => x !== meExternalId) ?? null
+      : null;
+  const resolvedOther = useUser(isDirect ? otherExtId : null);
+
+  const title = isDirect
+    ? otherExtId
+      ? (labelFor?.(otherExtId) ?? resolvedOther.profile?.displayName ?? otherExtId)
+      : 'Direct chat'
+    : (conv.name ?? 'Untitled conversation');
+  const avatarUrl =
+    isDirect && otherExtId
+      ? (avatarFor?.(otherExtId) ?? resolvedOther.profile?.avatarUrl ?? null)
+      : null;
+  const avatarSeed = isDirect ? (otherExtId ?? conv.id) : conv.id;
+
+  return (
+    <Pressable
+      onPress={() => onSelect?.(conv)}
+      style={[
+        styles.row,
+        {
+          backgroundColor: selected ? theme.colors.surface2 : 'transparent',
+        },
+      ]}
+    >
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={styles.rowAvatar} />
+      ) : (
+        <Avatar src={null} name={title} seed={avatarSeed} size="md" />
+      )}
+      <View style={styles.body}>
+        <Text
+          style={[styles.name, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+        {conv.last_message_preview ? (
+          <Text style={[styles.preview, { color: theme.colors.ink3 }]} numberOfLines={1}>
+            {conv.last_message_preview}
+          </Text>
+        ) : conv.last_message_at ? (
+          <Text style={[styles.preview, { color: theme.colors.ink3 }]} numberOfLines={1}>
+            {formatRelative(conv.last_message_at)}
+          </Text>
+        ) : null}
+      </View>
+      {unread > 0 ? (
+        <View style={[styles.unreadPill, { backgroundColor: theme.colors.unreadPill }]}>
+          <Text style={[styles.unreadText, { color: theme.colors.unreadPillText }]}>
+            {unread > 99 ? '99+' : String(unread)}
+          </Text>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -147,6 +219,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     gap: 10,
+  },
+  rowAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   body: {
     flex: 1,
