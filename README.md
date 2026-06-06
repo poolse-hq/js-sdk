@@ -24,7 +24,7 @@ import { PoolseProvider } from '@poolse/react';
 import { ConversationView } from '@poolse/react-ui';
 
 const config = {
-  apiUrl: import.meta.env.VITE_CHATAPP_URL ?? 'http://localhost:4000',
+  apiUrl: import.meta.env.VITE_POOLSE_URL ?? 'http://localhost:4000',
   getToken: async () => fetchJwtFromYourBackend(),
 };
 

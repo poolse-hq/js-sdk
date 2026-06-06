@@ -2,7 +2,7 @@
 # package.json when LTS rolls.
 FROM node:22-alpine
 
-# Match the chatapp Elixir dev container's working dir convention.
+# Match the poolse Elixir dev container's working dir convention.
 WORKDIR /app
 
 # Corepack ships with modern Node and is how we get pnpm without a

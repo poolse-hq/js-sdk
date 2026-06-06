@@ -76,7 +76,7 @@ const config = {
   },
 };
 
-export default function ChatApp({ conversationId }: { conversationId: string }) {
+export default function Chat({ conversationId }: { conversationId: string }) {
   return (
     <PoolseProvider config={config}>
       <ConversationView conversationId={conversationId} />
