@@ -129,6 +129,7 @@ export interface Membership {
   external_id: string;
   role: MemberRole;
   last_read_message_id: Uuid | null;
+  last_read_sequence: number | null;
   last_read_at: IsoDateTime | null;
   inserted_at: IsoDateTime;
   updated_at: IsoDateTime;
