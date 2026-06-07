@@ -108,14 +108,21 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
 
     const handleSend = async () => {
       if (submitDisabled) return;
+      // Snapshot + clear synchronously so the input is empty on the
+      // next keystroke even if the send round-trip is slow. Otherwise
+      // the user types into the still-present old text and the new
+      // characters append to the stale message.
+      const body = value.trim();
+      const replyId = replyingTo?.id;
+      const attachmentIds = readyAttachmentIds;
+      setValue('');
+      upload.reset();
       setSending(true);
       try {
-        await onSend(value.trim(), {
-          ...(replyingTo ? { quoted_message_id: replyingTo.id } : {}),
-          ...(readyAttachmentIds.length > 0 ? { attachment_ids: readyAttachmentIds } : {}),
+        await onSend(body, {
+          ...(replyId ? { quoted_message_id: replyId } : {}),
+          ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
         });
-        setValue('');
-        upload.reset();
       } finally {
         setSending(false);
       }

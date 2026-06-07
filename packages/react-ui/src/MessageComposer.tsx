@@ -114,20 +114,24 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       const hasReady = ready.length > 0;
       // Allow attachment-only sends (no body).
       if ((!trimmed && !hasReady) || sending || uploading) return;
+      // Snapshot + clear synchronously so the textarea is empty on
+      // the next keystroke even if the send round-trip is slow.
+      // Otherwise the user types into the still-present old text and
+      // the new characters append to the stale message.
+      const opts: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] } = {
+        ...(replyingTo ? { quoted_message_id: replyingTo.id } : {}),
+        ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
+      };
+      setValue('');
+      // Sweep ready chips out of the queue now that they've been
+      // attached + sent. Errored chips stay until dismissed.
+      for (const it of ready) removeUpload(it.localId);
       setSending(true);
       try {
-        const opts: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] } = {
-          ...(replyingTo ? { quoted_message_id: replyingTo.id } : {}),
-          ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
-        };
         // Pass `undefined` (not an empty object) when there are no
         // opts — callers that only care about body can ignore the
         // second arg, and tests that assert on its identity stay clean.
         await onSend(trimmed, Object.keys(opts).length > 0 ? opts : undefined);
-        setValue('');
-        // Sweep ready chips out of the queue now that they've been
-        // attached + sent. Errored chips stay until dismissed.
-        for (const it of ready) removeUpload(it.localId);
       } finally {
         setSending(false);
       }
