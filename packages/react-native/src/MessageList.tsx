@@ -85,17 +85,17 @@ export function MessageList({
       renderItem={handleRender}
       onEndReached={hasMore ? onLoadMore : undefined}
       onEndReachedThreshold={0.3}
-      // `inverted` flips ListHeader / ListFooter visually too — the
-      // header lands at the bottom and footer at the top. We swap
-      // them in props so the caller-facing semantics match the
-      // visual reality.
-      ListHeaderComponent={ListFooter}
+      // `inverted` flips the list, so FlatList's ListHeaderComponent
+      // renders at the bottom of the screen (above the latest message,
+      // next to the composer) and ListFooterComponent renders at the
+      // top (above the oldest message). That matches our prop names.
+      ListHeaderComponent={ListHeader}
       ListFooterComponent={
         <View>
           {hasMore && loading ? (
             <ActivityIndicator color={theme.colors.ink3} style={{ marginVertical: 8 }} />
           ) : null}
-          {ListHeader}
+          {ListFooter}
         </View>
       }
       style={{ backgroundColor: theme.colors.paper }}
