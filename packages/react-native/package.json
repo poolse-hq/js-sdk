@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react-native",
-  "version": "2.0.12",
+  "version": "2.0.13",
   "description": "Plug-and-play React Native components for poolse — realtime chat infrastructure. Brand-aligned defaults, JS theme tokens, Expo-friendly out of the box.",
   "license": "MIT",
   "keywords": [
@@ -60,7 +60,8 @@
     "react-native": ">=0.73",
     "react-native-svg": ">=14",
     "expo-image-picker": "*",
-    "expo-document-picker": "*"
+    "expo-document-picker": "*",
+    "expo-image-manipulator": "*"
   },
   "peerDependenciesMeta": {
     "expo-image-picker": {
@@ -68,12 +69,16 @@
     },
     "expo-document-picker": {
       "optional": true
+    },
+    "expo-image-manipulator": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "expo-document-picker": "^12.0.0",
     "expo-haptics": "^14.0.0",
+    "expo-image-manipulator": "^14.0.0",
     "expo-image-picker": "^16.0.0",
     "react": "^19.0.0",
     "react-native": "^0.76.0",

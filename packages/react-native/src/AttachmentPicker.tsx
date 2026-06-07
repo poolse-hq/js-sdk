@@ -1,4 +1,4 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image as RNImage, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 // Static imports — Metro's bundle graph can only trace literal
 // `import` / `require` calls. The earlier `new Function('m', 'return
 // import(m)')(name)` trick bypassed Metro entirely, so the picker
@@ -14,6 +14,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 // imports add ~12kb total which is acceptable).
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { useSharedUpload, useUploadPreview } from './internal/uploadContext.js';
@@ -118,26 +119,111 @@ async function uriToBlob(uri: string): Promise<Blob> {
   return res.blob();
 }
 
+// Phone-sized output — the fullscreen viewer on a 3x retina display
+// only needs ~1300px on the long edge, and chat bubbles top out at
+// ~960px. 1600 leaves headroom for pinch-zoom without sending the
+// 4000+ px monsters that some screenshots ship with.
+const COMPRESSION_LONG_SIDE_PX = 1600;
+const COMPRESSION_QUALITY = 0.75;
+
+function getImageSize(uri: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    RNImage.getSize(uri, (width, height) => resolve({ width, height }), reject);
+  });
+}
+
+/**
+ * Resize → WebP @ 0.75 every image before upload. iOS screenshots
+ * can be 8–12 MB PNGs and the fullscreen `<Image>` decode of those
+ * blocks the JS thread / silently fails on older devices — clipping
+ * the long edge to 1600 keeps the per-message payload under ~250kb
+ * for typical photos and is still crisp on every phone display.
+ *
+ * Never upscales. Falls back to the original blob on any failure so
+ * a flaky manipulator pass never blocks a send.
+ */
+async function compressImage({
+  uri,
+  width,
+  height,
+  filename,
+}: {
+  uri: string;
+  width?: number;
+  height?: number;
+  filename?: string;
+}): Promise<{ blob: Blob; contentType: string; filename: string }> {
+  let w = width;
+  let h = height;
+  if (!w || !h) {
+    try {
+      const size = await getImageSize(uri);
+      w = size.width;
+      h = size.height;
+    } catch {
+      w = 0;
+      h = 0;
+    }
+  }
+  const longSide = Math.max(w ?? 0, h ?? 0);
+  const scale =
+    longSide > COMPRESSION_LONG_SIDE_PX ? COMPRESSION_LONG_SIDE_PX / longSide : 1;
+  const actions =
+    scale < 1 && w && h
+      ? [{ resize: { width: Math.round(w * scale), height: Math.round(h * scale) } }]
+      : [];
+
+  const result = await manipulateAsync(uri, actions, {
+    compress: COMPRESSION_QUALITY,
+    format: SaveFormat.WEBP,
+  });
+  const blob = await uriToBlob(result.uri);
+  const base = (filename ?? `image-${Date.now()}`).replace(/\.[^.]+$/, '');
+  return {
+    blob,
+    contentType: 'image/webp',
+    filename: `${base}.webp`,
+  };
+}
+
 async function defaultAdapter(kind: 'image' | 'document') {
   if (kind === 'image') {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
-      quality: 0.85,
+      // Quality 1 — picker hands back the source as-is and we do the
+      // compression ourselves below. Letting the picker re-encode
+      // first just chains two lossy passes.
+      quality: 1,
     });
     if (res.canceled) return [];
     return Promise.all(
       res.assets.map(async (asset) => {
-        const blob = await uriToBlob(asset.uri);
-        const contentType = asset.mimeType ?? blob.type ?? 'image/jpeg';
-        // _previewUri is read by the picker before passing the input
-        // to the SDK; the SDK ignores unknown fields.
-        return {
-          body: blob,
-          contentType,
-          byteSize: asset.fileSize ?? blob.size,
-          filename: asset.fileName ?? `image-${Date.now()}.jpg`,
-          _previewUri: asset.uri,
-        };
+        try {
+          const compressed = await compressImage({
+            uri: asset.uri,
+            width: asset.width,
+            height: asset.height,
+            filename: asset.fileName ?? `image-${Date.now()}`,
+          });
+          return {
+            body: compressed.blob,
+            contentType: compressed.contentType,
+            byteSize: compressed.blob.size,
+            filename: compressed.filename,
+            _previewUri: asset.uri,
+          };
+        } catch (err) {
+          console.warn('[poolse/picker] image compression failed, sending original:', err);
+          const blob = await uriToBlob(asset.uri);
+          const contentType = asset.mimeType ?? blob.type ?? 'image/jpeg';
+          return {
+            body: blob,
+            contentType,
+            byteSize: asset.fileSize ?? blob.size,
+            filename: asset.fileName ?? `image-${Date.now()}.jpg`,
+            _previewUri: asset.uri,
+          };
+        }
       }),
     );
   }
@@ -148,6 +234,24 @@ async function defaultAdapter(kind: 'image' | 'document') {
   if (res.canceled) return [];
   return Promise.all(
     res.assets.map(async (asset) => {
+      const isImage = (asset.mimeType ?? '').startsWith('image/');
+      if (isImage) {
+        try {
+          const compressed = await compressImage({
+            uri: asset.uri,
+            filename: asset.name,
+          });
+          return {
+            body: compressed.blob,
+            contentType: compressed.contentType,
+            byteSize: compressed.blob.size,
+            filename: compressed.filename,
+            _previewUri: asset.uri,
+          };
+        } catch (err) {
+          console.warn('[poolse/picker] image compression failed, sending original:', err);
+        }
+      }
       const blob = await uriToBlob(asset.uri);
       const contentType = asset.mimeType ?? blob.type ?? 'application/octet-stream';
       return {

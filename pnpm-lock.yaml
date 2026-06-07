@@ -82,6 +82,9 @@ importers:
       expo-haptics:
         specifier: ^14.0.0
         version: 14.1.4(expo@56.0.8)
+      expo-image-manipulator:
+        specifier: ^14.0.0
+        version: 14.0.8(expo@56.0.8)
       expo-image-picker:
         specifier: ^16.0.0
         version: 16.1.4(expo@56.0.8)
@@ -4392,7 +4395,7 @@ packages:
     resolution: {integrity: sha512-AF3r7P5dWxL8MxyITRMlORQNaOA2IkAFaTr4k7BUumjPtRpGDTZpl0Pb1XCO6JeDCBdp126Cgs9sMxqSjgYyRg==}
     engines: {node: '>= 0.6'}
     dependencies:
-      mime-db: 1.52.0
+      mime-db: 1.54.0
     dev: true
 
   /compression@1.8.1:
@@ -4985,6 +4988,23 @@ packages:
       expo: '*'
     dependencies:
       expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-native@0.76.9)(react@19.2.6)(typescript@5.9.3)
+    dev: true
+
+  /expo-image-loader@6.0.0(expo@56.0.8):
+    resolution: {integrity: sha512-nKs/xnOGw6ACb4g26xceBD57FKLFkSwEUTDXEDF3Gtcu3MqF3ZIYd3YM+sSb1/z9AKV1dYT7rMSGVNgsveXLIQ==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-native@0.76.9)(react@19.2.6)(typescript@5.9.3)
+    dev: true
+
+  /expo-image-manipulator@14.0.8(expo@56.0.8):
+    resolution: {integrity: sha512-sXsXjm7rIxLWZe0j2A41J/Ph53PpFJRdyzJ3EQ/qetxLUvS2m3K1sP5xy37px43qCf0l79N/i6XgFgenFV36/Q==}
+    peerDependencies:
+      expo: '*'
+    dependencies:
+      expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-native@0.76.9)(react@19.2.6)(typescript@5.9.3)
+      expo-image-loader: 6.0.0(expo@56.0.8)
     dev: true
 
   /expo-image-picker@16.1.4(expo@56.0.8):
