@@ -28,7 +28,7 @@ export interface AttachmentPickerProps {
    * Override to plug in custom storage / transcoding. Default reads
    * from `expo-image-picker` / `expo-document-picker`.
    */
-  onPickInputs?: (kind: 'image' | 'document') => Promise<
+  onPickInputs?: (kind: 'image' | 'document' | 'camera') => Promise<
     {
       body: { uri: string; name: string; type: string } | Blob | unknown;
       contentType: string;
@@ -36,6 +36,14 @@ export interface AttachmentPickerProps {
       filename?: string;
     }[]
   >;
+  /**
+   * Show the Camera item alongside Photo and File. Defaults true.
+   * Disable if your app explicitly doesn't want camera access (some
+   * App Store reviewers require an explicit usage description even
+   * for the picker entry). Add `NSCameraUsageDescription` to your
+   * iOS Info.plist when leaving this on.
+   */
+  camera?: boolean;
 }
 
 /**
@@ -45,7 +53,12 @@ export interface AttachmentPickerProps {
  * declared as optional peers because consumers who pass
  * `attachments={false}` to ConversationView never render this file.
  */
-export function AttachmentPicker({ visible, onClose, onPickInputs }: AttachmentPickerProps) {
+export function AttachmentPicker({
+  visible,
+  onClose,
+  onPickInputs,
+  camera = true,
+}: AttachmentPickerProps) {
   const theme = usePoolseTheme();
   // Shared queue (via UploadProvider) so the composer sees these
   // uploads and can include them in the next send. Falls back to a
@@ -53,7 +66,7 @@ export function AttachmentPicker({ visible, onClose, onPickInputs }: AttachmentP
   const upload = useSharedUpload();
   const { setPreview } = useUploadPreview();
 
-  const pickFromKind = async (kind: 'image' | 'document') => {
+  const pickFromKind = async (kind: 'image' | 'document' | 'camera') => {
     try {
       const adapter = onPickInputs ?? defaultAdapter;
       const inputs = await adapter(kind);
@@ -88,8 +101,14 @@ export function AttachmentPicker({ visible, onClose, onPickInputs }: AttachmentP
             theme.shadows.lg,
           ]}
         >
+          {camera ? (
+            <Pressable style={styles.item} onPress={() => pickFromKind('camera')}>
+              <PoolseIcon name="camera" size={20} color={theme.colors.ink2} />
+              <Text style={[styles.itemText, { color: theme.colors.ink }]}>Camera</Text>
+            </Pressable>
+          ) : null}
           <Pressable style={styles.item} onPress={() => pickFromKind('image')}>
-            <PoolseIcon name="attachment" size={20} color={theme.colors.ink2} />
+            <PoolseIcon name="image" size={20} color={theme.colors.ink2} />
             <Text style={[styles.itemText, { color: theme.colors.ink }]}>Photo or video</Text>
           </Pressable>
           <Pressable style={styles.item} onPress={() => pickFromKind('document')}>
@@ -185,7 +204,57 @@ async function compressImage({
   };
 }
 
-async function defaultAdapter(kind: 'image' | 'document') {
+async function assetsToInputs(assets: ReadonlyArray<ImagePicker.ImagePickerAsset>) {
+  return Promise.all(
+    assets.map(async (asset) => {
+      try {
+        const compressed = await compressImage({
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          filename: asset.fileName ?? `image-${Date.now()}`,
+        });
+        return {
+          body: compressed.blob,
+          contentType: compressed.contentType,
+          byteSize: compressed.blob.size,
+          filename: compressed.filename,
+          _previewUri: asset.uri,
+        };
+      } catch (err) {
+        console.warn('[poolse/picker] image compression failed, sending original:', err);
+        const blob = await uriToBlob(asset.uri);
+        const contentType = asset.mimeType ?? blob.type ?? 'image/jpeg';
+        return {
+          body: blob,
+          contentType,
+          byteSize: asset.fileSize ?? blob.size,
+          filename: asset.fileName ?? `image-${Date.now()}.jpg`,
+          _previewUri: asset.uri,
+        };
+      }
+    }),
+  );
+}
+
+async function defaultAdapter(kind: 'image' | 'document' | 'camera') {
+  if (kind === 'camera') {
+    // Camera permissions are required on both iOS (Info.plist
+    // NSCameraUsageDescription) and Android. requestCameraPermissionsAsync
+    // shows the system prompt the first time; subsequent calls
+    // resolve immediately with the cached answer.
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      console.warn('[poolse/picker] camera permission denied');
+      return [];
+    }
+    const res = await ImagePicker.launchCameraAsync({
+      mediaTypes: 'images',
+      quality: 1,
+    });
+    if (res.canceled) return [];
+    return assetsToInputs(res.assets);
+  }
   if (kind === 'image') {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
@@ -195,36 +264,7 @@ async function defaultAdapter(kind: 'image' | 'document') {
       quality: 1,
     });
     if (res.canceled) return [];
-    return Promise.all(
-      res.assets.map(async (asset) => {
-        try {
-          const compressed = await compressImage({
-            uri: asset.uri,
-            width: asset.width,
-            height: asset.height,
-            filename: asset.fileName ?? `image-${Date.now()}`,
-          });
-          return {
-            body: compressed.blob,
-            contentType: compressed.contentType,
-            byteSize: compressed.blob.size,
-            filename: compressed.filename,
-            _previewUri: asset.uri,
-          };
-        } catch (err) {
-          console.warn('[poolse/picker] image compression failed, sending original:', err);
-          const blob = await uriToBlob(asset.uri);
-          const contentType = asset.mimeType ?? blob.type ?? 'image/jpeg';
-          return {
-            body: blob,
-            contentType,
-            byteSize: asset.fileSize ?? blob.size,
-            filename: asset.fileName ?? `image-${Date.now()}.jpg`,
-            _previewUri: asset.uri,
-          };
-        }
-      }),
-    );
+    return assetsToInputs(res.assets);
   }
   const res = await DocumentPicker.getDocumentAsync({
     copyToCacheDirectory: true,

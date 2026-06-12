@@ -1,6 +1,12 @@
 import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useMemo, useRef, useState } from 'react';
+// Static import — Metro's bundle graph can only trace literal
+// `import` / `require` calls. See ./internal/markdown.ts for the
+// full reasoning. `expo-clipboard` is a required peer dep; consumers
+// who don't want copy can omit the Copy action by not enabling
+// `actions` on <ConversationView>.
+import * as Clipboard from 'expo-clipboard';
 
 import { Avatar } from './primitives/Avatar.js';
 import { MessageActions } from './MessageActions.js';
@@ -324,7 +330,7 @@ export function MessageRow({
             ? {
                 onCopy: () => {
                   setActionsOpen(false);
-                  void copyToClipboard(msg.body ?? '');
+                  void Clipboard.setStringAsync(msg.body ?? '');
                 },
               }
             : {})}
@@ -425,29 +431,3 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 });
-
-// Lazy-require expo-clipboard so consumers who don't install it (or
-// use a non-Expo bare RN setup) don't crash on import. The Copy
-// action just no-ops with a one-time warn in that case.
-let clipboardModule: { setStringAsync?: (s: string) => Promise<unknown> } | null | undefined;
-let clipboardWarned = false;
-async function copyToClipboard(text: string): Promise<void> {
-  if (clipboardModule === undefined) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      clipboardModule = require('expo-clipboard') as typeof clipboardModule;
-    } catch {
-      clipboardModule = null;
-    }
-  }
-  if (!clipboardModule?.setStringAsync) {
-    if (!clipboardWarned) {
-      clipboardWarned = true;
-      console.warn(
-        '[@poolse/react-native] Copy action requires `expo-clipboard`. Install it to enable copy-to-clipboard.',
-      );
-    }
-    return;
-  }
-  await clipboardModule.setStringAsync(text);
-}

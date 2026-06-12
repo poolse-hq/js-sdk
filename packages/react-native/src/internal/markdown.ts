@@ -1,43 +1,19 @@
-import type { ReactElement } from 'react';
-import { createElement } from 'react';
-
-// Lazy-require `react-native-markdown-display`. We don't take a hard
-// dependency because (a) the consumer may have intentionally chosen
-// plain-text rendering for performance and (b) the lib carries
-// transitive deps (react-native-fit-image, css-to-react-native) that
-// not every host wants to ship. When it's missing the bubble falls
-// back to plain text + a one-time warn.
-
-type MarkdownComponent = (props: {
-  style?: Record<string, unknown>;
-  onLinkPress?: (url: string) => boolean;
-  children?: string;
-}) => ReactElement;
-
-let MarkdownModule: { default?: MarkdownComponent } | null | undefined;
-let warned = false;
-
-function loadMarkdown(): MarkdownComponent | null {
-  if (MarkdownModule === undefined) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      MarkdownModule = require('react-native-markdown-display') as typeof MarkdownModule;
-    } catch {
-      MarkdownModule = null;
-    }
-  }
-  const fn = MarkdownModule?.default;
-  if (!fn) {
-    if (!warned) {
-      warned = true;
-      console.warn(
-        '[@poolse/react-native] Markdown rendering requires `react-native-markdown-display`. Install it to enable bold/italic/code/links in message bubbles. Falling back to plain text.',
-      );
-    }
-    return null;
-  }
-  return fn;
-}
+import { createElement, type ReactElement } from 'react';
+import type { StyleSheet } from 'react-native';
+// Static import — Metro's bundle graph can only trace literal
+// `import` / `require` calls. The earlier try/require trick generated
+// a `require('react-native-markdown-display')` that Metro couldn't
+// resolve from inside our pre-bundled CJS dist, throwing a runtime
+// "Requiring unknown module" even when the consumer had the package
+// installed. Hard-importing puts the resolution into the consumer
+// app's normal graph where it works the same way react-native-svg or
+// expo-image-picker do.
+//
+// Trade-off: the package is now a required peer of @poolse/react-native
+// (was optional). Consumers who don't want markdown can pass
+// `markdown={false}` to <ConversationView> — the import stays in the
+// bundle but the component isn't rendered.
+import Markdown from 'react-native-markdown-display';
 
 export interface MarkdownStyleArgs {
   textColor: string;
@@ -49,14 +25,11 @@ export interface MarkdownStyleArgs {
 }
 
 /**
- * Render `body` as Markdown into a React element, or return `null`
- * if the markdown library isn't installed (caller falls back to a
- * plain `<Text>`). The style mapping uses the bubble's resolved
- * theme tokens so text color tracks self / other bubble background.
+ * Render `body` as Markdown into a React element. The style mapping
+ * uses the bubble's resolved theme tokens so text color tracks self /
+ * other bubble background.
  */
-export function renderMarkdown(body: string, args: MarkdownStyleArgs): ReactElement | null {
-  const Markdown = loadMarkdown();
-  if (!Markdown) return null;
+export function renderMarkdown(body: string, args: MarkdownStyleArgs): ReactElement {
   const baseText = {
     color: args.textColor,
     fontFamily: args.fontFamily,
@@ -67,7 +40,7 @@ export function renderMarkdown(body: string, args: MarkdownStyleArgs): ReactElem
   // text color; links pick up the brand-on-bubble color so they
   // remain visible whether the bubble is a self-brand or
   // other-surface variant.
-  const style: Record<string, unknown> = {
+  const style: StyleSheet.NamedStyles<unknown> = {
     body: baseText,
     paragraph: { ...baseText, marginTop: 0, marginBottom: 0 },
     text: baseText,

@@ -177,57 +177,50 @@ export function MessageBubble({
           </View>
         ) : null}
 
-        {body.length > 0
-          ? (() => {
-              if (isDeleted) {
-                return (
-                  <Text
-                    style={[
-                      styles.body,
-                      {
-                        color: theme.colors.ink3,
-                        fontFamily: theme.type.fontBody,
-                        fontSize: theme.type.bodySize,
-                        lineHeight: theme.type.lineHeight,
-                        fontStyle: 'italic',
-                      },
-                    ]}
-                  >
-                    Message deleted
-                  </Text>
-                );
-              }
-              const md = markdown
-                ? renderMarkdown(truncated, {
-                    textColor,
-                    linkColor: isSelf ? theme.colors.onBrand : theme.colors.brand,
-                    fontFamily: theme.type.fontBody,
-                    fontSize: theme.type.bodySize,
-                    lineHeight: theme.type.lineHeight,
-                    onLinkPress: (url: string) => {
-                      void Linking.openURL(url).catch(() => undefined);
-                      return false;
-                    },
-                  })
-                : null;
-              if (md) return md;
-              return (
-                <Text
-                  style={[
-                    styles.body,
-                    {
-                      color: textColor,
-                      fontFamily: theme.type.fontBody,
-                      fontSize: theme.type.bodySize,
-                      lineHeight: theme.type.lineHeight,
-                    },
-                  ]}
-                >
-                  {truncated}
-                </Text>
-              );
-            })()
-          : null}
+        {body.length > 0 ? (
+          isDeleted ? (
+            <Text
+              style={[
+                styles.body,
+                {
+                  color: theme.colors.ink3,
+                  fontFamily: theme.type.fontBody,
+                  fontSize: theme.type.bodySize,
+                  lineHeight: theme.type.lineHeight,
+                  fontStyle: 'italic',
+                },
+              ]}
+            >
+              Message deleted
+            </Text>
+          ) : markdown ? (
+            renderMarkdown(truncated, {
+              textColor,
+              linkColor: isSelf ? theme.colors.onBrand : theme.colors.brand,
+              fontFamily: theme.type.fontBody,
+              fontSize: theme.type.bodySize,
+              lineHeight: theme.type.lineHeight,
+              onLinkPress: (url: string) => {
+                void Linking.openURL(url).catch(() => undefined);
+                return false;
+              },
+            })
+          ) : (
+            <Text
+              style={[
+                styles.body,
+                {
+                  color: textColor,
+                  fontFamily: theme.type.fontBody,
+                  fontSize: theme.type.bodySize,
+                  lineHeight: theme.type.lineHeight,
+                },
+              ]}
+            >
+              {truncated}
+            </Text>
+          )
+        ) : null}
 
         {maxBodyLength > 0 && body.length > maxBodyLength ? (
           <Pressable onPress={() => setExpanded((e) => !e)}>
