@@ -53,9 +53,27 @@ async function POST(req: Request) {
 
 ## 2. Frontend — install + provider
 
+**Web (React)**
+
 ```bash
 npm install @poolse/sdk @poolse/react @poolse/react-ui
 ```
+
+**React Native (Expo)**
+
+```bash
+npx expo install \
+  @poolse/sdk @poolse/react @poolse/react-native \
+  react-native-svg \
+  react-native-markdown-display \
+  react-native-safe-area-context \
+  expo-clipboard \
+  expo-image-picker \
+  expo-document-picker \
+  expo-image-manipulator
+```
+
+All peer dependencies are required — the chat surface eagerly imports each one, so a missing peer crashes Metro with "Requiring unknown module …" the first time you mount `<ConversationView>`. See [`packages/react-native/README.md`](./packages/react-native#install) for what each library powers and the iOS Info.plist entries you'll need for camera + photo library.
 
 ```tsx
 import '@poolse/react-ui/styles.css';

@@ -14,14 +14,67 @@ Works out of the box with Expo (SDK 50+) and bare React Native
 ## Install
 
 ```bash
-npm install @poolse/sdk @poolse/react @poolse/react-native react-native-svg
-npx expo install expo-image-picker expo-document-picker expo-haptics
+npx expo install \
+  @poolse/sdk @poolse/react @poolse/react-native \
+  react-native-svg \
+  react-native-markdown-display \
+  react-native-safe-area-context \
+  expo-clipboard \
+  expo-image-picker \
+  expo-document-picker \
+  expo-image-manipulator
 ```
 
-All four Expo modules are required peer dependencies — `expo-haptics`
-powers long-press feedback in `<MessageRow>`, and the two pickers
-back `<AttachmentPicker>`. The `npx expo install` form picks
-versions compatible with your installed Expo SDK automatically.
+Use `npx expo install` (not plain `npm install`) so each module is
+pinned to a version compatible with your Expo SDK. On bare React
+Native without the Expo CLI, swap it for `npm install` and pin
+versions yourself.
+
+**All peer dependencies are required.** The chat surface eagerly
+imports each one at module-load time (Metro can't follow `try /
+require`, so we don't try — see `2.1.1` release notes). If any peer
+is missing the bundle blows up the first time you mount
+`<ConversationView>` / `<PoolseInbox>` with "Requiring unknown
+module …".
+
+| Peer                             | What it powers                                                                                                                                                                                                                                |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `react-native-svg`               | All `<PoolseIcon>` glyphs (send, reply, reactions, chevrons).                                                                                                                                                                                 |
+| `react-native-markdown-display`  | Bold / italic / code / clickable links inside message bubbles. Disable with `markdown={false}` on `<ConversationView>` if you don't want it — the import still ships in the bundle.                                                           |
+| `react-native-safe-area-context` | Composer bottom inset when the keyboard is closed, and the `keyboardVerticalOffset` math `<PoolseInbox>` does for its header. Falls back to hardcoded iOS 50/34 constants if missing — usable, but wrong on devices with non-standard insets. |
+| `expo-clipboard`                 | The Copy action in the long-press message menu.                                                                                                                                                                                               |
+| `expo-image-picker`              | Camera + Photo-library entries in `<AttachmentPicker>`.                                                                                                                                                                                       |
+| `expo-document-picker`           | File entry in `<AttachmentPicker>`.                                                                                                                                                                                                           |
+| `expo-image-manipulator`         | WebP resize + compress on picked photos before upload (keeps payloads under ~250 KB).                                                                                                                                                         |
+
+**iOS Info.plist** (`app.json` → `ios.infoPlist`):
+
+```json
+{
+  "NSCameraUsageDescription": "Take photos to send in chat.",
+  "NSPhotoLibraryUsageDescription": "Pick photos to send in chat."
+}
+```
+
+Pass `camera={false}` to `<AttachmentPicker>` if you want to skip
+the camera entry (and Apple's review burden for `NSCameraUsageDescription`).
+
+**App root** — wrap once with `<SafeAreaProvider>` and `<PoolseProvider>`:
+
+```tsx
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { PoolseProvider } from '@poolse/react';
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <PoolseProvider config={{ getToken: ..., apiUrl: ... }}>
+        <YourScreens />
+      </PoolseProvider>
+    </SafeAreaProvider>
+  );
+}
+```
 
 ## Quick start
 

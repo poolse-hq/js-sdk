@@ -99,6 +99,12 @@ pnpm dev
 
 Open http://localhost:5173. You should see the conversation UI; type and send. To verify real-time:
 
+> **React Native instead of web?** Skip the Vite step and follow
+> [`packages/react-native/README.md`](./packages/react-native#install)
+> for the install (a single `npx expo install` line with **all**
+> peer deps — none are optional). The same JWT + conversation id
+> from the curl steps above drop straight in.
+
 - Open a second browser tab to the same URL — both tabs should receive each other's messages instantly.
 - Or send via curl: `curl -X POST -H "Authorization: Bearer $JWT" -H "Content-Type: application/json" -d '{"body":"from curl"}' http://localhost:4000/v1/conversations/$CONV_ID/messages` and watch the message appear in the browser within ~50ms.
 

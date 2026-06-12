@@ -2,21 +2,38 @@
 
 TypeScript SDKs for the [poolse](https://github.com/jasirfetai/poolse) Chat-as-a-Service backend.
 
-This repository is a pnpm monorepo. **Three packages**, each usable independently:
+This repository is a pnpm monorepo. **Four packages**, each usable independently:
 
-| Package                                   | What                                                                                                                  | Use when                                                                     |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [`@poolse/sdk`](./packages/sdk)           | Headless TypeScript SDK. REST + WebSocket + offline queue. No React, no DOM.                                          | Building for Node, vanilla JS, mobile (RN), or you want zero UI opinions.    |
-| [`@poolse/react`](./packages/react)       | Headless React hooks built on `@poolse/sdk`. Provider + `useMessages` / `useTyping` / `usePresence` / etc. **No UI**. | You want real-time wired up but you're building your own UI from scratch.    |
-| [`@poolse/react-ui`](./packages/react-ui) | Plug-and-play React components built on `@poolse/react`. CSS-variable theming + render-slot escape hatches.           | You want a working chat in 5 minutes; eject to lower layers later if needed. |
+| Package                                           | What                                                                                                                   | Use when                                                                     |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [`@poolse/sdk`](./packages/sdk)                   | Headless TypeScript SDK. REST + WebSocket + offline queue. No React, no DOM.                                           | Building for Node, vanilla JS, mobile (RN), or you want zero UI opinions.    |
+| [`@poolse/react`](./packages/react)               | Headless React hooks built on `@poolse/sdk`. Provider + `useMessages` / `useTyping` / `usePresence` / etc. **No UI**.  | You want real-time wired up but you're building your own UI from scratch.    |
+| [`@poolse/react-ui`](./packages/react-ui)         | Plug-and-play React components built on `@poolse/react`. CSS-variable theming + render-slot escape hatches.            | You want a working chat in 5 minutes; eject to lower layers later if needed. |
+| [`@poolse/react-native`](./packages/react-native) | Plug-and-play React Native components — same component names + prop shapes as `react-ui`, JS theme tokens, Expo-ready. | You're shipping an Expo / bare React Native app.                             |
 
 You can mix and match. `<ConversationView>` uses the hooks from `@poolse/react`, which use the client from `@poolse/sdk` — drop down a layer at any point without re-architecting.
 
-## Quickstart (5-minute chat)
+## Quickstart (5-minute chat — web)
 
 ```bash
 pnpm add @poolse/sdk @poolse/react @poolse/react-ui
 ```
+
+### React Native (Expo)
+
+```bash
+npx expo install \
+  @poolse/sdk @poolse/react @poolse/react-native \
+  react-native-svg \
+  react-native-markdown-display \
+  react-native-safe-area-context \
+  expo-clipboard \
+  expo-image-picker \
+  expo-document-picker \
+  expo-image-manipulator
+```
+
+All peer dependencies are required — see [`@poolse/react-native` README](./packages/react-native#install) for what each one powers and the iOS Info.plist keys you'll need.
 
 ```tsx
 import '@poolse/react-ui/styles.css';
@@ -134,9 +151,10 @@ docker compose run --rm node pnpm build        # build all packages
 ```
 poolse-js-sdk/
 ├── packages/
-│   ├── sdk/         @poolse/sdk
-│   ├── react/       @poolse/react
-│   └── react-ui/    @poolse/react-ui
+│   ├── sdk/            @poolse/sdk
+│   ├── react/          @poolse/react
+│   ├── react-ui/       @poolse/react-ui
+│   └── react-native/   @poolse/react-native
 ├── tsconfig.base.json      ← shared base for all packages
 ├── eslint.config.js        ← shared (flat config, ESLint 9)
 ├── .prettierrc.json
