@@ -133,11 +133,16 @@ function prepend(prev: Conversation[], conv: Conversation): Conversation[] {
 
 /**
  * Apply a `conversation:updated` realtime payload: merge the fresh
- * surface fields (preview, timestamp, sequence) into the existing
- * row and float it to the top. Increment `unread_count` only when
- * the triggering message wasn't from the current user — the server
- * already advanced the sender's read cursor, so their own unread
- * stays at 0.
+ * surface fields (preview, timestamp, sequence, unread_count) into
+ * the existing row and float it to the top.
+ *
+ * Preferred source for `unread_count` is the wire payload —
+ * @poolse/server now computes per-member counts excluding tombstoned
+ * messages and injects them into each member's broadcast, so the
+ * value is authoritative for both new-message and delete events.
+ * Older servers don't include it; we fall back to the legacy
+ * "increment when not from me" heuristic so the badge still moves
+ * for unconsumed sends.
  *
  * If the conversation isn't in our local list yet (rare — joined
  * via a different tab, or we just signed in), prepend the wire row
@@ -147,12 +152,15 @@ function mergeUpdated(prev: Conversation[], next: Conversation, fromMe: boolean)
   const idx = prev.findIndex((c) => c.id === next.id);
   if (idx === -1) return [next, ...prev];
   const existing = prev[idx]!;
+  const wireUnread = typeof next.unread_count === 'number' ? next.unread_count : null;
+  const unread_count =
+    wireUnread !== null ? wireUnread : fromMe ? 0 : (existing.unread_count ?? 0) + 1;
   const merged: Conversation = {
     ...existing,
     last_message_at: next.last_message_at,
     last_message_preview: next.last_message_preview,
     last_sequence: next.last_sequence,
-    unread_count: fromMe ? 0 : (existing.unread_count ?? 0) + 1,
+    unread_count,
   };
   const rest = prev.slice(0, idx).concat(prev.slice(idx + 1));
   return [merged, ...rest];
