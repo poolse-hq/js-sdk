@@ -61,10 +61,16 @@ export function UploadQueueStrip() {
               <Pressable
                 onPress={handleClose}
                 hitSlop={8}
-                style={[styles.closeBtn, { backgroundColor: theme.colors.ink }]}
+                // Hardcoded dark dot + white X. Pulling from the
+                // theme made the close affordance invisible against
+                // light-on-light or dark-on-dark custom palettes
+                // (e.g. a white-on-white surface/onBrand pair).
+                // This is a thumbnail badge — not chrome — so it
+                // should look the same in every theme.
+                style={styles.closeBtn}
                 accessibilityLabel={isError ? 'Remove failed upload' : 'Cancel upload'}
               >
-                <PoolseIcon name="close" size={11} color={theme.colors.onBrand} />
+                <PoolseIcon name="close" size={11} color="#fff" />
               </Pressable>
             ) : null}
 
@@ -221,6 +227,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(40,40,40,0.85)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.3,

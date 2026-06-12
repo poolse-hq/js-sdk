@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react-native",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Plug-and-play React Native components for poolse — realtime chat infrastructure. Brand-aligned defaults, JS theme tokens, Expo-friendly out of the box.",
   "license": "MIT",
   "keywords": [

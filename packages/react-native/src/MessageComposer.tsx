@@ -166,8 +166,9 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       disabled ||
       sending ||
       isUploading ||
-      value.trim().length === 0 ||
-      (isEditing ? !editChanged : value.trim().length === 0 && readyAttachmentIds.length === 0);
+      (isEditing
+        ? !editChanged || value.trim().length === 0
+        : value.trim().length === 0 && readyAttachmentIds.length === 0);
 
     const handleSend = async () => {
       if (submitDisabled) return;
