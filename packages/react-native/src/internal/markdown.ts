@@ -13,7 +13,16 @@ import type { StyleSheet } from 'react-native';
 // (was optional). Consumers who don't want markdown can pass
 // `markdown={false}` to <ConversationView> — the import stays in the
 // bundle but the component isn't rendered.
-import Markdown from 'react-native-markdown-display';
+import Markdown, { MarkdownIt } from 'react-native-markdown-display';
+
+// `react-native-markdown-display` defaults to a stock CommonMark
+// parser, which only treats `[text](url)` and `<url>` as links. Bare
+// URLs in body text (e.g. "check https://example.com") stay plain
+// text. Turn on `linkify` so markdown-it autolinks them — matches
+// what react-ui gets via remark-gfm. Built once at module load: the
+// instance is stateless and re-using it avoids re-allocating the
+// parser for every rendered message.
+const markdownit = MarkdownIt({ typographer: false, linkify: true });
 
 export interface MarkdownStyleArgs {
   textColor: string;
@@ -78,5 +87,5 @@ export function renderMarkdown(body: string, args: MarkdownStyleArgs): ReactElem
       opacity: 0.85,
     },
   };
-  return createElement(Markdown, { style, onLinkPress: args.onLinkPress }, body);
+  return createElement(Markdown, { style, markdownit, onLinkPress: args.onLinkPress }, body);
 }
