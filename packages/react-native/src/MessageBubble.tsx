@@ -1,11 +1,12 @@
 import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
 import { useUser } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { ImageMosaic } from './ImageMosaic.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { renderMarkdown } from './internal/markdown.js';
 import { userColor } from './primitives/userColor.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
@@ -31,6 +32,13 @@ export interface MessageBubbleProps {
   actionsTrigger?: ReactNode;
   /** Render in-bubble attachments (images, file cards). Defaults to true. */
   showAttachments?: boolean;
+  /**
+   * Render the body as Markdown (bold, italic, code, lists, links).
+   * Links open via `Linking.openURL`. Requires
+   * `react-native-markdown-display` to be installed in the host app;
+   * without it we fall back to plain text. Defaults to true.
+   */
+  markdown?: boolean;
 }
 
 export function MessageBubble({
@@ -44,6 +52,7 @@ export function MessageBubble({
   showSenderName = false,
   actionsTrigger,
   showAttachments = true,
+  markdown = true,
 }: MessageBubbleProps) {
   const theme = usePoolseTheme();
   const { width: screenWidth } = useWindowDimensions();
@@ -168,22 +177,57 @@ export function MessageBubble({
           </View>
         ) : null}
 
-        {body.length > 0 ? (
-          <Text
-            style={[
-              styles.body,
-              {
-                color: isDeleted ? theme.colors.ink3 : textColor,
-                fontFamily: theme.type.fontBody,
-                fontSize: theme.type.bodySize,
-                lineHeight: theme.type.lineHeight,
-                fontStyle: isDeleted ? 'italic' : 'normal',
-              },
-            ]}
-          >
-            {isDeleted ? 'Message deleted' : truncated}
-          </Text>
-        ) : null}
+        {body.length > 0
+          ? (() => {
+              if (isDeleted) {
+                return (
+                  <Text
+                    style={[
+                      styles.body,
+                      {
+                        color: theme.colors.ink3,
+                        fontFamily: theme.type.fontBody,
+                        fontSize: theme.type.bodySize,
+                        lineHeight: theme.type.lineHeight,
+                        fontStyle: 'italic',
+                      },
+                    ]}
+                  >
+                    Message deleted
+                  </Text>
+                );
+              }
+              const md = markdown
+                ? renderMarkdown(truncated, {
+                    textColor,
+                    linkColor: isSelf ? theme.colors.onBrand : theme.colors.brand,
+                    fontFamily: theme.type.fontBody,
+                    fontSize: theme.type.bodySize,
+                    lineHeight: theme.type.lineHeight,
+                    onLinkPress: (url: string) => {
+                      void Linking.openURL(url).catch(() => undefined);
+                      return false;
+                    },
+                  })
+                : null;
+              if (md) return md;
+              return (
+                <Text
+                  style={[
+                    styles.body,
+                    {
+                      color: textColor,
+                      fontFamily: theme.type.fontBody,
+                      fontSize: theme.type.bodySize,
+                      lineHeight: theme.type.lineHeight,
+                    },
+                  ]}
+                >
+                  {truncated}
+                </Text>
+              );
+            })()
+          : null}
 
         {maxBodyLength > 0 && body.length > maxBodyLength ? (
           <Pressable onPress={() => setExpanded((e) => !e)}>

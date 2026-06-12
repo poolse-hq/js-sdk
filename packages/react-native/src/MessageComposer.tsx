@@ -1,11 +1,12 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AttachmentUploadInput, Message, Uuid } from '@poolse/sdk';
 import { useUser } from '@poolse/react';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
 import { useSharedUpload } from './internal/uploadContext.js';
+import { useSafeInsets } from './internal/safeArea.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface MessageComposerProps {
@@ -42,6 +43,16 @@ export interface MessageComposerProps {
    * ignored.
    */
   keyboardOffset?: number;
+  /**
+   * When set, the composer enters edit mode: prefills the input with
+   * the message body and renders an "Editing message" chip above
+   * (mirrors `replyingTo`). Tapping Send calls `onSaveEdit(body)`
+   * instead of `onSend`; `onCancelEdit` clears the chip and restores
+   * the previous draft. Pass `null` (or omit) when not editing.
+   */
+  editingMessage?: Message | null;
+  onCancelEdit?: () => void;
+  onSaveEdit?: (body: string) => Promise<unknown> | void;
 }
 
 /**
@@ -69,6 +80,9 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       attachments = true,
       onAttachPress,
       keyboardOffset: _keyboardOffset = 0,
+      editingMessage = null,
+      onCancelEdit,
+      onSaveEdit,
     },
     ref,
   ) {
@@ -76,7 +90,24 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const inputRef = useRef<TextInput>(null);
     const [value, setValue] = useState('');
     const [sending, setSending] = useState(false);
+    const [keyboardOpen, setKeyboardOpen] = useState(false);
     const upload = useSharedUpload();
+    const insets = useSafeInsets();
+
+    useEffect(() => {
+      const show = Keyboard.addListener(
+        Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+        () => setKeyboardOpen(true),
+      );
+      const hide = Keyboard.addListener(
+        Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+        () => setKeyboardOpen(false),
+      );
+      return () => {
+        show.remove();
+        hide.remove();
+      };
+    }, []);
 
     useImperativeHandle(
       ref,
@@ -100,11 +131,43 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       (item) => item.status === 'uploading' || item.status === 'pending',
     );
 
+    // Stash the user's in-progress draft when edit mode opens so we
+    // can put it back when they cancel. Without this, cancelling
+    // would either wipe what they were typing or leave the edited
+    // body in the input.
+    const previousDraftRef = useRef<string | null>(null);
+    const editingIdRef = useRef<string | null>(null);
+    useEffect(() => {
+      const id = editingMessage?.id ?? null;
+      if (id === editingIdRef.current) return;
+      if (id) {
+        // Entering edit mode for a new message: snapshot whatever
+        // the user was drafting, then prefill with the body.
+        previousDraftRef.current = value;
+        setValue(editingMessage?.body ?? '');
+        // Focus so the keyboard pops up and the cursor lands at the
+        // end of the prefilled body.
+        inputRef.current?.focus();
+      } else {
+        // Leaving edit mode — restore the prior draft.
+        setValue(previousDraftRef.current ?? '');
+        previousDraftRef.current = null;
+      }
+      editingIdRef.current = id;
+      // value intentionally omitted: we only want this to fire when
+      // the editingMessage identity changes, not on every keystroke.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editingMessage?.id, editingMessage?.body]);
+
+    const isEditing = !!editingMessage;
+    const editChanged = isEditing && value.trim() !== (editingMessage?.body?.trim() ?? '');
+
     const submitDisabled =
       disabled ||
       sending ||
       isUploading ||
-      (value.trim().length === 0 && readyAttachmentIds.length === 0);
+      value.trim().length === 0 ||
+      (isEditing ? !editChanged : value.trim().length === 0 && readyAttachmentIds.length === 0);
 
     const handleSend = async () => {
       if (submitDisabled) return;
@@ -113,16 +176,24 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       // the user types into the still-present old text and the new
       // characters append to the stale message.
       const body = value.trim();
-      const replyId = replyingTo?.id;
-      const attachmentIds = readyAttachmentIds;
-      setValue('');
-      upload.reset();
       setSending(true);
       try {
-        await onSend(body, {
-          ...(replyId ? { quoted_message_id: replyId } : {}),
-          ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
-        });
+        if (isEditing && onSaveEdit) {
+          // Edit mode: don't clear attachments or the reply chip;
+          // we're just updating the body. The parent will clear
+          // editingMessage on success, which triggers the effect
+          // above to restore the prior draft.
+          await onSaveEdit(body);
+        } else {
+          const replyId = replyingTo?.id;
+          const attachmentIds = readyAttachmentIds;
+          setValue('');
+          upload.reset();
+          await onSend(body, {
+            ...(replyId ? { quoted_message_id: replyId } : {}),
+            ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+          });
+        }
       } finally {
         setSending(false);
       }
@@ -133,6 +204,13 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     // together. Wrapping only the composer inside a flex:1 parent
     // with no headroom pushed it below the visible area on iPhone
     // home-indicator devices.
+    //
+    // When the keyboard is closed we add the bottom safe-area inset
+    // to keep the send/attach buttons off the home indicator. When
+    // it's open the OS bottom inset is irrelevant (keyboard occupies
+    // that space) and we collapse back to the base 10px padding to
+    // avoid floating the composer above the keyboard.
+    const paddingBottom = keyboardOpen ? 10 : Math.max(10, insets.bottom);
     return (
       <View
         style={[
@@ -140,10 +218,16 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           {
             backgroundColor: theme.colors.surface,
             borderTopColor: theme.colors.border,
+            paddingBottom,
           },
         ]}
       >
-        {replyingTo ? (
+        {isEditing ? (
+          <EditChip
+            message={editingMessage!}
+            {...(onCancelEdit ? { onCancel: onCancelEdit } : {})}
+          />
+        ) : replyingTo ? (
           <ReplyChip
             message={replyingTo}
             {...(labelFor ? { labelFor } : {})}
@@ -151,7 +235,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           />
         ) : null}
 
-        {attachments ? <UploadQueueStrip /> : null}
+        {attachments && !isEditing ? <UploadQueueStrip /> : null}
 
         <View style={styles.row}>
           {attachments && onAttachPress ? (
@@ -208,6 +292,33 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
   },
 );
 
+function EditChip({ message, onCancel }: { message: Message; onCancel?: () => void }) {
+  const theme = usePoolseTheme();
+  return (
+    <View
+      style={[
+        styles.replyChip,
+        {
+          backgroundColor: theme.colors.surface2,
+          borderLeftColor: theme.colors.brand,
+        },
+      ]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.replyName, { color: theme.colors.brand }]}>Editing message</Text>
+        <Text style={[styles.replyBody, { color: theme.colors.ink2 }]} numberOfLines={1}>
+          {message.body ?? '…'}
+        </Text>
+      </View>
+      {onCancel ? (
+        <Pressable onPress={onCancel} hitSlop={8} style={styles.replyCancel}>
+          <PoolseIcon name="close" size={16} color={theme.colors.ink2} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function ReplyChip({
   message,
   labelFor,
@@ -256,12 +367,11 @@ const styles = StyleSheet.create({
   wrap: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 8,
-    paddingBottom: 10,
     paddingHorizontal: 12,
-    // Note: no safe-area inset here on purpose. Wrap your chat
-    // surface in <SafeAreaView> (or <SafeAreaView edges={['bottom']}>)
-    // at the app root so the home-indicator clearance is handled
-    // once. Doing it here too produces double padding.
+    // paddingBottom is applied inline — it follows the keyboard state
+    // (10 px while open, max(10, safeBottomInset) while closed) so the
+    // send/attach buttons stay clear of the home indicator without
+    // double-padding above the keyboard.
   },
   row: {
     flexDirection: 'row',

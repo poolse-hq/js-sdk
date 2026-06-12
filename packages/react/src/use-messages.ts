@@ -34,6 +34,15 @@ interface UseMessagesState {
    * "tell the server we read up to here".
    */
   markReadUpTo: (messageId: Uuid) => Promise<void>;
+  /**
+   * Re-fetch the newest page (PAGE_SIZE) and replace the cached
+   * messages. Useful when the app returns from background or the
+   * realtime socket reconnects after a drop — any messages we missed
+   * while disconnected are pulled in via REST. Pagination resets:
+   * `hasMore` becomes true again so `loadMore()` will walk back from
+   * the new tail.
+   */
+  refetch: () => Promise<void>;
 }
 
 const PAGE_SIZE = 50;
@@ -63,6 +72,11 @@ export function useMessages(conversationId: string): UseMessagesState {
 
   // Cursor for `loadMore` — the lowest sequence currently in state.
   const oldestSequenceRef = useRef<number | null>(null);
+  // Mutable refetch implementation. Set per-effect (it captures the
+  // current conversation's `messages` resource handle). Exposed
+  // through the stable `refetch` callback below so consumers can wire
+  // it to e.g. `AppState` 'active' without re-binding on every render.
+  const refetchRef = useRef<(() => Promise<void>) | null>(null);
 
   // Hold `me.id` in a ref so `send()` stays stable across renders
   // (otherwise its identity changes every time `me` reloads, which
@@ -98,6 +112,14 @@ export function useMessages(conversationId: string): UseMessagesState {
         setError(err instanceof Error ? err : new Error(String(err)));
         setLoading(false);
       });
+
+    refetchRef.current = async () => {
+      const page = await handle.list({ limit: PAGE_SIZE });
+      const ordered = [...page.data].reverse();
+      setMessages(ordered);
+      setHasMore(page.data.length === PAGE_SIZE);
+      oldestSequenceRef.current = ordered[0]?.sequence ?? null;
+    };
 
     // Realtime listeners.
     const conv = chat.realtime.conversation(conversationId);
@@ -300,6 +322,12 @@ export function useMessages(conversationId: string): UseMessagesState {
     [chat, conversationId],
   );
 
+  const refetch = useCallback(async (): Promise<void> => {
+    const fn = refetchRef.current;
+    if (!fn) return;
+    await fn();
+  }, []);
+
   return {
     messages,
     loading,
@@ -310,6 +338,7 @@ export function useMessages(conversationId: string): UseMessagesState {
     edit,
     delete: deleteMessage,
     markReadUpTo,
+    refetch,
   };
 }
 

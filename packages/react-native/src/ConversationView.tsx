@@ -1,18 +1,40 @@
 import type { Message, Uuid } from '@poolse/sdk';
-import { useMe, useMembers, useMessages, useTyping } from '@poolse/react';
+import {
+  computeGroupPosition,
+  formatDayLabel,
+  sameDay,
+  useMe,
+  useMembers,
+  useMessages,
+  useRealtimeStatus,
+  useTyping,
+} from '@poolse/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import {
+  AppState,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { AttachmentPicker } from './AttachmentPicker.js';
 import { ChatHeader } from './ChatHeader.js';
+import { DaySeparator } from './DaySeparator.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer } from './MessageComposer.js';
-import { MessageList } from './MessageList.js';
+import { MessageList, type MessageListItem } from './MessageList.js';
 import { MessageRow } from './MessageRow.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
 import { UploadProvider } from './internal/uploadContext.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
+
+// Two messages from the same sender within this window collapse
+// into a visual cluster (tight margin, grouped bubble corners).
+// Matches the react-ui default.
+const GROUPING_WINDOW_MS = 5 * 60 * 1000;
 
 export interface ConversationViewProps {
   conversationId: Uuid;
@@ -41,6 +63,8 @@ export interface ConversationViewProps {
   threads?: boolean;
   quotations?: boolean;
   readReceipts?: boolean;
+  /** Render message bodies as Markdown (links, bold, code). Defaults true. */
+  markdown?: boolean;
   maxBodyLength?: number;
 
   /** Show sender labels in group chats. `auto` (default), `always`, `never`. */
@@ -91,6 +115,7 @@ export function ConversationView({
   threads = true,
   quotations = true,
   readReceipts = true,
+  markdown = true,
   maxBodyLength = 200,
   senderLabels = 'auto',
   avatars = 'auto',
@@ -111,8 +136,33 @@ export function ConversationView({
     edit,
     delete: deleteMsg,
     markReadUpTo,
+    refetch,
   } = useMessages(conversationId);
   const { typing, signalTyping } = useTyping(conversationId);
+  const realtimeStatus = useRealtimeStatus();
+
+  // Pull the latest page when the app foregrounds or the socket
+  // reconnects. While the socket is down (background, network drop)
+  // we miss `message:new` pushes; without this the chat shows stale
+  // data until the user navigates away and back.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void refetch();
+    });
+    return () => sub.remove();
+  }, [refetch]);
+
+  const prevStatusRef = useRef(realtimeStatus);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = realtimeStatus;
+    if (
+      realtimeStatus === 'connected' &&
+      (prev === 'reconnecting' || prev === 'closed' || prev === 'connecting')
+    ) {
+      void refetch();
+    }
+  }, [realtimeStatus, refetch]);
 
   const wantsMembers = mentions || senderLabels === 'auto' || avatars === 'auto';
   const { members } = useMembers(wantsMembers ? conversationId : '');
@@ -164,6 +214,21 @@ export function ConversationView({
     onMarkedRead?.(conversationId, latest.id);
   }, [messages, meId, readReceipts, markReadUpTo, onMarkedRead, conversationId]);
 
+  // Precompute per-message group position (drives the bubble's
+  // corner treatment + inter-cluster spacing). Same logic as
+  // react-ui's ConversationView; the helpers live in @poolse/react.
+  const groupPositionById = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof computeGroupPosition>>();
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (!msg) continue;
+      const prev = i > 0 ? (messages[i - 1] ?? null) : null;
+      const next = i < messages.length - 1 ? (messages[i + 1] ?? null) : null;
+      map.set(msg.id, computeGroupPosition(msg, prev, next, GROUPING_WINDOW_MS));
+    }
+    return map;
+  }, [messages]);
+
   const renderItem = useCallback(
     (msg: Message): ReactElement => {
       if (renderMessage) return <>{renderMessage(msg, meId)}</>;
@@ -171,6 +236,15 @@ export function ConversationView({
         readReceipts && meId !== null && msg.sender_id === meId
           ? readStateForMessage(msg, members, meId, sequenceByMessageId)
           : undefined;
+      // Edit is only offered for own messages no one else has read
+      // yet — once someone has "seen" it (their last_read_message_id
+      // sequence >= this one) WhatsApp-style apps disable editing to
+      // prevent conversation rewriting. `readStateForMessage`
+      // returns 'sent' in 1:1 chats with no other member, so own
+      // messages in fresh threads stay editable.
+      const isSelf = meId !== null && msg.sender_id === meId;
+      const canEdit = isSelf && !msg.deleted_at && (readState ?? 'sent') === 'sent';
+      const groupPosition = groupPositionById.get(msg.id) ?? 'standalone';
       return (
         <MessageRow
           msg={msg}
@@ -181,13 +255,8 @@ export function ConversationView({
           threads={threads}
           quotations={quotations}
           {...(readState ? { readState } : {})}
-          editing={editingId === msg.id}
-          onStartEdit={() => setEditingId(msg.id)}
-          onCancelEdit={() => setEditingId(null)}
-          onSaveEdit={async (body) => {
-            await edit(msg.id, body);
-            setEditingId(null);
-          }}
+          isEditing={editingId === msg.id}
+          {...(canEdit ? { onStartEdit: () => setEditingId(msg.id) } : {})}
           onDelete={() => deleteMsg(msg.id)}
           {...(threads ? { onOpenThread: () => setThreadRoot(msg) } : {})}
           {...(quotations ? { onQuote: () => setReplyingTo(msg) } : {})}
@@ -196,6 +265,8 @@ export function ConversationView({
           showSenderName={showSenderLabels}
           showAvatar={showAvatars}
           maxBodyLength={maxBodyLength}
+          groupPosition={groupPosition}
+          markdown={markdown}
         />
       );
     },
@@ -210,7 +281,6 @@ export function ConversationView({
       threads,
       quotations,
       editingId,
-      edit,
       deleteMsg,
       labelFor,
       avatarFor,
@@ -218,8 +288,36 @@ export function ConversationView({
       showAvatars,
       maxBodyLength,
       sequenceByMessageId,
+      groupPositionById,
+      markdown,
     ],
   );
+
+  const editingMessage = useMemo(
+    () => (editingId ? (messages.find((m) => m.id === editingId) ?? null) : null),
+    [editingId, messages],
+  );
+
+  // Build the interleaved item list (messages + day separators).
+  // Inject a separator BEFORE a message whenever its day differs
+  // from the previous message's day.
+  const listItems = useMemo<MessageListItem[]>(() => {
+    const out: MessageListItem[] = [];
+    let prev: Message | null = null;
+    for (const msg of messages) {
+      if (prev === null || !sameDay(msg.inserted_at, prev.inserted_at)) {
+        const label = formatDayLabel(msg.inserted_at);
+        out.push({
+          kind: 'separator',
+          id: `sep-${msg.id}`,
+          node: <DaySeparator label={label} />,
+        });
+      }
+      out.push({ kind: 'msg', msg });
+      prev = msg;
+    }
+    return out;
+  }, [messages]);
 
   const composerProps = useMemo(
     () => ({
@@ -242,8 +340,27 @@ export function ConversationView({
       ...(labelFor ? { labelFor } : {}),
       attachments,
       keyboardOffset,
+      editingMessage,
+      onCancelEdit: () => setEditingId(null),
+      onSaveEdit: async (body: string) => {
+        if (!editingId) return;
+        await edit(editingId, body);
+        setEditingId(null);
+      },
     }),
-    [send, signalTyping, attachments, replyingTo, labelFor, keyboardOffset, onSent, conversationId],
+    [
+      send,
+      signalTyping,
+      attachments,
+      replyingTo,
+      labelFor,
+      keyboardOffset,
+      onSent,
+      conversationId,
+      editingMessage,
+      editingId,
+      edit,
+    ],
   );
 
   const headerNode =
@@ -281,6 +398,8 @@ export function ConversationView({
         <View style={styles.listWrap}>
           <MessageList
             messages={messages}
+            items={listItems}
+            meId={meId}
             loading={loading}
             hasMore={hasMore}
             onLoadMore={loadMore}
@@ -288,6 +407,17 @@ export function ConversationView({
             ListHeader={<TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />}
             {...(emptyState !== undefined ? { emptyState } : {})}
           />
+          {/* WhatsApp-style dim while editing: the overlay covers
+              the scroll surface but the row being edited renders
+              above it (MessageRow elevates itself when isEditing).
+              Tap-outside cancels. */}
+          {editingId ? (
+            <Pressable
+              style={styles.editBackdrop}
+              onPress={() => setEditingId(null)}
+              accessibilityLabel="Cancel editing"
+            />
+          ) : null}
         </View>
 
         {mentions ? (
@@ -339,5 +469,13 @@ const styles = StyleSheet.create({
   },
   listWrap: {
     flex: 1,
+  },
+  editBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    // Sit above message rows by default but below any row that
+    // explicitly elevates itself (MessageRow bumps zIndex/elevation
+    // when isEditing is true).
+    zIndex: 5,
   },
 });

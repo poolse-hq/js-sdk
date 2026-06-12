@@ -1,7 +1,15 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
 import { useConversations, useMe, useUser } from '@poolse/react';
 import { type ReactNode } from 'react';
-import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { Avatar } from './primitives/Avatar.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
@@ -134,7 +142,7 @@ function ConversationRow({
   const isDirect = conv.type === 'direct';
   const otherExtId =
     isDirect && meExternalId
-      ? (conv.member_external_ids ?? []).find((x) => x !== meExternalId) ?? null
+      ? ((conv.member_external_ids ?? []).find((x) => x !== meExternalId) ?? null)
       : null;
   const resolvedOther = useUser(isDirect ? otherExtId : null);
 

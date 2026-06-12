@@ -3,7 +3,6 @@ import type { Message, Uuid } from '@poolse/sdk';
 import { useMemo, useRef, useState } from 'react';
 
 import { Avatar } from './primitives/Avatar.js';
-import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
@@ -27,13 +26,25 @@ export interface MessageRowProps {
   threads?: boolean;
   /** WhatsApp-style quote-reply. Defaults true on ConversationView. */
   quotations?: boolean;
+  /** Forwarded to `<MessageBubble markdown>`. Defaults true. */
+  markdown?: boolean;
 
   readState?: 'sent' | 'read';
 
-  editing?: boolean;
+  /**
+   * Whether this row's message is the one currently being edited.
+   * Editing happens in the composer (see MessageComposer's
+   * `editingMessage` prop); this flag is only used to elevate the
+   * row above the dim backdrop ConversationView renders during
+   * edit mode.
+   */
+  isEditing?: boolean;
+  /**
+   * Long-press → "Edit". Omitted entirely (no Edit option in the
+   * menu) when the parent has decided this message isn't editable
+   * (someone read it, it's deleted, it isn't yours).
+   */
   onStartEdit?: () => void;
-  onCancelEdit?: () => void;
-  onSaveEdit?: (body: string) => Promise<unknown> | void;
   onDelete?: () => void;
   onOpenThread?: () => void;
   onQuote?: () => void;
@@ -57,11 +68,10 @@ export function MessageRow({
   actions = true,
   threads = true,
   quotations = true,
+  markdown = true,
   readState,
-  editing = false,
+  isEditing = false,
   onStartEdit,
-  onCancelEdit,
-  onSaveEdit,
   onDelete,
   onOpenThread,
   onQuote,
@@ -95,7 +105,7 @@ export function MessageRow({
   // Animation runs on the JS thread because we need to read the value
   // synchronously on release — native driver would prevent that.
   const translateX = useRef(new Animated.Value(0)).current;
-  const swipeEnabled = quotations && !!onQuote && !editing;
+  const swipeEnabled = quotations && !!onQuote && !isEditing;
 
   const panResponder = useMemo(
     () =>
@@ -197,7 +207,16 @@ export function MessageRow({
     : null;
 
   return (
-    <View style={[styles.row, { alignSelf: isSelf ? 'flex-end' : 'flex-start' }]}>
+    <View
+      style={[
+        styles.row,
+        { alignSelf: isSelf ? 'flex-end' : 'flex-start' },
+        // Lift this row above the dim backdrop the parent renders
+        // during edit mode. zIndex covers iOS / web; elevation does
+        // the equivalent on Android.
+        isEditing ? styles.rowEditing : null,
+      ]}
+    >
       {showAvatarSlot ? (
         <View style={styles.avatarSlot}>
           {showAvatarRender ? (
@@ -241,37 +260,29 @@ export function MessageRow({
             accessibilityRole="button"
             accessibilityLabel="Message actions"
           >
-            {editing ? (
-              <EditableMessageBubble
-                message={msg}
-                currentUserId={meId}
-                onCancel={onCancelEdit ?? (() => undefined)}
-                onSave={onSaveEdit ?? (() => undefined)}
-              />
-            ) : (
-              <MessageBubble
-                message={msg}
-                currentUserId={meId}
-                {...(readState ? { readState } : {})}
-                {...(labelFor ? { labelFor } : {})}
-                {...(onQuotedClick ? { onQuotedClick } : {})}
-                groupPosition={groupPosition}
-                maxBodyLength={maxBodyLength}
-                showSenderName={showSenderName}
-                showAttachments={attachments}
-                actionsTrigger={
-                  actions ? (
-                    <Pressable onPress={() => setActionsOpen(true)} hitSlop={8}>
-                      <PoolseIcon
-                        name="chevron-down"
-                        size={14}
-                        color={isSelf ? theme.colors.onBrand : theme.colors.ink3}
-                      />
-                    </Pressable>
-                  ) : null
-                }
-              />
-            )}
+            <MessageBubble
+              message={msg}
+              currentUserId={meId}
+              {...(readState ? { readState } : {})}
+              {...(labelFor ? { labelFor } : {})}
+              {...(onQuotedClick ? { onQuotedClick } : {})}
+              groupPosition={groupPosition}
+              maxBodyLength={maxBodyLength}
+              showSenderName={showSenderName}
+              showAttachments={attachments}
+              markdown={markdown}
+              actionsTrigger={
+                actions ? (
+                  <Pressable onPress={() => setActionsOpen(true)} hitSlop={8}>
+                    <PoolseIcon
+                      name="chevron-down"
+                      size={14}
+                      color={isSelf ? theme.colors.onBrand : theme.colors.ink3}
+                    />
+                  </Pressable>
+                ) : null
+              }
+            />
           </Pressable>
         </Animated.View>
 
@@ -306,6 +317,14 @@ export function MessageRow({
                 // one tap = react + close, no second modal needed.
                 onPickReaction: (emoji: string) => {
                   void reactionsApi.addReaction(emoji);
+                },
+              }
+            : {})}
+          {...(msg.body && !msg.deleted_at
+            ? {
+                onCopy: () => {
+                  setActionsOpen(false);
+                  void copyToClipboard(msg.body ?? '');
                 },
               }
             : {})}
@@ -361,6 +380,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     maxWidth: '95%',
   },
+  rowEditing: {
+    // Above ConversationView's editBackdrop (zIndex 5). Elevation
+    // does the equivalent stacking on Android.
+    zIndex: 10,
+    elevation: 10,
+  },
   avatarSlot: {
     width: 36,
     marginRight: 6,
@@ -400,3 +425,29 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 });
+
+// Lazy-require expo-clipboard so consumers who don't install it (or
+// use a non-Expo bare RN setup) don't crash on import. The Copy
+// action just no-ops with a one-time warn in that case.
+let clipboardModule: { setStringAsync?: (s: string) => Promise<unknown> } | null | undefined;
+let clipboardWarned = false;
+async function copyToClipboard(text: string): Promise<void> {
+  if (clipboardModule === undefined) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      clipboardModule = require('expo-clipboard') as typeof clipboardModule;
+    } catch {
+      clipboardModule = null;
+    }
+  }
+  if (!clipboardModule?.setStringAsync) {
+    if (!clipboardWarned) {
+      clipboardWarned = true;
+      console.warn(
+        '[@poolse/react-native] Copy action requires `expo-clipboard`. Install it to enable copy-to-clipboard.',
+      );
+    }
+    return;
+  }
+  await clipboardModule.setStringAsync(text);
+}

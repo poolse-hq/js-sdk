@@ -43,11 +43,23 @@ export function ReactionStrip({
               {
                 backgroundColor: meReacted ? theme.colors.brandSoft : theme.colors.surface2,
                 borderColor: meReacted ? theme.colors.brand : theme.colors.border,
+                borderWidth: meReacted ? 1.5 : 1,
+                transform: meReacted ? [{ scale: 1.04 }] : undefined,
               },
             ]}
           >
             <Text style={styles.emoji}>{emoji}</Text>
-            <Text style={[styles.count, { color: theme.colors.ink2 }]}>{userArr.length}</Text>
+            <Text
+              style={[
+                styles.count,
+                {
+                  color: meReacted ? theme.colors.brand : theme.colors.ink2,
+                  fontWeight: meReacted ? '700' : '600',
+                },
+              ]}
+            >
+              {userArr.length}
+            </Text>
           </Pressable>
         );
       })}
@@ -114,7 +126,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 14,
-    borderWidth: 1,
     gap: 5,
     minHeight: 26,
     // Subtle elevation so chips lift off the surface
@@ -130,7 +141,6 @@ const styles = StyleSheet.create({
   },
   count: {
     fontSize: 12,
-    fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
   backdrop: {

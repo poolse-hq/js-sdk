@@ -22,6 +22,13 @@ export {
 } from './use-attachment-upload.js';
 export { useAttachmentUrl } from './use-attachment-url.js';
 export { useUser, type UseUserState } from './use-user.js';
+export {
+  computeGroupPosition,
+  sameGroup,
+  sameDay,
+  formatDayLabel,
+  type GroupPosition,
+} from './grouping.js';
 
 // Re-export the SDK so consumers can pull in types / errors from one
 // package — saves a second `npm install @poolse/sdk` for React-only apps.

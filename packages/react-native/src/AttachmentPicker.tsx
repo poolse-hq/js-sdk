@@ -166,8 +166,7 @@ async function compressImage({
     }
   }
   const longSide = Math.max(w ?? 0, h ?? 0);
-  const scale =
-    longSide > COMPRESSION_LONG_SIDE_PX ? COMPRESSION_LONG_SIDE_PX / longSide : 1;
+  const scale = longSide > COMPRESSION_LONG_SIDE_PX ? COMPRESSION_LONG_SIDE_PX / longSide : 1;
   const actions =
     scale < 1 && w && h
       ? [{ resize: { width: Math.round(w * scale), height: Math.round(h * scale) } }]

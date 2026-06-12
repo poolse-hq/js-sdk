@@ -114,10 +114,8 @@ function MemberRow({
   // PoolseConfig.userResolver contract for consumers who configured
   // one and expected names + avatars to flow through automatically.
   const resolved = useUser(externalId);
-  const name =
-    labelFor?.(externalId) ?? resolved.profile?.displayName ?? externalId;
-  const avatarUrl =
-    avatarFor?.(externalId) ?? resolved.profile?.avatarUrl ?? null;
+  const name = labelFor?.(externalId) ?? resolved.profile?.displayName ?? externalId;
+  const avatarUrl = avatarFor?.(externalId) ?? resolved.profile?.avatarUrl ?? null;
   return (
     <View style={styles.row}>
       <Avatar src={avatarUrl} name={name} seed={externalId} online={online} size="md" />

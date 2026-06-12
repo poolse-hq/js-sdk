@@ -112,33 +112,37 @@ function ThreadSheet({
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const renderReply = useCallback(
-    (msg: Message): ReactElement => (
-      <MessageRow
-        msg={msg}
-        meId={meId}
-        // Reactions + actions on by default; nested threads off (you
-        // can't thread inside a thread in v1).
-        reactions
-        attachments
-        actions
-        threads={false}
-        // Quote-to-reply doesn't make sense inside a single-root thread.
-        quotations={false}
-        editing={editingId === msg.id}
-        onStartEdit={() => setEditingId(msg.id)}
-        onCancelEdit={() => setEditingId(null)}
-        onSaveEdit={async (body) => {
-          await edit(msg.id, body);
-          setEditingId(null);
-        }}
-        onDelete={() => {
-          void deleteReply(msg.id);
-        }}
-        {...(labelFor ? { labelFor } : {})}
-        {...(avatarFor ? { avatarFor } : {})}
-      />
-    ),
-    [meId, editingId, edit, deleteReply, labelFor, avatarFor],
+    (msg: Message): ReactElement => {
+      const isSelf = meId !== null && msg.sender_id === meId;
+      const canEdit = isSelf && !msg.deleted_at;
+      return (
+        <MessageRow
+          msg={msg}
+          meId={meId}
+          // Reactions + actions on by default; nested threads off (you
+          // can't thread inside a thread in v1).
+          reactions
+          attachments
+          actions
+          threads={false}
+          // Quote-to-reply doesn't make sense inside a single-root thread.
+          quotations={false}
+          isEditing={editingId === msg.id}
+          {...(canEdit ? { onStartEdit: () => setEditingId(msg.id) } : {})}
+          onDelete={() => {
+            void deleteReply(msg.id);
+          }}
+          {...(labelFor ? { labelFor } : {})}
+          {...(avatarFor ? { avatarFor } : {})}
+        />
+      );
+    },
+    [meId, editingId, deleteReply, labelFor, avatarFor],
+  );
+
+  const editingMessage = useMemo(
+    () => (editingId ? (replies.find((m) => m.id === editingId) ?? null) : null),
+    [editingId, replies],
   );
 
   const rootRow = useMemo(
@@ -233,6 +237,13 @@ function ThreadSheet({
             placeholder="Reply to thread…"
             attachments
             onAttachPress={() => setPickerOpen(true)}
+            editingMessage={editingMessage}
+            onCancelEdit={() => setEditingId(null)}
+            onSaveEdit={async (body) => {
+              if (!editingId) return;
+              await edit(editingId, body);
+              setEditingId(null);
+            }}
           />
         </KeyboardAvoidingView>
 

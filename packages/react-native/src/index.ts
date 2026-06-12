@@ -26,11 +26,11 @@ export { GroupDetailsSheet, type GroupDetailsSheetProps } from './GroupDetailsSh
 
 // ── Pieces of the chat surface ────────────────────────────────
 export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';
-export { EditableMessageBubble, type EditableMessageBubbleProps } from './EditableMessageBubble.js';
 export { MessageRow, type MessageRowProps } from './MessageRow.js';
 export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';
 export { MessageActions, type MessageActionsProps } from './MessageActions.js';
-export { MessageList, type MessageListProps } from './MessageList.js';
+export { MessageList, type MessageListProps, type MessageListItem } from './MessageList.js';
+export { DaySeparator, type DaySeparatorProps } from './DaySeparator.js';
 export { TypingIndicator, type TypingIndicatorProps } from './TypingIndicator.js';
 export { ThreadView, type ThreadViewProps } from './ThreadView.js';
 export { UserName, useDisplayName, type UserNameProps } from './UserName.js';
