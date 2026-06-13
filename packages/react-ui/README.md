@@ -1,6 +1,8 @@
 # `@poolse/react-ui`
 
-React components for [poolse](https://poolse.dev). A composed `<ConversationView>` for the common case, plus the parts it's built from (`<MessageBubble>`, `<MessageComposer>`, `<ConversationList>`, `<MemberList>`, `<ThreadView>`, `<MentionInput>`, …) for when you want to assemble your own surface. Brand-themed via CSS variables — no rebuild needed to re-skin.
+Drop-in React chat components — `<ConversationView>` mounts the whole chat surface in one component, or compose the building blocks (`<MessageBubble>`, `<MessageComposer>`, `<ConversationList>`, `<MemberList>`, `<ThreadView>`, `<MentionInput>`, `<TypingIndicator>`, `<ReactionPicker>`) for custom layouts. CSS-variable theming — re-skin without a rebuild. Built for Next.js + React 18+.
+
+> **MIT-licensed alternative to Sendbird UIKit, Stream Chat React UI, TalkJS, and CometChat React UI Kit.** Same component names + prop shapes as [`@poolse/react-native`](https://www.npmjs.com/package/@poolse/react-native) so cross-platform code stays mechanical to port.
 
 Sits on top of [`@poolse/react`](https://www.npmjs.com/package/@poolse/react) (hooks) and [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk) (client).
 

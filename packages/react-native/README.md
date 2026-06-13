@@ -1,15 +1,10 @@
 # `@poolse/react-native`
 
-Plug-and-play React Native components for [poolse](https://poolse.dev).
-Mirrors [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui)
-for native targets: same component names, same prop shapes, same
-feature flags — implemented against `View` / `Text` / `FlatList` /
-`TextInput` / `Pressable` / `Image` / `Modal` / `KeyboardAvoidingView`.
+Drop-in React Native chat SDK for Expo and bare React Native. `<ConversationView>` and `<PoolseInbox>` mount a complete chat surface with camera, attachments, markdown, typing indicators, reactions, threads, and AppState lifecycle baked in. Mirrors [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui) — same component names, same prop shapes — but implemented against native primitives (`View` / `Text` / `FlatList` / `TextInput` / `Pressable` / `Modal` / `KeyboardAvoidingView`).
 
-Works out of the box with Expo (SDK 50+) and bare React Native
-(≥ 0.73). Sits on top of [`@poolse/react`](https://www.npmjs.com/package/@poolse/react)
-(hooks) and [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk)
-(client).
+> **MIT-licensed alternative to `sendbird-chat-react-native`, `stream-chat-react-native`, and CometChat React Native UIKit.** Works out of the box with Expo (SDK 50+) and bare React Native (≥ 0.73). JS theme tokens, no native module setup beyond standard peer deps.
+
+Sits on top of [`@poolse/react`](https://www.npmjs.com/package/@poolse/react) (hooks) and [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk) (client).
 
 ## Install
 

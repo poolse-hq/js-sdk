@@ -1,16 +1,28 @@
 {
   "name": "@poolse/react",
-  "version": "2.1.5",
-  "description": "Headless React hooks for poolse — realtime chat infrastructure. Provider + useMessages / useTyping / usePresence / useReactions / useAttachmentUpload / etc. NO UI.",
+  "version": "2.1.6",
+  "description": "React hooks for realtime chat — PoolseProvider plus useMessages, useTyping, usePresence, useReactions, useMembers, useAttachmentUpload. Works on web and React Native. No UI. MIT — alternative to sendbird-chat-react and stream-chat-react.",
   "license": "MIT",
   "keywords": [
-    "poolse",
     "chat",
+    "chat-sdk",
+    "chat-hooks",
+    "react-chat",
     "react",
+    "react-hooks",
     "hooks",
     "realtime",
+    "realtime-chat",
+    "messaging",
     "websocket",
-    "messaging"
+    "typescript",
+    "in-app-messaging",
+    "use-messages",
+    "use-typing",
+    "use-presence",
+    "sendbird-alternative",
+    "stream-chat-alternative",
+    "poolse"
   ],
   "homepage": "https://poolse.dev",
   "repository": {
