@@ -78,6 +78,9 @@ importers:
       react-native-markdown-display:
         specifier: '>=7'
         version: 7.0.2(react-native@0.76.9)(react@19.2.6)
+      react-native-safe-area-context:
+        specifier: '>=4'
+        version: 5.8.0(react-native@0.76.9)(react@19.2.6)
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
@@ -7216,6 +7219,16 @@ packages:
       react: 19.2.6
       react-native: 0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7)(@types/react@19.2.15)(react@19.2.6)
       react-native-fit-image: 1.5.5
+    dev: false
+
+  /react-native-safe-area-context@5.8.0(react-native@0.76.9)(react@19.2.6):
+    resolution: {integrity: sha512-t+ZsAVzY/wWzzx34vqGbo3/as9EEESJdbyZNL7Yg5EYX+toYMtMqFoDDCvqZUi35eeGVsXc6pAaEk4edMwbuCQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '*'
+    dependencies:
+      react: 19.2.6
+      react-native: 0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7)(@types/react@19.2.15)(react@19.2.6)
     dev: false
 
   /react-native-svg@15.15.5(react-native@0.76.9)(react@19.2.6):
