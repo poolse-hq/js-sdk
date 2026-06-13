@@ -161,7 +161,3 @@ poolse-js-sdk/
 ├── docker-compose.yml
 └── Dockerfile.dev
 ```
-
-### Releasing
-
-(Once 0.1.0 ships.) Bump all three package versions in lockstep when the wire protocol changes; bump only the leaf packages otherwise. `pnpm publish -r --access public` releases everything that's changed.
