@@ -1,0 +1,5 @@
+# Remap historical `Co-Authored-By: Claude <noreply@anthropic.com>` trailers
+# (and the `Claude Opus 4.7 (1M context)` variant) to the actual author so
+# the GitHub contributors graph + `git log` stop double-counting.
+# Non-destructive: commit SHAs and message bodies are untouched.
+jasir99 <jasirfetai@gmail.com> <noreply@anthropic.com>
