@@ -132,6 +132,14 @@ export interface CallDeclined {
   userId: string;
 }
 
+/** The callee is already on another call. */
+export interface CallBusy {
+  callId: string;
+  conversationId: string;
+  /** Who is busy. */
+  userId: string;
+}
+
 /** The caller hung up before anyone answered. */
 export interface CallCancelled {
   callId: string;

@@ -25,6 +25,7 @@ import type { Channel } from 'phoenix';
 import { PoolseError } from '../errors.js';
 import type {
   CallAccepted,
+  CallBusy,
   CallCancelled,
   CallDeclined,
   IncomingCall,
@@ -57,6 +58,7 @@ export class CallsResource {
   private readonly incoming = new Set<(c: IncomingCall) => void>();
   private readonly accepted = new Set<(c: CallAccepted) => void>();
   private readonly declined = new Set<(c: CallDeclined) => void>();
+  private readonly busy = new Set<(c: CallBusy) => void>();
   private readonly cancelled = new Set<(c: CallCancelled) => void>();
 
   private bound = false;
@@ -103,6 +105,21 @@ export class CallsResource {
     });
   }
 
+  /**
+   * Tell the caller you are already on another call.
+   *
+   * Distinct from {@link decline}: nobody chose anything, so clients
+   * send this automatically when a ring arrives mid-call. `useCalls`
+   * does it for you.
+   */
+  async markBusy(call: IncomingCall): Promise<void> {
+    await this.request('call:busy', {
+      call_id: call.callId,
+      conversation_id: call.conversationId,
+      caller_user_id: call.callerUserId,
+    });
+  }
+
   /** Withdraw an invite you placed — hung up before anyone answered. */
   async cancel(call: OutgoingCall): Promise<void> {
     await this.request('call:cancel', {
@@ -132,6 +149,13 @@ export class CallsResource {
     this.bind();
     this.declined.add(fn);
     return () => this.declined.delete(fn) as unknown as void;
+  }
+
+  /** The person you called is already on another call. */
+  onBusy(fn: (call: CallBusy) => void): Unsubscribe {
+    this.bind();
+    this.busy.add(fn);
+    return () => this.busy.delete(fn) as unknown as void;
   }
 
   /** An inbound ring was withdrawn before you answered. */
@@ -177,6 +201,15 @@ export class CallsResource {
         userId: p.user_id,
       };
       this.declined.forEach((l) => l(call));
+    });
+
+    channel.on('call:busy', (p: WireParty) => {
+      const call: CallBusy = {
+        callId: p.call_id,
+        conversationId: p.conversation_id,
+        userId: p.user_id,
+      };
+      this.busy.forEach((l) => l(call));
     });
 
     channel.on('call:cancelled', (p: WireIncoming) => {

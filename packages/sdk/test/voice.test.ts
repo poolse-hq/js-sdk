@@ -50,8 +50,14 @@ function fakeSocket(channel: Channel): Socket {
   return { channel: () => channel } as unknown as Socket;
 }
 
+/** `remoteDescription` is readonly on the real interface, so the fake is
+ *  built through a mutable mirror and cast once at the end. */
+type MutablePeerConnection = {
+  -readonly [K in keyof VoicePeerConnection]: VoicePeerConnection[K];
+};
+
 function fakePeerConnection(): VoicePeerConnection {
-  const pc: Partial<VoicePeerConnection> & Record<string, unknown> = {
+  const pc: MutablePeerConnection = {
     remoteDescription: null,
     connectionState: 'new',
     onicecandidate: null,
@@ -61,8 +67,8 @@ function fakePeerConnection(): VoicePeerConnection {
     createOffer: vi.fn(async (): Promise<VoiceDescription> => ({ type: 'offer', sdp: 'OFFER' })),
     createAnswer: vi.fn(async (): Promise<VoiceDescription> => ({ type: 'answer', sdp: 'ANSWER' })),
     setLocalDescription: vi.fn(async () => {}),
-    setRemoteDescription: vi.fn(async function (this: unknown, d: VoiceDescription) {
-      pc['remoteDescription'] = d;
+    setRemoteDescription: vi.fn(async (d: VoiceDescription) => {
+      pc.remoteDescription = d;
     }),
     addIceCandidate: vi.fn(async () => {}),
     close: vi.fn(),
@@ -267,6 +273,53 @@ describe('CallsResource', () => {
     });
 
     expect(seen).toEqual([{ callId: 'c9', conversationId: 'conv-9', callerUserId: 'u1' }]);
+  });
+
+  it('sends a busy signal under the caller-directed payload shape', async () => {
+    const pushed: Pushed[] = [];
+    const reply = {
+      receive(status: string, cb: (arg: unknown) => void) {
+        if (status === 'ok') cb({});
+        return reply;
+      },
+    };
+    const channel = {
+      on: vi.fn(),
+      push: (event: string, payload: Record<string, unknown>) => {
+        pushed.push({ event, payload });
+        return reply;
+      },
+    } as unknown as Channel;
+
+    const calls = new CallsResource(() => channel);
+    await calls.markBusy({ callId: 'c1', conversationId: 'conv-1', callerUserId: 'u1' });
+
+    expect(pushed[0]?.event).toBe('call:busy');
+    expect(pushed[0]?.payload).toEqual({
+      call_id: 'c1',
+      conversation_id: 'conv-1',
+      caller_user_id: 'u1',
+    });
+  });
+
+  it('surfaces a busy reply for the caller', () => {
+    const handlers = new Map<string, (p: unknown) => void>();
+    const channel = {
+      on: (e: string, cb: (p: unknown) => void) => handlers.set(e, cb),
+      push: () => ({ receive: () => ({ receive: () => ({ receive: () => undefined }) }) }),
+    } as unknown as Channel;
+
+    const calls = new CallsResource(() => channel);
+    const seen: unknown[] = [];
+    calls.onBusy((c) => seen.push(c));
+
+    handlers.get('call:busy')?.({
+      call_id: 'c2',
+      conversation_id: 'conv-2',
+      user_id: 'u2',
+    });
+
+    expect(seen).toEqual([{ callId: 'c2', conversationId: 'conv-2', userId: 'u2' }]);
   });
 
   it('rejects when the server refuses the invite', async () => {

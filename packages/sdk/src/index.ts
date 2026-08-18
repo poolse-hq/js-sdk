@@ -78,6 +78,7 @@ export { CallsResource } from './voice/calls.js';
 export { createBrowserWebRtcAdapter, isWebRtcAvailable } from './voice/webrtc-browser.js';
 export type {
   CallAccepted,
+  CallBusy,
   CallCancelled,
   CallDeclined,
   IncomingCall,

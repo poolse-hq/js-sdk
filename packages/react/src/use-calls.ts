@@ -12,7 +12,9 @@ export type CallPhase =
   /** Both sides agreed; the voice room should be joined now. */
   | 'active'
   /** The far side said no. */
-  | 'declined';
+  | 'declined'
+  /** The person we called is already on another call. */
+  | 'busy';
 
 export interface UseCalls {
   phase: CallPhase;
@@ -35,7 +37,7 @@ export interface UseCalls {
   /** Hang up an outbound ring before it's answered. */
   cancel: () => Promise<void>;
   /** Drop back to idle — call after leaving the room, or to clear a
-   *  `declined` state the UI has finished showing. */
+   *  `declined` / `busy` state the UI has finished showing. */
   reset: () => void;
 }
 
@@ -71,11 +73,18 @@ export function useCalls(userId: string | null): UseCalls {
     if (!calls) return;
 
     const offIncoming = calls.onIncoming((call) => {
-      // One call at a time. A second ring while we're already busy is
-      // ignored rather than replacing the screen mid-decision; the
-      // far side sees no answer and gives up.
+      // One call at a time. A second ring must not replace the screen
+      // mid-decision — but it must not vanish silently either, or the
+      // second caller can't tell "busy" from "ignoring me". Answer it
+      // automatically so their UI can say so.
       setPhase((current) => {
-        if (current !== 'idle') return current;
+        if (current !== 'idle') {
+          void calls.markBusy(call).catch(() => {
+            // Best effort: failing to send busy just degrades to the
+            // old silence, which must not break the call in progress.
+          });
+          return current;
+        }
         setIncoming(call);
         return 'ringing-in';
       });
@@ -88,6 +97,11 @@ export function useCalls(userId: string | null): UseCalls {
 
     const offDeclined = calls.onDeclined(() => {
       setPhase('declined');
+      setOutgoing(null);
+    });
+
+    const offBusy = calls.onBusy(() => {
+      setPhase('busy');
       setOutgoing(null);
     });
 
@@ -105,6 +119,7 @@ export function useCalls(userId: string | null): UseCalls {
       offIncoming();
       offAccepted();
       offDeclined();
+      offBusy();
       offCancelled();
     };
   }, [calls]);
