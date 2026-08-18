@@ -1,5 +1,5 @@
 import type { IncomingCall, OutgoingCall } from '@poolse/sdk';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 
 /** Where a call is in its lifecycle, from this device's point of view. */
@@ -14,7 +14,24 @@ export type CallPhase =
   /** The far side said no. */
   | 'declined'
   /** The person we called is already on another call. */
-  | 'busy';
+  | 'busy'
+  /** Nobody picked up before the ring timeout elapsed. */
+  | 'timed-out';
+
+export interface UseCallsOptions {
+  /**
+   * How long a ring may go unanswered, in milliseconds, before it is
+   * given up on. Defaults to 45s, roughly what the mainstream call apps
+   * use. Pass `0` to ring indefinitely.
+   *
+   * The server deliberately holds no timer — only the UI knows when it
+   * stopped waiting — so this is what actually ends an unanswered call.
+   * Both directions are covered: an outbound ring cancels itself, and an
+   * inbound one gives up too, otherwise a caller that crashed mid-ring
+   * would leave the callee's phone ringing forever.
+   */
+  ringTimeoutMs?: number;
+}
 
 export interface UseCalls {
   phase: CallPhase;
@@ -37,7 +54,8 @@ export interface UseCalls {
   /** Hang up an outbound ring before it's answered. */
   cancel: () => Promise<void>;
   /** Drop back to idle — call after leaving the room, or to clear a
-   *  `declined` / `busy` state the UI has finished showing. */
+   *  `declined` / `busy` / `timed-out` state the UI has finished
+   *  showing. */
   reset: () => void;
 }
 
@@ -58,7 +76,8 @@ export interface UseCalls {
  * Keeping them separate means a "join voice" button and a ringing call
  * share exactly one implementation of the media path.
  */
-export function useCalls(userId: string | null): UseCalls {
+export function useCalls(userId: string | null, opts: UseCallsOptions = {}): UseCalls {
+  const ringTimeoutMs = opts.ringTimeoutMs ?? 45_000;
   const poolse = usePoolse();
 
   const [phase, setPhase] = useState<CallPhase>('idle');
@@ -66,6 +85,14 @@ export function useCalls(userId: string | null): UseCalls {
   const [outgoing, setOutgoing] = useState<OutgoingCall | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
+
+  // Held in a ref so the timeout effect can reach the current handlers
+  // without re-arming the timer every time one of them is recreated —
+  // re-arming would silently extend the ring forever.
+  const actionsRef = useRef<{ cancel: () => Promise<void>; decline: () => Promise<void> }>({
+    cancel: async () => {},
+    decline: async () => {},
+  });
 
   const calls = useMemo(() => (userId ? poolse.realtime.calls(userId) : null), [poolse, userId]);
 
@@ -177,6 +204,28 @@ export function useCalls(userId: string | null): UseCalls {
       setPhase('idle');
     }
   }, [calls, outgoing]);
+
+  actionsRef.current = { cancel, decline };
+
+  // Give up on a ring that nobody answered.
+  useEffect(() => {
+    if (ringTimeoutMs <= 0) return;
+    if (phase !== 'ringing-out' && phase !== 'ringing-in') return;
+
+    const outbound = phase === 'ringing-out';
+    const timer = setTimeout(() => {
+      // Tell the far side before changing local state, so their UI
+      // stops ringing too rather than waiting out its own timer.
+      void (outbound ? actionsRef.current.cancel() : actionsRef.current.decline()).finally(() => {
+        // cancel()/decline() both land on 'idle'; outbound gets a
+        // distinct phase so the UI can say "no answer" instead of
+        // silently dismissing the call.
+        if (outbound) setPhase('timed-out');
+      });
+    }, ringTimeoutMs);
+
+    return () => clearTimeout(timer);
+  }, [phase, ringTimeoutMs]);
 
   const reset = useCallback(() => {
     setPhase('idle');

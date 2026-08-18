@@ -92,6 +92,11 @@ export function useAttachmentUpload(): UseAttachmentUploadState {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Reading inFlightRef at cleanup time is the point: we abort
+      // whatever is uploading *now*. The lint rule's usual advice —
+      // snapshot the ref inside the effect — would capture the empty
+      // map from mount and abort nothing.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       for (const v of inFlightRef.current.values()) v.controller.abort();
       inFlightRef.current.clear();
     };

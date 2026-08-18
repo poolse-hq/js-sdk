@@ -22,6 +22,31 @@ import { vi } from 'vitest';
 // is exercised end-to-end by the showcase, not these unit tests.
 (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = undefined;
 
+// The `vi.mock('phoenix', …)` below cannot reach the copy of Phoenix
+// that `@poolse/sdk`'s dist bundles inline, so that copy still builds a
+// real Socket. With no WebSocket in the global, Phoenix falls back to
+// LongPoll and schedules a poll timer that fires *after* happy-dom is
+// torn down — surfacing as an unhandled "No suitable XMLHttpRequest
+// implementation found" that fails the run even though every test
+// passed. Removing XHR alone doesn't help: the timer is scheduled
+// before the first poll throws.
+//
+// Handing Phoenix an inert WebSocket keeps it on the WS transport, so
+// it never reaches the LongPoll branch and never schedules anything.
+class InertWebSocket {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+  readonly readyState = InertWebSocket.CLOSED;
+  constructor(_url: string, _protocols?: string | string[]) {}
+  send(_data: unknown): void {}
+  close(_code?: number, _reason?: string): void {}
+  addEventListener(): void {}
+  removeEventListener(): void {}
+}
+(globalThis as { WebSocket?: unknown }).WebSocket = InertWebSocket;
+
 vi.mock('phoenix', () => {
   class StubChannel {
     on() {

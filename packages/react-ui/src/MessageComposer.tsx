@@ -1,4 +1,11 @@
-import { forwardRef, useImperativeHandle, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useAttachmentUpload } from '@poolse/react';
 import { handleListEnter } from './listAutocomplete.js';
@@ -92,21 +99,24 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const readyCount = queue.filter((it) => it.status === 'ready').length;
     const uploading = queue.some((it) => it.status === 'pending' || it.status === 'uploading');
 
-    const addFiles = (files: File[]) => {
-      if (!attachments || files.length === 0) return;
-      void uploadAll(
-        files.map((f) => ({
-          body: f,
-          contentType: f.type || 'application/octet-stream',
-          byteSize: f.size,
-          filename: f.name,
-        })),
-      ).catch(() => {
-        // Per-item error stays on its chip; the user dismisses.
-      });
-    };
+    const addFiles = useCallback(
+      (files: File[]) => {
+        if (!attachments || files.length === 0) return;
+        void uploadAll(
+          files.map((f) => ({
+            body: f,
+            contentType: f.type || 'application/octet-stream',
+            byteSize: f.size,
+            filename: f.name,
+          })),
+        ).catch(() => {
+          // Per-item error stays on its chip; the user dismisses.
+        });
+      },
+      [attachments, uploadAll],
+    );
 
-    useImperativeHandle(ref, () => ({ addFiles }), [addFiles, attachments]);
+    useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
 
     const submit = async () => {
       const trimmed = value.trim();

@@ -101,7 +101,9 @@ export function CallScreen({ userId, labelFor, calls: external }: CallScreenProp
               color={theme.colors.error}
               onPress={() => void calls.cancel()}
             />
-          ) : calls.phase === 'declined' || calls.phase === 'busy' ? (
+          ) : calls.phase === 'declined' ||
+            calls.phase === 'busy' ||
+            calls.phase === 'timed-out' ? (
             <CallButton label="Close" color={theme.colors.ink3} onPress={calls.reset} />
           ) : (
             <>
@@ -140,6 +142,8 @@ function statusLine(calls: UseCalls, voiceStatus: string): string {
       return 'Call declined';
     case 'busy':
       return 'Already on another call';
+    case 'timed-out':
+      return 'No answer';
     case 'active':
       return voiceStatus === 'connected' ? 'Connected' : 'Connecting…';
     default:

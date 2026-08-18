@@ -7,6 +7,7 @@ import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sd
 import { useAttachmentUpload, useMembers } from '@poolse/react';
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -96,20 +97,23 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     const readyCount = queue.filter((it) => it.status === 'ready').length;
     const uploading = queue.some((it) => it.status === 'pending' || it.status === 'uploading');
 
-    const addFiles = (files: File[]) => {
-      if (!attachments || files.length === 0) return;
-      void uploadAll(
-        files.map((f) => ({
-          body: f,
-          contentType: f.type || 'application/octet-stream',
-          byteSize: f.size,
-          filename: f.name,
-        })),
-      ).catch(() => {
-        // Per-item error stays on chip.
-      });
-    };
-    useImperativeHandle(ref, () => ({ addFiles }), [addFiles, attachments]);
+    const addFiles = useCallback(
+      (files: File[]) => {
+        if (!attachments || files.length === 0) return;
+        void uploadAll(
+          files.map((f) => ({
+            body: f,
+            contentType: f.type || 'application/octet-stream',
+            byteSize: f.size,
+            filename: f.name,
+          })),
+        ).catch(() => {
+          // Per-item error stays on chip.
+        });
+      },
+      [attachments, uploadAll],
+    );
+    useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
 
     const label = labelFor ?? ((id: string) => id);
 
