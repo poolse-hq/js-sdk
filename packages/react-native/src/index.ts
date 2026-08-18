@@ -77,3 +77,11 @@ export type {
 
 // ── Lifecycle ─────────────────────────────────────────────────
 export { useAppStateLifecycle } from './lifecycle/useAppStateLifecycle.js';
+
+// ── Voice + calling ───────────────────────────────────────────
+// Audio needs the optional `react-native-webrtc` peer dependency and a
+// development build; without it these render a disabled state rather
+// than crashing.
+export { VoiceRoomBar, type VoiceRoomBarProps } from './VoiceRoomBar.js';
+export { CallScreen, type CallScreenProps } from './CallScreen.js';
+export { createNativeWebRtcAdapter, isNativeWebRtcAvailable } from './voice/webrtc-native.js';

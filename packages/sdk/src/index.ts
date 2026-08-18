@@ -72,6 +72,28 @@ export type {
   Uuid,
 } from './types.js';
 
+// ── Voice + calling ──────────────────────────────────────────────────
+export { VoiceRoom } from './voice/voice-room.js';
+export { CallsResource } from './voice/calls.js';
+export { createBrowserWebRtcAdapter, isWebRtcAvailable } from './voice/webrtc-browser.js';
+export type {
+  CallAccepted,
+  CallCancelled,
+  CallDeclined,
+  IncomingCall,
+  OutgoingCall,
+  VoiceCandidate,
+  VoiceDescription,
+  VoiceIceServer,
+  VoiceParticipant,
+  VoicePeerConnection,
+  VoiceRoomOptions,
+  VoiceStatus,
+  VoiceStream,
+  VoiceTrack,
+  WebRtcAdapter,
+} from './voice/types.js';
+
 export { version } from './version.js';
 
 // Cross-runtime UUID v4 used internally for idempotency keys, client

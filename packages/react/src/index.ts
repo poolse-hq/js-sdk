@@ -52,3 +52,7 @@ export type {
   Uuid,
 } from '@poolse/sdk';
 export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from '@poolse/sdk';
+
+// ── Voice + calling ──────────────────────────────────────────────
+export { useVoiceRoom, type UseVoiceRoom } from './use-voice-room.js';
+export { useCalls, type UseCalls, type CallPhase } from './use-calls.js';

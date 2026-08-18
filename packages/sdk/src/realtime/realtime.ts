@@ -17,6 +17,9 @@ import type { Channel } from 'phoenix';
 
 import type { ResolvedConfig } from '../config.js';
 import { PoolseError } from '../errors.js';
+import { CallsResource } from '../voice/calls.js';
+import { VoiceRoom } from '../voice/voice-room.js';
+import type { VoiceRoomOptions } from '../voice/types.js';
 import type { TokenCache } from '../token-cache.js';
 import type {
   ConversationCreatedEvent,
@@ -57,7 +60,9 @@ export class PoolseRealtime {
 
   private socket: Socket | null = null;
   private readonly conversations = new Map<string, ConversationChannel>();
+  private readonly voiceRooms = new Map<string, VoiceRoom>();
   private userChannel: UserChannel | null = null;
+  private callsResource: CallsResource | null = null;
 
   private status: RealtimeStatus = 'idle';
   private readonly statusListeners = new Set<(s: RealtimeStatus) => void>();
@@ -149,6 +154,8 @@ export class PoolseRealtime {
 
   /** Close the socket and tear down every joined channel. */
   disconnect(): void {
+    for (const room of this.voiceRooms.values()) room.leave();
+    this.voiceRooms.clear();
     this.setStatus('closed');
     this.conversations.forEach((c) => c._destroy());
     this.conversations.clear();
@@ -200,6 +207,46 @@ export class PoolseRealtime {
     this.userChannel = handle;
     handle._join();
     return handle;
+  }
+
+  /**
+   * Voice room for a conversation — the Discord-style surface. Call
+   * `join()` on the returned handle to acquire the mic and connect;
+   * reusing the same id returns the same room rather than opening a
+   * second one.
+   *
+   * Ringing somebody who hasn't joined is a separate concern; see
+   * `poolse.calls`.
+   */
+  voice(conversationId: string, opts: VoiceRoomOptions = {}): VoiceRoom {
+    const existing = this.voiceRooms.get(conversationId);
+    if (existing) return existing;
+
+    this.connect();
+
+    if (!this.socket) {
+      throw new PoolseError('socket not initialised — call connect() first');
+    }
+
+    const room = new VoiceRoom(conversationId, this.socket, opts);
+    this.voiceRooms.set(conversationId, room);
+    return room;
+  }
+
+  /**
+   * Call invitations for a user — the WhatsApp-style surface. Rides the
+   * `user:<id>` topic, the one channel a client is always joined to, so
+   * a ring reaches somebody who hasn't opened a voice room yet.
+   *
+   * Takes the user id explicitly, mirroring `user(userId)`; the SDK
+   * never assumes whose token it is holding.
+   */
+  calls(userId: string): CallsResource {
+    if (this.callsResource) return this.callsResource;
+    // Resolved lazily so constructing the resource doesn't force a
+    // socket connection before the consumer subscribes to anything.
+    this.callsResource = new CallsResource(() => this.user(userId)._channel());
+    return this.callsResource;
   }
 
   /** Drop a conversation handle and leave the channel. */
@@ -376,6 +423,16 @@ export class UserChannel {
   constructor(userId: string, channel: Channel) {
     this.userId = userId;
     this.channel = channel;
+  }
+
+  /**
+   * The underlying Phoenix channel, for surfaces that push their own
+   * events on this topic (the calls resource does).
+   *
+   * @internal
+   */
+  _channel(): Channel {
+    return this.channel;
   }
 
   onMention(fn: (evt: MentionEvent) => void): Unsubscribe {

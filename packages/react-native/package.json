@@ -76,7 +76,8 @@
     "expo-document-picker": "*",
     "expo-image-manipulator": "*",
     "expo-clipboard": "*",
-    "react-native-markdown-display": ">=7"
+    "react-native-markdown-display": ">=7",
+    "react-native-webrtc": ">=124"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
@@ -90,5 +91,10 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "peerDependenciesMeta": {
+    "react-native-webrtc": {
+      "optional": true
+    }
   }
 }
