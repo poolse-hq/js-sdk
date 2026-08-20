@@ -32,6 +32,20 @@ import type { VoiceIceServer, VoicePeerConnection, VoiceStream, WebRtcAdapter } 
  * straight through.
  */
 export interface NativeWebRtcModule {
+  RTCPeerConnection: new (...args: never[]) => unknown;
+  mediaDevices: { getUserMedia: (...args: never[]) => Promise<unknown> };
+}
+
+/**
+ * The precise shape, used internally once the module has been checked.
+ *
+ * `NativeWebRtcModule` above is deliberately loose. Spelling the real
+ * signatures out there does NOT work: `react-native-webrtc` types `sdp`
+ * as `string` where the SDK's `VoiceDescription` has `string | undefined`,
+ * so `import * as webrtc` fails to satisfy a strict interface and no
+ * consumer can pass the module in at all.
+ */
+interface CheckedWebRtc {
   RTCPeerConnection: new (config: { iceServers: VoiceIceServer[] }) => VoicePeerConnection;
   mediaDevices: {
     getUserMedia(constraints: {
@@ -69,13 +83,17 @@ export function createNativeWebRtcAdapter(mod: NativeWebRtcModule): WebRtcAdapte
     );
   }
 
+  // Narrow once, here, rather than making every caller's module match
+  // signature-for-signature.
+  const rtc = mod as unknown as CheckedWebRtc;
+
   return {
     createPeerConnection(iceServers: VoiceIceServer[]): VoicePeerConnection {
-      return new mod.RTCPeerConnection({ iceServers });
+      return new rtc.RTCPeerConnection({ iceServers });
     },
 
     getUserMedia(): Promise<VoiceStream> {
-      return mod.mediaDevices.getUserMedia({
+      return rtc.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
         video: false,
       });
