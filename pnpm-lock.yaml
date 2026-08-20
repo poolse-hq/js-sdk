@@ -45,7 +45,7 @@ importers:
   packages/react:
     dependencies:
       '@poolse/sdk':
-        specifier: ^2.4.0
+        specifier: ^2.5.0
         version: link:../sdk
     devDependencies:
       '@testing-library/react':
@@ -67,10 +67,10 @@ importers:
   packages/react-native:
     dependencies:
       '@poolse/react':
-        specifier: ^2.4.0
+        specifier: ^2.5.0
         version: link:../react
       '@poolse/sdk':
-        specifier: ^2.4.0
+        specifier: ^2.5.0
         version: link:../sdk
       expo-clipboard:
         specifier: '*'
@@ -113,10 +113,10 @@ importers:
   packages/react-ui:
     dependencies:
       '@poolse/react':
-        specifier: ^2.4.0
+        specifier: ^2.5.0
         version: link:../react
       '@poolse/sdk':
-        specifier: ^2.4.0
+        specifier: ^2.5.0
         version: link:../sdk
       react-markdown:
         specifier: ^9.0.1

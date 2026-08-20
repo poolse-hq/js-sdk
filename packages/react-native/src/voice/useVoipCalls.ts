@@ -36,28 +36,34 @@ import { useEffect, useRef } from 'react';
  *     });
  */
 
-/** The slice of `react-native-voip-push-notification` used here. */
+/**
+ * The slice of `react-native-voip-push-notification` used here.
+ *
+ * Loose on purpose. The real module types `addEventListener` as a
+ * generic whose handler payload varies per event, and pinning exact
+ * signatures here makes `voipPush={VoipPushNotification}` fail to
+ * compile — the prop becomes unusable, which is the whole point of it.
+ * Method syntax (not property arrow syntax) keeps the check bivariant.
+ */
 export interface VoipPushModule {
-  addEventListener(
-    event: 'register' | 'notification' | 'didLoadWithEvents',
-    handler: (payload: never) => void,
-  ): void;
+  addEventListener(event: string, handler: (payload: unknown) => void): void;
   removeEventListener(event: string): void;
   registerVoipToken(): void;
 }
 
-/** The slice of `react-native-callkeep` used here. */
+/** The slice of `react-native-callkeep` used here. Loose for the same
+ *  reason — `setup` resolves to a boolean in the real module. */
 export interface CallKeepModule {
-  setup(options: unknown): Promise<void>;
+  setup(options: unknown): Promise<unknown>;
   displayIncomingCall(
     uuid: string,
     handle: string,
     localizedCallerName?: string,
     handleType?: string,
     hasVideo?: boolean,
-  ): void;
-  endCall(uuid: string): void;
-  addEventListener(event: string, handler: (payload: never) => void): void;
+  ): unknown;
+  endCall(uuid: string): unknown;
+  addEventListener(event: string, handler: (payload: unknown) => void): void;
   removeEventListener(event: string): void;
 }
 
@@ -162,11 +168,11 @@ export function useVoipCalls({
         .catch(() => {
           // Offline at launch is normal. The next launch re-registers.
         });
-    }) as (payload: never) => void);
+    }) as (payload: unknown) => void);
 
     voipPush.addEventListener('notification', ((payload: PushPayload) => {
       reportCall(payload);
-    }) as (payload: never) => void);
+    }) as (payload: unknown) => void);
 
     // Pushes that arrived while the JS bundle was still starting are
     // replayed here. Without this, a cold-launch call is lost — the very
@@ -179,18 +185,18 @@ export function useVoipCalls({
           reportCall(event.data as PushPayload);
         }
       }
-    }) as (payload: never) => void);
+    }) as (payload: unknown) => void);
 
     callKeep.addEventListener('answerCall', (({ callUUID }: { callUUID: string }) => {
       const call = pending.current.get(callUUID);
       if (call) handlers.current.onAnswer?.(call);
-    }) as (payload: never) => void);
+    }) as (payload: unknown) => void);
 
     callKeep.addEventListener('endCall', (({ callUUID }: { callUUID: string }) => {
       const call = pending.current.get(callUUID);
       pending.current.delete(callUUID);
       if (call) handlers.current.onDecline?.(call);
-    }) as (payload: never) => void);
+    }) as (payload: unknown) => void);
 
     voipPush.registerVoipToken();
 

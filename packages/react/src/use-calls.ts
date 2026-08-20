@@ -47,10 +47,17 @@ export interface UseCalls {
   error: Error | null;
   /** Ring every other member of a conversation. */
   call: (conversationId: string) => Promise<void>;
-  /** Answer the inbound ring. */
-  accept: () => Promise<void>;
-  /** Reject the inbound ring. */
-  decline: () => Promise<void>;
+  /**
+   * Answer the inbound ring.
+   *
+   * Pass the call explicitly when it didn't arrive over the socket — a
+   * VoIP push can launch the app cold, in which case this hook has no
+   * `incoming` state and the push payload is the only source of truth.
+   */
+  accept: (call?: IncomingCall) => Promise<void>;
+  /** Reject the inbound ring. Takes an explicit call for the same
+   *  cold-launch reason as {@link accept}. */
+  decline: (call?: IncomingCall) => Promise<void>;
   /** Hang up an outbound ring before it's answered. */
   cancel: () => Promise<void>;
   /** Drop back to idle — call after leaving the room, or to clear a
@@ -167,31 +174,39 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     [calls],
   );
 
-  const accept = useCallback(async () => {
-    if (!calls || !incoming) return;
-    try {
-      await calls.accept(incoming);
-      setActiveConversationId(incoming.conversationId);
-      setPhase('active');
-      setIncoming(null);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-    }
-  }, [calls, incoming]);
+  const accept = useCallback(
+    async (call?: IncomingCall) => {
+      const target = call ?? incoming;
+      if (!calls || !target) return;
+      try {
+        await calls.accept(target);
+        setActiveConversationId(target.conversationId);
+        setPhase('active');
+        setIncoming(null);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+    [calls, incoming],
+  );
 
-  const decline = useCallback(async () => {
-    if (!calls || !incoming) return;
-    try {
-      await calls.decline(incoming);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-    } finally {
-      // Local state clears either way: a failed decline shouldn't leave
-      // the ring screen stuck on screen.
-      setIncoming(null);
-      setPhase('idle');
-    }
-  }, [calls, incoming]);
+  const decline = useCallback(
+    async (call?: IncomingCall) => {
+      const target = call ?? incoming;
+      if (!calls || !target) return;
+      try {
+        await calls.decline(target);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+      } finally {
+        // Local state clears either way: a failed decline shouldn't
+        // leave the ring screen stuck on screen.
+        setIncoming(null);
+        setPhase('idle');
+      }
+    },
+    [calls, incoming],
+  );
 
   const cancel = useCallback(async () => {
     if (!calls || !outgoing) return;
