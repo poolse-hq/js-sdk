@@ -3,7 +3,11 @@ import { useEffect, useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { usePoolseTheme } from './theme/PoolseTheme.js';
-import { createNativeWebRtcAdapter, isNativeWebRtcAvailable } from './voice/webrtc-native.js';
+import {
+  createNativeWebRtcAdapter,
+  isNativeWebRtcAvailable,
+  type NativeWebRtcModule,
+} from './voice/webrtc-native.js';
 
 export interface CallScreenProps {
   /** The signed-in user's id — the topic calls are delivered on. */
@@ -16,6 +20,12 @@ export interface CallScreenProps {
    * component manages its own.
    */
   calls?: UseCalls;
+  /**
+   * The `react-native-webrtc` module, imported by your app. Required for
+   * call audio; without it the screen still rings and connects but warns
+   * that there is no audio. See {@link VoiceRoomBarProps.webrtc}.
+   */
+  webrtc?: NativeWebRtcModule | null;
 }
 
 /**
@@ -33,15 +43,15 @@ export interface CallScreenProps {
  * to whatever button your UI wants. Pass the same instance in via
  * `calls` so both halves share one state machine.
  */
-export function CallScreen({ userId, labelFor, calls: external }: CallScreenProps) {
+export function CallScreen({ userId, labelFor, calls: external, webrtc }: CallScreenProps) {
   const theme = usePoolseTheme();
   const own = useCalls(external ? null : userId);
   const calls = external ?? own;
 
-  const available = isNativeWebRtcAvailable();
+  const available = isNativeWebRtcAvailable(webrtc);
   const opts = useMemo(
-    () => (available ? { webrtc: createNativeWebRtcAdapter() } : {}),
-    [available],
+    () => (available && webrtc ? { webrtc: createNativeWebRtcAdapter(webrtc) } : {}),
+    [available, webrtc],
   );
 
   // The voice room only exists once a call is actually connected — the

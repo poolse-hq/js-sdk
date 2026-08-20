@@ -80,8 +80,14 @@ export { useAppStateLifecycle } from './lifecycle/useAppStateLifecycle.js';
 
 // ── Voice + calling ───────────────────────────────────────────
 // Audio needs the optional `react-native-webrtc` peer dependency and a
-// development build; without it these render a disabled state rather
-// than crashing.
+// development build. YOUR APP must import that module and pass it in --
+// Metro only bundles what it can see statically, so this package cannot
+// require it on your behalf. Without it these render a disabled state
+// rather than crashing.
 export { VoiceRoomBar, type VoiceRoomBarProps } from './VoiceRoomBar.js';
 export { CallScreen, type CallScreenProps } from './CallScreen.js';
-export { createNativeWebRtcAdapter, isNativeWebRtcAvailable } from './voice/webrtc-native.js';
+export {
+  createNativeWebRtcAdapter,
+  isNativeWebRtcAvailable,
+  type NativeWebRtcModule,
+} from './voice/webrtc-native.js';

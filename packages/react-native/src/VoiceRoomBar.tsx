@@ -4,10 +4,25 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { usePoolseTheme } from './theme/PoolseTheme.js';
-import { createNativeWebRtcAdapter, isNativeWebRtcAvailable } from './voice/webrtc-native.js';
+import {
+  createNativeWebRtcAdapter,
+  isNativeWebRtcAvailable,
+  type NativeWebRtcModule,
+} from './voice/webrtc-native.js';
 
 export interface VoiceRoomBarProps {
   conversationId: string;
+  /**
+   * The `react-native-webrtc` module, imported by your app:
+   *
+   *     import * as webrtc from 'react-native-webrtc';
+   *
+   * Required for audio. Metro only bundles what it can see statically,
+   * so this package cannot import it for you — see `voice/webrtc-native`.
+   * Omit it and the bar renders its unavailable state, which is what you
+   * want in Expo Go.
+   */
+  webrtc?: NativeWebRtcModule | null;
   /** Resolves a user id to a display label. Defaults to a short id. */
   labelFor?: (userId: string) => string;
   /**
@@ -25,15 +40,20 @@ export interface VoiceRoomBarProps {
  * always-on voice channel. For ringing a specific person, use
  * `<IncomingCallSheet>` together with `useCalls`.
  */
-export function VoiceRoomBar({ conversationId, labelFor, unavailableSlot }: VoiceRoomBarProps) {
+export function VoiceRoomBar({
+  conversationId,
+  labelFor,
+  unavailableSlot,
+  webrtc,
+}: VoiceRoomBarProps) {
   const theme = usePoolseTheme();
-  const available = isNativeWebRtcAvailable();
+  const available = isNativeWebRtcAvailable(webrtc);
 
-  // Building the adapter throws when the native module is missing, so
-  // it is only constructed on the path where we know it resolves.
+  // Building the adapter throws when the module is missing or unlinked,
+  // so only construct it on the path where we know it resolves.
   const opts = useMemo(
-    () => (available ? { webrtc: createNativeWebRtcAdapter() } : {}),
-    [available],
+    () => (available && webrtc ? { webrtc: createNativeWebRtcAdapter(webrtc) } : {}),
+    [available, webrtc],
   );
 
   const { status, participants, muted, join, leave, toggleMute, error } = useVoiceRoom(
