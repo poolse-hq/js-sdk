@@ -6,6 +6,7 @@ import { resolveConfig } from './config.js';
 import { PoolseRealtime } from './realtime/realtime.js';
 import { AttachmentsResource } from './resources/attachments.js';
 import { ConversationsResource } from './resources/conversations.js';
+import { DevicesResource } from './resources/devices.js';
 import { MeResource } from './resources/me.js';
 import { MessagesResource } from './resources/messages.js';
 import { UsersResource } from './resources/users.js';
@@ -15,6 +16,12 @@ import { TokenCache } from './token-cache.js';
 export class Poolse {
   /** `/v1/me` — current End User. */
   public readonly me: MeResource;
+
+  /**
+   * `/v1/devices` — push destinations, so an incoming call can ring a
+   * phone whose app isn't running. Only meaningful on mobile.
+   */
+  public readonly devices: DevicesResource;
   /** `/v1/conversations` collection + per-conversation handle factory. */
   public readonly conversations: ConversationsResource;
   /** `/v1/messages/:id/*` — accessed via `chat.messages.one(id)`. */
@@ -67,6 +74,7 @@ export class Poolse {
 
     this.rest = new RestClient(cachedConfig, this.tokenCache);
     this.me = new MeResource(this.rest);
+    this.devices = new DevicesResource(this.rest);
     this.conversations = new ConversationsResource(this.rest);
     this.messages = new MessagesResource(this.rest);
     this.attachments = new AttachmentsResource(this.rest, cachedConfig.fetch);

@@ -15,6 +15,13 @@ export {
   ConversationsResource,
 } from './resources/conversations.js';
 export { MeResource } from './resources/me.js';
+export { DevicesResource } from './resources/devices.js';
+export type {
+  Device,
+  DeviceEnvironment,
+  DevicePlatform,
+  RegisterDeviceRequest,
+} from './resources/devices.js';
 export { ConversationMessages, MessageHandle, MessagesResource } from './resources/messages.js';
 export { UsersResource } from './resources/users.js';
 export type { AttachmentProgressEvent } from './resources/attachments.js';

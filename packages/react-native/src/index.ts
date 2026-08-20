@@ -91,3 +91,15 @@ export {
   isNativeWebRtcAvailable,
   type NativeWebRtcModule,
 } from './voice/webrtc-native.js';
+
+// ── VoIP push + CallKit (iOS) ─────────────────────────────────────
+// Rings a backgrounded or closed app. Needs react-native-callkeep and
+// react-native-voip-push-notification, both native and both imported by
+// YOUR app — Metro only bundles what it can see statically.
+export {
+  useVoipCalls,
+  type UseVoipCallsOptions,
+  type VoipIncomingCall,
+  type VoipPushModule,
+  type CallKeepModule,
+} from './voice/useVoipCalls.js';
