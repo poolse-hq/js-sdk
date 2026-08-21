@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isStalePush } from '../src/voice/useVoipCalls.js';
+import { isCallOver, isStalePush } from '../src/voice/useVoipCalls.js';
 
 // This decides whether a pushed call is dismissed right after being
 // reported. Getting it wrong is silent and total: an over-eager window
@@ -42,5 +42,40 @@ describe('isStalePush', () => {
   it('is exactly-at-the-boundary safe', () => {
     // Equal to the window is not past it — ties go to ringing.
     expect(isStalePush(NOW - WINDOW, NOW, WINDOW)).toBe(false);
+  });
+});
+
+// Which phases tear down the CallKit call. Both directions of getting
+// this wrong have shipped: ending on `active` pulled a connected call out
+// of the Dynamic Island, and never ending it left a hung-up call still
+// live on the phone with dead buttons.
+describe('isCallOver', () => {
+  it('keeps the system call while ringing', () => {
+    expect(isCallOver('ringing-in')).toBe(false);
+    expect(isCallOver('ringing-out')).toBe(false);
+  });
+
+  it('keeps the system call while connected', () => {
+    // The whole point of CallKit: a call in progress belongs in the
+    // Dynamic Island, Recents, and the audio routing.
+    expect(isCallOver('active')).toBe(false);
+  });
+
+  it('ends the system call on every terminal phase', () => {
+    for (const phase of ['idle', 'declined', 'busy', 'timed-out']) {
+      expect(isCallOver(phase)).toBe(true);
+    }
+  });
+
+  it('leaves the system call alone when there is no state machine', () => {
+    // No `calls` means no phase to read. Guessing "over" here would end
+    // calls the app is still handling itself.
+    expect(isCallOver(undefined)).toBe(false);
+  });
+
+  it('ends the system call for an unrecognised phase', () => {
+    // A phase added later is far likelier to be terminal than not, and
+    // a stuck call on the lock screen is the worse failure.
+    expect(isCallOver('something-new')).toBe(true);
   });
 });

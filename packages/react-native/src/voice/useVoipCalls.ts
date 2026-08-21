@@ -51,6 +51,17 @@ export interface VoipPushModule {
   addEventListener(event: string, handler: (payload: unknown) => void): void;
   removeEventListener(event: string): void;
   registerVoipToken(): void;
+  /**
+   * Releases the native PushKit completion handler for a push.
+   *
+   * iOS hands `didReceiveIncomingPushWith` a completion block and expects
+   * it back once the call has been reported. Never calling it leaves the
+   * app looking like it dropped the push, which is one of the ways iOS
+   * stops delivering VoIP pushes to an app entirely.
+   *
+   * Optional because older versions of the module don't expose it.
+   */
+  onVoipNotificationCompleted?(uuid: string): void;
 }
 
 /** The slice of `react-native-callkeep` used here. */
@@ -64,6 +75,8 @@ export interface CallKeepModule {
     hasVideo?: boolean,
   ): unknown;
   endCall(uuid: string): unknown;
+  /** Tell CallKit the call connected. Absent on older versions. */
+  setCurrentCallActive?(uuid: string): unknown;
   addEventListener(event: string, handler: (payload: unknown) => void): void;
   removeEventListener(event: string): void;
 }
@@ -133,6 +146,31 @@ export interface UseVoipCallsOptions {
  * skew runs both ways, and withholding a real call is far worse than
  * ringing once for a dead one.
  */
+/**
+ * Whether a call phase means the system call should be torn down.
+ *
+ * CallKit has no idea what the app is doing, so it holds a call open
+ * until told otherwise. Get this wrong in either direction and the phone
+ * and the app disagree:
+ *
+ *   * too eager — ending on `active` takes the connected call out of the
+ *     Dynamic Island and Recents while the user is still talking;
+ *   * too reluctant — never ending it leaves a call the user hung up
+ *     still showing on the lock screen, with buttons that do nothing.
+ *
+ * The ringing phases are excluded because the ring IS the system call,
+ * and `active` because a connected call is supposed to exist. Everything
+ * else — idle, declined, busy, timed out — is over.
+ *
+ * `undefined` means no `calls` was supplied, so there is no state
+ * machine to read and nothing this can honestly conclude. Tearing a call
+ * down on a guess would be worse than leaving it to the app.
+ */
+export function isCallOver(phase: string | undefined): boolean {
+  if (phase === undefined) return false;
+  return phase !== 'ringing-in' && phase !== 'ringing-out' && phase !== 'active';
+}
+
 export function isStalePush(
   sentAt: number | undefined,
   now: number,
@@ -191,8 +229,17 @@ export function useVoipCalls({
    */
   const ready = useRef<Promise<unknown>>(Promise.resolve());
 
+  // Which reported calls the user actually answered.
+  //
+  // A CallKit "endCall" means two different things depending on this: a
+  // call ended while ringing was refused, one ended after answering was
+  // hung up. They travel as different signals, and sending the wrong one
+  // leaves the other side thinking the call is still going.
+  const answered = useRef(new Set<string>());
+
   /** Take a call down in CallKit — the island stays stuck until we do. */
   const dismiss = useRef((callId: string) => {
+    answered.current.delete(callId);
     if (!shown.current.has(callId)) return;
     shown.current.delete(callId);
     try {
@@ -237,10 +284,22 @@ export function useVoipCalls({
       }
     };
 
+    const done = () => {
+      show();
+      try {
+        // Only after the call is reported. Handing the completion back
+        // first would tell iOS we were finished while CallKit still had
+        // nothing to show, which is the case it terminates apps over.
+        voipPush.onVoipNotificationCompleted?.(call.callId);
+      } catch {
+        // Same reasoning as above — never throw on this path.
+      }
+    };
+
     // `.then` on an already-resolved promise still defers a tick, which
     // is immaterial next to the seconds iOS allows — and far cheaper
     // than reporting before CallKit is ready.
-    void ready.current.then(show, show);
+    void ready.current.then(done, done);
 
     if (isStalePush(sentAt, Date.now(), staleRef.current)) dismiss.current(call.callId);
   });
@@ -316,7 +375,17 @@ export function useVoipCalls({
 
     callKeep.addEventListener('answerCall', (({ callUUID }: { callUUID: string }) => {
       const call = shown.current.get(callUUID);
-      shown.current.delete(callUUID);
+
+      // Deliberately KEPT in `shown`. Removing it here left nothing to
+      // end when the user later hung up, so the system call stayed live
+      // on the phone with the app no longer in it.
+      answered.current.add(callUUID);
+
+      try {
+        callKeep.setCurrentCallActive?.(callUUID);
+      } catch {
+        // Older CallKeep builds lack this; the call still connects.
+      }
 
       // The map is empty after a relaunch — iOS can kill and restart the
       // app between reporting the call and the user answering it. Falling
@@ -341,11 +410,17 @@ export function useVoipCalls({
 
     callKeep.addEventListener('endCall', (({ callUUID }: { callUUID: string }) => {
       const call = shown.current.get(callUUID);
+      const wasAnswered = answered.current.has(callUUID);
       shown.current.delete(callUUID);
+      answered.current.delete(callUUID);
 
       // Same relaunch case as answerCall: end whatever the hook thinks
       // is live rather than leaving a call the user has dismissed.
-      if (!call) {
+      //
+      // An answered call takes the same route: it is no longer an
+      // invitation to refuse, so it hangs up like the in-app button and
+      // the other side is told the call ended.
+      if (!call || wasAnswered) {
         void handlers.current.calls?.hangUp();
         return;
       }
@@ -389,12 +464,10 @@ export function useVoipCalls({
     }
   }, [phase, incoming]);
 
-  // The caller hung up, we declined, it timed out, or it connected. In
-  // every one of those cases the ring is over, and CallKit doesn't know
-  // unless told — leave it and the Dynamic Island keeps showing a call
-  // that no longer exists, with buttons that do nothing.
+  // End the system call once the poolse call is genuinely over — see
+  // `isCallOver`.
   useEffect(() => {
-    if (phase === 'ringing-in' || phase === 'ringing-out') return;
+    if (!isCallOver(phase)) return;
     for (const callId of [...shown.current.keys()]) dismiss.current(callId);
   }, [phase]);
 }
