@@ -98,6 +98,7 @@ export {
 // YOUR app — Metro only bundles what it can see statically.
 export {
   useVoipCalls,
+  isStalePush,
   type UseVoipCallsOptions,
   type VoipIncomingCall,
   type VoipPushModule,

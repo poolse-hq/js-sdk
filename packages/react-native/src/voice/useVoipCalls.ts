@@ -106,15 +106,42 @@ export interface UseVoipCallsOptions {
    */
   apnsEnvironment?: 'production' | 'sandbox';
   /**
-   * How old a pushed call may be before it is ignored, in ms. Defaults
-   * to 45s, matching `useCalls`' ring timeout — past that the caller has
-   * already given up, so there is nothing live to answer.
+   * How old a pushed call may be before it is reported and immediately
+   * ended, in ms. Defaults to a deliberately generous 120s.
+   *
+   * The tight value this once used made clock skew between server and
+   * handset enough to suppress live calls. The authoritative guard is
+   * server-side anyway — accepting an ended call is refused — so this is
+   * only here to spare the user a ring for something long dead.
    *
    * PushKit holds a push that lands before the JS bundle is up and
    * replays it on launch, so opening the app can ring you for a call the
    * caller hung up on minutes ago — a ring with nothing live to accept.
    */
   staleAfterMs?: number;
+}
+
+/**
+ * Whether a pushed call is old enough to be dismissed straight after
+ * being reported.
+ *
+ * Exported for testing, because getting this wrong is silent and total:
+ * too tight a window and clock skew between the server and the handset
+ * suppresses live calls with nothing in the app to explain it.
+ *
+ * Never dismisses on a missing timestamp, and never on a future one —
+ * skew runs both ways, and withholding a real call is far worse than
+ * ringing once for a dead one.
+ */
+export function isStalePush(
+  sentAt: number | undefined,
+  now: number,
+  staleAfterMs: number,
+): boolean {
+  if (typeof sentAt !== 'number' || !Number.isFinite(sentAt)) return false;
+  const age = now - sentAt;
+  if (age < 0) return false;
+  return age > staleAfterMs;
 }
 
 interface PushPayload {
@@ -139,14 +166,12 @@ export function useVoipCalls({
   onDecline,
   appName = 'poolse',
   apnsEnvironment,
-  staleAfterMs = 45_000,
+  staleAfterMs = 120_000,
 }: UseVoipCallsOptions): void {
   const poolse = usePoolse();
 
   /** Calls currently shown to CallKit, keyed by call id. */
   const shown = useRef<Map<string, VoipIncomingCall>>(new Map());
-  /** Every call id already acted on, so neither route can ring twice. */
-  const seen = useRef<Set<string>>(new Set());
 
   // Read at event time so a re-render doesn't tear down and re-register
   // the native listeners.
@@ -155,6 +180,16 @@ export function useVoipCalls({
 
   const staleRef = useRef(staleAfterMs);
   staleRef.current = staleAfterMs;
+
+  /**
+   * Resolves once CallKit is configured.
+   *
+   * On a push-launched app the queued push can be replayed before
+   * `setup()` finishes, and reporting into an unconfigured CallKit
+   * throws — which iOS treats as a push that was never reported, and
+   * kills the app for it. Reports are chained on this instead.
+   */
+  const ready = useRef<Promise<unknown>>(Promise.resolve());
 
   /** Take a call down in CallKit — the island stays stuck until we do. */
   const dismiss = useRef((callId: string) => {
@@ -167,20 +202,47 @@ export function useVoipCalls({
     }
   });
 
-  /** Show a call once, from whichever route reached us first. */
+  /**
+   * Report a call to CallKit.
+   *
+   * ALWAYS reports, with no early return before
+   * `displayIncomingCall`. iOS terminates an app that accepts a VoIP
+   * push without reporting a call — so skipping the report to
+   * deduplicate, or because the push looked stale, crashes the app
+   * instead of quietly ignoring the call.
+   *
+   * Deduplication needs no help from us: CallKit keys calls by UUID, so
+   * reporting the same `callId` twice updates the existing call rather
+   * than creating a second one. That is what makes it safe for the
+   * socket and the push to both report the same call.
+   *
+   * A stale call is reported and then immediately ended, which satisfies
+   * the contract and still spares the user a ring they cannot answer.
+   */
   const present = useRef((call: VoipIncomingCall, sentAt?: number) => {
-    if (seen.current.has(call.callId)) return;
-
-    // A replayed push for a call that already ended would produce a ring
-    // nobody can answer, which is worse than missing it.
-    if (typeof sentAt === 'number' && Date.now() - sentAt > staleRef.current) return;
-
-    seen.current.add(call.callId);
     shown.current.set(call.callId, call);
 
-    // Must happen now: iOS kills an app that takes a VoIP push without
-    // reporting a call, and eventually stops waking it at all.
-    callKeep.displayIncomingCall(call.callId, call.callerUserId, call.callerName, 'generic', false);
+    const show = () => {
+      try {
+        callKeep.displayIncomingCall(
+          call.callId,
+          call.callerUserId,
+          call.callerName,
+          'generic',
+          false,
+        );
+      } catch {
+        // Never let a reporting failure propagate: an exception here
+        // takes the whole app down on a path iOS is already watching.
+      }
+    };
+
+    // `.then` on an already-resolved promise still defers a tick, which
+    // is immaterial next to the seconds iOS allows — and far cheaper
+    // than reporting before CallKit is ready.
+    void ready.current.then(show, show);
+
+    if (isStalePush(sentAt, Date.now(), staleRef.current)) dismiss.current(call.callId);
   });
 
   useEffect(() => {
@@ -202,7 +264,7 @@ export function useVoipCalls({
       );
     };
 
-    void callKeep
+    ready.current = callKeep
       .setup({
         ios: { appName },
         android: {
@@ -214,8 +276,9 @@ export function useVoipCalls({
         },
       })
       .catch(() => {
-        // A failed CallKit setup shouldn't take the app down; calls just
-        // stay foreground-only.
+        // A failed setup shouldn't take the app down. Reports still go
+        // out afterwards — a rejected setup often still leaves CallKit
+        // usable, and not reporting is the one outcome iOS punishes.
       });
 
     // PushKit issues a token on every launch and may rotate it, so
@@ -253,8 +316,16 @@ export function useVoipCalls({
 
     callKeep.addEventListener('answerCall', (({ callUUID }: { callUUID: string }) => {
       const call = shown.current.get(callUUID);
-      if (!call) return;
       shown.current.delete(callUUID);
+
+      // The map is empty after a relaunch — iOS can kill and restart the
+      // app between reporting the call and the user answering it. Falling
+      // back to the hook's own state means answering still works instead
+      // of silently doing nothing.
+      if (!call) {
+        void handlers.current.calls?.accept();
+        return;
+      }
 
       // Accept through the shared state machine so the in-app UI moves to
       // 'active' too. The explicit argument matters: on a cold launch the
@@ -271,7 +342,13 @@ export function useVoipCalls({
     callKeep.addEventListener('endCall', (({ callUUID }: { callUUID: string }) => {
       const call = shown.current.get(callUUID);
       shown.current.delete(callUUID);
-      if (!call) return;
+
+      // Same relaunch case as answerCall: end whatever the hook thinks
+      // is live rather than leaving a call the user has dismissed.
+      if (!call) {
+        void handlers.current.calls?.hangUp();
+        return;
+      }
 
       void handlers.current.calls?.decline({
         callId: call.callId,
