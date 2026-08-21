@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "React hooks for realtime chat — PoolseProvider plus useMessages, useTyping, usePresence, useReactions, useMembers, useAttachmentUpload. Works on web and React Native. No UI. MIT — alternative to sendbird-chat-react and stream-chat-react.",
   "license": "MIT",
   "keywords": [
@@ -62,7 +62,7 @@
     "lint": "eslint src test"
   },
   "dependencies": {
-    "@poolse/sdk": "^2.6.0"
+    "@poolse/sdk": "^2.7.0"
   },
   "peerDependencies": {
     "react": ">=18"

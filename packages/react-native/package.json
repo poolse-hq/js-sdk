@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react-native",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "React Native chat SDK for Expo and bare RN. Drop-in ConversationView + PoolseInbox with camera, attachments, markdown, AppState lifecycle, KeyboardAvoidingView baked in. JS theme tokens. MIT — alternative to sendbird-chat-react-native and stream-chat-react-native.",
   "license": "MIT",
   "keywords": [
@@ -64,8 +64,8 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@poolse/react": "^2.6.0",
-    "@poolse/sdk": "^2.6.0"
+    "@poolse/react": "^2.7.0",
+    "@poolse/sdk": "^2.7.0"
   },
   "peerDependencies": {
     "react": ">=18",

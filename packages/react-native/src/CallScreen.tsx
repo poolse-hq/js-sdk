@@ -33,6 +33,16 @@ export interface CallScreenProps {
    * {@link VoiceRoomBarProps.onStatusChange}.
    */
   onStatusChange?: (status: VoiceStatus) => void;
+  /**
+   * Hide this screen while a call is merely ringing in.
+   *
+   * Set it when `useVoipCalls` is wired: CallKit already shows the
+   * system call UI on the lock screen and in the Dynamic Island, and a
+   * second in-app sheet on top of it means one tap of Call produces two
+   * competing rings. The screen still appears once the call connects, to
+   * carry the in-call controls.
+   */
+  nativeIncomingUi?: boolean;
 }
 
 /**
@@ -56,6 +66,7 @@ export function CallScreen({
   calls: external,
   webrtc,
   onStatusChange,
+  nativeIncomingUi = false,
 }: CallScreenProps) {
   const theme = usePoolseTheme();
   const own = useCalls(external ? null : userId);
@@ -85,7 +96,11 @@ export function CallScreen({
   }, [voice.status, onStatusChange]);
 
   const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
-  const visible = calls.phase !== 'idle';
+
+  // With CallKit driving the ring, showing this too would be a second
+  // simultaneous prompt for the same call.
+  const ringingIn = calls.phase === 'ringing-in';
+  const visible = calls.phase !== 'idle' && !(nativeIncomingUi && ringingIn);
 
   const hangUp = () => {
     voice.leave();
