@@ -1,4 +1,5 @@
 import { useCalls, useVoiceRoom, type UseCalls } from '@poolse/react';
+import type { VoiceStatus } from '@poolse/sdk';
 import { useEffect, useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -26,6 +27,12 @@ export interface CallScreenProps {
    * that there is no audio. See {@link VoiceRoomBarProps.webrtc}.
    */
   webrtc?: NativeWebRtcModule | null;
+  /**
+   * Called whenever the call's audio connection state changes. Drive
+   * speakerphone and the proximity sensor from here — see
+   * {@link VoiceRoomBarProps.onStatusChange}.
+   */
+  onStatusChange?: (status: VoiceStatus) => void;
 }
 
 /**
@@ -43,7 +50,13 @@ export interface CallScreenProps {
  * to whatever button your UI wants. Pass the same instance in via
  * `calls` so both halves share one state machine.
  */
-export function CallScreen({ userId, labelFor, calls: external, webrtc }: CallScreenProps) {
+export function CallScreen({
+  userId,
+  labelFor,
+  calls: external,
+  webrtc,
+  onStatusChange,
+}: CallScreenProps) {
   const theme = usePoolseTheme();
   const own = useCalls(external ? null : userId);
   const calls = external ?? own;
@@ -66,6 +79,10 @@ export function CallScreen({ userId, labelFor, calls: external, webrtc }: CallSc
   useEffect(() => {
     if (calls.phase === 'active' && voice.status === 'idle') void voice.join();
   }, [calls.phase, voice]);
+
+  useEffect(() => {
+    onStatusChange?.(voice.status);
+  }, [voice.status, onStatusChange]);
 
   const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
   const visible = calls.phase !== 'idle';

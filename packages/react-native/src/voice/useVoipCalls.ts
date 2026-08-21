@@ -88,6 +88,19 @@ export interface UseVoipCallsOptions {
   onDecline?: (call: VoipIncomingCall) => void;
   /** CallKit display name for your app. Shown on the lock screen. */
   appName?: string;
+  /**
+   * Which APNs environment issued this build's PushKit token — it must
+   * match the app's `aps-environment` entitlement.
+   *
+   * Pass it explicitly. The fallback guesses from `__DEV__`, which
+   * describes the JS bundle and NOT the entitlement: an ad-hoc or
+   * TestFlight build has `__DEV__ === false` while still carrying the
+   * `development` entitlement, so it receives a sandbox token and
+   * reports it as production. The server then pushes to the wrong
+   * environment, Apple answers BadDeviceToken, and the phone never
+   * rings — with nothing in the app to suggest why.
+   */
+  apnsEnvironment?: 'production' | 'sandbox';
 }
 
 interface PushPayload {
@@ -109,6 +122,7 @@ export function useVoipCalls({
   onAnswer,
   onDecline,
   appName = 'poolse',
+  apnsEnvironment,
 }: UseVoipCallsOptions): void {
   const poolse = usePoolse();
 
@@ -164,7 +178,11 @@ export function useVoipCalls({
     voipPush.addEventListener('register', ((token: string) => {
       if (cancelled || !token) return;
       void poolse.devices
-        .register({ token, platform: 'ios', environment: apnsEnvironment() })
+        .register({
+          token,
+          platform: 'ios',
+          environment: apnsEnvironment ?? guessApnsEnvironment(),
+        })
         .catch(() => {
           // Offline at launch is normal. The next launch re-registers.
         });
@@ -208,13 +226,17 @@ export function useVoipCalls({
       callKeep.removeEventListener('answerCall');
       callKeep.removeEventListener('endCall');
     };
-  }, [poolse, voipPush, callKeep, appName]);
+  }, [poolse, voipPush, callKeep, appName, apnsEnvironment]);
 }
 
 /**
- * Debug builds get sandbox APNs tokens, which production APNs rejects
- * outright — so the environment has to travel with the token.
+ * Last-resort guess when `apnsEnvironment` isn't supplied.
+ *
+ * `__DEV__` reflects the JS bundle, not the `aps-environment`
+ * entitlement, and the two disagree for any ad-hoc or TestFlight build.
+ * Prefer passing the value explicitly, derived from the same source as
+ * the entitlement.
  */
-function apnsEnvironment(): 'production' | 'sandbox' {
+function guessApnsEnvironment(): 'production' | 'sandbox' {
   return __DEV__ ? 'sandbox' : 'production';
 }

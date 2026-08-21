@@ -1,6 +1,6 @@
 import { useVoiceRoom } from '@poolse/react';
-import type { VoiceParticipant } from '@poolse/sdk';
-import { useMemo } from 'react';
+import type { VoiceParticipant, VoiceStatus } from '@poolse/sdk';
+import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { usePoolseTheme } from './theme/PoolseTheme.js';
@@ -23,6 +23,15 @@ export interface VoiceRoomBarProps {
    * want in Expo Go.
    */
   webrtc?: NativeWebRtcModule | null;
+  /**
+   * Called whenever the room's connection state changes.
+   *
+   * Audio routing is the app's job — speakerphone, the proximity sensor
+   * that blanks the screen at your ear, and holding the audio session
+   * open all need a native module this package deliberately doesn't
+   * depend on. Use this to start and stop it.
+   */
+  onStatusChange?: (status: VoiceStatus) => void;
   /** Resolves a user id to a display label. Defaults to a short id. */
   labelFor?: (userId: string) => string;
   /**
@@ -45,6 +54,7 @@ export function VoiceRoomBar({
   labelFor,
   unavailableSlot,
   webrtc,
+  onStatusChange,
 }: VoiceRoomBarProps) {
   const theme = usePoolseTheme();
   const available = isNativeWebRtcAvailable(webrtc);
@@ -60,6 +70,10 @@ export function VoiceRoomBar({
     available ? conversationId : null,
     opts,
   );
+
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [status, onStatusChange]);
 
   const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
   const connected = status === 'connected';
