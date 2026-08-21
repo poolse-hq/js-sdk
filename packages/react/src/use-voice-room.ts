@@ -44,6 +44,13 @@ export function useVoiceRoom(
   // the lifetime of a room.
   const optsRef = useRef(opts);
 
+  // Whether THIS hook holds the room open. The SDK hands out one room
+  // per conversation and counts holders, so leaving without having
+  // joined would release someone else's claim — a call screen unmounting
+  // would cut the audio out from under a voice bar in the same
+  // conversation.
+  const joined = useRef(false);
+
   const room = useMemo(
     () => (conversationId ? poolse.realtime.voice(conversationId, optsRef.current) : null),
     [poolse, conversationId],
@@ -66,8 +73,11 @@ export function useVoiceRoom(
       offError();
       // Leaving on unmount is deliberate: the server only broadcasts
       // `voice:left` on an explicit leave, so skipping it would strand
-      // us in everyone else's roster.
-      room.leave();
+      // us in everyone else's roster. Only release a claim we made.
+      if (joined.current) {
+        joined.current = false;
+        room.leave();
+      }
     };
   }, [room]);
 
@@ -76,12 +86,15 @@ export function useVoiceRoom(
     setError(null);
     try {
       await room.join();
+      joined.current = true;
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     }
   }, [room]);
 
   const leave = useCallback(() => {
+    if (!joined.current) return;
+    joined.current = false;
     room?.leave();
   }, [room]);
 

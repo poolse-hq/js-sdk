@@ -223,6 +223,96 @@ describe('VoiceRoom roster', () => {
   });
 });
 
+describe('VoiceRoom sharing', () => {
+  // PoolseRealtime hands out ONE room per conversation, so a call screen
+  // and an always-on voice bar for the same conversation share this
+  // instance. That is correct — a user is in one audio session — but it
+  // means teardown has to be reference counted.
+  it('stays connected while another holder still has it', async () => {
+    const pushed: Pushed[] = [];
+    const { channel, emit } = fakeChannel(pushed);
+    const pc = fakePeerConnection();
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: fakeAdapter(pc),
+      detectSpeaking: false,
+    });
+
+    await room.join();
+    emit('voice:joined', { user_id: 'user-a' });
+    await room.join();
+
+    room.leave();
+
+    // The first holder let go; the second is still in the room, so the
+    // session must survive — otherwise hanging up a call silences the
+    // voice bar the user is also sitting in.
+    expect(room.getStatus()).toBe('connected');
+    expect(pushed.some((p) => p.event === 'voice:leave')).toBe(false);
+  });
+
+  it('tears down once the last holder leaves', async () => {
+    const pushed: Pushed[] = [];
+    const { channel, emit } = fakeChannel(pushed);
+    const pc = fakePeerConnection();
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: fakeAdapter(pc),
+      detectSpeaking: false,
+    });
+
+    await room.join();
+    emit('voice:joined', { user_id: 'user-a' });
+    await room.join();
+
+    room.leave();
+    room.leave();
+
+    expect(room.getStatus()).toBe('idle');
+    expect(pushed.some((p) => p.event === 'voice:leave')).toBe(true);
+  });
+
+  it('a second join reuses the session rather than opening another', async () => {
+    const pushed: Pushed[] = [];
+    const { channel, emit } = fakeChannel(pushed);
+    const pc = fakePeerConnection();
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: fakeAdapter(pc),
+      detectSpeaking: false,
+    });
+
+    await room.join();
+    emit('voice:joined', { user_id: 'user-a' });
+    await room.join();
+
+    // Two channels and two meshes for one conversation would duplicate
+    // every participant and every stream.
+    expect(pushed.filter((p) => p.event === 'voice:join')).toHaveLength(1);
+  });
+
+  it('an extra leave cannot drive the count negative', async () => {
+    const pushed: Pushed[] = [];
+    const { channel, emit } = fakeChannel(pushed);
+    const pc = fakePeerConnection();
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: fakeAdapter(pc),
+      detectSpeaking: false,
+    });
+
+    await room.join();
+    emit('voice:joined', { user_id: 'user-a' });
+
+    room.leave();
+    room.leave();
+    room.leave();
+
+    // A stray leave must not leave the room owing claims, or the next
+    // join would need several leaves to actually hang up.
+    await room.join();
+    emit('voice:joined', { user_id: 'user-a' });
+    room.leave();
+    expect(room.getStatus()).toBe('idle');
+  });
+});
+
 describe('CallsResource', () => {
   it('places a call and maps the reply out of snake_case', async () => {
     const pushed: Pushed[] = [];

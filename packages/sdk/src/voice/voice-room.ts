@@ -73,6 +73,17 @@ export class VoiceRoom {
   private readonly pendingIce = new Map<string, VoiceCandidate[]>();
   private readonly roster = new Map<string, Omit<VoiceParticipant, 'isSelf'>>();
 
+  /**
+   * How many callers currently hold this room open.
+   *
+   * `PoolseRealtime` hands out ONE room per conversation, so a call
+   * screen and an always-on voice bar for the same conversation share
+   * this instance — which is correct, since a user is in one audio
+   * session, not two. Without counting, whichever of them tore down
+   * first would cut the audio out from under the other.
+   */
+  private holders = 0;
+
   private speakingTimer: ReturnType<typeof setInterval> | null = null;
   private stopSpeakingDetection: Unsubscribe | null = null;
 
@@ -124,12 +135,20 @@ export class VoiceRoom {
 
   /** Acquire the mic, join the channel, and start negotiating. */
   async join(): Promise<void> {
-    if (this.channel) return;
+    // Already in the room: record the extra holder and reuse the
+    // session rather than opening a second channel and mesh.
+    if (this.channel) {
+      this.holders += 1;
+      return;
+    }
+
+    this.holders += 1;
     this.setStatus('connecting');
 
     try {
       this.localStream = await this.webrtc.getUserMedia();
     } catch (err) {
+      this.holders = Math.max(0, this.holders - 1);
       this.setStatus('error');
       this.emitError(new Error(`microphone unavailable: ${String(err)}`));
       throw err;
@@ -165,6 +184,12 @@ export class VoiceRoom {
 
   /** Announce departure, then drop every peer connection and the mic. */
   leave(): void {
+    if (this.holders > 0) this.holders -= 1;
+
+    // Someone else still has the room open — hanging up a call must not
+    // silence the voice bar the user is also sitting in.
+    if (this.holders > 0) return;
+
     this.channel?.push('voice:leave', {});
     this.teardown();
     this.setStatus('idle');
@@ -442,6 +467,10 @@ export class VoiceRoom {
   }
 
   private teardown(): void {
+    // Reached by leave() at zero holders and by a failed join; either
+    // way nobody is holding the room once it runs.
+    this.holders = 0;
+
     for (const peerId of [...this.peers.keys()]) this.closePeer(peerId);
 
     if (this.speakingTimer) clearInterval(this.speakingTimer);
