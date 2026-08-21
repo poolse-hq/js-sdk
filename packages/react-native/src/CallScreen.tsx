@@ -102,9 +102,12 @@ export function CallScreen({
   const ringingIn = calls.phase === 'ringing-in';
   const visible = calls.phase !== 'idle' && !(nativeIncomingUi && ringingIn);
 
+  // `calls.hangUp()` signals the other side and always returns to idle;
+  // `reset()` alone only cleared local state, leaving the peer in a call
+  // with a screen it had no reason to close.
   const hangUp = () => {
     voice.leave();
-    calls.reset();
+    void calls.hangUp();
   };
 
   return (

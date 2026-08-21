@@ -28,6 +28,7 @@ import type {
   CallBusy,
   CallCancelled,
   CallDeclined,
+  CallEnded,
   IncomingCall,
   OutgoingCall,
 } from './types.js';
@@ -60,6 +61,7 @@ export class CallsResource {
   private readonly declined = new Set<(c: CallDeclined) => void>();
   private readonly busy = new Set<(c: CallBusy) => void>();
   private readonly cancelled = new Set<(c: CallCancelled) => void>();
+  private readonly ended = new Set<(c: CallEnded) => void>();
 
   private bound = false;
 
@@ -120,6 +122,21 @@ export class CallsResource {
     });
   }
 
+  /**
+   * End a call that is already connected.
+   *
+   * Distinct from {@link cancel}, which withdraws an unanswered invite.
+   * Without this a connected call has no end signal, so hanging up
+   * leaves the other side sitting in the room with a call screen it has
+   * no reason to close.
+   */
+  async hangUp(call: { callId: string; conversationId: string }): Promise<void> {
+    await this.request('call:hangup', {
+      call_id: call.callId,
+      conversation_id: call.conversationId,
+    });
+  }
+
   /** Withdraw an invite you placed — hung up before anyone answered. */
   async cancel(call: OutgoingCall): Promise<void> {
     await this.request('call:cancel', {
@@ -156,6 +173,13 @@ export class CallsResource {
     this.bind();
     this.busy.add(fn);
     return () => this.busy.delete(fn) as unknown as void;
+  }
+
+  /** The other side ended a connected call. */
+  onEnded(fn: (call: CallEnded) => void): Unsubscribe {
+    this.bind();
+    this.ended.add(fn);
+    return () => this.ended.delete(fn) as unknown as void;
   }
 
   /** An inbound ring was withdrawn before you answered. */
@@ -210,6 +234,15 @@ export class CallsResource {
         userId: p.user_id,
       };
       this.busy.forEach((l) => l(call));
+    });
+
+    channel.on('call:ended', (p: WireParty) => {
+      const call: CallEnded = {
+        callId: p.call_id,
+        conversationId: p.conversation_id,
+        userId: p.user_id,
+      };
+      this.ended.forEach((l) => l(call));
     });
 
     channel.on('call:cancelled', (p: WireIncoming) => {

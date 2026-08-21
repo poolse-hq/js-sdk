@@ -140,6 +140,14 @@ export interface CallBusy {
   userId: string;
 }
 
+/** The other side ended a call that was already connected. */
+export interface CallEnded {
+  callId: string;
+  conversationId: string;
+  /** Who hung up. */
+  userId: string;
+}
+
 /** The caller hung up before anyone answered. */
 export interface CallCancelled {
   callId: string;

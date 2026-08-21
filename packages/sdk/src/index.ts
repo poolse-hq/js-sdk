@@ -87,6 +87,7 @@ export type {
   CallAccepted,
   CallBusy,
   CallCancelled,
+  CallEnded,
   CallDeclined,
   IncomingCall,
   OutgoingCall,

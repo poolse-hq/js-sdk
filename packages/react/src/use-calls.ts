@@ -60,6 +60,16 @@ export interface UseCalls {
   decline: (call?: IncomingCall) => Promise<void>;
   /** Hang up an outbound ring before it's answered. */
   cancel: () => Promise<void>;
+  /**
+   * End the call, whatever state it is in.
+   *
+   * The one action a UI's hang-up button should call: it sends the right
+   * signal for the current phase — cancel while ringing out, decline
+   * while ringing in, hangup once connected — and always returns to
+   * idle, even if the signal fails. `reset` alone clears local state
+   * only, which leaves the other side in the call.
+   */
+  hangUp: () => Promise<void>;
   /** Drop back to idle — call after leaving the room, or to clear a
    *  `declined` / `busy` / `timed-out` state the UI has finished
    *  showing. */
@@ -139,6 +149,15 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       setOutgoing(null);
     });
 
+    // The other side hung up a connected call. Without this the screen
+    // stays open on a call that no longer exists.
+    const offEnded = calls.onEnded(() => {
+      setPhase('idle');
+      setIncoming(null);
+      setOutgoing(null);
+      setActiveConversationId(null);
+    });
+
     const offCancelled = calls.onCancelled((call) => {
       // Only clear if it's the call we're actually showing — a late
       // cancel for an older call shouldn't dismiss a fresh ring.
@@ -154,6 +173,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       offAccepted();
       offDeclined();
       offBusy();
+      offEnded();
       offCancelled();
     };
   }, [calls]);
@@ -242,6 +262,37 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     return () => clearTimeout(timer);
   }, [phase, ringTimeoutMs]);
 
+  /**
+   * End the call and tell the other side.
+   *
+   * Local state is cleared in `finally` on purpose: a failed signal must
+   * never strand the user on a call screen they cannot dismiss.
+   */
+  const hangUp = useCallback(async () => {
+    const conversationId =
+      activeConversationId ?? incoming?.conversationId ?? outgoing?.conversationId;
+    const callId = incoming?.callId ?? outgoing?.callId;
+
+    try {
+      if (!calls || !callId || !conversationId) return;
+
+      if (phase === 'ringing-out' && outgoing) {
+        await calls.cancel(outgoing);
+      } else if (phase === 'ringing-in' && incoming) {
+        await calls.decline(incoming);
+      } else if (phase === 'active') {
+        await calls.hangUp({ callId, conversationId });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setPhase('idle');
+      setIncoming(null);
+      setOutgoing(null);
+      setActiveConversationId(null);
+    }
+  }, [calls, phase, incoming, outgoing, activeConversationId]);
+
   const reset = useCallback(() => {
     setPhase('idle');
     setIncoming(null);
@@ -260,6 +311,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     accept,
     decline,
     cancel,
+    hangUp,
     reset,
   };
 }
