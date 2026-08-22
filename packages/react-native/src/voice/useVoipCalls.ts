@@ -1,5 +1,5 @@
 import { usePoolse, type UseCalls } from '@poolse/react';
-import type { IncomingCall } from '@poolse/sdk';
+import type { CallMedia, IncomingCall } from '@poolse/sdk';
 import { useEffect, useRef } from 'react';
 
 /**
@@ -87,6 +87,14 @@ export interface VoipIncomingCall {
   conversationId: string;
   callerUserId: string;
   callerName: string;
+  /**
+   * What the call opened as.
+   *
+   * Carried by the push because CallKit fixes the answer button when the
+   * call is reported and cannot change it afterwards — waiting for the
+   * socket would mean answering a video call through an audio UI.
+   */
+  media: CallMedia;
 }
 
 export interface UseVoipCallsOptions {
@@ -187,6 +195,8 @@ interface PushPayload {
   conversation_id?: string;
   caller_user_id?: string;
   caller_name?: string;
+  media?: string;
+  has_video?: boolean;
   sent_at?: number;
 }
 
@@ -276,7 +286,7 @@ export function useVoipCalls({
           call.callerUserId,
           call.callerName,
           'generic',
-          false,
+          call.media === 'video',
         );
       } catch {
         // Never let a reporting failure propagate: an exception here
@@ -318,6 +328,9 @@ export function useVoipCalls({
           conversationId,
           callerUserId: payload.caller_user_id ?? '',
           callerName: payload.caller_name ?? 'Incoming call',
+          // `has_video` is what older servers sent; `media` supersedes
+          // it. Either says video, and the system UI offers video.
+          media: payload.media === 'video' || payload.has_video ? 'video' : 'audio',
         },
         payload.sent_at,
       );
@@ -404,6 +417,7 @@ export function useVoipCalls({
         callId: call.callId,
         conversationId: call.conversationId,
         callerUserId: call.callerUserId,
+        media: call.media,
       });
       handlers.current.onAnswer?.(call);
     }) as (payload: unknown) => void);
@@ -429,6 +443,7 @@ export function useVoipCalls({
         callId: call.callId,
         conversationId: call.conversationId,
         callerUserId: call.callerUserId,
+        media: call.media,
       });
       handlers.current.onDecline?.(call);
     }) as (payload: unknown) => void);
@@ -460,6 +475,7 @@ export function useVoipCalls({
         conversationId: incoming.conversationId,
         callerUserId: incoming.callerUserId,
         callerName: incoming.callerUserId,
+        media: incoming.media,
       });
     }
   }, [phase, incoming]);

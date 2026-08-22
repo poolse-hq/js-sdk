@@ -14,7 +14,21 @@ export {
   ConversationHandle,
   ConversationsResource,
 } from './resources/conversations.js';
+export { CallTokensResource } from './resources/call-tokens.js';
 export { IceServersResource, type IceServerResponse } from './resources/ice-servers.js';
+export { CallRoom } from './voice/call-room.js';
+export type {
+  CallConnection,
+  CallParticipant,
+  CallRoomOptions,
+  CallRoomStatus,
+  LiveKitModule,
+  LiveKitParticipant,
+  LiveKitPublication,
+  LiveKitRoomHandle,
+  LiveKitTrack,
+  LiveKitTrackReference,
+} from './voice/livekit-types.js';
 export { MeResource } from './resources/me.js';
 export { DevicesResource } from './resources/devices.js';
 export type {
@@ -85,6 +99,7 @@ export { VoiceRoom } from './voice/voice-room.js';
 export { CallsResource } from './voice/calls.js';
 export { createBrowserWebRtcAdapter, isWebRtcAvailable } from './voice/webrtc-browser.js';
 export type {
+  CallMedia,
   CallAccepted,
   CallBusy,
   CallCancelled,

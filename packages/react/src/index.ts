@@ -54,5 +54,6 @@ export type {
 export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from '@poolse/sdk';
 
 // ── Voice + calling ──────────────────────────────────────────────
+export { useCallRoom, type UseCallRoom, type UseCallRoomOptions } from './use-call-room.js';
 export { useVoiceRoom, type UseVoiceRoom } from './use-voice-room.js';
 export { useCalls, type UseCalls, type CallPhase } from './use-calls.js';

@@ -1,4 +1,4 @@
-import type { IncomingCall, OutgoingCall } from '@poolse/sdk';
+import type { CallMedia, IncomingCall, OutgoingCall } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 
@@ -44,9 +44,17 @@ export interface UseCalls {
    * `active` — the same id for both caller and callee.
    */
   activeConversationId: string | null;
+  /**
+   * What the current call opened as.
+   *
+   * `'audio'` when nothing is in flight. Either side can still turn
+   * their camera on mid-call — this is what was rung, which is what the
+   * incoming UI has to commit to before the user answers.
+   */
+  media: CallMedia;
   error: Error | null;
   /** Ring every other member of a conversation. */
-  call: (conversationId: string) => Promise<void>;
+  call: (conversationId: string, media?: CallMedia) => Promise<void>;
   /**
    * Answer the inbound ring.
    *
@@ -179,11 +187,11 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
   }, [calls]);
 
   const call = useCallback(
-    async (conversationId: string) => {
+    async (conversationId: string, media: CallMedia = 'audio') => {
       if (!calls) return;
       setError(null);
       try {
-        const placed = await calls.invite(conversationId);
+        const placed = await calls.invite(conversationId, media);
         setOutgoing(placed);
         setPhase('ringing-out');
       } catch (err) {
@@ -301,11 +309,18 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     setError(null);
   }, []);
 
+  // Whichever end we are: the callee learns it from the ring, the
+  // caller from the invite it placed. Idle reports audio rather than
+  // holding the last call's value, so a fresh audio call can never
+  // inherit video from the one before it.
+  const media: CallMedia = incoming?.media ?? outgoing?.media ?? 'audio';
+
   return {
     phase,
     incoming,
     outgoing,
     activeConversationId,
+    media,
     error,
     call,
     accept,

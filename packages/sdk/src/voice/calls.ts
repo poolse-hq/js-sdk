@@ -24,6 +24,7 @@ import type { Channel } from 'phoenix';
 
 import { PoolseError } from '../errors.js';
 import type {
+  CallMedia,
   CallAccepted,
   CallBusy,
   CallCancelled,
@@ -40,6 +41,7 @@ interface WireIncoming {
   call_id: string;
   conversation_id: string;
   caller_user_id: string;
+  media?: string;
 }
 interface WireParty {
   call_id: string;
@@ -50,6 +52,17 @@ interface WireInviteReply {
   call_id: string;
   conversation_id: string;
   callee_user_ids?: string[];
+  media?: string;
+}
+
+/**
+ * Anything unrecognised is audio.
+ *
+ * A server that predates the field sends nothing, and a call that rings
+ * as audio is better than one that fails over how it will be rendered.
+ */
+function toMedia(value: string | undefined): CallMedia {
+  return value === 'video' ? 'video' : 'audio';
 }
 
 export class CallsResource {
@@ -76,13 +89,18 @@ export class CallsResource {
    * has fanned the invite out, with the minted call id and who was rung
    * — not when anyone answers; that arrives via {@link onAccepted}.
    */
-  invite(conversationId: string): Promise<OutgoingCall> {
+  invite(conversationId: string, media: CallMedia = 'audio'): Promise<OutgoingCall> {
     return this.request<WireInviteReply>('call:invite', {
       conversation_id: conversationId,
+      media,
     }).then((reply) => ({
       callId: reply.call_id,
       conversationId: reply.conversation_id,
       calleeUserIds: reply.callee_user_ids ?? [],
+      // Echoed by the server rather than assumed, so an older deployment
+      // that ignores the field is reflected honestly instead of leaving
+      // the UI promising video it will not get.
+      media: toMedia(reply.media),
     }));
   }
 
@@ -205,6 +223,7 @@ export class CallsResource {
         callId: p.call_id,
         conversationId: p.conversation_id,
         callerUserId: p.caller_user_id,
+        media: toMedia(p.media),
       };
       this.incoming.forEach((l) => l(call));
     });

@@ -1,3 +1,8 @@
+export {
+  CallVideoGrid,
+  type CallVideoGridProps,
+  type LiveKitReactNativeModule,
+} from './voice/CallVideoGrid.js';
 // @poolse/react-native — plug-and-play React Native components built
 // on @poolse/react hooks. Mirrors the @poolse/react-ui surface for
 // web: same component names, same prop shapes, same feature flags —

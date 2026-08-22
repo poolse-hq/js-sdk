@@ -338,11 +338,12 @@ describe('CallsResource', () => {
     const placed = await calls.invite('conv-1');
 
     expect(pushed[0]?.event).toBe('call:invite');
-    expect(pushed[0]?.payload).toEqual({ conversation_id: 'conv-1' });
+    expect(pushed[0]?.payload).toEqual({ conversation_id: 'conv-1', media: 'audio' });
     expect(placed).toEqual({
       callId: 'c1',
       conversationId: 'conv-1',
       calleeUserIds: ['u2', 'u3'],
+      media: 'audio',
     });
   });
 
@@ -363,7 +364,9 @@ describe('CallsResource', () => {
       caller_user_id: 'u1',
     });
 
-    expect(seen).toEqual([{ callId: 'c9', conversationId: 'conv-9', callerUserId: 'u1' }]);
+    expect(seen).toEqual([
+      { callId: 'c9', conversationId: 'conv-9', callerUserId: 'u1', media: 'audio' },
+    ]);
   });
 
   it('sends a busy signal under the caller-directed payload shape', async () => {
@@ -383,7 +386,12 @@ describe('CallsResource', () => {
     } as unknown as Channel;
 
     const calls = new CallsResource(() => channel);
-    await calls.markBusy({ callId: 'c1', conversationId: 'conv-1', callerUserId: 'u1' });
+    await calls.markBusy({
+      callId: 'c1',
+      conversationId: 'conv-1',
+      callerUserId: 'u1',
+      media: 'audio',
+    });
 
     expect(pushed[0]?.event).toBe('call:busy');
     expect(pushed[0]?.payload).toEqual({
@@ -555,5 +563,83 @@ describe('VoiceRoom ICE servers', () => {
     await room.join();
 
     expect(calls).toBe(1);
+  });
+});
+
+// The media type has to survive the round trip, because CallKit commits
+// to an answer button when the call is reported and cannot change it.
+describe('call media type', () => {
+  function callsWith(reply: Record<string, unknown>) {
+    const pushed: Pushed[] = [];
+    const handlers = new Map<string, (payload: unknown) => void>();
+    const replyChain = {
+      receive(status: string, cb: (arg: unknown) => void) {
+        if (status === 'ok') cb(reply);
+        return replyChain;
+      },
+    };
+    const channel = {
+      on: (event: string, cb: (payload: unknown) => void) => handlers.set(event, cb),
+      push: (event: string, payload: Record<string, unknown>) => {
+        pushed.push({ event, payload });
+        return replyChain;
+      },
+    } as unknown as Channel;
+
+    return { calls: new CallsResource(() => channel), pushed, handlers };
+  }
+
+  it('defaults an invite to audio', async () => {
+    const { calls, pushed } = callsWith({ call_id: 'c1', conversation_id: 'v1', media: 'audio' });
+    const placed = await calls.invite('v1');
+
+    expect(pushed[0]?.payload['media']).toBe('audio');
+    expect(placed.media).toBe('audio');
+  });
+
+  it('sends video when asked', async () => {
+    const { calls, pushed } = callsWith({ call_id: 'c1', conversation_id: 'v1', media: 'video' });
+    const placed = await calls.invite('v1', 'video');
+
+    expect(pushed[0]?.payload['media']).toBe('video');
+    expect(placed.media).toBe('video');
+  });
+
+  it('trusts the server echo over what we asked for', async () => {
+    // An older deployment ignores the field. Reporting video anyway
+    // would leave the UI promising a camera the call will never carry.
+    const { calls } = callsWith({ call_id: 'c1', conversation_id: 'v1' });
+    const placed = await calls.invite('v1', 'video');
+
+    expect(placed.media).toBe('audio');
+  });
+
+  it('reads the media type off an incoming ring', () => {
+    const { calls, handlers } = callsWith({});
+    const seen: string[] = [];
+    calls.onIncoming((c) => seen.push(c.media));
+
+    handlers.get('call:incoming')?.({
+      call_id: 'c1',
+      conversation_id: 'v1',
+      caller_user_id: 'u1',
+      media: 'video',
+    });
+
+    expect(seen).toEqual(['video']);
+  });
+
+  it('treats a ring with no media field as audio', () => {
+    const { calls, handlers } = callsWith({});
+    const seen: string[] = [];
+    calls.onIncoming((c) => seen.push(c.media));
+
+    handlers.get('call:incoming')?.({
+      call_id: 'c1',
+      conversation_id: 'v1',
+      caller_user_id: 'u1',
+    });
+
+    expect(seen).toEqual(['audio']);
   });
 });

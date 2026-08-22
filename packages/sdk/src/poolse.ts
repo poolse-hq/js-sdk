@@ -10,6 +10,9 @@ import { DevicesResource } from './resources/devices.js';
 import { MeResource } from './resources/me.js';
 import { MessagesResource } from './resources/messages.js';
 import { UsersResource } from './resources/users.js';
+import { CallTokensResource } from './resources/call-tokens.js';
+import { CallRoom } from './voice/call-room.js';
+import type { CallRoomOptions } from './voice/livekit-types.js';
 import { IceServersResource } from './resources/ice-servers.js';
 import { RestClient } from './rest-client.js';
 import { TokenCache } from './token-cache.js';
@@ -58,6 +61,8 @@ export class Poolse {
   public readonly realtime: PoolseRealtime;
   /** STUN/TURN servers for WebRTC — see `IceServersResource`. */
   public readonly iceServers: IceServersResource;
+  /** SFU credentials for a call's media — see `CallTokensResource`. */
+  public readonly callTokens: CallTokensResource;
 
   private readonly resolved: ResolvedConfig;
   private readonly tokenCache: TokenCache;
@@ -83,6 +88,7 @@ export class Poolse {
     this.attachments = new AttachmentsResource(this.rest, cachedConfig.fetch);
     this.users = new UsersResource(cachedConfig);
     this.iceServers = new IceServersResource(this.rest);
+    this.callTokens = new CallTokensResource(this.rest);
 
     this.realtime = new PoolseRealtime(cachedConfig, this.tokenCache, {
       ...(this.resolved.wsUrl !== undefined ? { wsUrl: this.resolved.wsUrl } : {}),
@@ -91,6 +97,31 @@ export class Poolse {
       // credentials expire, and a stale one is rejected silently — the
       // call connects and carries no media.
       iceServersProvider: async () => (await this.iceServers.list()).ice_servers,
+    });
+  }
+
+  /**
+   * A call's media, carried by the SFU.
+   *
+   * Media only — ringing, presence, roster and mute state stay on
+   * poolse's own channels, and a client joins both. See {@link CallRoom}.
+   *
+   * `livekit` is your app's `livekit-client` import. This package cannot
+   * import it for you: tsup rewrites `require()` into `__require()`,
+   * which Metro cannot follow, so a dependency required from in here is
+   * absent from every React Native bundle.
+   *
+   *     import * as livekit from 'livekit-client';
+   *     const call = poolse.call(conversationId, { livekit, video: true });
+   *     const usingSfu = await call.join();   // false = no SFU, use the mesh
+   */
+  call(
+    conversationId: string,
+    opts: Omit<CallRoomOptions, 'tokenProvider'> & Partial<Pick<CallRoomOptions, 'tokenProvider'>>,
+  ): CallRoom {
+    return new CallRoom({
+      ...opts,
+      tokenProvider: opts.tokenProvider ?? (() => this.callTokens.create(conversationId)),
     });
   }
 

@@ -1,9 +1,10 @@
-import { useCalls, useVoiceRoom, type UseCalls } from '@poolse/react';
-import type { VoiceStatus } from '@poolse/sdk';
-import { useEffect, useMemo } from 'react';
+import { useCallRoom, useCalls, useVoiceRoom, type UseCalls } from '@poolse/react';
+import type { LiveKitModule, VoiceStatus } from '@poolse/sdk';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { CallVideoGrid, type LiveKitReactNativeModule } from './voice/CallVideoGrid.js';
 import {
   createNativeWebRtcAdapter,
   isNativeWebRtcAvailable,
@@ -22,17 +23,40 @@ export interface CallScreenProps {
    */
   calls?: UseCalls;
   /**
-   * The `react-native-webrtc` module, imported by your app. Required for
-   * call audio; without it the screen still rings and connects but warns
-   * that there is no audio. See {@link VoiceRoomBarProps.webrtc}.
+   * The `react-native-webrtc` module (or `@livekit/react-native-webrtc`,
+   * which is API-compatible), imported by your app.
+   *
+   * Used for the peer-to-peer fallback when the deployment has no SFU.
+   * With an SFU configured, LiveKit owns the peer connection and this is
+   * only the safety net.
    */
   webrtc?: NativeWebRtcModule | null;
   /**
-   * Called whenever the call's audio connection state changes. Drive
+   * `livekit-client`, imported by your app. Enables SFU-backed calls,
+   * which is what makes video and the mid-call camera toggle possible.
+   * Omit it and calls fall back to the peer-to-peer mesh, audio only.
+   */
+  livekit?: LiveKitModule | null;
+  /**
+   * `@livekit/react-native`, imported by your app. Required to *render*
+   * video; without it a video call still connects and carries audio, and
+   * every tile shows a placeholder.
+   */
+  livekitReactNative?: LiveKitReactNativeModule | null;
+  /**
+   * Called whenever the call's media connection state changes. Drive
    * speakerphone and the proximity sensor from here — see
    * {@link VoiceRoomBarProps.onStatusChange}.
    */
   onStatusChange?: (status: VoiceStatus) => void;
+  /**
+   * Called when the call's video state changes.
+   *
+   * A video call belongs on the speaker with the proximity sensor OFF —
+   * otherwise the screen blanks the moment the phone comes near your
+   * face, which is exactly when you are looking at it.
+   */
+  onVideoChange?: (video: boolean) => void;
   /**
    * Hide this screen while a call is merely ringing in.
    *
@@ -52,82 +76,135 @@ export interface CallScreenProps {
  * Mount it once, high in the tree, so a call can arrive on any screen:
  *
  *     <PoolseProvider config={config}>
- *       <CallScreen userId={me.id} />
+ *       <CallScreen userId={me.id} livekit={livekit} livekitReactNative={livekitRN} />
  *       <YourApp />
  *     </PoolseProvider>
  *
- * Placing a call is separate — `useCalls().call(conversationId)`, wired
- * to whatever button your UI wants. Pass the same instance in via
- * `calls` so both halves share one state machine.
+ * ## Two media paths
+ *
+ * With `livekit` supplied, media rides the SFU: one upload per
+ * participant regardless of call size, and the camera and microphone can
+ * be switched on and off at any point. Without it — or against a
+ * deployment that has no SFU configured — calls fall back to the
+ * peer-to-peer mesh, which is audio only.
+ *
+ * The fallback is automatic and silent by design. A deployment without
+ * an SFU is a supported configuration, not a broken one.
  */
 export function CallScreen({
   userId,
   labelFor,
-  calls: external,
+  calls: callsProp,
   webrtc,
+  livekit,
+  livekitReactNative,
   onStatusChange,
-  nativeIncomingUi = false,
+  onVideoChange,
+  nativeIncomingUi,
 }: CallScreenProps) {
   const theme = usePoolseTheme();
-  const own = useCalls(external ? null : userId);
-  const calls = external ?? own;
+  const ownCalls = useCalls(callsProp ? null : userId);
+  const calls = callsProp ?? ownCalls;
 
-  const available = isNativeWebRtcAvailable(webrtc);
+  const meshAvailable = isNativeWebRtcAvailable(webrtc);
   const opts = useMemo(
-    () => (available && webrtc ? { webrtc: createNativeWebRtcAdapter(webrtc) } : {}),
-    [available, webrtc],
+    () => (meshAvailable && webrtc ? { webrtc: createNativeWebRtcAdapter(webrtc) } : {}),
+    [meshAvailable, webrtc],
   );
 
-  // The voice room only exists once a call is actually connected — the
-  // hook tears it down on its own when the id goes back to null.
-  const voice = useVoiceRoom(
-    calls.phase === 'active' && available ? calls.activeConversationId : null,
-    opts,
-  );
+  const conversationId = calls.phase === 'active' ? calls.activeConversationId : null;
 
-  // Audio starts on `active`, which both sides reach: the callee when
-  // it accepts, the caller when `call:accepted` arrives.
-  useEffect(() => {
-    if (calls.phase === 'active' && voice.status === 'idle') void voice.join();
-  }, [calls.phase, voice]);
+  // Both are constructed; only one ends up connected. `useCallRoom`
+  // reports `sfuAvailable: false` when the API answers 503, and only
+  // then does the mesh join — so a deployment with an SFU never opens a
+  // peer connection it will not use.
+  const sfu = useCallRoom(livekit ? conversationId : null, {
+    livekit: livekit as LiveKitModule,
+    video: calls.media === 'video',
+  });
+  const mesh = useVoiceRoom(conversationId, opts);
+
+  const usingSfu = sfu.sfuAvailable === true;
+  const status: VoiceStatus = usingSfu ? toVoiceStatus(sfu.status) : mesh.status;
 
   useEffect(() => {
-    onStatusChange?.(voice.status);
-  }, [voice.status, onStatusChange]);
+    if (calls.phase !== 'active' || !conversationId) return;
+
+    let cancelled = false;
+    void (async () => {
+      // Try the SFU first when the app supplied LiveKit. A `false` here
+      // means the deployment has none, which is the one case the mesh
+      // should take over.
+      const connected = livekit ? await sfu.join() : false;
+      if (cancelled || connected) return;
+      if (meshAvailable) await mesh.join();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calls.phase, conversationId, livekit, meshAvailable]);
+
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [status, onStatusChange]);
+
+  // The mesh carries no video, so its calls are always audio.
+  const videoOn = usingSfu && sfu.cameraEnabled;
+  useEffect(() => {
+    onVideoChange?.(videoOn);
+  }, [videoOn, onVideoChange]);
 
   const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
 
-  // With CallKit driving the ring, showing this too would be a second
-  // simultaneous prompt for the same call.
   const ringingIn = calls.phase === 'ringing-in';
   const visible = calls.phase !== 'idle' && !(nativeIncomingUi && ringingIn);
 
   // `calls.hangUp()` signals the other side and always returns to idle;
   // `reset()` alone only cleared local state, leaving the peer in a call
   // with a screen it had no reason to close.
-  const hangUp = () => {
-    voice.leave();
+  const hangUp = useCallback(() => {
+    sfu.leave();
+    mesh.leave();
     void calls.hangUp();
-  };
+  }, [sfu, mesh, calls]);
+
+  const micOn = usingSfu ? sfu.micEnabled : !mesh.muted;
+  const toggleMic = useCallback(() => {
+    if (usingSfu) void sfu.toggleMic();
+    else mesh.toggleMute();
+  }, [usingSfu, sfu, mesh]);
+
+  const error = calls.error ?? (usingSfu ? sfu.error : mesh.error);
+  const connected = calls.phase === 'active' && status === 'connected';
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={hangUp}>
       <View style={[styles.screen, { backgroundColor: theme.colors.paper }]}>
-        <View style={styles.identity}>
-          <Text style={[styles.who, { color: theme.colors.ink }]}>
-            {calls.phase === 'ringing-in' && calls.incoming
-              ? label(calls.incoming.callerUserId)
-              : calls.outgoing
-                ? calls.outgoing.calleeUserIds.map(label).join(', ')
-                : ''}
-          </Text>
-          <Text style={[styles.state, { color: theme.colors.ink3 }]}>
-            {statusLine(calls, voice.status)}
-          </Text>
-        </View>
+        {connected && usingSfu && sfu.participants.length > 0 ? (
+          <CallVideoGrid
+            participants={sfu.participants}
+            livekitReactNative={livekitReactNative}
+            labelFor={labelFor}
+          />
+        ) : (
+          <View style={styles.identity}>
+            <Text style={[styles.who, { color: theme.colors.ink }]}>
+              {ringingIn && calls.incoming
+                ? label(calls.incoming.callerUserId)
+                : calls.outgoing
+                  ? calls.outgoing.calleeUserIds.map(label).join(', ')
+                  : ''}
+            </Text>
+            <Text style={[styles.state, { color: theme.colors.ink3 }]}>
+              {statusLine(calls, status)}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.actions}>
-          {calls.phase === 'ringing-in' ? (
+          {ringingIn ? (
             <>
               <CallButton
                 label="Decline"
@@ -153,34 +230,53 @@ export function CallScreen({
           ) : (
             <>
               <CallButton
-                label={voice.muted ? 'Unmute' : 'Mute'}
-                color={theme.colors.ink2}
-                onPress={voice.toggleMute}
+                label={micOn ? 'Mute' : 'Unmute'}
+                color={micOn ? theme.colors.ink2 : theme.colors.brand}
+                onPress={toggleMic}
               />
+              {/* Only the SFU can add video to a live call — the mesh
+                  offers once, on peer discovery, and cannot renegotiate. */}
+              {usingSfu && (
+                <CallButton
+                  label={videoOn ? 'Camera off' : 'Camera on'}
+                  color={videoOn ? theme.colors.brand : theme.colors.ink2}
+                  onPress={() => void sfu.toggleCamera()}
+                />
+              )}
               <CallButton label="Hang up" color={theme.colors.error} onPress={hangUp} />
             </>
           )}
         </View>
 
-        {!available && (
+        {!meshAvailable && !livekit && (
           <Text style={[styles.warn, { color: theme.colors.error }]}>
-            react-native-webrtc is not installed — this call has no audio.
+            No WebRTC module supplied — this call has no audio.
           </Text>
         )}
-        {(calls.error ?? voice.error) && (
-          <Text style={[styles.warn, { color: theme.colors.error }]}>
-            {(calls.error ?? voice.error)?.message}
-          </Text>
-        )}
+        {error && <Text style={[styles.warn, { color: theme.colors.error }]}>{error.message}</Text>}
       </View>
     </Modal>
   );
 }
 
-function statusLine(calls: UseCalls, voiceStatus: string): string {
+/** The SFU's lifecycle mapped onto the one the mesh already reports. */
+function toVoiceStatus(status: string): VoiceStatus {
+  switch (status) {
+    case 'connecting':
+      return 'connecting';
+    case 'connected':
+      return 'connected';
+    case 'error':
+      return 'error';
+    default:
+      return 'idle';
+  }
+}
+
+function statusLine(calls: UseCalls, mediaStatus: string): string {
   switch (calls.phase) {
     case 'ringing-in':
-      return 'Incoming call…';
+      return calls.media === 'video' ? 'Incoming video call…' : 'Incoming call…';
     case 'ringing-out':
       return 'Ringing…';
     case 'declined':
@@ -190,7 +286,7 @@ function statusLine(calls: UseCalls, voiceStatus: string): string {
     case 'timed-out':
       return 'No answer';
     case 'active':
-      return voiceStatus === 'connected' ? 'Connected' : 'Connecting…';
+      return mediaStatus === 'connected' ? 'Connected' : 'Connecting…';
     default:
       return '';
   }
@@ -221,12 +317,12 @@ const styles = StyleSheet.create({
   identity: { alignItems: 'center', gap: 8, marginTop: 48 },
   who: { fontSize: 28, fontWeight: '600', textAlign: 'center' },
   state: { fontSize: 15 },
-  actions: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
+  actions: { flexDirection: 'row', justifyContent: 'center', gap: 12, flexWrap: 'wrap' },
   callBtn: {
-    paddingHorizontal: 26,
+    paddingHorizontal: 22,
     paddingVertical: 16,
     borderRadius: 999,
-    minWidth: 128,
+    minWidth: 108,
     alignItems: 'center',
   },
   callBtnText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
