@@ -4,6 +4,20 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.13.1] — 2026-08-23
+
+### Fixed
+
+- Controls no longer vanish mid-tap on a video call: pressing one now
+  restarts the idle countdown, which a screen-wide handler never saw
+  because a child `Pressable` wins the touch outright.
+- The iOS audio policy is released when a call ends while its session is
+  still starting, instead of being left installed.
+- The floating self-preview follows the stage across a rotation rather
+  than keeping a pixel position from the old bounds.
+- The auto-hang-up on an emptied call fires once rather than on every
+  render in the window before the phase flips.
+
 ## [2.13.0] — 2026-08-23
 
 A near-total rebuild of the calling surface.

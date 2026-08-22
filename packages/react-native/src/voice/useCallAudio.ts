@@ -133,6 +133,11 @@ export function useCallAudio({
 
     const wantsSpeaker = preferSpeaker.current;
     let disposePolicy: (() => void) | undefined;
+    // A call that ends while the session is still starting up would
+    // otherwise leave the iOS policy installed forever: cleanup runs
+    // before the async body has assigned the disposer, so there is
+    // nothing to call. The flag lets the body clean up after itself.
+    let released = false;
 
     // Ordering matters: configure, then install the iOS policy, then
     // start. `configureAudio` is documented as having to run before the
@@ -154,6 +159,7 @@ export function useCallAudio({
         // Falls back to LiveKit's own defaults, which are sane.
       }
 
+      if (released) return;
       disposePolicy = livekitReactNative?.setupIOSAudioManagement?.(wantsSpeaker);
 
       try {
@@ -163,10 +169,19 @@ export function useCallAudio({
         // it outright. Better a call the user can see is broken than one
         // that never rings.
       }
+
+      if (released) {
+        // Ended mid-start. Undo what we just did rather than leaving a
+        // session running for a call that no longer exists.
+        void session.stopAudioSession().catch(() => {});
+        disposePolicy?.();
+        return;
+      }
       refreshRoutes();
     })();
 
     return () => {
+      released = true;
       // Released deliberately. Holding the session open leaves the
       // device in call mode afterwards, with media apps stuck at call
       // volume and the earpiece still routed.

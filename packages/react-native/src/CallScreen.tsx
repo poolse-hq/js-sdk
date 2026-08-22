@@ -208,7 +208,10 @@ export function CallScreen({
   // ── chrome auto-hide ────────────────────────────────────────────────
 
   const [chromeVisible, setChromeVisible] = useState(true);
-  const hideAt = useRef(0);
+  // Bumped on every interaction. Having the effect depend on it is what
+  // restarts the countdown — a polled deadline would either fire late or
+  // need an interval running for the whole call.
+  const [lastWake, setLastWake] = useState(0);
 
   // Only video calls hide their controls — there is nothing to look at
   // underneath an audio call, so hiding them would just lose the
@@ -216,21 +219,29 @@ export function CallScreen({
   const chromeHides = connected && isVideoCall;
 
   useEffect(() => {
-    if (!chromeHides) {
-      setChromeVisible(true);
-      return;
-    }
-    hideAt.current = Date.now() + CHROME_IDLE_MS;
-    const timer = setInterval(() => {
-      if (Date.now() >= hideAt.current) setChromeVisible(false);
-    }, 500);
-    return () => clearInterval(timer);
-  }, [chromeHides, chromeVisible]);
-
-  const wakeChrome = useCallback(() => {
-    hideAt.current = Date.now() + CHROME_IDLE_MS;
     setChromeVisible(true);
-  }, []);
+    if (!chromeHides) return;
+    const timer = setTimeout(() => setChromeVisible(false), CHROME_IDLE_MS);
+    return () => clearTimeout(timer);
+  }, [chromeHides, lastWake]);
+
+  const wakeChrome = useCallback(() => setLastWake(Date.now()), []);
+
+  /**
+   * Run an action and restart the idle countdown.
+   *
+   * A child `Pressable` wins the touch outright, so the screen-wide
+   * handler never sees a control being tapped — without this, hitting
+   * mute at four seconds would watch the controls vanish half a second
+   * later.
+   */
+  const withWake = useCallback(
+    (fn: () => void) => () => {
+      wakeChrome();
+      fn();
+    },
+    [wakeChrome],
+  );
 
   // ── actions ─────────────────────────────────────────────────────────
 
@@ -247,8 +258,17 @@ export function CallScreen({
   // their phone lost signal, so no `call:hangup` will ever arrive. End
   // it here rather than leaving the survivor on a dead call screen.
   const alone = usingSfu ? sfu.alone : mesh.alone;
+
+  // Latched, because `hangUp` closes over the room objects and those are
+  // rebuilt every render — the effect re-runs constantly, and without a
+  // guard it would fire the hang-up repeatedly in the window before the
+  // phase actually flips.
+  const endedOnEmpty = useRef(false);
+  if (calls.phase !== 'active') endedOnEmpty.current = false;
+
   useEffect(() => {
-    if (!alone || calls.phase !== 'active') return;
+    if (!alone || calls.phase !== 'active' || endedOnEmpty.current) return;
+    endedOnEmpty.current = true;
     hangUp();
   }, [alone, calls.phase, hangUp]);
 
@@ -398,14 +418,14 @@ export function CallScreen({
                     icon={micOn ? 'mic' : 'mic-off'}
                     label={micOn ? 'Mute' : 'Unmute'}
                     active={!micOn}
-                    onPress={toggleMic}
+                    onPress={withWake(toggleMic)}
                     accessibilityLabel={micOn ? 'Mute microphone' : 'Unmute microphone'}
                   />
                   <CallControlButton
                     icon={speakerIcon(audio)}
                     label={speakerLabel(audio)}
                     active={audio.speakerOn}
-                    onPress={onSpeakerPress}
+                    onPress={withWake(onSpeakerPress)}
                     accessibilityLabel="Audio output"
                   />
                   {/* Only the SFU can add video to a live call — the mesh
@@ -415,7 +435,7 @@ export function CallScreen({
                       icon={videoOn ? 'video' : 'video-off'}
                       label="Camera"
                       active={!videoOn}
-                      onPress={() => void sfu.toggleCamera()}
+                      onPress={withWake(() => void sfu.toggleCamera())}
                       accessibilityLabel={videoOn ? 'Turn camera off' : 'Turn camera on'}
                     />
                   )}
@@ -423,7 +443,7 @@ export function CallScreen({
                     <CallControlButton
                       icon="camera-flip"
                       label="Flip"
-                      onPress={() => void sfu.switchCamera()}
+                      onPress={withWake(() => void sfu.switchCamera())}
                       accessibilityLabel="Switch camera"
                     />
                   )}

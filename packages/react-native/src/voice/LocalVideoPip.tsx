@@ -1,5 +1,5 @@
 import type { CallParticipant } from '@poolse/sdk';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { CallParticipantTile } from './CallParticipantTile.js';
@@ -72,6 +72,16 @@ export function LocalVideoPip({
   const cornerRef = useRef(corner);
   cornerRef.current = corner;
   const dragged = useRef(false);
+
+  // Follow the corners when the stage itself changes — a rotation, or
+  // the control bar appearing. Without this the tile keeps the pixel
+  // position it had under the old bounds, which after a rotation can be
+  // most of the way off screen.
+  useEffect(() => {
+    if (dragged.current) return;
+    const at = corners[corner];
+    if (at) pan.setValue(at);
+  }, [corners, corner, pan]);
 
   const responder = useMemo(
     () =>
