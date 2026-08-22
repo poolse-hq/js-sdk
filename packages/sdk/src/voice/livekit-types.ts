@@ -33,6 +33,24 @@ export interface LiveKitPublication {
   track?: LiveKitTrack | null | undefined;
   isMuted?: boolean;
   isSubscribed?: boolean;
+  /**
+   * The same track typed as video, when it is one.
+   *
+   * Separate from `track` because only this side carries
+   * `restartTrack`, which is how the camera is flipped: LiveKit
+   * re-acquires the capture device under the existing publication, so
+   * the far side sees the picture change without a renegotiation and
+   * without the tile blanking.
+   */
+  videoTrack?: LiveKitLocalVideoTrack | null | undefined;
+}
+
+/** Which camera a video track is capturing from. */
+export type CameraFacing = 'user' | 'environment';
+
+/** The slice of LiveKit's `LocalVideoTrack` used to flip the camera. */
+export interface LiveKitLocalVideoTrack {
+  restartTrack?(constraints?: { facingMode?: CameraFacing; deviceId?: string }): Promise<unknown>;
 }
 
 export interface LiveKitParticipant {
@@ -46,7 +64,12 @@ export interface LiveKitParticipant {
 }
 
 export interface LiveKitLocalParticipant extends LiveKitParticipant {
-  setCameraEnabled(enabled: boolean): Promise<unknown>;
+  /**
+   * `options` carries the capture constraints. It is how the call opens
+   * on the front camera rather than whatever the OS picks by default,
+   * which on Android is routinely the rear one.
+   */
+  setCameraEnabled(enabled: boolean, options?: { facingMode?: CameraFacing }): Promise<unknown>;
   setMicrophoneEnabled(enabled: boolean): Promise<unknown>;
 }
 
@@ -169,4 +192,20 @@ export interface CallRoomOptions {
   video?: boolean;
   /** Start muted. */
   muted?: boolean;
+  /**
+   * Which camera to open with. Defaults to the front one — a call is a
+   * conversation, so the selfie camera is what anyone expects.
+   */
+  facing?: CameraFacing;
+  /**
+   * How long the last participant may sit alone before the call is
+   * declared over, in milliseconds. Defaults to 1500. Pass `0` to
+   * disable and keep the call open indefinitely.
+   *
+   * The delay is not cosmetic. Two people hanging up within a frame of
+   * each other, or an SFU reconnect that briefly empties the roster,
+   * would both otherwise trip an immediate check — and a call that ends
+   * itself during a half-second blip is worse than one that lingers.
+   */
+  aloneGraceMs?: number;
 }

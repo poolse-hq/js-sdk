@@ -1,5 +1,6 @@
 import type { VoiceParticipant, VoiceRoomOptions, VoiceStatus } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAloneWatch } from './internal/alone-watch.js';
 import { usePoolse } from './provider.js';
 
 export interface UseVoiceRoom {
@@ -7,6 +8,16 @@ export interface UseVoiceRoom {
   /** Everyone currently in the room, oldest join first. */
   participants: VoiceParticipant[];
   muted: boolean;
+  /**
+   * Everyone else has left and is not coming back.
+   *
+   * The mesh equivalent of `useCallRoom`'s flag of the same name — see
+   * there for why a call needs this on top of the explicit hang-up
+   * signal. Only meaningful for a room being used to carry a call; a
+   * Discord-style room you sit in alone is a normal state, so wire this
+   * to hang-up only on the call surface.
+   */
+  alone: boolean;
   error: Error | null;
   /** Acquire the mic and connect. Safe to call twice. */
   join: () => Promise<void>;
@@ -29,7 +40,10 @@ export interface UseVoiceRoom {
  */
 export function useVoiceRoom(
   conversationId: string | null,
-  opts: VoiceRoomOptions = {},
+  opts: VoiceRoomOptions & {
+    /** Grace before {@link UseVoiceRoom.alone}. Defaults to 1500; `0` disables. */
+    aloneGraceMs?: number;
+  } = {},
 ): UseVoiceRoom {
   const poolse = usePoolse();
 
@@ -103,5 +117,13 @@ export function useVoiceRoom(
     setMuted(room.toggleMute());
   }, [room]);
 
-  return { status, participants, muted, error, join, leave, toggleMute };
+  // `participants` includes the local participant, so anyone else is
+  // whatever is left over.
+  const alone = useAloneWatch({
+    active: status === 'connected',
+    others: Math.max(0, participants.length - 1),
+    graceMs: optsRef.current.aloneGraceMs ?? 1500,
+  });
+
+  return { status, participants, muted, alone, error, join, leave, toggleMute };
 }

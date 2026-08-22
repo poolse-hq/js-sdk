@@ -15,9 +15,17 @@ export const ICONS = {
     vb: '0 0 24 24',
     d: '<path d="M6 9.2a6 6 0 0 1 12 0c0 4.8 1.4 6.3 1.9 6.8H4.1C4.6 15.5 6 14 6 9.2Z"/><path d="M9.6 19.8a2.5 2.5 0 0 0 4.8 0"/>',
   },
+  bluetooth: {
+    vb: '0 0 24 24',
+    d: '<path d="M7.5 7.5 16.5 16.5 12 21V3l4.5 4.5L7.5 16.5"/>',
+  },
   camera: {
     vb: '0 0 24 24',
     d: '<path d="M3 8.5a2 2 0 0 1 2-2h2.4l1.4-2h6.4l1.4 2H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Z"/><circle cx="12" cy="13" r="3.5"/>',
+  },
+  'camera-flip': {
+    vb: '0 0 24 24',
+    d: '<path d="M3 8.5a2 2 0 0 1 2-2h2.4l1.4-2h6.4l1.4 2H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9Z"/><path d="M14.6 13a2.6 2.6 0 0 1-4.5 1.8"/><path d="M9.4 13a2.6 2.6 0 0 1 4.5-1.8"/><path d="M13.9 9.6v1.7h-1.7"/><path d="M10.1 16.4v-1.7h1.7"/>',
   },
   'check-double': {
     vb: '0 0 24 24',
@@ -34,6 +42,10 @@ export const ICONS = {
   'chevron-right': {
     vb: '0 0 24 24',
     d: '<path d="M9 5 16 12 9 19"/>',
+  },
+  'chevron-up': {
+    vb: '0 0 24 24',
+    d: '<path d="M6 14.5 12 8.5 18 14.5"/>',
   },
   close: {
     vb: '0 0 24 24',
@@ -62,6 +74,10 @@ export const ICONS = {
   emoji: {
     vb: '0 0 24 24',
     d: '<circle cx="12" cy="12" r="8.6"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/><path d="M8.4 14.2a4.6 4.6 0 0 0 7.2 0"/>',
+  },
+  headphones: {
+    vb: '0 0 24 24',
+    d: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14h2.6a1.4 1.4 0 0 1 1.4 1.4v3.2A1.4 1.4 0 0 1 6.6 20H5.4A1.4 1.4 0 0 1 4 18.6Z"/><path d="M20 14h-2.6a1.4 1.4 0 0 0-1.4 1.4v3.2A1.4 1.4 0 0 0 17.4 20h1.2A1.4 1.4 0 0 0 20 18.6Z"/>',
   },
   heart: {
     vb: '0 0 24 24',
@@ -99,6 +115,10 @@ export const ICONS = {
     vb: '0 0 24 24',
     d: '<rect x="9" y="2.6" width="6" height="11.2" rx="3"/><path d="M5.6 11.2a6.4 6.4 0 0 0 12.8 0"/><path d="M12 17.6v3.4"/><path d="M8.6 21h6.8"/>',
   },
+  'mic-off': {
+    vb: '0 0 24 24',
+    d: '<rect x="9" y="2.6" width="6" height="11.2" rx="3"/><path d="M5.6 11.2a6.4 6.4 0 0 0 12.8 0"/><path d="M12 17.6v3.4"/><path d="M8.6 21h6.8"/><path d="M3.6 3.2 20.4 20.8"/>',
+  },
   'more-h': {
     vb: '0 0 24 24',
     d: '<circle cx="5.4" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18.6" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
@@ -106,6 +126,14 @@ export const ICONS = {
   'more-v': {
     vb: '0 0 24 24',
     d: '<circle cx="12" cy="5.4" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="18.6" r="1.6" fill="currentColor" stroke="none"/>',
+  },
+  phone: {
+    vb: '0 0 24 24',
+    d: '<path d="M6.6 3.5h3l1.5 3.7-1.9 1.4a12.5 12.5 0 0 0 6.2 6.2l1.4-1.9 3.7 1.5v3a2 2 0 0 1-2.2 2A16.8 16.8 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/>',
+  },
+  'phone-off': {
+    vb: '0 0 24 24',
+    d: '<g transform="rotate(135 12 12)"><path d="M6.6 3.5h3l1.5 3.7-1.9 1.4a12.5 12.5 0 0 0 6.2 6.2l1.4-1.9 3.7 1.5v3a2 2 0 0 1-2.2 2A16.8 16.8 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></g>',
   },
   pin: {
     vb: '0 0 24 24',
@@ -147,6 +175,14 @@ export const ICONS = {
     vb: '0 0 24 24',
     d: '<path d="M4 7h9M17 7h3"/><circle cx="15" cy="7" r="2.1"/><path d="M4 17h3M11 17h9"/><circle cx="9" cy="17" r="2.1"/>',
   },
+  speaker: {
+    vb: '0 0 24 24',
+    d: '<path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z"/><path d="M15.6 9.2a4 4 0 0 1 0 5.6"/><path d="M18.2 6.6a7.7 7.7 0 0 1 0 10.8"/>',
+  },
+  'speaker-off': {
+    vb: '0 0 24 24',
+    d: '<path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z"/><path d="M16.4 9.6 21.4 14.4"/><path d="M21.4 9.6 16.4 14.4"/>',
+  },
   'thumbs-up': {
     vb: '0 0 24 24',
     d: '<path d="M7 10.4V20H4.2V10.4Z"/><path d="M7 10.4 11 3.2a2 2 0 0 1 1.9 2.2L12.4 9H18a2 2 0 0 1 2 2.4l-1.1 6A2 2 0 0 1 16.9 20H7"/>',
@@ -170,6 +206,14 @@ export const ICONS = {
   users: {
     vb: '0 0 24 24',
     d: '<circle cx="9" cy="8" r="3.6"/><path d="M2.6 20a6.4 6.4 0 0 1 12.8 0"/><path d="M15.8 4.7a3.6 3.6 0 0 1 0 6.6"/><path d="M17.6 20a6.4 6.4 0 0 0-3.1-5.5"/>',
+  },
+  video: {
+    vb: '0 0 24 24',
+    d: '<rect x="2.6" y="6" width="13" height="12" rx="2.4"/><path d="M15.6 11.2 21.4 8v8l-5.8-3.2Z"/>',
+  },
+  'video-off': {
+    vb: '0 0 24 24',
+    d: '<rect x="2.6" y="6" width="13" height="12" rx="2.4"/><path d="M15.6 11.2 21.4 8v8l-5.8-3.2Z"/><path d="M3.6 3.2 20.4 20.8"/>',
   },
   webhook: {
     vb: '0 0 24 24',

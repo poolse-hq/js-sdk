@@ -302,6 +302,191 @@ describe('CallRoom roster', () => {
   });
 });
 
+// A call whose other participants hang up cleanly ends by signal —
+// `call:hangup` travels over poolse's own channel. These cover the case
+// where no signal is ever sent: the app was killed, the phone lost its
+// network, the tab was closed. The only evidence is an empty roster.
+describe('CallRoom abandonment', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  async function connected(aloneGraceMs = 1500) {
+    const h = harness();
+    const room = new CallRoom({
+      livekit: h.module,
+      tokenProvider: async () => CONNECTION,
+      aloneGraceMs,
+    });
+    await room.join();
+    return { h, room };
+  }
+
+  function arrive(h: Harness, id: string) {
+    h.room.remoteParticipants.set(id, fakeParticipant(id));
+    h.handlers.get('participantConnected')?.();
+  }
+
+  function depart(h: Harness, id: string) {
+    h.room.remoteParticipants.delete(id);
+    h.handlers.get('participantDisconnected')?.();
+  }
+
+  it('ends the call when the last other participant leaves', async () => {
+    const { h, room } = await connected();
+    const alone = vi.fn();
+    room.onAlone(alone);
+
+    arrive(h, 'u-bob');
+    depart(h, 'u-bob');
+
+    expect(alone).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1500);
+    expect(alone).toHaveBeenCalledTimes(1);
+  });
+
+  it('never fires for a caller who has simply not been answered yet', async () => {
+    // The caller connects first and is alone by definition until the
+    // callee joins. Ending there would kill every outbound call.
+    const { room } = await connected();
+    const alone = vi.fn();
+    room.onAlone(alone);
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(alone).not.toHaveBeenCalled();
+  });
+
+  it('does not fire when somebody rejoins inside the grace period', async () => {
+    const { h, room } = await connected();
+    const alone = vi.fn();
+    room.onAlone(alone);
+
+    arrive(h, 'u-bob');
+    depart(h, 'u-bob');
+    vi.advanceTimersByTime(900);
+    arrive(h, 'u-bob');
+    vi.advanceTimersByTime(5_000);
+
+    expect(alone).not.toHaveBeenCalled();
+  });
+
+  it('keeps a group call alive while anyone else is still there', async () => {
+    const { h, room } = await connected();
+    const alone = vi.fn();
+    room.onAlone(alone);
+
+    arrive(h, 'u-bob');
+    arrive(h, 'u-cat');
+    depart(h, 'u-bob');
+    vi.advanceTimersByTime(10_000);
+
+    expect(alone).not.toHaveBeenCalled();
+
+    depart(h, 'u-cat');
+    vi.advanceTimersByTime(1500);
+    expect(alone).toHaveBeenCalledTimes(1);
+  });
+
+  it('can be switched off entirely', async () => {
+    const { h, room } = await connected(0);
+    const alone = vi.fn();
+    room.onAlone(alone);
+
+    arrive(h, 'u-bob');
+    depart(h, 'u-bob');
+    vi.advanceTimersByTime(60_000);
+
+    expect(alone).not.toHaveBeenCalled();
+  });
+
+  it("does not carry one call's history into the next", async () => {
+    // `hasSeenPeer` surviving a teardown would let a re-joined room end
+    // itself while the next callee was still picking up.
+    const { h, room } = await connected();
+    const alone = vi.fn();
+    room.onAlone(alone);
+
+    arrive(h, 'u-bob');
+    depart(h, 'u-bob');
+    vi.advanceTimersByTime(1500);
+    expect(alone).toHaveBeenCalledTimes(1);
+
+    room.leave();
+    await vi.runAllTimersAsync();
+    await room.join();
+
+    vi.advanceTimersByTime(60_000);
+    expect(alone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CallRoom camera selection', () => {
+  it('opens the front camera rather than whatever the OS picks', async () => {
+    // Android routinely defaults to the rear camera, which on a call is
+    // never what anyone wants.
+    const h = harness();
+    const room = new CallRoom({
+      livekit: h.module,
+      tokenProvider: async () => CONNECTION,
+      video: true,
+    });
+    await room.join();
+
+    expect(h.local.setCameraEnabled).toHaveBeenCalledWith(true, { facingMode: 'user' });
+    expect(room.getFacingMode()).toBe('user');
+  });
+
+  it('flips by restarting the track, so the far side never sees a gap', async () => {
+    const restartTrack = vi.fn(async () => {});
+    const h = harness();
+    (h.local as unknown as { getTrackPublication: () => LiveKitPublication }).getTrackPublication =
+      () => ({ videoTrack: { restartTrack } }) as LiveKitPublication;
+
+    const room = new CallRoom({
+      livekit: h.module,
+      tokenProvider: async () => CONNECTION,
+      video: true,
+    });
+    await room.join();
+
+    await room.switchCamera();
+    expect(restartTrack).toHaveBeenCalledWith({ facingMode: 'environment' });
+    expect(room.getFacingMode()).toBe('environment');
+
+    await room.switchCamera();
+    expect(restartTrack).toHaveBeenLastCalledWith({ facingMode: 'user' });
+    expect(room.getFacingMode()).toBe('user');
+  });
+
+  it('a refused flip leaves the call pointed where it was', async () => {
+    const h = harness();
+    (h.local as unknown as { getTrackPublication: () => LiveKitPublication }).getTrackPublication =
+      () =>
+        ({
+          videoTrack: {
+            restartTrack: async () => {
+              throw new Error('single camera');
+            },
+          },
+        }) as LiveKitPublication;
+
+    const room = new CallRoom({
+      livekit: h.module,
+      tokenProvider: async () => CONNECTION,
+      video: true,
+    });
+    await room.join();
+
+    const errors: Error[] = [];
+    room.onError((e) => errors.push(e));
+
+    await room.switchCamera();
+
+    expect(room.getFacingMode()).toBe('user');
+    expect(errors.at(-1)?.message).toMatch(/could not switch camera/);
+  });
+});
+
 describe('CallRoom reference counting', () => {
   it('a second holder reuses the connection', async () => {
     // A call screen and a roster can both hold the same call; opening a

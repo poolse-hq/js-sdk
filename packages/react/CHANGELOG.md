@@ -4,6 +4,27 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.13.0] — 2026-08-23
+
+### Fixed
+
+- **Video calls now open with the camera on.** `useCallRoom` pinned its
+  options to the first render, but a call screen mounts long before a
+  call exists — so the room was always built from options captured when
+  nothing was ringing, i.e. audio. Cameras never opened on a video call
+  and the toggle looked broken.
+
+### Added
+
+- **`useCallRoom().alone`** — everyone else has left and is not coming
+  back. Wire it to your hang-up path; see `@poolse/sdk`'s
+  `CallRoom.onAlone` for the guards that keep it from firing on an
+  unanswered outbound call.
+- **`useCallRoom().switchCamera` / `.facingMode`** — front/rear camera.
+- **`useCallRoom`** options `facing` and `aloneGraceMs`.
+- **`useVoiceRoom().alone`** — the same signal for the peer-to-peer mesh
+  fallback, so both transports end an abandoned call.
+
 ## [2.0.0] — 2026-06-03
 
 Lockstep release with `@poolse/sdk@2.0.0` and `@poolse/react-ui@2.0.0`.

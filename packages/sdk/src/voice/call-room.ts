@@ -3,6 +3,7 @@ import type {
   CallParticipant,
   CallRoomOptions,
   CallRoomStatus,
+  CameraFacing,
   CheckedLiveKitModule,
   LiveKitParticipant,
   LiveKitRoomHandle,
@@ -49,6 +50,9 @@ export class CallRoom {
   private readonly tokenProvider: () => Promise<CallConnection | null>;
   private readonly startWithVideo: boolean;
   private readonly startMuted: boolean;
+  private readonly aloneGraceMs: number;
+
+  private facing: CameraFacing;
 
   private room: LiveKitRoomHandle | null = null;
   private status: CallRoomStatus = 'idle';
@@ -59,9 +63,24 @@ export class CallRoom {
   // second SFU connection or tear the first one down on leaving.
   private holders = 0;
 
+  /**
+   * Whether anyone else has ever been on this call.
+   *
+   * The whole point of the alone check is to end a call the other side
+   * has vanished from, and "vanished" is only meaningful once they were
+   * here. Without this flag the caller who connects first — alone, by
+   * definition, for as long as it takes the callee to join — would end
+   * their own call before it ever started.
+   */
+  private hasSeenPeer = false;
+
+  /** Pending alone verdict, cleared the moment anyone shows up. */
+  private aloneTimer: ReturnType<typeof setTimeout> | null = null;
+
   private readonly statusListeners = new Set<(status: CallRoomStatus) => void>();
   private readonly participantListeners = new Set<(participants: CallParticipant[]) => void>();
   private readonly errorListeners = new Set<(error: Error) => void>();
+  private readonly aloneListeners = new Set<() => void>();
 
   /** Bound once so `off()` in teardown removes the same references. */
   private readonly onRoomChange = () => this.emitParticipants();
@@ -87,6 +106,8 @@ export class CallRoom {
     this.tokenProvider = opts.tokenProvider;
     this.startWithVideo = opts.video ?? false;
     this.startMuted = opts.muted ?? false;
+    this.facing = opts.facing ?? 'user';
+    this.aloneGraceMs = opts.aloneGraceMs ?? 1500;
   }
 
   // ── observation ─────────────────────────────────────────────────────
@@ -108,6 +129,24 @@ export class CallRoom {
   onError(fn: (error: Error) => void): Unsubscribe {
     this.errorListeners.add(fn);
     return () => this.errorListeners.delete(fn);
+  }
+
+  /**
+   * Everyone else has left and is not coming back.
+   *
+   * A call whose other participants hang up cleanly ends by signal:
+   * `call:hangup` travels over poolse's own channel and the far side
+   * closes its screen. This covers the case where no signal is ever
+   * sent — the app was killed, the phone lost its network, the tab was
+   * closed — where the only evidence is that the SFU roster emptied.
+   *
+   * Media is NOT torn down here. Whoever handles this owns hanging up,
+   * because ending a call also means telling poolse about it, which is
+   * a layer this class deliberately knows nothing about.
+   */
+  onAlone(fn: () => void): Unsubscribe {
+    this.aloneListeners.add(fn);
+    return () => this.aloneListeners.delete(fn);
   }
 
   getParticipants(): CallParticipant[] {
@@ -177,7 +216,9 @@ export class CallRoom {
       // camera and microphone before we know the room will accept us,
       // leaving the capture indicator lit on a call that never happened.
       await room.localParticipant.setMicrophoneEnabled(!this.startMuted);
-      if (this.startWithVideo) await room.localParticipant.setCameraEnabled(true);
+      if (this.startWithVideo) {
+        await room.localParticipant.setCameraEnabled(true, { facingMode: this.facing });
+      }
 
       // Browsers keep audio silent until the page has seen a user
       // gesture. Answering a call is one, so this normally resolves
@@ -220,7 +261,50 @@ export class CallRoom {
    * renegotiates underneath.
    */
   async setCameraEnabled(enabled: boolean): Promise<void> {
-    await this.withLocal((local) => local.setCameraEnabled(enabled), 'camera');
+    await this.withLocal(
+      (local) =>
+        enabled
+          ? local.setCameraEnabled(true, { facingMode: this.facing })
+          : local.setCameraEnabled(false),
+      'camera',
+    );
+  }
+
+  /**
+   * Swap between the front and rear cameras.
+   *
+   * `restartTrack` re-acquires the capture device under the *existing*
+   * publication, so the far side's tile keeps rendering throughout.
+   * Unpublishing and republishing instead would blank their view and
+   * force a renegotiation for what is, to them, the same camera.
+   *
+   * No-ops when the camera is off — there is nothing to restart, and
+   * the next `setCameraEnabled(true)` will open whichever lens is
+   * selected anyway.
+   */
+  async switchCamera(): Promise<void> {
+    const room = this.room;
+    if (!room) return;
+
+    const source = this.livekit.Track.Source['Camera'] ?? 'camera';
+    const track = room.localParticipant.getTrackPublication(source)?.videoTrack;
+    if (!track?.restartTrack) return;
+
+    const next: CameraFacing = this.facing === 'user' ? 'environment' : 'user';
+    try {
+      await track.restartTrack({ facingMode: next });
+      this.facing = next;
+      this.emitParticipants();
+    } catch (err) {
+      // A device with one camera, or one that refuses the swap. The
+      // call carries on pointed wherever it already was.
+      this.emitError(new Error(`could not switch camera: ${String(err)}`));
+    }
+  }
+
+  /** Which camera the local video track is capturing from. */
+  getFacingMode(): CameraFacing {
+    return this.facing;
   }
 
   /** Mute or unmute the microphone. */
@@ -366,6 +450,12 @@ export class CallRoom {
     this.selfId = null;
     this.holders = 0;
 
+    // Reset, not preserved: this object can be joined again, and a
+    // stale `hasSeenPeer` would let the next call end itself while the
+    // callee was still picking up.
+    this.hasSeenPeer = false;
+    this.clearAloneTimer();
+
     for (const track of [...this.audioSinks.keys()]) this.stopAudio(track);
 
     if (room) {
@@ -390,6 +480,50 @@ export class CallRoom {
   private emitParticipants(): void {
     const participants = this.getParticipants();
     for (const fn of this.participantListeners) fn(participants);
+    this.checkAlone();
+  }
+
+  /**
+   * Decide whether this client is the last one standing.
+   *
+   * Runs on every roster change. Three things have to be true before a
+   * call is declared over: it is actually connected, somebody else was
+   * here at some point, and nobody is here now — and even then the
+   * verdict waits out {@link CallRoomOptions.aloneGraceMs}, so a
+   * simultaneous hang-up or a momentary SFU reconnect does not read as
+   * abandonment.
+   */
+  private checkAlone(): void {
+    if (this.aloneGraceMs <= 0) return;
+
+    const others = this.room?.remoteParticipants.size ?? 0;
+
+    if (others > 0) {
+      this.hasSeenPeer = true;
+      this.clearAloneTimer();
+      return;
+    }
+
+    // Alone, but never had company: this is the caller waiting for an
+    // answer, not a call anyone walked out of.
+    if (!this.hasSeenPeer || this.status !== 'connected') return;
+    if (this.aloneTimer) return;
+
+    this.aloneTimer = setTimeout(() => {
+      this.aloneTimer = null;
+      // Re-check rather than trusting the reading that armed the timer:
+      // someone may have rejoined during the grace period, and the
+      // roster is the authority, not the schedule.
+      if ((this.room?.remoteParticipants.size ?? 0) > 0) return;
+      if (this.status !== 'connected') return;
+      for (const fn of this.aloneListeners) fn();
+    }, this.aloneGraceMs);
+  }
+
+  private clearAloneTimer(): void {
+    if (!this.aloneTimer) return;
+    clearTimeout(this.aloneTimer);
+    this.aloneTimer = null;
   }
 
   private emitError(error: Error): void {

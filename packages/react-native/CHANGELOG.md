@@ -4,6 +4,49 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.13.0] — 2026-08-23
+
+A near-total rebuild of the calling surface.
+
+### Added
+
+- **Audio output routing — `useCallAudio`.** Speaker, earpiece, wired
+  headset and Bluetooth, driven through LiveKit's `AudioSession`. Audio
+  calls start at the earpiece and video calls on the speaker, but a
+  connected headset outranks both, so plugging in AirPods mid-call does
+  the obvious thing. Android enumerates real devices and gets a picker
+  (`AudioRouteSheet`); iOS exposes only default/force-speaker, so the
+  system route picker is opened instead. This moves the audio session
+  out of host apps — `CallScreen` now owns it on the SFU path.
+- **Camera flip.** A control in the bar, and tapping your own preview.
+- **Draggable local preview (`LocalVideoPip`)** that snaps to the
+  nearest corner.
+- **Call duration timer**, anchored to a timestamp so a throttled or
+  sleeping phone cannot make it drift.
+- Exported building blocks: `CallControlButton`, `CallParticipantTile`,
+  `CallAvatar`, `LocalVideoPip`, `AudioRouteSheet`, `callColors`,
+  `useCallDuration`, `useCallAudio`.
+- Call icons: `phone`, `phone-off`, `mic-off`, `video`, `video-off`,
+  `speaker`, `speaker-off`, `camera-flip`, `bluetooth`, `headphones`,
+  `chevron-up`.
+
+### Changed
+
+- **`CallScreen` rebuilt.** Round icon controls with captions, engaged
+  controls inverted so they read at a glance, full-bleed video, a
+  header carrying the name and call duration, and controls that fade
+  out on a connected video call and return on tap. The call surface is
+  deliberately dark regardless of the app theme, as every serious
+  calling app renders one.
+- **`CallVideoGrid` is layout-aware**: spotlight plus floating preview
+  for a 1:1 call, a scrolling grid for three or more.
+- **A call ends when everyone else leaves**, including when they never
+  sent a hang-up.
+
+### Fixed
+
+- **Video calls open with the camera on.** See `@poolse/react@2.13.0`.
+
 ## [0.1.5] — 2026-06-03
 
 ### Added

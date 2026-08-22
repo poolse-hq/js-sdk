@@ -1,8 +1,3 @@
-export {
-  CallVideoGrid,
-  type CallVideoGridProps,
-  type LiveKitReactNativeModule,
-} from './voice/CallVideoGrid.js';
 // @poolse/react-native — plug-and-play React Native components built
 // on @poolse/react hooks. Mirrors the @poolse/react-ui surface for
 // web: same component names, same prop shapes, same feature flags —
@@ -91,11 +86,34 @@ export { useAppStateLifecycle } from './lifecycle/useAppStateLifecycle.js';
 // rather than crashing.
 export { VoiceRoomBar, type VoiceRoomBarProps } from './VoiceRoomBar.js';
 export { CallScreen, type CallScreenProps } from './CallScreen.js';
+export { CallVideoGrid, type CallVideoGridProps } from './voice/CallVideoGrid.js';
 export {
   createNativeWebRtcAdapter,
   isNativeWebRtcAvailable,
   type NativeWebRtcModule,
 } from './voice/webrtc-native.js';
+
+// Pieces of the call surface, exported so an app can build its own
+// screen without giving up the parts that are fiddly to get right.
+export { CallControlButton, type CallControlButtonProps } from './voice/CallControlButton.js';
+export { CallParticipantTile, type CallParticipantTileProps } from './voice/CallParticipantTile.js';
+export { CallAvatar, type CallAvatarProps } from './voice/CallAvatar.js';
+export { LocalVideoPip, type LocalVideoPipProps } from './voice/LocalVideoPip.js';
+export { AudioRouteSheet, type AudioRouteSheetProps } from './voice/AudioRouteSheet.js';
+export { callColors } from './voice/callTheme.js';
+export { useCallDuration } from './voice/useCallDuration.js';
+
+// Owns the audio session on the SFU path: speaker, earpiece, headset
+// and Bluetooth routing. See the note on `CallScreenProps.onTransportChange`
+// for why the mesh path is InCallManager's job instead.
+export { useCallAudio, type UseCallAudioOptions, type CallAudio } from './voice/useCallAudio.js';
+export {
+  describeRoute,
+  type AudioRoute,
+  type AudioRouteKind,
+  type LiveKitAudioSession,
+  type LiveKitReactNativeModule,
+} from './voice/livekit-rn.js';
 
 // ── VoIP push + CallKit (iOS) ─────────────────────────────────────
 // Rings a backgrounded or closed app. Needs react-native-callkeep and

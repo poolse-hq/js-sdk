@@ -1,0 +1,119 @@
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { PoolseIcon, type IconName } from '../primitives/PoolseIcon.js';
+import { callColors } from './callTheme.js';
+import type { AudioRoute, AudioRouteKind } from './livekit-rn.js';
+
+export interface AudioRouteSheetProps {
+  visible: boolean;
+  routes: AudioRoute[];
+  /** Platform id of the chosen route, or null while routing is automatic. */
+  selectedRouteId: string | null;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}
+
+const ICONS: Record<AudioRouteKind, IconName> = {
+  speaker: 'speaker',
+  earpiece: 'phone',
+  headset: 'headphones',
+  bluetooth: 'bluetooth',
+  auto: 'phone',
+};
+
+/**
+ * Pick where call audio comes out.
+ *
+ * Only worth showing when there is a real choice — on iOS there are
+ * exactly two entries and the system's own picker covers everything
+ * else, so `CallScreen` opens that instead. This is the Android
+ * surface, where LiveKit enumerates the actual devices.
+ */
+export function AudioRouteSheet({
+  visible,
+  routes,
+  selectedRouteId,
+  onSelect,
+  onClose,
+}: AudioRouteSheetProps) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      {/* Tapping away closes it, which is what a sheet like this owes
+          anyone who opened it by accident mid-call. */}
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button">
+        <Pressable style={styles.sheet} onPress={() => {}}>
+          <View style={styles.grabber} />
+          <Text style={styles.title}>Audio output</Text>
+
+          {routes.map((route) => {
+            const selected = route.id === selectedRouteId;
+            return (
+              <Pressable
+                key={route.id}
+                onPress={() => {
+                  onSelect(route.id);
+                  onClose();
+                }}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              >
+                <PoolseIcon
+                  name={ICONS[route.kind]}
+                  size={21}
+                  color={selected ? callColors.accept : callColors.text}
+                  label={null}
+                />
+                <Text style={[styles.label, selected && styles.labelSelected]}>{route.label}</Text>
+                {selected && (
+                  <PoolseIcon name="check" size={19} color={callColors.accept} label="selected" />
+                )}
+              </Pressable>
+            );
+          })}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: callColors.tile,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 34,
+    gap: 2,
+  },
+  grabber: {
+    alignSelf: 'center',
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: callColors.textFaint,
+    marginBottom: 12,
+  },
+  title: {
+    color: callColors.textDim,
+    fontSize: 12.5,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 15,
+    borderRadius: 14,
+  },
+  rowPressed: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  label: { flex: 1, color: callColors.text, fontSize: 16, fontWeight: '500' },
+  labelSelected: { color: callColors.accept },
+});

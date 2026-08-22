@@ -4,6 +4,27 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.13.0] — 2026-08-23
+
+### Added
+
+- **`CallRoom.onAlone`** — fires when everyone else has left a connected
+  call and is not coming back. A peer who hangs up cleanly sends
+  `call:hangup`; this covers the case where no signal is ever sent
+  because the app was killed, the phone lost signal or the tab was
+  closed, and the only evidence is an empty SFU roster. Guarded twice:
+  it never fires before somebody else has actually joined (so a caller
+  waiting for an answer is safe), and the verdict waits out
+  `CallRoomOptions.aloneGraceMs` (default 1500ms) so a simultaneous
+  hang-up or a brief reconnect does not read as abandonment.
+- **`CallRoom.switchCamera` / `getFacingMode`** — flips between the front
+  and rear cameras by restarting the track under the existing
+  publication, so the far side's tile never blanks.
+- **`CallRoomOptions.facing`** — which camera a call opens on. Defaults
+  to `'user'`; previously the platform chose, and Android routinely
+  chose the rear camera.
+- **`CameraFacing`** and **`LiveKitLocalVideoTrack`** types.
+
 ## [2.0.0] — 2026-06-03
 
 Lockstep release with `@poolse/react@2.0.0` and `@poolse/react-ui@2.0.0`.

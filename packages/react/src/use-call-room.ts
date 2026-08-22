@@ -1,4 +1,4 @@
-import type { CallParticipant, CallRoomStatus, LiveKitModule } from '@poolse/sdk';
+import type { CallParticipant, CallRoomStatus, CameraFacing, LiveKitModule } from '@poolse/sdk';
 import { CallRoom } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -20,6 +20,14 @@ export interface UseCallRoomOptions {
   video?: boolean;
   /** Join muted. */
   muted?: boolean;
+  /** Which camera to open with. Defaults to the front one. */
+  facing?: CameraFacing;
+  /**
+   * How long the last participant may sit alone before {@link
+   * UseCallRoom.alone} turns true, in milliseconds. Defaults to 1500.
+   * Pass `0` to never report it.
+   */
+  aloneGraceMs?: number;
 }
 
 export interface UseCallRoom {
@@ -28,6 +36,22 @@ export interface UseCallRoom {
   participants: CallParticipant[];
   cameraEnabled: boolean;
   micEnabled: boolean;
+  /** Which camera is publishing. Meaningless while the camera is off. */
+  facingMode: CameraFacing;
+  /**
+   * Everyone else has gone and is not coming back.
+   *
+   * Turns true only after somebody else has actually been on the call,
+   * so the caller waiting for an answer never trips it. Wire it to your
+   * hang-up path — a peer whose app was killed or whose phone lost
+   * signal sends no `call:hangup`, and without this the survivor is
+   * left on a call screen that will never close on its own.
+   *
+   *     useEffect(() => {
+   *       if (media.alone) void calls.hangUp();
+   *     }, [media.alone]);
+   */
+  alone: boolean;
   error: Error | null;
   /**
    * Whether this deployment has an SFU.
@@ -42,6 +66,8 @@ export interface UseCallRoom {
   leave: () => void;
   setCameraEnabled: (enabled: boolean) => Promise<void>;
   toggleCamera: () => Promise<void>;
+  /** Swap between the front and rear cameras. */
+  switchCamera: () => Promise<void>;
   setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
   toggleMic: () => Promise<void>;
 }
@@ -68,13 +94,27 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [cameraEnabled, setCamera] = useState(false);
   const [micEnabled, setMic] = useState(false);
+  const [facingMode, setFacing] = useState<CameraFacing>(opts.facing ?? 'user');
+  const [alone, setAlone] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [sfuAvailable, setSfuAvailable] = useState<boolean | null>(null);
 
-  // Pinned to the first value: the LiveKit module and the initial media
-  // choice don't meaningfully change for a room's lifetime, and an
-  // inline object literal would otherwise rebuild the room every render.
+  // Kept current, but read only when a room is built.
+  //
+  // This used to pin the FIRST value, which quietly broke every video
+  // call. The options are an inline object literal, so pinning avoided
+  // rebuilding the room on each render — but a call screen mounts long
+  // before a call exists, and at that point `video` is false because
+  // nothing is ringing yet. The room was then constructed later, on the
+  // conversation id arriving, from options captured when there was no
+  // call: audio, always. Cameras never opened on a video call and the
+  // toggle looked broken.
+  //
+  // Assigning during render keeps the ref current without triggering
+  // one, and the memo below still only reads it when it actually
+  // constructs a room — so nothing rebuilds per render either.
   const optsRef = useRef(opts);
+  optsRef.current = opts;
 
   // Whether THIS hook holds the room. Leaving without having joined
   // would release a claim we never made.
@@ -87,6 +127,10 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       livekit: optsRef.current.livekit,
       ...(optsRef.current.video !== undefined ? { video: optsRef.current.video } : {}),
       ...(optsRef.current.muted !== undefined ? { muted: optsRef.current.muted } : {}),
+      ...(optsRef.current.facing !== undefined ? { facing: optsRef.current.facing } : {}),
+      ...(optsRef.current.aloneGraceMs !== undefined
+        ? { aloneGraceMs: optsRef.current.aloneGraceMs }
+        : {}),
     });
   }, [poolse, conversationId]);
 
@@ -97,6 +141,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     if (!target) return;
     setCamera(target.isCameraEnabled());
     setMic(target.isMicrophoneEnabled());
+    setFacing(target.getFacingMode());
   }, []);
 
   useEffect(() => {
@@ -109,16 +154,23 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     setStatus(room.getStatus());
     setParticipants(room.getParticipants());
 
+    // Latched rather than pulsed: a consumer that hangs up in an effect
+    // needs the signal to survive until it has been read, and a call
+    // that has been abandoned is never un-abandoned.
+    setAlone(false);
+
     const offStatus = room.onStatus(setStatus);
     const offRoster = room.onParticipants((next) => {
       setParticipants(next);
       sync(room);
     });
+    const offAlone = room.onAlone(() => setAlone(true));
     const offError = room.onError(setError);
 
     return () => {
       offStatus();
       offRoster();
+      offAlone();
       offError();
       // Unmounting mid-call must disconnect, or the SFU keeps publishing
       // a participant nobody is behind.
@@ -185,17 +237,26 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     await setMicrophoneEnabled(!room.isMicrophoneEnabled());
   }, [room, setMicrophoneEnabled]);
 
+  const switchCamera = useCallback(async () => {
+    if (!room) return;
+    await room.switchCamera();
+    setFacing(room.getFacingMode());
+  }, [room]);
+
   return {
     status,
     participants,
     cameraEnabled,
     micEnabled,
+    facingMode,
+    alone,
     error,
     sfuAvailable,
     join,
     leave,
     setCameraEnabled,
     toggleCamera,
+    switchCamera,
     setMicrophoneEnabled,
     toggleMic,
   };

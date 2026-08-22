@@ -1,40 +1,12 @@
 import type { CallParticipant } from '@poolse/sdk';
-import type { ComponentType } from 'react';
-import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 
-import { usePoolseTheme } from '../theme/PoolseTheme.js';
+import { CallParticipantTile } from './CallParticipantTile.js';
+import { LocalVideoPip } from './LocalVideoPip.js';
+import type { CheckedVideoTrack, LiveKitReactNativeModule } from './livekit-rn.js';
 
-/**
- * The slice of `@livekit/react-native` this needs.
- *
- * Passed in by the app rather than imported, for the same reason
- * `react-native-webrtc` is: tsup rewrites `require()` into
- * `__require()`, which Metro cannot follow, so anything this package
- * imports for itself never reaches a React Native bundle.
- *
- *     import * as livekitRN from '@livekit/react-native';
- */
-export interface LiveKitReactNativeModule {
-  /**
-   * The module's `VideoTrack` component.
-   *
-   * Typed as `unknown` on purpose. Its real props are far more specific
-   * than what this renders with, and React component props are
-   * contravariant — declaring the narrow shape here means the real
-   * component is not assignable to it and no app can pass the module in.
-   * It is narrowed to {@link CheckedVideoTrack} at the point of use.
-   */
-  VideoTrack: unknown;
-}
-
-/** The slice actually rendered, narrowed once inside the component. */
-type CheckedVideoTrack = ComponentType<{
-  trackRef: unknown;
-  style?: ViewStyle;
-  objectFit?: 'cover' | 'contain';
-  mirror?: boolean;
-  zOrder?: number;
-}>;
+export type { LiveKitReactNativeModule };
 
 export interface CallVideoGridProps {
   participants: CallParticipant[];
@@ -42,112 +14,157 @@ export interface CallVideoGridProps {
   livekitReactNative?: LiveKitReactNativeModule | null | undefined;
   /** Resolves a user id to a display label. */
   labelFor?: ((userId: string) => string) | undefined;
+  /**
+   * Tapping the local preview. Wired to the camera flip by
+   * `CallScreen`, which is where every other call app puts it.
+   */
+  onLocalPress?: (() => void) | undefined;
+  /**
+   * How much chrome sits over the top and bottom of the stage, so the
+   * floating preview does not park itself under the control bar.
+   */
+  chromeInsets?: { top: number; bottom: number } | undefined;
 }
 
+const GAP = 8;
+/** Below this a tile shows a head as a postage stamp, so the grid scrolls instead. */
+const MIN_TILE_HEIGHT = 132;
+
 /**
- * The video half of a call: one tile per participant.
+ * The stage: everyone on the call, laid out for how many there are.
  *
- * Someone with their camera off still gets a tile, showing their name
- * and whether they're muted. Dropping them would make a five-person
- * call with four cameras off look like a one-person call, and hide the
- * fact that they are there and can hear you.
+ * Three layouts, because one grid cannot serve all of them:
  *
- * Tiles are laid out in a simple grid that stays square-ish as the call
- * grows. There is no active-speaker promotion yet — with the small
- * calls an SFU mesh replacement is sized for, everyone fits on screen.
+ *   * **Alone** — you, filling the screen, while the far side connects.
+ *   * **One other person** — them full-bleed, you in a draggable
+ *     corner tile. A 1:1 call split into two half-height boxes wastes
+ *     most of the screen on letterboxing, which is why no calling app
+ *     does it.
+ *   * **Three or more** — a real grid, two columns up to six people and
+ *     three beyond that, scrolling once the tiles would be too small to
+ *     make out a face.
+ *
+ * Audio calls land here too. Everyone simply has their camera off, so
+ * every tile draws an avatar, and the layout logic does not need to
+ * know whether video was ever on the table.
  */
-export function CallVideoGrid({ participants, livekitReactNative, labelFor }: CallVideoGridProps) {
-  const theme = usePoolseTheme();
+export function CallVideoGrid({
+  participants,
+  livekitReactNative,
+  labelFor,
+  onLocalPress,
+  chromeInsets,
+}: CallVideoGridProps) {
   const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
   const VideoTrack = livekitReactNative?.VideoTrack as CheckedVideoTrack | undefined;
+  const [size, setSize] = useState({ width: 0, height: 0 });
 
-  if (participants.length === 0) return null;
+  const onLayout = (event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setSize((current) =>
+      current.width === width && current.height === height ? current : { width, height },
+    );
+  };
 
-  // Two columns from two participants up. One person on a call is
-  // either the caller waiting or a room they walked into alone, and a
-  // half-width tile there just looks broken.
-  const columns = participants.length <= 1 ? 1 : 2;
-  const basis = columns === 1 ? '100%' : '48%';
+  const self = participants.find((p) => p.isSelf) ?? null;
+  const others = useMemo(() => participants.filter((p) => !p.isSelf), [participants]);
+
+  const columns = others.length + 1 <= 6 ? 2 : 3;
+  const rows = Math.ceil((others.length + 1) / columns);
+  const tileHeight = size.height > 0 ? (size.height - GAP * (rows - 1)) / rows : 0;
+  const scrolls = tileHeight > 0 && tileHeight < MIN_TILE_HEIGHT;
+
+  if (participants.length === 0) return <View style={styles.stage} onLayout={onLayout} />;
+
+  // ── alone, or one other person: spotlight + floating preview ────────
+  if (others.length <= 1) {
+    const spotlight = others[0] ?? self;
+    if (!spotlight) return <View style={styles.stage} onLayout={onLayout} />;
+
+    return (
+      <View style={styles.stage} onLayout={onLayout}>
+        <CallParticipantTile
+          participant={spotlight}
+          VideoTrack={VideoTrack}
+          label={label}
+          avatarSize={Math.min(148, Math.max(96, Math.round(size.width * 0.36)))}
+          bleed
+          // Their name is already in the header; repeating it over the
+          // video is noise on a two-person call.
+          hideName={others.length === 1}
+          style={styles.fill as ViewStyle}
+        />
+
+        {/* Only once somebody else is here. Your own preview floating
+            over your own preview is just a mirror in a mirror. */}
+        {self && others.length === 1 && size.width > 0 && (
+          <LocalVideoPip
+            participant={self}
+            VideoTrack={VideoTrack}
+            label={label}
+            bounds={size}
+            insets={chromeInsets ?? { top: 0, bottom: 0 }}
+            onPress={onLocalPress}
+          />
+        )}
+      </View>
+    );
+  }
+
+  // ── three or more: a grid ───────────────────────────────────────────
+  // Remote faces lead and you sit last, which is both what people look
+  // for first and a stable order — promoting the active speaker would
+  // reshuffle the grid every time somebody spoke.
+  const tiles = [...others, ...(self ? [self] : [])];
+  const width = size.width > 0 ? (size.width - GAP * (columns - 1)) / columns : 0;
+
+  const grid = (
+    <View style={[styles.grid, scrolls ? styles.gridScrolling : styles.gridFilling]}>
+      {tiles.map((participant) => (
+        <CallParticipantTile
+          key={participant.userId}
+          participant={participant}
+          VideoTrack={VideoTrack}
+          label={label}
+          avatarSize={columns === 2 ? 66 : 46}
+          style={
+            {
+              width: width || undefined,
+              height: scrolls ? MIN_TILE_HEIGHT : tileHeight || undefined,
+            } as ViewStyle
+          }
+        />
+      ))}
+    </View>
+  );
 
   return (
-    <View style={styles.grid}>
-      {participants.map((participant) => (
-        <View
-          key={participant.userId}
-          style={[
-            styles.tile,
-            {
-              flexBasis: basis,
-              backgroundColor: theme.colors.surface,
-              // A ring rather than a badge: it reads at a glance in a
-              // grid, and doesn't cover a face.
-              borderColor: participant.speaking ? theme.colors.brand : 'transparent',
-            },
+    <View style={styles.stage} onLayout={onLayout}>
+      {scrolls ? (
+        <ScrollView
+          // Padding rather than `contentInset`, which is iOS-only. The
+          // control bar floats over the bottom of the stage, so the last
+          // row needs room to clear it on both platforms.
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: (chromeInsets?.bottom ?? 0) + GAP },
           ]}
+          showsVerticalScrollIndicator={false}
         >
-          {participant.videoTrackRef && VideoTrack ? (
-            <VideoTrack
-              trackRef={participant.videoTrackRef}
-              style={styles.video}
-              objectFit="cover"
-              // Only your own preview is mirrored. Mirroring a remote
-              // feed would flip their text and reverse which hand they
-              // are waving with.
-              mirror={participant.isSelf}
-              zOrder={participant.isSelf ? 1 : 0}
-            />
-          ) : (
-            <View style={styles.placeholder}>
-              <Text style={[styles.initial, { color: theme.colors.ink3 }]}>
-                {label(participant.userId).slice(0, 1).toUpperCase()}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.caption}>
-            <Text numberOfLines={1} style={[styles.name, { color: theme.colors.onBrand }]}>
-              {participant.isSelf ? 'You' : (participant.name ?? label(participant.userId))}
-            </Text>
-            {!participant.micEnabled && (
-              // Muted is worth showing even for yourself — it is the
-              // answer to "why can nobody hear me".
-              <Text style={[styles.muted, { color: theme.colors.onBrand }]}>muted</Text>
-            )}
-          </View>
-        </View>
-      ))}
+          {grid}
+        </ScrollView>
+      ) : (
+        grid
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  grid: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignContent: 'center',
-    gap: 8,
-  },
-  tile: {
-    aspectRatio: 3 / 4,
-    borderRadius: 16,
-    borderWidth: 2,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  video: { ...StyleSheet.absoluteFillObject },
-  placeholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  initial: { fontSize: 48, fontWeight: '600' },
-  caption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    // Legible over both a bright video frame and a flat placeholder.
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  name: { flexShrink: 1, fontSize: 13, fontWeight: '600' },
-  muted: { fontSize: 11, opacity: 0.85 },
+  stage: { flex: 1, overflow: 'hidden' },
+  fill: { ...StyleSheet.absoluteFillObject },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
+  gridFilling: { flex: 1, alignContent: 'center' },
+  gridScrolling: { alignContent: 'flex-start' },
+  scroll: { paddingVertical: GAP },
 });

@@ -4,6 +4,28 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.13.0] — 2026-08-23
+
+### Changed
+
+- **`CallVideoGrid` is now layout-aware.** One other person gets the
+  whole frame with your own camera in a corner tile; three or more get a
+  grid, two columns up to six and three beyond that. Splitting a
+  two-person call into equal boxes spent most of the screen on
+  letterboxing.
+- Camera-off participants render a coloured initials avatar rather than
+  a bare letter, matching the mobile SDK.
+- Mute is shown with the `mic-off` icon instead of the word "muted".
+
+### Added
+
+- Call icons: `phone`, `phone-off`, `mic-off`, `video`, `video-off`,
+  `speaker`, `speaker-off`, `camera-flip`, `bluetooth`, `headphones`,
+  `chevron-up`.
+- New class hooks: `.callstage`, `.callstage__pip`,
+  `.callgrid__tile--bleed`, `.callgrid__avatar`. No CSS ships with the
+  component — the host app still owns the look.
+
 ## [2.0.0] — 2026-06-03
 
 Lockstep release with `@poolse/sdk@2.0.0` and `@poolse/react@2.0.0`.
