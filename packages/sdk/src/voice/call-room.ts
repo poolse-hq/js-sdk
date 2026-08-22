@@ -3,7 +3,7 @@ import type {
   CallParticipant,
   CallRoomOptions,
   CallRoomStatus,
-  LiveKitModule,
+  CheckedLiveKitModule,
   LiveKitParticipant,
   LiveKitRoomHandle,
   LiveKitTrack,
@@ -45,7 +45,7 @@ export type Unsubscribe = () => void;
  * existed. `join()` resolves `false` to say so.
  */
 export class CallRoom {
-  private readonly livekit: LiveKitModule;
+  private readonly livekit: CheckedLiveKitModule;
   private readonly tokenProvider: () => Promise<CallConnection | null>;
   private readonly startWithVideo: boolean;
   private readonly startMuted: boolean;
@@ -67,7 +67,9 @@ export class CallRoom {
   private readonly onRoomChange = () => this.emitParticipants();
 
   constructor(opts: CallRoomOptions) {
-    this.livekit = opts.livekit;
+    // Narrow once, here, rather than making every caller's module match
+    // signature-for-signature — see the note on `LiveKitModule`.
+    this.livekit = opts.livekit as unknown as CheckedLiveKitModule;
     this.tokenProvider = opts.tokenProvider;
     this.startWithVideo = opts.video ?? false;
     this.startMuted = opts.muted ?? false;
@@ -162,6 +164,17 @@ export class CallRoom {
       // leaving the capture indicator lit on a call that never happened.
       await room.localParticipant.setMicrophoneEnabled(!this.startMuted);
       if (this.startWithVideo) await room.localParticipant.setCameraEnabled(true);
+
+      // Browsers keep audio silent until the page has seen a user
+      // gesture. Answering a call is one, so this normally resolves
+      // immediately — but if it doesn't, a call that connects and plays
+      // nothing is indistinguishable from a broken one.
+      try {
+        await room.startAudio?.();
+      } catch {
+        // Still blocked. The next tap anywhere in the app releases it,
+        // and failing the whole call over it would be far worse.
+      }
 
       this.setStatus('connected');
       this.emitParticipants();

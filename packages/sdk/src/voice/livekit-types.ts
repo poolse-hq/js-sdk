@@ -46,6 +46,13 @@ export interface LiveKitRoomHandle {
   remoteParticipants: Map<string, LiveKitParticipant>;
   connect(url: string, token: string, options?: unknown): Promise<void>;
   disconnect(): Promise<void>;
+  /**
+   * Unblocks audio playback held back by a browser's autoplay policy.
+   *
+   * Optional because only the web needs it — React Native routes through
+   * the native audio session and has nothing to unblock.
+   */
+  startAudio?(): Promise<void>;
   on(event: string, handler: (...args: never[]) => void): unknown;
   off(event: string, handler: (...args: never[]) => void): unknown;
 }
@@ -54,9 +61,26 @@ export interface LiveKitRoomHandle {
  * The `livekit-client` namespace, as imported by your app:
  *
  *     import * as livekit from 'livekit-client';
+ *
+ * Deliberately loose, for the same reason `NativeWebRtcModule` is.
+ * Spelling the real signatures out here does NOT work: `Room`'s
+ * constructor takes `RoomOptions`, and a constructor accepting
+ * `RoomOptions` is not assignable to one accepting `unknown` —
+ * parameters are contravariant. Declaring it precisely means no consumer
+ * can pass `import * as livekit` in at all.
+ *
+ * {@link CheckedLiveKitModule} is the precise shape, narrowed once
+ * inside `CallRoom` rather than at every call site.
  */
 export interface LiveKitModule {
-  Room: new (options?: unknown) => LiveKitRoomHandle;
+  Room: new (...args: never[]) => unknown;
+  RoomEvent: Record<string, string>;
+  Track: { Source: Record<string, string> };
+}
+
+/** The precise shape, used internally once the module has been checked. */
+export interface CheckedLiveKitModule {
+  Room: new (options?: { adaptiveStream?: boolean; dynacast?: boolean }) => LiveKitRoomHandle;
   RoomEvent: Record<string, string>;
   Track: { Source: Record<string, string> };
 }

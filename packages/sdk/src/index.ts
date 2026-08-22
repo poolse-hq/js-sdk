@@ -22,6 +22,7 @@ export type {
   CallParticipant,
   CallRoomOptions,
   CallRoomStatus,
+  CheckedLiveKitModule,
   LiveKitModule,
   LiveKitParticipant,
   LiveKitPublication,

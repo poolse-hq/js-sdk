@@ -15,14 +15,26 @@ import { usePoolseTheme } from '../theme/PoolseTheme.js';
  *     import * as livekitRN from '@livekit/react-native';
  */
 export interface LiveKitReactNativeModule {
-  VideoTrack: ComponentType<{
-    trackRef: unknown;
-    style?: ViewStyle;
-    objectFit?: 'cover' | 'contain';
-    mirror?: boolean;
-    zOrder?: number;
-  }>;
+  /**
+   * The module's `VideoTrack` component.
+   *
+   * Typed as `unknown` on purpose. Its real props are far more specific
+   * than what this renders with, and React component props are
+   * contravariant — declaring the narrow shape here means the real
+   * component is not assignable to it and no app can pass the module in.
+   * It is narrowed to {@link CheckedVideoTrack} at the point of use.
+   */
+  VideoTrack: unknown;
 }
+
+/** The slice actually rendered, narrowed once inside the component. */
+type CheckedVideoTrack = ComponentType<{
+  trackRef: unknown;
+  style?: ViewStyle;
+  objectFit?: 'cover' | 'contain';
+  mirror?: boolean;
+  zOrder?: number;
+}>;
 
 export interface CallVideoGridProps {
   participants: CallParticipant[];
@@ -47,6 +59,7 @@ export interface CallVideoGridProps {
 export function CallVideoGrid({ participants, livekitReactNative, labelFor }: CallVideoGridProps) {
   const theme = usePoolseTheme();
   const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
+  const VideoTrack = livekitReactNative?.VideoTrack as CheckedVideoTrack | undefined;
 
   if (participants.length === 0) return null;
 
@@ -72,8 +85,8 @@ export function CallVideoGrid({ participants, livekitReactNative, labelFor }: Ca
             },
           ]}
         >
-          {participant.videoTrackRef && livekitReactNative ? (
-            <livekitReactNative.VideoTrack
+          {participant.videoTrackRef && VideoTrack ? (
+            <VideoTrack
               trackRef={participant.videoTrackRef}
               style={styles.video}
               objectFit="cover"

@@ -1,3 +1,4 @@
+export { CallVideoGrid, type CallVideoGridProps } from './CallVideoGrid.js';
 // @poolse/react-ui — plug-and-play React components built on
 // @poolse/react hooks. Drop in once for instant chat; eject to
 // individual pieces (or the raw hooks) when you need more control.
