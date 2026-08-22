@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CallRoom } from '../src/voice/call-room.js';
 import type {
@@ -327,5 +327,113 @@ describe('CallRoom reference counting', () => {
 
     room.leave();
     expect(h.disconnect).toHaveBeenCalled();
+  });
+});
+
+// livekit-client does NOT play remote audio on the web — that is what
+// `<RoomAudioRenderer />` exists for in their React package. Without an
+// explicit attach a call connects, the roster is right, video flows, and
+// nobody hears anything. The mesh always did this; the SFU path shipped
+// without it and every call was silent on every platform.
+describe('CallRoom remote audio', () => {
+  // These tests run in vitest's `node` environment, so `document` is
+  // stubbed rather than emulated — the code only needs `body.appendChild`,
+  // and stubbing keeps the test honest about exactly what it touches.
+  let appended: unknown[];
+
+  beforeEach(() => {
+    appended = [];
+    vi.stubGlobal('document', {
+      body: { appendChild: (el: unknown) => appended.push(el) },
+    });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  function audioTrack() {
+    const element = {
+      autoplay: false,
+      style: { display: '' },
+      remove: vi.fn(),
+    } as unknown as HTMLMediaElement;
+
+    return {
+      element,
+      track: { kind: 'audio', attach: vi.fn(() => element), detach: vi.fn() },
+    };
+  }
+
+  async function connected() {
+    const h = harness();
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    await room.join();
+    return { h, room };
+  }
+
+  it('plays a subscribed remote audio track', async () => {
+    const { h } = await connected();
+    const { track, element } = audioTrack();
+
+    h.handlers.get('trackSubscribed')?.(track as never);
+
+    expect(track.attach).toHaveBeenCalled();
+    expect(element.autoplay).toBe(true);
+    // In the DOM (required for playback) but never laid out.
+    expect(element.style.display).toBe('none');
+    expect(appended).toContain(element);
+  });
+
+  it('ignores video tracks — the UI renders those', async () => {
+    const { h } = await connected();
+    const attach = vi.fn();
+
+    h.handlers.get('trackSubscribed')?.({ kind: 'video', attach } as never);
+
+    expect(attach).not.toHaveBeenCalled();
+  });
+
+  it('stops playing when the track goes away', async () => {
+    const { h } = await connected();
+    const { track, element } = audioTrack();
+
+    h.handlers.get('trackSubscribed')?.(track as never);
+    h.handlers.get('trackUnsubscribed')?.(track as never);
+
+    expect(track.detach).toHaveBeenCalled();
+    expect(element.remove).toHaveBeenCalled();
+  });
+
+  it('releases every sink on leave', async () => {
+    // A held element keeps playing a call the user has hung up on.
+    const { h, room } = await connected();
+    const { track, element } = audioTrack();
+
+    h.handlers.get('trackSubscribed')?.(track as never);
+    room.leave();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(element.remove).toHaveBeenCalled();
+  });
+
+  it('does not attach the same track twice', async () => {
+    const { h } = await connected();
+    const { track } = audioTrack();
+
+    h.handlers.get('trackSubscribed')?.(track as never);
+    h.handlers.get('trackSubscribed')?.(track as never);
+
+    expect(track.attach).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing without a DOM, where the platform plays audio itself', async () => {
+    // React Native has no document; LiveKit routes audio through the
+    // native audio session there.
+    const { h } = await connected();
+    vi.stubGlobal('document', undefined);
+    const { track } = audioTrack();
+
+    h.handlers.get('trackSubscribed')?.(track as never);
+
+    expect(track.attach).not.toHaveBeenCalled();
   });
 });

@@ -66,6 +66,20 @@ export class CallRoom {
   /** Bound once so `off()` in teardown removes the same references. */
   private readonly onRoomChange = () => this.emitParticipants();
 
+  /**
+   * Hidden `<audio>` elements playing each remote audio track.
+   *
+   * livekit-client does NOT play remote audio for you on the web — that
+   * is what `@livekit/components-react`'s `<RoomAudioRenderer />` exists
+   * to do. Without this a call connects, the roster is right, video
+   * flows, and nobody hears anything. The peer-to-peer mesh always did
+   * this (see `webrtc-browser.ts`); the SFU path has to as well.
+   *
+   * Empty on React Native, where there is no DOM and LiveKit routes
+   * audio through the native audio session instead.
+   */
+  private readonly audioSinks = new Map<LiveKitTrack, HTMLMediaElement>();
+
   constructor(opts: CallRoomOptions) {
     // Narrow once, here, rather than making every caller's module match
     // signature-for-signature — see the note on `LiveKitModule`.
@@ -262,6 +276,19 @@ export class CallRoom {
       if (event) room.on(event, this.onRoomChange);
     }
 
+    // Remote audio playback. Separate from the roster handlers above
+    // because these need the track itself, not just a nudge to re-read
+    // the room.
+    const subscribed = RoomEvent['TrackSubscribed'];
+    if (subscribed) {
+      room.on(subscribed, ((track: LiveKitTrack) => this.playAudio(track)) as never);
+    }
+
+    const unsubscribed = RoomEvent['TrackUnsubscribed'];
+    if (unsubscribed) {
+      room.on(unsubscribed, ((track: LiveKitTrack) => this.stopAudio(track)) as never);
+    }
+
     const disconnected = RoomEvent['Disconnected'];
     if (disconnected) {
       room.on(disconnected, () => {
@@ -271,6 +298,44 @@ export class CallRoom {
         this.emitParticipants();
       });
     }
+  }
+
+  /**
+   * Play a remote audio track through a hidden element.
+   *
+   * No-ops for video (the UI renders that) and on React Native, where
+   * there is no `document` and the native audio session handles
+   * playback.
+   */
+  private playAudio(track: LiveKitTrack): void {
+    if (typeof document === 'undefined') return;
+    if (track?.kind !== 'audio' || typeof track.attach !== 'function') return;
+    if (this.audioSinks.has(track)) return;
+
+    try {
+      const element = track.attach();
+      element.autoplay = true;
+      // In the DOM (required for playback) but never laid out.
+      element.style.display = 'none';
+      document.body.appendChild(element);
+      this.audioSinks.set(track, element);
+    } catch (err) {
+      this.emitError(new Error(`could not play remote audio: ${String(err)}`));
+    }
+  }
+
+  /** Tear a sink down, so a departed peer stops holding an element. */
+  private stopAudio(track: LiveKitTrack): void {
+    const element = this.audioSinks.get(track);
+    if (!element) return;
+
+    this.audioSinks.delete(track);
+    try {
+      track.detach?.(element);
+    } catch {
+      // Already detached by LiveKit; removing the element is what counts.
+    }
+    element.remove();
   }
 
   private toParticipant(participant: LiveKitParticipant, isSelf: boolean): CallParticipant {
@@ -300,6 +365,8 @@ export class CallRoom {
     this.room = null;
     this.selfId = null;
     this.holders = 0;
+
+    for (const track of [...this.audioSinks.keys()]) this.stopAudio(track);
 
     if (room) {
       try {

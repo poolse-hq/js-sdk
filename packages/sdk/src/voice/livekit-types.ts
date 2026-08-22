@@ -16,8 +16,18 @@
  * Deliberately narrow — only what {@link CallRoom} actually touches.
  */
 
-/** A media track. Opaque here; the platform renderer consumes it. */
-export type LiveKitTrack = object;
+/**
+ * A media track.
+ *
+ * Mostly opaque — the platform renderer consumes video. Audio is the
+ * exception: {@link CallRoom} attaches it itself on the web, because
+ * livekit-client does not play remote audio for you.
+ */
+export interface LiveKitTrack {
+  kind?: string;
+  attach?: () => HTMLMediaElement;
+  detach?: (element?: HTMLMediaElement) => unknown;
+}
 
 export interface LiveKitPublication {
   track?: LiveKitTrack | null | undefined;
