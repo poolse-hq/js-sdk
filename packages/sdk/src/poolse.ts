@@ -10,6 +10,7 @@ import { DevicesResource } from './resources/devices.js';
 import { MeResource } from './resources/me.js';
 import { MessagesResource } from './resources/messages.js';
 import { UsersResource } from './resources/users.js';
+import { IceServersResource } from './resources/ice-servers.js';
 import { RestClient } from './rest-client.js';
 import { TokenCache } from './token-cache.js';
 
@@ -55,6 +56,8 @@ export class Poolse {
    * `config.wsUrl`.
    */
   public readonly realtime: PoolseRealtime;
+  /** STUN/TURN servers for WebRTC — see `IceServersResource`. */
+  public readonly iceServers: IceServersResource;
 
   private readonly resolved: ResolvedConfig;
   private readonly tokenCache: TokenCache;
@@ -79,10 +82,15 @@ export class Poolse {
     this.messages = new MessagesResource(this.rest);
     this.attachments = new AttachmentsResource(this.rest, cachedConfig.fetch);
     this.users = new UsersResource(cachedConfig);
+    this.iceServers = new IceServersResource(this.rest);
 
     this.realtime = new PoolseRealtime(cachedConfig, this.tokenCache, {
       ...(this.resolved.wsUrl !== undefined ? { wsUrl: this.resolved.wsUrl } : {}),
       socketPath: this.resolved.socketPath,
+      // Re-fetched on every room join rather than cached here: TURN
+      // credentials expire, and a stale one is rejected silently — the
+      // call connects and carries no media.
+      iceServersProvider: async () => (await this.iceServers.list()).ice_servers,
     });
   }
 

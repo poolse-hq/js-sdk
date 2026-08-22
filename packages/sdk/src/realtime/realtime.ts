@@ -18,6 +18,7 @@ import type { Channel } from 'phoenix';
 import type { ResolvedConfig } from '../config.js';
 import { PoolseError } from '../errors.js';
 import { CallsResource } from '../voice/calls.js';
+import type { VoiceIceServer } from '../voice/types.js';
 import { VoiceRoom } from '../voice/voice-room.js';
 import type { VoiceRoomOptions } from '../voice/types.js';
 import type { TokenCache } from '../token-cache.js';
@@ -50,12 +51,19 @@ interface RealtimeOptions {
    * swapping http(s) → ws(s).
    */
   wsUrl?: string;
+  /**
+   * Resolves ICE servers for voice rooms. Wired by `Poolse` to
+   * `GET /v1/ice-servers` so TURN reaches every room without the app
+   * plumbing anything.
+   */
+  iceServersProvider?: () => Promise<VoiceIceServer[]>;
 }
 
 export class PoolseRealtime {
   private readonly config: ResolvedConfig;
   private readonly tokenCache: TokenCache;
   private readonly socketPath: string;
+  private readonly iceServersProvider: (() => Promise<VoiceIceServer[]>) | null;
   private readonly wsUrl: string;
 
   private socket: Socket | null = null;
@@ -71,6 +79,7 @@ export class PoolseRealtime {
     this.config = config;
     this.tokenCache = tokenCache;
     this.socketPath = opts.socketPath ?? '/socket';
+    this.iceServersProvider = opts.iceServersProvider ?? null;
     this.wsUrl = opts.wsUrl ?? deriveWsUrl(config.apiUrl);
   }
 
@@ -228,7 +237,13 @@ export class PoolseRealtime {
       throw new PoolseError('socket not initialised — call connect() first');
     }
 
-    const room = new VoiceRoom(conversationId, this.socket, opts);
+    // The app's own `iceServersProvider` wins if it passed one; ours is
+    // only a default, so a deployment with its own TURN arrangement is
+    // not overridden.
+    const room = new VoiceRoom(conversationId, this.socket, {
+      ...(this.iceServersProvider ? { iceServersProvider: this.iceServersProvider } : {}),
+      ...opts,
+    });
     this.voiceRooms.set(conversationId, room);
     return room;
   }

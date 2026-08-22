@@ -5,6 +5,7 @@ import { CallsResource } from '../src/voice/calls.js';
 import type {
   VoiceCandidate,
   VoiceDescription,
+  VoiceIceServer,
   VoicePeerConnection,
   VoiceStream,
   VoiceTrack,
@@ -426,5 +427,133 @@ describe('CallsResource', () => {
 
     const calls = new CallsResource(() => channel);
     await expect(calls.invite('conv-1')).rejects.toThrow(/forbidden/);
+  });
+});
+
+// TURN credentials expire, so they cannot be resolved once and reused.
+// Getting this wrong is invisible in development — STUN alone works on
+// the networks you build on, and only fails behind the symmetric NAT of
+// a mobile carrier, where the call connects and carries no media.
+describe('VoiceRoom ICE servers', () => {
+  /** Records what each peer connection was actually constructed with. */
+  function recordingAdapter(seen: VoiceIceServer[][]): WebRtcAdapter {
+    const base = fakeAdapter(fakePeerConnection());
+    return {
+      ...base,
+      createPeerConnection: (iceServers: VoiceIceServer[]) => {
+        seen.push(iceServers);
+        return fakePeerConnection();
+      },
+    };
+  }
+
+  const TURN: VoiceIceServer[] = [
+    { urls: ['turn:turn.example.com:3478'], username: '9999:u-1', credential: 'derived' },
+  ];
+
+  it('negotiates with the servers the provider returned', async () => {
+    const seen: VoiceIceServer[][] = [];
+    const { channel, emit } = fakeChannel([]);
+
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: recordingAdapter(seen),
+      detectSpeaking: false,
+      iceServersProvider: async () => TURN,
+    });
+
+    await room.join();
+    emit('voice:joined', { user_id: 'user-a' });
+    emit('voice:joined', { user_id: 'user-b' });
+
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    expect(seen[0]).toEqual(TURN);
+  });
+
+  it('connects without TURN when the provider fails', async () => {
+    const seen: VoiceIceServer[][] = [];
+    const { channel, emit } = fakeChannel([]);
+
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: recordingAdapter(seen),
+      detectSpeaking: false,
+      iceServers: [{ urls: 'stun:fallback.example.com' }],
+      iceServersProvider: async () => {
+        throw new Error('ice endpoint down');
+      },
+    });
+
+    // A room that refused to connect because the ICE endpoint blipped
+    // would be worse than one that connects without a relay — which is
+    // how calls behaved before TURN existed.
+    await expect(room.join()).resolves.toBeUndefined();
+
+    emit('voice:joined', { user_id: 'user-a' });
+    emit('voice:joined', { user_id: 'user-b' });
+
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    expect(seen[0]).toEqual([{ urls: 'stun:fallback.example.com' }]);
+  });
+
+  it('keeps the configured servers when the provider returns none', async () => {
+    const seen: VoiceIceServer[][] = [];
+    const { channel, emit } = fakeChannel([]);
+
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: recordingAdapter(seen),
+      detectSpeaking: false,
+      iceServers: [{ urls: 'stun:fallback.example.com' }],
+      iceServersProvider: async () => [],
+    });
+
+    await room.join();
+    emit('voice:joined', { user_id: 'user-a' });
+    emit('voice:joined', { user_id: 'user-b' });
+
+    // An empty list would leave the connection with nowhere to gather
+    // candidates from at all — worse than the default.
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    expect(seen[0]).toEqual([{ urls: 'stun:fallback.example.com' }]);
+  });
+
+  it('re-resolves on every join, because credentials expire', async () => {
+    const { channel } = fakeChannel([]);
+    let calls = 0;
+
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: fakeAdapter(fakePeerConnection()),
+      detectSpeaking: false,
+      iceServersProvider: async () => {
+        calls += 1;
+        return TURN;
+      },
+    });
+
+    await room.join();
+    room.leave();
+    await room.join();
+
+    expect(calls).toBe(2);
+  });
+
+  it('does not re-resolve for a second holder of a live room', async () => {
+    const { channel } = fakeChannel([]);
+    let calls = 0;
+
+    const room = new VoiceRoom('conv-1', fakeSocket(channel), {
+      webrtc: fakeAdapter(fakePeerConnection()),
+      detectSpeaking: false,
+      iceServersProvider: async () => {
+        calls += 1;
+        return TURN;
+      },
+    });
+
+    // The call screen and the voice bar can hold the same room. The
+    // second holder joins an already-negotiated session, so re-fetching
+    // would be a request that changes nothing.
+    await room.join();
+    await room.join();
+
+    expect(calls).toBe(1);
   });
 });

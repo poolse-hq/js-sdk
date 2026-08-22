@@ -58,7 +58,8 @@ export class VoiceRoom {
 
   private readonly socket: Socket;
   private readonly webrtc: WebRtcAdapter;
-  private readonly iceServers: VoiceIceServer[];
+  private iceServers: VoiceIceServer[];
+  private readonly iceServersProvider: (() => Promise<VoiceIceServer[]>) | null;
   private readonly detectSpeaking: boolean;
 
   private channel: Channel | null = null;
@@ -96,6 +97,7 @@ export class VoiceRoom {
     this.socket = socket;
     this.webrtc = opts.webrtc ?? createBrowserWebRtcAdapter();
     this.iceServers = opts.iceServers ?? DEFAULT_ICE_SERVERS;
+    this.iceServersProvider = opts.iceServersProvider ?? null;
     this.detectSpeaking = opts.detectSpeaking ?? true;
   }
 
@@ -144,6 +146,12 @@ export class VoiceRoom {
 
     this.holders += 1;
     this.setStatus('connecting');
+
+    // Resolved per join, not per construction: TURN credentials expire,
+    // so a list fetched once and reused would be rejected by the second
+    // call. This is also the only await before peers are created, which
+    // matters — `ensurePeer` reads `iceServers` synchronously.
+    await this.resolveIceServers();
 
     try {
       this.localStream = await this.webrtc.getUserMedia();
@@ -287,6 +295,25 @@ export class VoiceRoom {
     channel.on('voice:error', (payload: { reason?: string }) => {
       this.emitError(new Error(`voice error: ${payload?.reason ?? 'unknown'}`));
     });
+  }
+
+  /**
+   * Refresh ICE servers from the provider, if there is one.
+   *
+   * Never throws. A room that refused to connect because the ICE
+   * endpoint was briefly unreachable would be a worse outcome than one
+   * that connects without TURN — which is exactly how calls behaved
+   * before TURN existed, and works on most networks.
+   */
+  private async resolveIceServers(): Promise<void> {
+    if (!this.iceServersProvider) return;
+
+    try {
+      const servers = await this.iceServersProvider();
+      if (servers.length > 0) this.iceServers = servers;
+    } catch (err) {
+      this.emitError(new Error(`ice servers unavailable, continuing without: ${String(err)}`));
+    }
   }
 
   // ── negotiation ────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ export {
   ConversationHandle,
   ConversationsResource,
 } from './resources/conversations.js';
+export { IceServersResource, type IceServerResponse } from './resources/ice-servers.js';
 export { MeResource } from './resources/me.js';
 export { DevicesResource } from './resources/devices.js';
 export type {

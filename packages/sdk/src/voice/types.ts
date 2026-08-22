@@ -99,6 +99,20 @@ export interface VoiceRoomOptions {
    * TURN server for participants behind symmetric NAT.
    */
   iceServers?: VoiceIceServer[];
+  /**
+   * Resolve ICE servers just before connecting, overriding `iceServers`.
+   *
+   * TURN credentials expire, so they cannot be handed over once at
+   * construction and reused for the life of the app — by the second call
+   * they would be rejected. `PoolseRealtime` supplies a provider backed
+   * by `GET /v1/ice-servers`, which is what makes TURN work without any
+   * app wiring.
+   *
+   * Failures are non-fatal: the room falls back to `iceServers` (or the
+   * default STUN) rather than refusing to connect. Degraded beats dead —
+   * without TURN a call still works on most networks.
+   */
+  iceServersProvider?: () => Promise<VoiceIceServer[]>;
   /** Platform WebRTC binding. Defaults to the browser implementation. */
   webrtc?: WebRtcAdapter;
   /**
