@@ -50,6 +50,22 @@ export interface CallScreenProps {
    */
   onStatusChange?: (status: VoiceStatus) => void;
   /**
+   * Called when the media transport changes: `'sfu'`, `'mesh'`, or
+   * `null` when no call is connected.
+   *
+   * This decides who owns the iOS audio session, and getting it wrong is
+   * silent. `@livekit/react-native`'s `registerGlobals()` configures and
+   * activates AVAudioSession natively as its audio engine changes state.
+   * An app that ALSO drives the session — `react-native-incall-manager`,
+   * typically — fights it: the microphone publishes nothing, and audio
+   * only starts working after some unrelated engine change (turning the
+   * camera on) makes LiveKit reapply its configuration.
+   *
+   * So drive InCallManager from this, and only for `'mesh'`. The mesh
+   * has no session management of its own and still needs it.
+   */
+  onTransportChange?: (transport: 'sfu' | 'mesh' | null) => void;
+  /**
    * Called when the call's video state changes.
    *
    * A video call belongs on the speaker with the proximity sensor OFF —
@@ -99,6 +115,7 @@ export function CallScreen({
   livekit,
   livekitReactNative,
   onStatusChange,
+  onTransportChange,
   onVideoChange,
   nativeIncomingUi,
 }: CallScreenProps) {
@@ -149,6 +166,13 @@ export function CallScreen({
   useEffect(() => {
     onStatusChange?.(status);
   }, [status, onStatusChange]);
+
+  const transport: 'sfu' | 'mesh' | null =
+    status !== 'connected' ? null : usingSfu ? 'sfu' : 'mesh';
+
+  useEffect(() => {
+    onTransportChange?.(transport);
+  }, [transport, onTransportChange]);
 
   // The mesh carries no video, so its calls are always audio.
   const videoOn = usingSfu && sfu.cameraEnabled;
