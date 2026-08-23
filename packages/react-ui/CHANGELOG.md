@@ -4,6 +4,21 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.15.2] — 2026-08-23
+
+### Fixed
+
+- Same edge seam as `@poolse/react-native@2.15.2`: the floating preview's
+  inner tile is borderless, so the bubble owns the only rounding.
+
+### Changed
+
+- `CallVideoGrid`'s tile takes `fit` separately from `bleed`. The two
+  were coupled, but the spotlight and the floating preview are both
+  bleed tiles that want opposite fits — the spotlight letterboxes so a
+  phone's portrait frame survives a landscape window, while the preview
+  is a small fixed-ratio bubble that should be filled edge to edge.
+
 ## [2.15.1] — 2026-08-23
 
 ### Fixed

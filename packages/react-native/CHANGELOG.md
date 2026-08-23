@@ -4,6 +4,17 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.15.2] — 2026-08-23
+
+### Fixed
+
+- **The floating self-preview had a visible seam around its edge.** The
+  bubble clips to its own rounding, but the tile inside rounded itself
+  as well and carried a 2px border — transparent or not, that inset the
+  video from the edge it should meet, and the two radii disagreeing left
+  a hairline along the curve. The inner tile is borderless now, and the
+  bubble is rounder.
+
 ## [2.15.1] — 2026-08-23
 
 ### Changed

@@ -154,6 +154,12 @@ export function LocalVideoPip({
             label={label}
             avatarSize={48}
             hideName
+            // Borderless, and square-cornered, because the rounding and
+            // the clipping both belong to the bubble around it. A tile
+            // that rounds itself as well leaves a hairline seam where
+            // the two radii disagree, and its 2px border — transparent
+            // or not — insets the video from the edge it should meet.
+            bleed
             style={styles.fill as ViewStyle}
           />
         </View>
@@ -169,7 +175,10 @@ const styles = StyleSheet.create({
     left: 0,
     width: PIP_WIDTH,
     height: PIP_HEIGHT,
-    borderRadius: 16,
+    // Generous enough to read as a bubble rather than a cropped
+    // rectangle. The video is clipped to it, so this is the only
+    // rounding in play.
+    borderRadius: 22,
     overflow: 'hidden',
     // Lifted off the video so it reads as floating rather than inset.
     shadowColor: '#000',

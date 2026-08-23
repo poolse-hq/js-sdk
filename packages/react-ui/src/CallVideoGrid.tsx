@@ -60,10 +60,14 @@ export function CallVideoGrid({
 
     return (
       <div className={className ?? 'callstage callstage--solo'}>
-        <CallVideoTile participant={spotlight} label={label} bleed />
+        <CallVideoTile participant={spotlight} label={label} bleed fit="contain" />
         {self && others.length === 1 && (
           <FloatingSelf onClick={onLocalClick}>
-            <CallVideoTile participant={self} label={label} hideName />
+            {/* `bleed` for the borders, `cover` for the fit: the
+                rounding and clipping belong to the bubble around it, and
+                a tile that also rounds and borders itself leaves a
+                hairline seam and insets the video from the edge. */}
+            <CallVideoTile participant={self} label={label} hideName bleed fit="cover" />
           </FloatingSelf>
         )}
       </div>
@@ -93,11 +97,23 @@ function CallVideoTile({
   label,
   bleed = false,
   hideName = false,
+  fit = 'cover',
 }: {
   participant: CallParticipant;
   label: (userId: string) => string;
+  /** Fill the parent, with no border and no rounding of its own. */
   bleed?: boolean;
   hideName?: boolean;
+  /**
+   * How the video sits in the tile.
+   *
+   * Deliberately NOT derived from `bleed`. The spotlight and the
+   * floating preview are both bleed tiles and want opposite things: the
+   * spotlight letterboxes so a phone's portrait frame survives a
+   * landscape window, while the preview is a small fixed-ratio bubble
+   * that should be filled edge to edge.
+   */
+  fit?: 'cover' | 'contain';
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const track = participant.videoTrack as AttachableTrack | null;
@@ -136,18 +152,16 @@ function CallVideoTile({
           // LiveKit itself, not by these elements.
           muted={participant.isSelf}
           style={{
-            // `contain` for the spotlight, `cover` for everything else,
-            // and set here rather than left to host CSS because it is
+            // Set here rather than left to host CSS because it is
             // behaviour rather than theme.
             //
             // A phone publishes portrait video. Cropping that to fill a
             // landscape browser window — which is what `cover` does —
             // throws away most of the frame and lands somewhere around
-            // the caller's nose. Letterboxing shows the picture they
-            // are actually sending. Fixed-ratio tiles keep `cover`,
-            // where the crop is slight and the alternative is a grid
-            // full of pillarboxed slivers.
-            objectFit: bleed ? 'contain' : 'cover',
+            // the caller's nose, so the spotlight letterboxes.
+            // Fixed-ratio tiles crop, where the loss is slight and the
+            // alternative is a grid full of pillarboxed slivers.
+            objectFit: fit,
             // Mirrored only for yourself — mirroring a remote feed would
             // flip their text and reverse which hand they are waving
             // with.
