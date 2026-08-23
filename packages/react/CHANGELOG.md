@@ -4,6 +4,32 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.15.0] — 2026-08-23
+
+### Fixed
+
+- **Answering a call then hanging up left the other side in it.**
+  `accept()` clears `incoming`, and a callee never had an `outgoing`, so
+  `hangUp()` resolved no call id and returned before signalling. The
+  call id of the call in progress is now tracked in its own right.
+- **A late `call:cancelled` tore down a live call.** The guard fell
+  through whenever `incoming` was null — exactly the state `accept()`
+  leaves behind — so a caller's ring timeout firing as the callee
+  answered dropped the callee straight out of the call.
+- **Every call signal is now matched to the call it belongs to.**
+  `accepted`, `declined`, `busy`, `ended` and `cancelled` are ignored
+  unless they name the call this client is actually in. A signal about a
+  previous call could previously end the current one.
+- **A room could be left connected with nothing holding it.** If a call
+  ended while its media was still connecting, the cleanup ran before
+  `join()` resolved, found nothing to release, and the connection
+  completed into a room no component held — audio still flowing, no UI,
+  and no way to hang up. Both `useCallRoom` and `useVoiceRoom` now
+  release a room that was superseded mid-connect.
+- **`markBusy` could reject a call the user was being shown.** The
+  decision ran inside a `setPhase` updater; updaters must be pure, and
+  React may run them more than once.
+
 ## [2.14.1] — 2026-08-23
 
 ### Added

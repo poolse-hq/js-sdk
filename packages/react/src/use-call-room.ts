@@ -158,6 +158,20 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   // would release a claim we never made.
   const joined = useRef(false);
 
+  /**
+   * The room this hook is currently responsible for.
+   *
+   * Connecting takes time, and a call can end during it — the far side
+   * hangs up, the user navigates away, the conversation changes. When
+   * that happened the effect's cleanup ran while `joined` was still
+   * false, because `join()` had not resolved yet, so nothing released
+   * the room. The connection then completed into a room no component
+   * held: audio flowing, no UI, and no way to hang it up.
+   *
+   * Comparing against this on resolve is what closes that window.
+   */
+  const held = useRef<CallRoom | null>(null);
+
   const room = useMemo(() => {
     if (!conversationId) return null;
 
@@ -213,6 +227,8 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     setStatus(room.getStatus());
     setParticipants(room.getParticipants());
 
+    held.current = room;
+
     // Latched rather than pulsed: a consumer that hangs up in an effect
     // needs the signal to survive until it has been read, and a call
     // that has been abandoned is never un-abandoned.
@@ -234,6 +250,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       offAlone();
       offDevices();
       offError();
+      held.current = null;
       // Unmounting mid-call must disconnect, or the SFU keeps publishing
       // a participant nobody is behind.
       if (joined.current) {
@@ -244,17 +261,27 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   }, [room, sync, refreshDevices]);
 
   const join = useCallback(async (): Promise<boolean> => {
-    if (!room) return false;
+    const target = room;
+    if (!target) return false;
     setError(null);
 
     try {
-      const connected = await room.join();
+      const connected = await target.join();
+
+      // Superseded while connecting. Release it here — the cleanup that
+      // would normally have done so already ran, and found nothing to
+      // release because this promise had not resolved yet.
+      if (held.current !== target) {
+        if (connected) target.leave();
+        return false;
+      }
+
       joined.current = connected;
       setSfuAvailable(connected);
-      sync(room);
+      sync(target);
       // Only once connected: enumerating before the call holds its
       // permissions gives a list of unlabelled placeholders.
-      if (connected) refreshDevices(room);
+      if (connected) refreshDevices(target);
       return connected;
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));

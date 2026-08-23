@@ -1,5 +1,11 @@
 export { CallVideoGrid, type CallVideoGridProps } from './CallVideoGrid.js';
 export {
+  CallProvider,
+  useCallInvite,
+  type CallProviderProps,
+  type CallInvite,
+} from './CallProvider.js';
+export {
   CallControlButton,
   CallDeviceMenu,
   type CallControlButtonProps,

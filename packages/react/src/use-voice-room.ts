@@ -65,6 +65,16 @@ export function useVoiceRoom(
   // conversation.
   const joined = useRef(false);
 
+  /**
+   * The room this hook is responsible for right now.
+   *
+   * Same window as `useCallRoom`: a call that ends while the room is
+   * still connecting ran its cleanup before `join()` resolved, so
+   * nothing released the room and it finished connecting with no
+   * component behind it — audio with no UI.
+   */
+  const held = useRef<ReturnType<typeof poolse.realtime.voice> | null>(null);
+
   const room = useMemo(
     () => (conversationId ? poolse.realtime.voice(conversationId, optsRef.current) : null),
     [poolse, conversationId],
@@ -73,6 +83,7 @@ export function useVoiceRoom(
   useEffect(() => {
     if (!room) return;
 
+    held.current = room;
     setStatus(room.getStatus());
     setParticipants(room.getParticipants());
     setMuted(room.isMuted());
@@ -85,6 +96,7 @@ export function useVoiceRoom(
       offStatus();
       offRoster();
       offError();
+      held.current = null;
       // Leaving on unmount is deliberate: the server only broadcasts
       // `voice:left` on an explicit leave, so skipping it would strand
       // us in everyone else's roster. Only release a claim we made.
@@ -96,10 +108,18 @@ export function useVoiceRoom(
   }, [room]);
 
   const join = useCallback(async () => {
-    if (!room) return;
+    const target = room;
+    if (!target) return;
     setError(null);
     try {
-      await room.join();
+      await target.join();
+
+      // Superseded while connecting — release it rather than leaving a
+      // room nobody holds. See `held`.
+      if (held.current !== target) {
+        target.leave();
+        return;
+      }
       joined.current = true;
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));

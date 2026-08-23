@@ -4,6 +4,13 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.15.0] — 2026-08-23
+
+Republished for the call-lifecycle fixes in `@poolse/sdk` and
+`@poolse/react` — a callee being unable to hang up on the caller, a late
+cancel tearing down a live call, and media left connected with no UI
+behind it all affected React Native too. See those changelogs.
+
 ## [2.14.1] — 2026-08-23
 
 Republished in lockstep. The device fix in `@poolse/sdk` is a web

@@ -4,6 +4,19 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.15.0] — 2026-08-23
+
+### Fixed
+
+- **A video call on a machine with no camera failed outright.**
+  `setCameraEnabled` throws `NotFoundError` on a desktop without a
+  webcam, and that landed in `join()`'s error path and tore the call
+  down — video calling was impossible from such a machine, when it
+  should have connected as audio. Capture devices are now best-effort:
+  a missing or refused camera _or_ microphone reports through
+  `onError` and the call still connects. An SFU that genuinely cannot be
+  reached still fails, as it should.
+
 ## [2.14.1] — 2026-08-23
 
 ### Fixed

@@ -215,6 +215,60 @@ describe('CallRoom publishing', () => {
   });
 });
 
+// A desktop with no webcam threw NotFoundError from setCameraEnabled,
+// which landed in join()'s catch and tore the whole call down — a video
+// call was impossible on any machine without a camera, when it should
+// have connected as audio.
+describe('CallRoom missing capture devices', () => {
+  it('connects a video call on a machine with no camera', async () => {
+    const h = harness();
+    h.local.setCameraEnabled = vi.fn(async () => {
+      throw new Error('NotFoundError: Requested device not found');
+    });
+
+    const room = new CallRoom({
+      livekit: h.module,
+      tokenProvider: async () => CONNECTION,
+      video: true,
+    });
+
+    const errors: Error[] = [];
+    room.onError((e) => errors.push(e));
+
+    await expect(room.join()).resolves.toBe(true);
+    expect(room.getStatus()).toBe('connected');
+    // Reported, so the UI can say which half is missing.
+    expect(errors.at(-1)?.message).toMatch(/no camera available/);
+    // …and the microphone still went out.
+    expect(h.local.setMicrophoneEnabled).toHaveBeenCalled();
+  });
+
+  it('still connects when the microphone is refused', async () => {
+    // Being able to hear the other side beats not connecting at all.
+    const h = harness();
+    h.local.setMicrophoneEnabled = vi.fn(async () => {
+      throw new Error('NotAllowedError');
+    });
+
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    const errors: Error[] = [];
+    room.onError((e) => errors.push(e));
+
+    await expect(room.join()).resolves.toBe(true);
+    expect(room.getStatus()).toBe('connected');
+    expect(errors.at(-1)?.message).toMatch(/no microphone available/);
+  });
+
+  it('a genuinely unreachable SFU still fails the call', async () => {
+    // The point is to survive a missing device, not to paper over a
+    // room that never accepted us.
+    const h = harness({ connectRejects: true });
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+
+    await expect(room.join()).rejects.toThrow(/call media failed/);
+  });
+});
+
 describe('CallRoom roster', () => {
   it('marks the local participant as self', async () => {
     const h = harness();

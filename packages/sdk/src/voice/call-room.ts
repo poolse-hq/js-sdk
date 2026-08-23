@@ -250,9 +250,26 @@ export class CallRoom {
       // Publish AFTER connecting: publishing first would acquire the
       // camera and microphone before we know the room will accept us,
       // leaving the capture indicator lit on a call that never happened.
-      await room.localParticipant.setMicrophoneEnabled(!this.startMuted);
+      //
+      // Neither of these may fail the call. A desktop with no webcam
+      // throws `NotFoundError` from `setCameraEnabled`, and that used to
+      // land in the catch below and tear the whole call down — a video
+      // call was simply impossible on any machine without a camera,
+      // when it should have connected as audio. The same reasoning
+      // applies to a missing or refused microphone: being able to hear
+      // the other side beats not connecting at all.
+      //
+      // Both report through `onError`, so the UI can say which half is
+      // missing rather than leaving the user guessing.
+      await this.publish(
+        () => room.localParticipant.setMicrophoneEnabled(!this.startMuted),
+        'microphone',
+      );
       if (this.startWithVideo) {
-        await room.localParticipant.setCameraEnabled(true, { facingMode: this.facing });
+        await this.publish(
+          () => room.localParticipant.setCameraEnabled(true, { facingMode: this.facing }),
+          'camera',
+        );
       }
 
       // Browsers keep audio silent until the page has seen a user
@@ -418,6 +435,21 @@ export class CallRoom {
   }
 
   // ── internals ───────────────────────────────────────────────────────
+
+  /**
+   * Publish one capture device, surviving its absence.
+   *
+   * Split out from {@link withLocal} because this runs mid-join, before
+   * the room is marked connected — emitting a roster here would
+   * advertise a call that has not finished starting.
+   */
+  private async publish(fn: () => Promise<unknown>, what: string): Promise<void> {
+    try {
+      await fn();
+    } catch (err) {
+      this.emitError(new Error(`no ${what} available: ${String(err)}`));
+    }
+  }
 
   private async withLocal(
     fn: (local: LiveKitRoomHandle['localParticipant']) => Promise<unknown>,

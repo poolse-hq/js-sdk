@@ -106,10 +106,50 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
   const poolse = usePoolse();
 
   const [phase, setPhase] = useState<CallPhase>('idle');
+
+  // The phase as of the last render, readable from a socket callback
+  // without making every subscription depend on it — re-subscribing on
+  // each phase change would drop events in the gap.
+  const phaseRef = useRef<CallPhase>('idle');
+  phaseRef.current = phase;
   const [incoming, setIncoming] = useState<IncomingCall | null>(null);
   const [outgoing, setOutgoing] = useState<OutgoingCall | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+
+  /**
+   * The id of the call this client is in, once it is in one.
+   *
+   * Tracked separately because neither `incoming` nor `outgoing`
+   * survives being answered — `accept()` clears `incoming`, and a callee
+   * never had an `outgoing`. Without this the callee's `hangUp()` had no
+   * call id at all and returned before sending anything, so answering a
+   * call meant you could never end it for the other side: they sat in a
+   * call the app had already left.
+   *
+   * It is also what makes the socket handlers below able to tell a
+   * signal about THIS call from a late one about a previous call.
+   */
+  const [activeCallId, setActiveCallId] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
+
+  // Same reason as `phaseRef`: the handlers are bound once, and must be
+  // able to ask "is this signal about the call I am in?" without
+  // re-subscribing on every state change.
+  const incomingRef = useRef<IncomingCall | null>(null);
+  incomingRef.current = incoming;
+  const outgoingRef = useRef<OutgoingCall | null>(null);
+  outgoingRef.current = outgoing;
+  const activeCallIdRef = useRef<string | null>(null);
+  activeCallIdRef.current = activeCallId;
+
+  /** Is this signal about the call this client is currently in? */
+  const isCurrent = useCallback((callId: string) => {
+    return (
+      callId === activeCallIdRef.current ||
+      callId === incomingRef.current?.callId ||
+      callId === outgoingRef.current?.callId
+    );
+  }, []);
 
   // Held in a ref so the timeout effect can reach the current handlers
   // without re-arming the timer every time one of them is recreated —
@@ -129,51 +169,75 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       // mid-decision — but it must not vanish silently either, or the
       // second caller can't tell "busy" from "ignoring me". Answer it
       // automatically so their UI can say so.
-      setPhase((current) => {
-        if (current !== 'idle') {
-          void calls.markBusy(call).catch(() => {
-            // Best effort: failing to send busy just degrades to the
-            // old silence, which must not break the call in progress.
-          });
-          return current;
-        }
-        setIncoming(call);
-        return 'ringing-in';
-      });
+      //
+      // The decision reads a ref rather than a `setPhase` updater.
+      // Updaters must be pure: React runs them during render and may run
+      // them more than once, so sending `call:busy` from inside one
+      // could reject a call the user was in fact being shown — and did,
+      // under StrictMode's double-invoke.
+      if (phaseRef.current !== 'idle') {
+        void calls.markBusy(call).catch(() => {
+          // Best effort: failing to send busy just degrades to the old
+          // silence, which must not break the call in progress.
+        });
+        return;
+      }
+      setIncoming(call);
+      setPhase('ringing-in');
     });
+
+    // Every handler below is guarded on the call id. A signal that
+    // arrives late, or belongs to a call this client already finished
+    // with, must not touch the call it is in now — that is how a live
+    // call ended up being torn down by a `call:cancelled` for a
+    // different one.
 
     const offAccepted = calls.onAccepted((call) => {
+      // Only our own outbound call. Nothing else should move us into a
+      // call we did not place.
+      if (outgoingRef.current && call.callId !== outgoingRef.current.callId) return;
       setPhase('active');
       setActiveConversationId(call.conversationId);
+      setActiveCallId(call.callId);
     });
 
-    const offDeclined = calls.onDeclined(() => {
+    const offDeclined = calls.onDeclined((call) => {
+      if (!isCurrent(call.callId)) return;
       setPhase('declined');
       setOutgoing(null);
+      setActiveCallId(null);
     });
 
-    const offBusy = calls.onBusy(() => {
+    const offBusy = calls.onBusy((call) => {
+      if (!isCurrent(call.callId)) return;
       setPhase('busy');
       setOutgoing(null);
+      setActiveCallId(null);
     });
 
     // The other side hung up a connected call. Without this the screen
     // stays open on a call that no longer exists.
-    const offEnded = calls.onEnded(() => {
+    const offEnded = calls.onEnded((call) => {
+      if (!isCurrent(call.callId)) return;
       setPhase('idle');
       setIncoming(null);
       setOutgoing(null);
       setActiveConversationId(null);
+      setActiveCallId(null);
     });
 
     const offCancelled = calls.onCancelled((call) => {
-      // Only clear if it's the call we're actually showing — a late
-      // cancel for an older call shouldn't dismiss a fresh ring.
-      setIncoming((current) => {
-        if (current && current.callId !== call.callId) return current;
-        setPhase('idle');
-        return null;
-      });
+      // Strictly the ring we are showing.
+      //
+      // This used to fall through to `setPhase('idle')` whenever
+      // `incoming` was null — which is precisely the state `accept()`
+      // leaves behind. A caller's ring timeout firing as the callee
+      // answered would then drop the callee straight out of the call
+      // they had just joined, leaving media running with no UI.
+      if (call.callId !== incomingRef.current?.callId) return;
+      setIncoming(null);
+      setPhase('idle');
+      setActiveCallId(null);
     });
 
     return () => {
@@ -184,7 +248,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       offEnded();
       offCancelled();
     };
-  }, [calls]);
+  }, [calls, isCurrent]);
 
   const call = useCallback(
     async (conversationId: string, media: CallMedia = 'audio') => {
@@ -193,6 +257,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       try {
         const placed = await calls.invite(conversationId, media);
         setOutgoing(placed);
+        setActiveCallId(placed.callId);
         setPhase('ringing-out');
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -209,6 +274,10 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       try {
         await calls.accept(target);
         setActiveConversationId(target.conversationId);
+        // Recorded BEFORE `incoming` is cleared — it is the only thing
+        // that will still know which call this is once the ring state
+        // is gone, and it is what `hangUp` needs to tell the other side.
+        setActiveCallId(target.callId);
         setPhase('active');
         setIncoming(null);
       } catch (err) {
@@ -230,6 +299,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
         // Local state clears either way: a failed decline shouldn't
         // leave the ring screen stuck on screen.
         setIncoming(null);
+        setActiveCallId(null);
         setPhase('idle');
       }
     },
@@ -244,6 +314,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setOutgoing(null);
+      setActiveCallId(null);
       setPhase('idle');
     }
   }, [calls, outgoing]);
@@ -279,7 +350,11 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
   const hangUp = useCallback(async () => {
     const conversationId =
       activeConversationId ?? incoming?.conversationId ?? outgoing?.conversationId;
-    const callId = incoming?.callId ?? outgoing?.callId;
+    // `activeCallId` first, and that is the whole fix: answering a call
+    // clears `incoming`, and a callee never had an `outgoing`, so this
+    // used to resolve to undefined and return before signalling. The
+    // caller was left in a call the callee had already walked out of.
+    const callId = activeCallId ?? incoming?.callId ?? outgoing?.callId;
 
     try {
       if (!calls || !callId || !conversationId) return;
@@ -298,14 +373,16 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       setIncoming(null);
       setOutgoing(null);
       setActiveConversationId(null);
+      setActiveCallId(null);
     }
-  }, [calls, phase, incoming, outgoing, activeConversationId]);
+  }, [calls, phase, incoming, outgoing, activeConversationId, activeCallId]);
 
   const reset = useCallback(() => {
     setPhase('idle');
     setIncoming(null);
     setOutgoing(null);
     setActiveConversationId(null);
+    setActiveCallId(null);
     setError(null);
   }, []);
 

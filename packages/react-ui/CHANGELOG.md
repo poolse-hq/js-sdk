@@ -4,6 +4,26 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.15.0] — 2026-08-23
+
+### Added
+
+- **`CallProvider` and `useCallInvite`** — the web counterpart to
+  `@poolse/react-native`'s `CallScreen`. Mount `CallProvider` once at
+  the root and it owns ringing, answering, media and the call UI;
+  buttons anywhere below reach it through `useCallInvite`.
+
+  This exists because the alternative kept going wrong: a call surface
+  mounted inside a conversation view means the app cannot be called at
+  all while no conversation is open, and unmounts the call state machine
+  if the user navigates back to the list mid-call. Both present as
+  calling being unreliable rather than as a mounting mistake.
+
+### Changed
+
+- The camera control is disabled when the machine has no camera, instead
+  of being a button that reports an error each time it is pressed.
+
 ## [2.14.1] — 2026-08-23
 
 ### Changed
