@@ -4,6 +4,16 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.14.0] — 2026-08-23
+
+### Added
+
+- **`useCallRoom().devices` / `.activeDevices` / `.selectDevice`** —
+  camera, microphone and audio-output selection, refreshed as devices
+  come and go. Enumeration is deferred until the call connects, because
+  a browser withholds device labels from a page that does not yet hold
+  the matching permission.
+
 ## [2.13.1] — 2026-08-23
 
 Republished in lockstep with `@poolse/react-native@2.13.1`. No changes

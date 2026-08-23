@@ -4,6 +4,12 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.14.0] — 2026-08-23
+
+Republished in lockstep. Device selection landed in `@poolse/sdk` and
+`@poolse/react`; on React Native, routing continues to go through
+`useCallAudio` and the platform audio session.
+
 ## [2.13.1] — 2026-08-23
 
 ### Fixed

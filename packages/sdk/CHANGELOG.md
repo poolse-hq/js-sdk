@@ -4,6 +4,19 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.14.0] — 2026-08-23
+
+### Added
+
+- **`CallRoom.listDevices` / `getActiveDevice` / `setActiveDevice`** —
+  choose the camera, microphone or audio output a call runs on.
+  `audiooutput` is the web's speakerphone button: it re-points playback
+  through `setSinkId`. Not every browser implements that, so a refusal
+  surfaces as an error and leaves the call where it was.
+- **`CallRoom.onDevices`** — fires when devices are plugged in or
+  removed, so a picker never offers a webcam that has been unplugged.
+- **`CallDevice`** and **`CallDeviceKind`** types.
+
 ## [2.13.1] — 2026-08-23
 
 Republished in lockstep with `@poolse/react-native@2.13.1`. No changes

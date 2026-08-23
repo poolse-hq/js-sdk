@@ -1,4 +1,11 @@
-import type { CallParticipant, CallRoomStatus, CameraFacing, LiveKitModule } from '@poolse/sdk';
+import type {
+  CallDevice,
+  CallDeviceKind,
+  CallParticipant,
+  CallRoomStatus,
+  CameraFacing,
+  LiveKitModule,
+} from '@poolse/sdk';
 import { CallRoom } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -38,6 +45,20 @@ export interface UseCallRoom {
   micEnabled: boolean;
   /** Which camera is publishing. Meaningless while the camera is off. */
   facingMode: CameraFacing;
+  /**
+   * Selectable devices, refreshed as they are plugged in and removed.
+   *
+   * The web's answer to a phone's speaker button — a laptop has no
+   * earpiece, but it does have several microphones and a pair of
+   * headphones, and choosing between them is the same job. Sparse on
+   * React Native, where routing goes through the platform audio session
+   * instead (see `useCallAudio` in `@poolse/react-native`).
+   */
+  devices: Record<CallDeviceKind, CallDevice[]>;
+  /** Device id in use per kind, where the platform reports one. */
+  activeDevices: Partial<Record<CallDeviceKind, string>>;
+  /** Move the call onto another camera, microphone or output. */
+  selectDevice: (kind: CallDeviceKind, deviceId: string) => Promise<void>;
   /**
    * Everyone else has gone and is not coming back.
    *
@@ -96,6 +117,12 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   const [micEnabled, setMic] = useState(false);
   const [facingMode, setFacing] = useState<CameraFacing>(opts.facing ?? 'user');
   const [alone, setAlone] = useState(false);
+  const [devices, setDevices] = useState<Record<CallDeviceKind, CallDevice[]>>({
+    videoinput: [],
+    audioinput: [],
+    audiooutput: [],
+  });
+  const [activeDevices, setActiveDevices] = useState<Partial<Record<CallDeviceKind, string>>>({});
   const [error, setError] = useState<Error | null>(null);
   const [sfuAvailable, setSfuAvailable] = useState<boolean | null>(null);
 
@@ -137,6 +164,27 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   // Track state changes that originate below React — a camera that
   // failed to start, or the SFU dropping us — rather than assuming our
   // last call succeeded.
+  const refreshDevices = useCallback((target: CallRoom) => {
+    void Promise.all([
+      target.listDevices('videoinput'),
+      target.listDevices('audioinput'),
+      target.listDevices('audiooutput'),
+    ]).then(([videoinput, audioinput, audiooutput]) => {
+      setDevices({ videoinput, audioinput, audiooutput });
+
+      // Built by omission rather than by assigning undefined: under
+      // `exactOptionalPropertyTypes` a present-but-undefined key is not
+      // the same as an absent one, and "the platform does not report
+      // this" is genuinely absence.
+      const active: Partial<Record<CallDeviceKind, string>> = {};
+      for (const kind of ['videoinput', 'audioinput', 'audiooutput'] as const) {
+        const id = target.getActiveDevice(kind);
+        if (id) active[kind] = id;
+      }
+      setActiveDevices(active);
+    });
+  }, []);
+
   const sync = useCallback((target: CallRoom | null) => {
     if (!target) return;
     setCamera(target.isCameraEnabled());
@@ -165,12 +213,15 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       sync(room);
     });
     const offAlone = room.onAlone(() => setAlone(true));
+
+    const offDevices = room.onDevices(() => refreshDevices(room));
     const offError = room.onError(setError);
 
     return () => {
       offStatus();
       offRoster();
       offAlone();
+      offDevices();
       offError();
       // Unmounting mid-call must disconnect, or the SFU keeps publishing
       // a participant nobody is behind.
@@ -179,7 +230,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
         room.leave();
       }
     };
-  }, [room, sync]);
+  }, [room, sync, refreshDevices]);
 
   const join = useCallback(async (): Promise<boolean> => {
     if (!room) return false;
@@ -190,6 +241,9 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       joined.current = connected;
       setSfuAvailable(connected);
       sync(room);
+      // Only once connected: enumerating before the call holds its
+      // permissions gives a list of unlabelled placeholders.
+      if (connected) refreshDevices(room);
       return connected;
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -198,7 +252,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       setSfuAvailable(true);
       return false;
     }
-  }, [room, sync]);
+  }, [room, sync, refreshDevices]);
 
   const leave = useCallback(() => {
     if (!joined.current) return;
@@ -243,6 +297,18 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     setFacing(room.getFacingMode());
   }, [room]);
 
+  const selectDevice = useCallback(
+    async (kind: CallDeviceKind, deviceId: string) => {
+      if (!room) return;
+      await room.setActiveDevice(kind, deviceId);
+      setActiveDevices((current) => ({
+        ...current,
+        [kind]: room.getActiveDevice(kind) ?? deviceId,
+      }));
+    },
+    [room],
+  );
+
   return {
     status,
     participants,
@@ -250,6 +316,8 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     micEnabled,
     facingMode,
     alone,
+    devices,
+    activeDevices,
     error,
     sfuAvailable,
     join,
@@ -257,6 +325,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     setCameraEnabled,
     toggleCamera,
     switchCamera,
+    selectDevice,
     setMicrophoneEnabled,
     toggleMic,
   };

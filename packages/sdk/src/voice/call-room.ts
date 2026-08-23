@@ -1,5 +1,7 @@
 import type {
   CallConnection,
+  CallDevice,
+  CallDeviceKind,
   CallParticipant,
   CallRoomOptions,
   CallRoomStatus,
@@ -81,6 +83,7 @@ export class CallRoom {
   private readonly participantListeners = new Set<(participants: CallParticipant[]) => void>();
   private readonly errorListeners = new Set<(error: Error) => void>();
   private readonly aloneListeners = new Set<() => void>();
+  private readonly deviceListeners = new Set<() => void>();
 
   /** Bound once so `off()` in teardown removes the same references. */
   private readonly onRoomChange = () => this.emitParticipants();
@@ -307,6 +310,71 @@ export class CallRoom {
     return this.facing;
   }
 
+  // ── device selection ────────────────────────────────────────────────
+
+  /**
+   * Every device of a given kind that could carry this call.
+   *
+   * The web's equivalent of a phone's speaker button: a laptop has no
+   * earpiece to switch to, but it does have three microphones and a
+   * pair of headphones, and picking between them is the same job.
+   *
+   * Prefers livekit-client's own enumeration, which prompts for the
+   * permission that makes labels visible, and falls back to the plain
+   * browser API so a module without the static still lists something.
+   */
+  async listDevices(kind: CallDeviceKind): Promise<CallDevice[]> {
+    try {
+      const fromLiveKit = await this.livekit.Room.getLocalDevices?.(kind, false);
+      if (fromLiveKit) return fromLiveKit.map((d) => ({ ...d, kind }));
+    } catch {
+      // Fall through — a refused enumeration should cost the picker,
+      // not the call.
+    }
+
+    const media = globalThis.navigator?.mediaDevices;
+    if (!media?.enumerateDevices) return [];
+
+    try {
+      const all = await media.enumerateDevices();
+      return all
+        .filter((d) => d.kind === kind)
+        .map((d) => ({ deviceId: d.deviceId, kind, label: d.label }));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Which device of `kind` the call is currently using. */
+  getActiveDevice(kind: CallDeviceKind): string | undefined {
+    return this.room?.getActiveDevice?.(kind);
+  }
+
+  /**
+   * Move the call onto another device.
+   *
+   * `audiooutput` re-points playback through `setSinkId`, which some
+   * browsers do not implement — hence the boolean rather than a throw.
+   * A refusal is reported as an error and leaves the call where it was.
+   */
+  async setActiveDevice(kind: CallDeviceKind, deviceId: string): Promise<void> {
+    const room = this.room;
+    if (!room?.switchActiveDevice) return;
+
+    try {
+      await room.switchActiveDevice(kind, deviceId);
+      this.emitParticipants();
+    } catch (err) {
+      this.emitError(new Error(`could not switch ${kind}: ${String(err)}`));
+    }
+  }
+
+  /** Fires when devices are plugged in or removed. */
+  onDevices(fn: () => void): Unsubscribe {
+    this.deviceListeners.add(fn);
+    return () => this.deviceListeners.delete(fn);
+  }
+
   /** Mute or unmute the microphone. */
   async setMicrophoneEnabled(enabled: boolean): Promise<void> {
     await this.withLocal((local) => local.setMicrophoneEnabled(enabled), 'microphone');
@@ -371,6 +439,15 @@ export class CallRoom {
     const unsubscribed = RoomEvent['TrackUnsubscribed'];
     if (unsubscribed) {
       room.on(unsubscribed, ((track: LiveKitTrack) => this.stopAudio(track)) as never);
+    }
+
+    // Headphones plugged in, a webcam unplugged. The picker has to
+    // re-read rather than show a device that is no longer there.
+    const devicesChanged = RoomEvent['MediaDevicesChanged'];
+    if (devicesChanged) {
+      room.on(devicesChanged, () => {
+        for (const fn of this.deviceListeners) fn();
+      });
     }
 
     const disconnected = RoomEvent['Disconnected'];

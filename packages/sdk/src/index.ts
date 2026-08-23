@@ -19,6 +19,8 @@ export { IceServersResource, type IceServerResponse } from './resources/ice-serv
 export { CallRoom } from './voice/call-room.js';
 export type {
   CallConnection,
+  CallDevice,
+  CallDeviceKind,
   CallParticipant,
   CallRoomOptions,
   CallRoomStatus,

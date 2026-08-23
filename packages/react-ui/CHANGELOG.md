@@ -4,6 +4,27 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.14.0] — 2026-08-23
+
+### Fixed
+
+- **A phone's video is no longer cropped to a sliver.** The spotlight
+  tile filled its box with `object-fit: cover`, so portrait video in a
+  landscape window was cropped to roughly the caller's nose. The
+  spotlight now letterboxes; fixed-ratio tiles still crop, where the
+  alternative is a grid of pillarboxed slivers. Set on the element
+  rather than left to host CSS — it is behaviour, not theme.
+
+### Added
+
+- **`CallControlButton`** and **`CallDeviceMenu`** — round call controls
+  and a device picker, matching `@poolse/react-native`'s controls so the
+  two platforms read the same. Still no CSS: the host owns the look.
+- **`CallVideoGrid`'s local preview is draggable**, snapping to the
+  nearest corner, with an `onLocalClick` prop for switching camera.
+- New class hooks: `.callstage__pip--c0…c3`, `.callstage__pip--dragging`,
+  `.calldevices*`, `.callbtn__caret`, `.callbtn__wrap`.
+
 ## [2.13.1] — 2026-08-23
 
 Republished in lockstep with `@poolse/react-native@2.13.1`. No changes

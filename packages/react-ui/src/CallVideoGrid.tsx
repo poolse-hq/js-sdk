@@ -1,5 +1,5 @@
 import type { CallParticipant } from '@poolse/sdk';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { PoolseIcon } from './PoolseIcon.js';
 import { userColor } from './userColor.js';
@@ -36,9 +36,16 @@ export interface CallVideoGridProps {
   participants: CallParticipant[];
   labelFor?: (userId: string) => string;
   className?: string;
+  /** Clicking your own preview. Left unset, the tile is not interactive. */
+  onLocalClick?: (() => void) | undefined;
 }
 
-export function CallVideoGrid({ participants, labelFor, className }: CallVideoGridProps) {
+export function CallVideoGrid({
+  participants,
+  labelFor,
+  className,
+  onLocalClick,
+}: CallVideoGridProps) {
   const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
 
   const self = participants.find((p) => p.isSelf) ?? null;
@@ -55,9 +62,9 @@ export function CallVideoGrid({ participants, labelFor, className }: CallVideoGr
       <div className={className ?? 'callstage callstage--solo'}>
         <CallVideoTile participant={spotlight} label={label} bleed />
         {self && others.length === 1 && (
-          <div className="callstage__pip">
+          <FloatingSelf onClick={onLocalClick}>
             <CallVideoTile participant={self} label={label} hideName />
-          </div>
+          </FloatingSelf>
         )}
       </div>
     );
@@ -128,9 +135,24 @@ function CallVideoTile({
           // a delay and the call is unusable. Remote audio is played by
           // LiveKit itself, not by these elements.
           muted={participant.isSelf}
-          // Mirrored only for yourself — mirroring a remote feed would
-          // flip their text and reverse which hand they are waving with.
-          style={participant.isSelf ? { transform: 'scaleX(-1)' } : undefined}
+          style={{
+            // `contain` for the spotlight, `cover` for everything else,
+            // and set here rather than left to host CSS because it is
+            // behaviour rather than theme.
+            //
+            // A phone publishes portrait video. Cropping that to fill a
+            // landscape browser window — which is what `cover` does —
+            // throws away most of the frame and lands somewhere around
+            // the caller's nose. Letterboxing shows the picture they
+            // are actually sending. Fixed-ratio tiles keep `cover`,
+            // where the crop is slight and the alternative is a grid
+            // full of pillarboxed slivers.
+            objectFit: bleed ? 'contain' : 'cover',
+            // Mirrored only for yourself — mirroring a remote feed would
+            // flip their text and reverse which hand they are waving
+            // with.
+            ...(participant.isSelf ? { transform: 'scaleX(-1)' } : {}),
+          }}
         />
       ) : (
         <div className="callgrid__placeholder">
@@ -152,6 +174,89 @@ function CallVideoTile({
           <span className="callgrid__name">{name}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The local preview, floating over the remote video.
+ *
+ * Draggable, snapping to the nearest corner on release rather than
+ * staying where the pointer stopped — a tile left at a slight angle to
+ * the edge reads as dropped rather than placed, and corners are what
+ * people actually want, since they move it to uncover a face.
+ *
+ * Pointer events rather than mouse events, so it works the same under a
+ * finger on a tablet as under a mouse.
+ */
+function FloatingSelf({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick?: (() => void) | undefined;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [corner, setCorner] = useState(1);
+  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const origin = useRef<{ x: number; y: number } | null>(null);
+  const moved = useRef(false);
+
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    origin.current = { x: event.clientX, y: event.clientY };
+    moved.current = false;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+
+  const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const from = origin.current;
+    if (!from) return;
+    const dx = event.clientX - from.x;
+    const dy = event.clientY - from.y;
+    // Only claim the gesture once it is clearly a drag, so a click that
+    // wobbles by a pixel still flips the camera.
+    if (!moved.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    moved.current = true;
+    setDrag({ x: dx, y: dy });
+  }, []);
+
+  const onPointerUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const from = origin.current;
+      origin.current = null;
+      setDrag(null);
+
+      if (!moved.current) {
+        onClick?.();
+        return;
+      }
+      if (!from) return;
+
+      // Which half of the stage the tile was let go in decides its
+      // corner. Comparing against the stage's own box keeps this right
+      // regardless of where the window is on screen.
+      const stage = ref.current?.parentElement?.getBoundingClientRect();
+      if (!stage) return;
+      const right = event.clientX > stage.left + stage.width / 2;
+      const bottom = event.clientY > stage.top + stage.height / 2;
+      setCorner((bottom ? 2 : 0) + (right ? 1 : 0));
+    },
+    [onClick],
+  );
+
+  return (
+    <div
+      ref={ref}
+      className={`callstage__pip callstage__pip--c${corner}${drag ? ' callstage__pip--dragging' : ''}`}
+      style={drag ? { transform: `translate(${drag.x}px, ${drag.y}px)` } : undefined}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      role={onClick ? 'button' : undefined}
+      aria-label={onClick ? 'Your camera. Drag to move, click to switch camera.' : undefined}
+    >
+      {children}
     </div>
   );
 }

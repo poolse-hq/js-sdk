@@ -48,6 +48,30 @@ export interface LiveKitPublication {
 /** Which camera a video track is capturing from. */
 export type CameraFacing = 'user' | 'environment';
 
+/**
+ * A class of media device.
+ *
+ * Spelled out rather than reusing the DOM's `MediaDeviceKind` so the
+ * type means the same thing on React Native, where there is no DOM but
+ * `audiooutput` is still a real concept.
+ */
+export type CallDeviceKind = 'videoinput' | 'audioinput' | 'audiooutput';
+
+/** A selectable input or output. */
+export interface CallDevice {
+  deviceId: string;
+  kind: CallDeviceKind;
+  /**
+   * The browser's own label, e.g. "FaceTime HD Camera".
+   *
+   * Empty until the page holds a matching permission — the browser
+   * withholds labels from sites that have never been granted the
+   * device, precisely so they cannot be fingerprinted. In a call that
+   * permission is already held, so labels are normally present.
+   */
+  label: string;
+}
+
 /** The slice of LiveKit's `LocalVideoTrack` used to flip the camera. */
 export interface LiveKitLocalVideoTrack {
   restartTrack?(constraints?: { facingMode?: CameraFacing; deviceId?: string }): Promise<unknown>;
@@ -75,6 +99,16 @@ export interface LiveKitLocalParticipant extends LiveKitParticipant {
 
 export interface LiveKitRoomHandle {
   localParticipant: LiveKitLocalParticipant;
+  /**
+   * Move every track of `kind` onto another device.
+   *
+   * `audiooutput` is the web's answer to a speakerphone button: it
+   * re-points every incoming audio element with `setSinkId`. Not every
+   * browser implements it, which is why the result is a boolean rather
+   * than a throw.
+   */
+  switchActiveDevice?(kind: string, deviceId: string, exact?: boolean): Promise<unknown>;
+  getActiveDevice?(kind: string): string | undefined;
   /** Keyed by identity. `remoteParticipants` is the v2 name. */
   remoteParticipants: Map<string, LiveKitParticipant>;
   connect(url: string, token: string, options?: unknown): Promise<void>;
@@ -113,7 +147,16 @@ export interface LiveKitModule {
 
 /** The precise shape, used internally once the module has been checked. */
 export interface CheckedLiveKitModule {
-  Room: new (options?: { adaptiveStream?: boolean; dynacast?: boolean }) => LiveKitRoomHandle;
+  Room: (new (options?: { adaptiveStream?: boolean; dynacast?: boolean }) => LiveKitRoomHandle) & {
+    /**
+     * Enumerates devices, prompting for permission if needed.
+     *
+     * Optional because it is a static on livekit-client's `Room`, and
+     * `CallRoom` falls back to `navigator.mediaDevices` where it is
+     * absent rather than losing the picker entirely.
+     */
+    getLocalDevices?(kind?: string, requestPermissions?: boolean): Promise<CallDevice[]>;
+  };
   RoomEvent: Record<string, string>;
   Track: { Source: Record<string, string> };
 }
