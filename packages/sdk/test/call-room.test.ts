@@ -420,6 +420,92 @@ describe('CallRoom abandonment', () => {
   });
 });
 
+// Device lists come back as `MediaDeviceInfo`, a WebIDL interface whose
+// fields live on the prototype. Spreading one yields `{}` — which
+// shipped once as a picker full of unselectable blank rows.
+describe('CallRoom devices', () => {
+  /** Mimics WebIDL: values readable, but not own enumerable properties. */
+  function mediaDeviceInfo(deviceId: string, kind: string, label: string) {
+    return Object.create(
+      Object.defineProperties(
+        {},
+        {
+          deviceId: { get: () => deviceId, enumerable: false },
+          kind: { get: () => kind, enumerable: false },
+          label: { get: () => label, enumerable: false },
+        },
+      ),
+    ) as { deviceId?: string; kind?: string; label?: string };
+  }
+
+  function withDevices(list: ReturnType<typeof mediaDeviceInfo>[]) {
+    const h = harness();
+    (h.module.Room as unknown as Record<string, unknown>)['getLocalDevices'] = async (
+      kind?: string,
+    ) => list.filter((d) => !kind || d.kind === kind);
+    return h;
+  }
+
+  it('reads each field rather than spreading the device', async () => {
+    const h = withDevices([
+      mediaDeviceInfo('cam-1', 'videoinput', 'FaceTime HD Camera'),
+      mediaDeviceInfo('cam-2', 'videoinput', 'Studio Display Camera'),
+    ]);
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    await room.join();
+
+    expect(await room.listDevices('videoinput')).toEqual([
+      { deviceId: 'cam-1', kind: 'videoinput', label: 'FaceTime HD Camera' },
+      { deviceId: 'cam-2', kind: 'videoinput', label: 'Studio Display Camera' },
+    ]);
+  });
+
+  it('drops the placeholder a browser returns before permission', async () => {
+    // An ungranted device comes back with empty strings. Offering it is
+    // a row that cannot be selected.
+    const h = withDevices([
+      mediaDeviceInfo('', 'audioinput', ''),
+      mediaDeviceInfo('mic-1', 'audioinput', 'MacBook Pro Microphone'),
+    ]);
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    await room.join();
+
+    expect(await room.listDevices('audioinput')).toEqual([
+      { deviceId: 'mic-1', kind: 'audioinput', label: 'MacBook Pro Microphone' },
+    ]);
+  });
+
+  it('filters by kind when falling back to enumerateDevices', async () => {
+    // `getLocalDevices` filters for us; the plain browser API does not
+    // and hands back every kind at once.
+    const h = harness();
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    await room.join();
+
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        mediaDevices: {
+          enumerateDevices: async () => [
+            mediaDeviceInfo('cam-1', 'videoinput', 'Camera'),
+            mediaDeviceInfo('mic-1', 'audioinput', 'Mic'),
+            mediaDeviceInfo('out-1', 'audiooutput', 'Speakers'),
+          ],
+        },
+      },
+      configurable: true,
+    });
+
+    try {
+      expect(await room.listDevices('audiooutput')).toEqual([
+        { deviceId: 'out-1', kind: 'audiooutput', label: 'Speakers' },
+      ]);
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'navigator', original);
+    }
+  });
+});
+
 describe('CallRoom camera selection', () => {
   it('opens the front camera rather than whatever the OS picks', async () => {
     // Android routinely defaults to the rear camera, which on a call is

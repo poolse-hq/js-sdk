@@ -47,6 +47,38 @@ export type Unsubscribe = () => void;
  * falls back to the mesh, which is what every call used before this
  * existed. `join()` resolves `false` to say so.
  */
+/**
+ * Copy device records into plain objects.
+ *
+ * Field by field, and that is the whole point. `MediaDeviceInfo` is a
+ * WebIDL interface, so `deviceId`, `kind` and `label` are accessors on
+ * its PROTOTYPE rather than own enumerable properties — which means
+ * `{ ...device }` spreads to `{}` and silently produces a list of
+ * devices with no ids and no names. (It is also why the interface
+ * carries its own `toJSON`.) Reading each property invokes the getter,
+ * which is what actually copies the value.
+ *
+ * Entries with no `deviceId` are dropped. A browser that has not yet
+ * been granted the device returns a placeholder with empty strings, and
+ * offering that as a choice gives the user a row that cannot be
+ * selected.
+ */
+function toDevices(
+  raw: readonly { deviceId?: string; kind?: string; label?: string }[],
+  kind: CallDeviceKind,
+): CallDevice[] {
+  const out: CallDevice[] = [];
+  for (const device of raw) {
+    // `getLocalDevices(kind)` has already filtered; `enumerateDevices()`
+    // has not, and returns every kind at once.
+    if (device.kind && device.kind !== kind) continue;
+    const deviceId = device.deviceId ?? '';
+    if (!deviceId) continue;
+    out.push({ deviceId, kind, label: device.label ?? '' });
+  }
+  return out;
+}
+
 export class CallRoom {
   private readonly livekit: CheckedLiveKitModule;
   private readonly tokenProvider: () => Promise<CallConnection | null>;
@@ -326,7 +358,7 @@ export class CallRoom {
   async listDevices(kind: CallDeviceKind): Promise<CallDevice[]> {
     try {
       const fromLiveKit = await this.livekit.Room.getLocalDevices?.(kind, false);
-      if (fromLiveKit) return fromLiveKit.map((d) => ({ ...d, kind }));
+      if (fromLiveKit?.length) return toDevices(fromLiveKit, kind);
     } catch {
       // Fall through — a refused enumeration should cost the picker,
       // not the call.
@@ -336,10 +368,7 @@ export class CallRoom {
     if (!media?.enumerateDevices) return [];
 
     try {
-      const all = await media.enumerateDevices();
-      return all
-        .filter((d) => d.kind === kind)
-        .map((d) => ({ deviceId: d.deviceId, kind, label: d.label }));
+      return toDevices(await media.enumerateDevices(), kind);
     } catch {
       return [];
     }

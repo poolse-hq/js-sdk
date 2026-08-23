@@ -4,6 +4,19 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.14.1] — 2026-08-23
+
+### Fixed
+
+- **Device lists came back with no ids and no names.** `listDevices`
+  built its result by spreading each `MediaDeviceInfo`, but that is a
+  WebIDL interface whose `deviceId`, `kind` and `label` are accessors on
+  the _prototype_ — so `{ ...device }` produces `{}`. Every picker was a
+  list of blank, unselectable rows. Each field is now read explicitly.
+- Entries with an empty `deviceId` are dropped. A browser returns that
+  placeholder for a device the page has not been granted, and offering
+  it gives the user a row that cannot be selected.
+
 ## [2.14.0] — 2026-08-23
 
 ### Added

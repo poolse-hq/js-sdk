@@ -99,8 +99,9 @@ export interface CallDeviceMenuProps {
  * earpiece to switch to, but it does have three microphones and a pair
  * of headphones, and choosing between them is the same job.
  *
- * Renders nothing when there is nothing to choose between — a menu with
- * one entry is a dead end.
+ * A single entry is still worth rendering: it answers "is my microphone
+ * even being seen?", which a hidden control does not. Only an empty list
+ * renders nothing.
  */
 export function CallDeviceMenu({
   title,

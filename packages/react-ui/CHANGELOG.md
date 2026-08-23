@@ -4,6 +4,14 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.14.1] — 2026-08-23
+
+### Changed
+
+- `CallDeviceMenu` renders a single-entry list instead of hiding. One
+  entry answers "is my microphone even being seen?", which a hidden
+  control does not. Only an empty list renders nothing.
+
 ## [2.14.0] — 2026-08-23
 
 ### Fixed

@@ -60,6 +60,17 @@ export interface UseCallRoom {
   /** Move the call onto another camera, microphone or output. */
   selectDevice: (kind: CallDeviceKind, deviceId: string) => Promise<void>;
   /**
+   * Re-read the device list.
+   *
+   * Called for you on connect and whenever devices change, so this is
+   * for the case neither covers: a browser only reveals device ids and
+   * labels once the page holds a matching permission, and the moment
+   * that permission lands is not an event you can subscribe to. Call it
+   * when opening a picker and the list will be right by the time it is
+   * on screen.
+   */
+  refreshDevices: () => void;
+  /**
    * Everyone else has gone and is not coming back.
    *
    * Turns true only after somebody else has actually been on the call,
@@ -297,6 +308,10 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     setFacing(room.getFacingMode());
   }, [room]);
 
+  const refresh = useCallback(() => {
+    if (room) refreshDevices(room);
+  }, [room, refreshDevices]);
+
   const selectDevice = useCallback(
     async (kind: CallDeviceKind, deviceId: string) => {
       if (!room) return;
@@ -318,6 +333,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     alone,
     devices,
     activeDevices,
+    refreshDevices: refresh,
     error,
     sfuAvailable,
     join,

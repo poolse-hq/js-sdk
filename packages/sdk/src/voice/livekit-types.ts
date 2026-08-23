@@ -154,8 +154,16 @@ export interface CheckedLiveKitModule {
      * Optional because it is a static on livekit-client's `Room`, and
      * `CallRoom` falls back to `navigator.mediaDevices` where it is
      * absent rather than losing the picker entirely.
+     *
+     * Typed as the raw device shape, NOT as {@link CallDevice}. These
+     * are `MediaDeviceInfo` instances, whose fields are accessors on the
+     * prototype — declaring them as plain objects invites the spread
+     * that silently loses every id and label.
      */
-    getLocalDevices?(kind?: string, requestPermissions?: boolean): Promise<CallDevice[]>;
+    getLocalDevices?(
+      kind?: string,
+      requestPermissions?: boolean,
+    ): Promise<readonly { deviceId?: string; kind?: string; label?: string }[]>;
   };
   RoomEvent: Record<string, string>;
   Track: { Source: Record<string, string> };

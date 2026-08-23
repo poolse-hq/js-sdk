@@ -4,6 +4,22 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.14.1] — 2026-08-23
+
+### Added
+
+- **`useCallRoom().refreshDevices`** — re-read the device list on
+  demand. Devices are already re-read on connect and on hardware
+  changes; this covers the case neither does, which is that a browser
+  only reveals device ids and labels once the page holds a matching
+  permission, and that moment is not subscribable. Call it when opening
+  a picker.
+
+### Fixed
+
+- Device lists inherited the `MediaDeviceInfo` spread bug from
+  `@poolse/sdk`. See its 2.14.1 entry.
+
 ## [2.14.0] — 2026-08-23
 
 ### Added
