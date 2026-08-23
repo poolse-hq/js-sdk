@@ -4,6 +4,22 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.15.1] — 2026-08-23
+
+### Changed
+
+- **The floating self-preview now sits in the screen's corners.** It was
+  bounded by the call chrome, which left it parked well inside the
+  screen rather than tucked into a corner — and on a connected video
+  call the chrome is hidden most of the time anyway, so it was reserving
+  room for something that was not there. `CallVideoGrid` takes a new
+  `safeArea` prop for this; `chromeInsets` still governs the scrolling
+  group grid's clearance under the control bar.
+
+### Fixed
+
+- Picks up the camera-on-answer fix from `@poolse/react@2.15.1`.
+
 ## [2.15.0] — 2026-08-23
 
 Republished for the call-lifecycle fixes in `@poolse/sdk` and

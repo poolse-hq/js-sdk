@@ -11,7 +11,10 @@ export interface LocalVideoPipProps {
   label: (userId: string) => string;
   /** Area the tile may be dragged within, in pixels. */
   bounds: { width: number; height: number };
-  /** Inset from the edges — keeps the tile clear of the call chrome. */
+  /**
+   * Safe-area insets. The tile hugs the edges just inside these, so it
+   * clears the notch and the home indicator and nothing else.
+   */
   insets?: { top: number; bottom: number };
   /** Tap handler. Wired to the camera flip, matching every other call app. */
   onPress?: (() => void) | undefined;
@@ -19,7 +22,7 @@ export interface LocalVideoPipProps {
 
 const PIP_WIDTH = 108;
 const PIP_HEIGHT = 152;
-const MARGIN = 14;
+const MARGIN = 12;
 
 /**
  * The local camera preview, floating over the remote video.

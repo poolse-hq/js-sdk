@@ -20,10 +20,24 @@ export interface CallVideoGridProps {
    */
   onLocalPress?: (() => void) | undefined;
   /**
-   * How much chrome sits over the top and bottom of the stage, so the
-   * floating preview does not park itself under the control bar.
+   * How much chrome sits over the bottom of the stage.
+   *
+   * Only used to keep the last row of a scrolling group grid clear of
+   * the control bar. It deliberately does NOT bound the floating
+   * preview — see {@link safeArea}.
    */
   chromeInsets?: { top: number; bottom: number } | undefined;
+  /**
+   * The screen's safe area, which is what the floating preview is
+   * bounded by.
+   *
+   * Separate from `chromeInsets` on purpose. Bounding the preview by the
+   * chrome kept it in a box well inside the screen, floating in the
+   * middle of nowhere rather than tucked into a corner — and on a
+   * connected video call the chrome is hidden most of the time anyway,
+   * so it was reserving space for something that was not there.
+   */
+  safeArea?: { top: number; bottom: number } | undefined;
 }
 
 const GAP = 8;
@@ -54,6 +68,7 @@ export function CallVideoGrid({
   labelFor,
   onLocalPress,
   chromeInsets,
+  safeArea,
 }: CallVideoGridProps) {
   const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
   const VideoTrack = livekitReactNative?.VideoTrack as CheckedVideoTrack | undefined;
@@ -103,7 +118,7 @@ export function CallVideoGrid({
             VideoTrack={VideoTrack}
             label={label}
             bounds={size}
-            insets={chromeInsets ?? { top: 0, bottom: 0 }}
+            insets={safeArea ?? { top: 0, bottom: 0 }}
             onPress={onLocalPress}
           />
         )}

@@ -4,6 +4,18 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.15.1] — 2026-08-23
+
+### Fixed
+
+- **A video call opened with the camera off for whoever answered it.**
+  `media` was derived from `incoming ?? outgoing`, and `accept()` clears
+  `incoming` in the same batch that flips the phase — so the callee fell
+  back to `'audio'` and its room never opened the camera, while the
+  caller (which keeps `outgoing`) did. The default looked random; it was
+  really "whichever end of the call you were on". The media type of the
+  call in progress is now tracked in its own right.
+
 ## [2.15.0] — 2026-08-23
 
 ### Fixed

@@ -324,6 +324,9 @@ export function CallScreen({
   const showStage = connected && usingSfu && participants.length > 0;
 
   const error = calls.error ?? (usingSfu ? sfu.error : mesh.error);
+  // Only the scrolling group grid uses this — it keeps the last row
+  // clear of the control bar. The floating preview is bounded by the
+  // safe area instead, so it can sit in a real corner.
   const chromeInsets = {
     top: insets.top + 72,
     bottom: insets.bottom + 150,
@@ -346,6 +349,7 @@ export function CallScreen({
             labelFor={label}
             onLocalPress={() => void sfu.switchCamera()}
             chromeInsets={chromeInsets}
+            safeArea={{ top: insets.top, bottom: insets.bottom }}
           />
         ) : (
           <View style={styles.identity}>

@@ -4,6 +4,7 @@
 // all of the same shape: a signal arrives about SOME call, and the hook
 // applies it to the call the user is actually in.
 
+import type { CallMedia, IncomingCall } from '@poolse/sdk';
 import { act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -26,11 +27,13 @@ function fakeCalls() {
       for (const fn of handlers[name] ?? []) (fn as Handler<T>)(payload);
     },
     resource: {
+      // `media` widened, not inferred — a test that overrides it with
+      // `mockResolvedValueOnce` needs the property to accept both.
       invite: vi.fn(async (conversationId: string) => ({
         callId: 'call-out',
         conversationId,
         calleeUserIds: ['u-them'],
-        media: 'audio' as const,
+        media: 'audio' as CallMedia,
       })),
       accept: vi.fn(async () => {}),
       decline: vi.fn(async () => {}),
@@ -74,11 +77,13 @@ async function mount() {
   return { wire, view, calls: () => view.result.current.calls };
 }
 
-const INCOMING = {
+// Annotated rather than inferred: several tests override `media`, and
+// an inferred literal type makes that an error.
+const INCOMING: IncomingCall = {
   callId: 'call-in',
   conversationId: 'conv-1',
   callerUserId: 'u-them',
-  media: 'audio' as const,
+  media: 'audio',
 };
 
 describe('useCalls answering', () => {
@@ -138,6 +143,55 @@ describe('useCalls answering', () => {
 
     expect(calls().phase).toBe('idle');
     expect(calls().incoming).toBeNull();
+  });
+});
+
+describe('useCalls media type', () => {
+  it('a callee stays on video after answering', async () => {
+    // `media` drives whether the room opens the camera. It was derived
+    // from `incoming ?? outgoing`, and accept() clears `incoming` in the
+    // same batch that flips the phase — so the callee fell back to
+    // 'audio' and never opened its camera, while the caller (which keeps
+    // `outgoing`) did. The default looked random; it was really
+    // "whichever end you were on".
+    const { wire, calls } = await mount();
+
+    await act(async () => wire.fire('incoming', { ...INCOMING, media: 'video' }));
+    expect(calls().media).toBe('video');
+
+    await act(async () => calls().accept());
+
+    expect(calls().phase).toBe('active');
+    expect(calls().media).toBe('video');
+  });
+
+  it('a caller stays on video after being answered', async () => {
+    const { wire, calls } = await mount();
+
+    wire.resource.invite.mockResolvedValueOnce({
+      callId: 'call-out',
+      conversationId: 'conv-1',
+      calleeUserIds: ['u-them'],
+      media: 'video',
+    });
+    await act(async () => calls().call('conv-1', 'video'));
+    await act(async () =>
+      wire.fire('accepted', { callId: 'call-out', conversationId: 'conv-1', userId: 'u-them' }),
+    );
+
+    expect(calls().media).toBe('video');
+  });
+
+  it('does not let a finished video call bleed into the next audio one', async () => {
+    const { wire, calls } = await mount();
+
+    await act(async () => wire.fire('incoming', { ...INCOMING, media: 'video' }));
+    await act(async () => calls().accept());
+    await act(async () => calls().hangUp());
+    expect(calls().media).toBe('audio');
+
+    await act(async () => wire.fire('incoming', { ...INCOMING, callId: 'call-3', media: 'audio' }));
+    expect(calls().media).toBe('audio');
   });
 });
 

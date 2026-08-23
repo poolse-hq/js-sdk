@@ -130,6 +130,20 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
    * signal about THIS call from a late one about a previous call.
    */
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
+
+  /**
+   * What the call in progress opened as.
+   *
+   * Tracked for the same reason as {@link activeCallId}: `accept()`
+   * clears `incoming`, and a callee never had an `outgoing`, so once a
+   * call was answered there was nothing left to read the media type
+   * from and it fell back to `'audio'`. The callee's room was then
+   * built for an audio call and never opened the camera — so on a video
+   * call the caller's camera came on and the callee's did not, which
+   * reads as the default being random when it is really "whichever end
+   * you were on".
+   */
+  const [activeMedia, setActiveMedia] = useState<CallMedia | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   // Same reason as `phaseRef`: the handlers are bound once, and must be
@@ -206,6 +220,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       setPhase('declined');
       setOutgoing(null);
       setActiveCallId(null);
+      setActiveMedia(null);
     });
 
     const offBusy = calls.onBusy((call) => {
@@ -213,6 +228,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       setPhase('busy');
       setOutgoing(null);
       setActiveCallId(null);
+      setActiveMedia(null);
     });
 
     // The other side hung up a connected call. Without this the screen
@@ -224,6 +240,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       setOutgoing(null);
       setActiveConversationId(null);
       setActiveCallId(null);
+      setActiveMedia(null);
     });
 
     const offCancelled = calls.onCancelled((call) => {
@@ -238,6 +255,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       setIncoming(null);
       setPhase('idle');
       setActiveCallId(null);
+      setActiveMedia(null);
     });
 
     return () => {
@@ -258,6 +276,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
         const placed = await calls.invite(conversationId, media);
         setOutgoing(placed);
         setActiveCallId(placed.callId);
+        setActiveMedia(placed.media);
         setPhase('ringing-out');
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -278,6 +297,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
         // that will still know which call this is once the ring state
         // is gone, and it is what `hangUp` needs to tell the other side.
         setActiveCallId(target.callId);
+        setActiveMedia(target.media);
         setPhase('active');
         setIncoming(null);
       } catch (err) {
@@ -300,6 +320,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
         // leave the ring screen stuck on screen.
         setIncoming(null);
         setActiveCallId(null);
+        setActiveMedia(null);
         setPhase('idle');
       }
     },
@@ -315,6 +336,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     } finally {
       setOutgoing(null);
       setActiveCallId(null);
+      setActiveMedia(null);
       setPhase('idle');
     }
   }, [calls, outgoing]);
@@ -374,6 +396,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       setOutgoing(null);
       setActiveConversationId(null);
       setActiveCallId(null);
+      setActiveMedia(null);
     }
   }, [calls, phase, incoming, outgoing, activeConversationId, activeCallId]);
 
@@ -383,14 +406,17 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     setOutgoing(null);
     setActiveConversationId(null);
     setActiveCallId(null);
+    setActiveMedia(null);
     setError(null);
   }, []);
 
   // Whichever end we are: the callee learns it from the ring, the
-  // caller from the invite it placed. Idle reports audio rather than
-  // holding the last call's value, so a fresh audio call can never
-  // inherit video from the one before it.
-  const media: CallMedia = incoming?.media ?? outgoing?.media ?? 'audio';
+  // caller from the invite it placed, and `activeMedia` carries it
+  // through being answered — the point at which both of the other two
+  // can be gone. Idle reports audio rather than holding the last call's
+  // value, so a fresh audio call can never inherit video from the one
+  // before it.
+  const media: CallMedia = incoming?.media ?? outgoing?.media ?? activeMedia ?? 'audio';
 
   return {
     phase,

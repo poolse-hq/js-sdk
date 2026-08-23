@@ -4,6 +4,12 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.15.1] — 2026-08-23
+
+### Fixed
+
+- Picks up the camera-on-answer fix from `@poolse/react@2.15.1`.
+
 ## [2.15.0] — 2026-08-23
 
 ### Added
