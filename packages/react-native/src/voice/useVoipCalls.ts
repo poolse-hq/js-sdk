@@ -1,6 +1,6 @@
-import { usePoolse, type UseCalls } from '@poolse/react';
+import { useMe, usePoolse, type UseCalls } from '@poolse/react';
 import type { CallMedia, IncomingCall } from '@poolse/sdk';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * Bridges iOS PushKit + CallKit to poolse calls, and owns the incoming
@@ -221,6 +221,27 @@ export function useVoipCalls({
   /** Calls currently shown to CallKit, keyed by call id. */
   const shown = useRef<Map<string, VoipIncomingCall>>(new Map());
 
+  /**
+   * This device's PushKit token, once iOS has issued one.
+   *
+   * State rather than a ref: registering it depends on the session
+   * arriving, which can happen either side of the token, so both have to
+   * be able to trigger the attempt.
+   */
+  const [voipToken, setVoipToken] = useState<string | null>(null);
+
+  /**
+   * Who is signed in, if anyone yet.
+   *
+   * A device row belongs to a user, so there is nothing to register
+   * until this resolves — and on a cold launch it resolves well after
+   * PushKit hands over the token.
+   */
+  const { me } = useMe();
+
+  /** The `${userId}:${token}` pair already sent, so it is sent once. */
+  const registered = useRef<string | null>(null);
+
   // Read at event time so a re-render doesn't tear down and re-register
   // the native listeners.
   const handlers = useRef({ onAnswer, onDecline, calls });
@@ -314,6 +335,36 @@ export function useVoipCalls({
     if (isStalePush(sentAt, Date.now(), staleRef.current)) dismiss.current(call.callId);
   });
 
+  /**
+   * Register the device once BOTH the token and the user exist.
+   *
+   * Re-runs when either arrives, in whichever order, and again if the
+   * signed-in user changes — a handset handed to somebody else must ring
+   * for them and not for whoever had it before.
+   */
+  useEffect(() => {
+    const userId = me?.id;
+    if (!voipToken || !userId) return;
+
+    const pair = `${userId}:${voipToken}`;
+    if (registered.current === pair) return;
+
+    void poolse.devices
+      .register({
+        token: voipToken,
+        platform: 'ios',
+        environment: apnsEnvironment ?? guessApnsEnvironment(),
+      })
+      .then(() => {
+        registered.current = pair;
+      })
+      .catch(() => {
+        // Offline, or the session is not usable yet. Deliberately does
+        // NOT mark the pair as registered, so the next render that
+        // changes either half tries again.
+      });
+  }, [poolse, voipToken, me?.id, apnsEnvironment]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -355,17 +406,15 @@ export function useVoipCalls({
 
     // PushKit issues a token on every launch and may rotate it, so
     // register whatever we're given rather than caching.
+    // Captured, NOT registered here. PushKit issues the token moments
+    // after launch, which can easily be before the host app has a
+    // session — and registering needs one, because it is an
+    // authenticated call. Sending it straight away meant a silent 401,
+    // no device row, and therefore no push for any call at all. The
+    // effect below sends it once there is somebody to register it for.
     voipPush.addEventListener('register', ((token: string) => {
       if (cancelled || !token) return;
-      void poolse.devices
-        .register({
-          token,
-          platform: 'ios',
-          environment: apnsEnvironment ?? guessApnsEnvironment(),
-        })
-        .catch(() => {
-          // Offline at launch is normal; the next launch re-registers.
-        });
+      setVoipToken(token);
     }) as (payload: unknown) => void);
 
     voipPush.addEventListener('notification', ((payload: PushPayload) => {

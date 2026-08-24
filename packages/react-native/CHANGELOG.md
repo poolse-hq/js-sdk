@@ -4,6 +4,23 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.18.0] — 2026-08-24
+
+### Fixed
+
+- **The device was often never registered for VoIP push, so no call
+  ever rang a backgrounded or closed app.** `useVoipCalls` registered
+  the PushKit token the instant iOS issued it — which is moments after
+  launch, and routinely before the host app has a session. Registering
+  is an authenticated call, so it 401'd, and the error was swallowed as
+  "offline at launch". No device row meant poolse had nothing to push
+  to.
+
+  The token is now held until a signed-in user exists, and registered
+  when both are present — in whichever order they arrive. A failure no
+  longer marks the pair as done, so it retries rather than giving up
+  until the next launch.
+
 ## [2.17.1] — 2026-08-24
 
 ### Fixed
