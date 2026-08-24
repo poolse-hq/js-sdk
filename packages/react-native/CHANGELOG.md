@@ -4,6 +4,25 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.17.1] — 2026-08-24
+
+### Fixed
+
+- Ringback actually asks for `_BUNDLE_` now. 2.17.0 shipped the
+  changelog entry for this without the code change.
+
+## [2.17.0] — 2026-08-24
+
+### Fixed
+
+- **Ringback played an iPhone ringtone.** On iOS the library resolves
+  `startRingback("_DEFAULT_")` to `/Library/Ringtones/Marimba.m4r`, so
+  the caller heard the sound the callee's phone makes. `_DTMF_` is
+  remapped to `_DEFAULT_`, so the only correct option is to ship a tone:
+  `CallScreen` now asks for `_BUNDLE_`, and the app supplies
+  `incallmanager_ringback.mp3`. If it is absent the library falls back
+  to the ringtone, which is no worse than before.
+
 ## [2.16.3] — 2026-08-24
 
 ### Fixed

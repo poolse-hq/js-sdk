@@ -287,7 +287,16 @@ export function CallScreen({
       const start = (ringing ? inCallManager?.startRingback : inCallManager?.startRingtone) as
         | RingTone
         | undefined;
-      start?.('_DEFAULT_');
+      // `_BUNDLE_` for ringback, not `_DEFAULT_`. On iOS the library
+      // resolves `_DEFAULT_` to /Library/Ringtones/Marimba.m4r — an
+      // actual iPhone RINGTONE — so the caller heard the sound the
+      // callee's phone makes rather than a ringing tone. `_DTMF_` is
+      // remapped to `_DEFAULT_` too, so the only correct option is to
+      // ship the tone: the app bundles `incallmanager_ringback.mp3`
+      // (see the sample's plugins/withRingback.js). Absent that, the
+      // library falls back to the ringtone, which is no worse than
+      // before.
+      start?.(ringing ? '_BUNDLE_' : '_DEFAULT_');
     } catch {
       // A missing tone must never take the call down with it.
     }

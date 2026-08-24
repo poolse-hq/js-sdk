@@ -4,6 +4,14 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.17.1] — 2026-08-24
+
+Republished in lockstep.
+
+## [2.17.0] — 2026-08-24
+
+Republished in lockstep.
+
 ## [2.16.3] — 2026-08-24
 
 Republished in lockstep.
