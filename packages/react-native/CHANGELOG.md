@@ -4,6 +4,64 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.16.3] — 2026-08-24
+
+### Fixed
+
+- `RingToneModule` is loose again, like `LiveKitModule`. Spelling the
+  real signatures out made `react-native-incall-manager` unassignable —
+  function parameters are contravariant, so any difference at all (an
+  argument required rather than optional, `number | number[]` rather
+  than `number[]`) means no app can pass the module in, and it breaks
+  again on the next upstream change. Narrowed at the point of use.
+
+  2.16.1 and 2.16.2 both attempted this and shipped without it.
+
+## [2.16.2] — 2026-08-24
+
+### Fixed
+
+- `RingToneModule` is loose again, like `LiveKitModule`. Spelling the
+  real signatures out made `react-native-incall-manager` unassignable —
+  function parameters are contravariant, so any difference at all (an
+  argument required rather than optional, `number | number[]` rather
+  than `number[]`) means no app can pass the module in, and it breaks
+  again on the next upstream change. Narrowed at the point of use.
+
+## [2.16.1] — 2026-08-24
+
+### Fixed
+
+- `RingToneModule` declared its tone argument optional, which made the
+  real `react-native-incall-manager` unassignable to it — function
+  parameters are contravariant, so a signature that demands an argument
+  cannot stand in for one that does not.
+
+## [2.16.0] — 2026-08-24
+
+### Added
+
+- **Ring tones.** `CallScreen` takes an optional `inCallManager` module
+  and plays ringback while an outbound call rings, and a ringtone for an
+  inbound one — but only when it is actually showing the incoming UI,
+  since CallKit already rings and a second tone underneath is noise.
+  A silent outbound call is indistinguishable from one that failed to
+  place at all.
+
+### Changed
+
+- **Media opens while the call rings, not after it is answered.** The
+  caller used to stare at a blank screen for the whole ring and then
+  watch their own preview pop in a second late — and the microphone was
+  not open either, so the first word of every call was clipped. The room
+  is now joined on `ringing-out`, so it is warm the moment the far side
+  picks up. Safe for the alone-detection: a caller in an empty room has
+  never seen a peer, which is the guard that already exists.
+- **Tapping the call screen toggles the controls.** It only ever showed
+  them before, and a timer took them away — so there was no way to
+  deliberately clear the chrome and look at the video. The idle timer
+  remains, on top rather than as the only way they disappear.
+
 ## [2.15.2] — 2026-08-23
 
 ### Fixed

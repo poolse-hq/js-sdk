@@ -85,7 +85,7 @@ export { useAppStateLifecycle } from './lifecycle/useAppStateLifecycle.js';
 // require it on your behalf. Without it these render a disabled state
 // rather than crashing.
 export { VoiceRoomBar, type VoiceRoomBarProps } from './VoiceRoomBar.js';
-export { CallScreen, type CallScreenProps } from './CallScreen.js';
+export { CallScreen, type CallScreenProps, type RingToneModule } from './CallScreen.js';
 export { CallVideoGrid, type CallVideoGridProps } from './voice/CallVideoGrid.js';
 export {
   createNativeWebRtcAdapter,

@@ -77,6 +77,18 @@ export interface CallScreenProps {
   /** Called when the call's video state changes. */
   onVideoChange?: (video: boolean) => void;
   /**
+   * `react-native-incall-manager`, imported by your app.
+   *
+   * Only used here for the ring tones — the earpiece purr while an
+   * outbound call rings, and the ringtone for an inbound one. Without
+   * it a call is completely silent until somebody answers, which reads
+   * as the app having failed to place it at all.
+   *
+   * Injected rather than imported for the same reason every other
+   * native module is: Metro only bundles what it can see statically.
+   */
+  inCallManager?: RingToneModule | null;
+  /**
    * Hide this screen while a call is merely ringing in.
    *
    * Set it when `useVoipCalls` is wired: CallKit already shows the
@@ -90,6 +102,31 @@ export interface CallScreenProps {
 
 /** Controls fade out this long after the last touch on a video call. */
 const CHROME_IDLE_MS = 4500;
+
+/**
+ * The slice of `react-native-incall-manager` used for ring tones.
+ *
+ * Every method optional: older versions lack some, and a missing tone
+ * must never take a call down.
+ */
+export interface RingToneModule {
+  // Deliberately loose, for the same reason `LiveKitModule` is.
+  // Spelling the real signatures out does NOT work: function parameters
+  // are contravariant, so any shape differing even slightly from the
+  // installed version's — an argument required rather than optional, a
+  // `number | number[]` rather than a `number[]` — makes the real module
+  // unassignable and no app can pass it in. It also breaks again on the
+  // next upstream signature change.
+  //
+  // Narrowed to `RingTone` at the point of use instead.
+  startRingback?: (...args: never[]) => void;
+  stopRingback?: (...args: never[]) => void;
+  startRingtone?: (...args: never[]) => void;
+  stopRingtone?: (...args: never[]) => void;
+}
+
+/** The shape actually called, narrowed once inside the component. */
+type RingTone = (tone: string) => void;
 
 /**
  * WhatsApp-style call UI: a full-screen sheet that covers the app while
@@ -127,6 +164,7 @@ export function CallScreen({
   onStatusChange,
   onTransportChange,
   onVideoChange,
+  inCallManager,
   nativeIncomingUi,
 }: CallScreenProps) {
   const insets = useSafeAreaInsets();
@@ -139,7 +177,27 @@ export function CallScreen({
     [meshAvailable, webrtc],
   );
 
-  const conversationId = calls.phase === 'active' ? calls.activeConversationId : null;
+  /**
+   * The conversation whose media should be open.
+   *
+   * Deliberately includes `ringing-out`, not just `active`. Waiting for
+   * an answer before touching the camera meant the caller stared at a
+   * blank screen through the entire ring and then watched their own
+   * preview pop in a second after the other side picked up — and the
+   * microphone was not open either, so the first word of every call was
+   * clipped. Joining while it rings means the room is warm the instant
+   * they answer, and you can see yourself while you wait.
+   *
+   * Safe for the alone-detection: a caller sitting in an empty room has
+   * never seen a peer, and that is exactly the guard `CallRoom.onAlone`
+   * checks before declaring a call abandoned.
+   */
+  const conversationId =
+    calls.phase === 'active'
+      ? calls.activeConversationId
+      : calls.phase === 'ringing-out'
+        ? (calls.outgoing?.conversationId ?? null)
+        : null;
   const isVideoCall = calls.media === 'video';
 
   // Both are constructed; only one ends up connected. `useCallRoom`
@@ -157,7 +215,8 @@ export function CallScreen({
   const connected = calls.phase === 'active' && status === 'connected';
 
   useEffect(() => {
-    if (calls.phase !== 'active' || !conversationId) return;
+    const wants = calls.phase === 'active' || calls.phase === 'ringing-out';
+    if (!wants || !conversationId) return;
 
     let cancelled = false;
     void (async () => {
@@ -205,6 +264,44 @@ export function CallScreen({
   });
   const [routesOpen, setRoutesOpen] = useState(false);
 
+  /**
+   * The sound of a call in progress.
+   *
+   * Ringback while an outbound call rings, so the caller can hear that
+   * something is happening — silence there is indistinguishable from a
+   * call that failed to place. A ringtone for an inbound one, but only
+   * when this screen is actually showing it: with CallKit driving the
+   * ring, iOS plays the system ringtone and a second tone underneath it
+   * is just noise.
+   *
+   * Stopped in the cleanup rather than on a phase transition, so a call
+   * that ends any way at all — answered, declined, cancelled, timed out,
+   * crashed out — cannot leave a tone playing.
+   */
+  const showingIncoming = calls.phase === 'ringing-in' && !nativeIncomingUi;
+  useEffect(() => {
+    const ringing = calls.phase === 'ringing-out';
+    if (!ringing && !showingIncoming) return;
+
+    try {
+      const start = (ringing ? inCallManager?.startRingback : inCallManager?.startRingtone) as
+        | RingTone
+        | undefined;
+      start?.('_DEFAULT_');
+    } catch {
+      // A missing tone must never take the call down with it.
+    }
+
+    return () => {
+      try {
+        (inCallManager?.stopRingback as (() => void) | undefined)?.();
+        (inCallManager?.stopRingtone as (() => void) | undefined)?.();
+      } catch {
+        // Nothing playing; nothing to stop.
+      }
+    };
+  }, [calls.phase, showingIncoming, inCallManager]);
+
   // ── chrome auto-hide ────────────────────────────────────────────────
 
   const [chromeVisible, setChromeVisible] = useState(true);
@@ -226,6 +323,23 @@ export function CallScreen({
   }, [chromeHides, lastWake]);
 
   const wakeChrome = useCallback(() => setLastWake(Date.now()), []);
+
+  /**
+   * Tapping the screen toggles the controls.
+   *
+   * It used to only ever show them, and then a timer took them away —
+   * so there was no way to dismiss the chrome deliberately and get a
+   * clean look at the video. Tap to hide, tap to show, and the idle
+   * timer stays as a convenience on top rather than as the only way
+   * they ever disappear.
+   */
+  const toggleChrome = useCallback(() => {
+    setChromeVisible((visible) => {
+      if (visible) return false;
+      setLastWake(Date.now());
+      return true;
+    });
+  }, []);
 
   /**
    * Run an action and restart the idle countdown.
@@ -341,7 +455,7 @@ export function CallScreen({
       onRequestClose={hangUp}
     >
       <StatusBar barStyle="light-content" />
-      <Pressable style={styles.screen} onPress={wakeChrome} accessible={false}>
+      <Pressable style={styles.screen} onPress={toggleChrome} accessible={false}>
         {showStage ? (
           <CallVideoGrid
             participants={participants}
