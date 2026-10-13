@@ -358,10 +358,10 @@
   flex-direction: column;
   max-width: 78%;
   /* Tighter padding for a denser, more iMessage/WhatsApp-like read. */
-  padding: 7px 11px;
+  padding: 8px 12px;
   /* Default fully-rounded; the group-position modifiers below swap in
      the asymmetric tail corner for `last` / `standalone`. */
-  border-radius: 16px;
+  border-radius: 18px;
   font-size: 14.5px;
   line-height: 1.4;
   word-wrap: break-word;
@@ -369,11 +369,9 @@
   /* Anchor for the chevron action-trigger overlay AND the in-bubble
      image mosaic's overlaid meta pill (WhatsApp-style). */
   position: relative;
-  /* Clip the in-bubble image mosaic to the bubble's rounded corners
-     so the media reads as part of the bubble rather than an island
-     pasted on top. The chevron + actions overlay sit well within the
-     interior so they aren't affected by the clip. */
-  overflow: hidden;
+  /* No overflow clip: the mosaic rounds and clips itself (it sits
+     inset in its 3px frame), and the hover action disc floats half
+     outside the corner — a clip here would slice it. */
 }
 
 .poolse-message--self {
@@ -405,17 +403,76 @@
 }
 
 .poolse-message__meta {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  justify-content: flex-end;
   font-size: 10.5px;
+  line-height: 1.2;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+/* Meta on its own right-aligned row — markdown bodies, file-card
+   bubbles, deleted messages. The fallback placement. */
+.poolse-message__meta--block {
+  display: flex;
+  justify-content: flex-end;
   margin-top: 3px;
-  opacity: 0.85;
+}
+
+/* Meta floated into the last line of a plain-text body. The absolute
+   position pins it to the bubble's bottom-right; the inline spacer
+   twin (below) has already reserved exactly this much room on the
+   last line, so it never covers a glyph. */
+.poolse-message__meta--inline {
+  position: absolute;
+  right: 12px;
+  /* Optically centers the meta against the body's last line box
+     (20.3px line over the 8px bottom padding): 8 + (20.3 - 14) / 2.
+     At 9px it sat visibly low beside a one-line message. */
+  bottom: 11px;
+}
+
+/* The invisible reservation. Lives inline at the end of the text so
+   the line either has room for the meta or wraps — same trick
+   WhatsApp uses. The zero height keeps it from stretching the line. */
+.poolse-message__meta--spacer {
+  visibility: hidden;
+  padding-left: 10px;
+  height: 0;
 }
 
 .poolse-message__body {
   white-space: pre-wrap;
+}
+
+/* Markdown bodies un-inherit pre-wrap: react-markdown emits real
+   block elements with newline text nodes between them, and pre-wrap
+   would render each of those as a phantom blank line. Newlines
+   inside the content become <br>/<p> via the parser instead. */
+.poolse-message__body--md {
+  white-space: normal;
+}
+
+/* ── Jumbo emoji — 1-3 emoji and nothing else ──────────────────
+   The bubble chrome drops away and the glyphs carry the message.
+   Meta falls below in the list's quiet grey on both sides. */
+.poolse-message--jumbo {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 2px 0;
+  overflow: visible;
+}
+
+.poolse-message--jumbo .poolse-message__body--jumbo {
+  line-height: 1.15;
+  display: block;
+}
+
+.poolse-message--jumbo .poolse-message__meta,
+.poolse-message--jumbo.poolse-message--self .poolse-message__meta {
+  color: var(--poolse-ink-3);
 }
 
 /* Sender label — small, bold, per-user color. Only renders on the
@@ -779,11 +836,11 @@
   flex-direction: column;
   align-items: stretch;
   gap: 1px;
-  padding: 5px 9px;
+  padding: 6px 10px;
   margin-bottom: 6px;
-  border-radius: 6px;
+  border-radius: 10px;
   border: none;
-  border-left: 4px solid var(--poolse-brand);
+  border-left: 3px solid var(--poolse-brand);
   cursor: pointer;
   text-align: left;
   max-width: 100%;
@@ -1287,6 +1344,10 @@
 }
 
 .poolse-attachment__file {
+  /* border-box, explicitly: in-bubble cards get `width: 100%`, and
+     the host page may not reset box-sizing — content-box + this
+     padding made the card 26px wider than the bubble. */
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1348,25 +1409,52 @@
   /* 2px hairline gutters between tiles mirror the WA chat look — the
      bubble's background bleeds through and reads as a tasteful seam. */
   gap: 2px;
-  /* Full-bleed: cancel the bubble's 7px/11px padding so each image
-     touches the bubble border. The bubble's `overflow: hidden` +
-     border-radius clip the mosaic to the bubble shape. */
-  margin: -7px -11px 0 -11px;
+  /* Near-full-bleed with a 3px frame: cancel most of the bubble's
+     8px/12px padding so the bubble color reads as a thin picture
+     frame around the media — the WhatsApp/Telegram treatment. */
+  margin: -5px -9px 0 -9px;
+  /* The frame inset means the bubble's own clip no longer shapes the
+     media, so the mosaic rounds and clips itself — 3px tighter than
+     the bubble's 18px so the curves stay concentric. */
+  border-radius: 15px;
+  overflow: hidden;
   /* Minimum width so a tiny solo image doesn't collapse the bubble
-     into a thumbnail-narrow strip. Capped naturally by the row's
-     78% max-width. */
+     into a thumbnail-narrow strip. */
   min-width: 220px;
-  /* Subtle backing color in case an image is transparent / still
-     loading — keeps the seam color consistent with the bubble seams. */
-  background: var(--poolse-surface-2);
+  /* Transparent so the 2px seams read as the bubble's own color —
+     brand on self, surface on other — instead of a grey grid. Each
+     tile carries its own placeholder background while loading. */
+  background: transparent;
+}
+
+/* Media (and file-card) bubbles cap tighter than text: a photo at
+   the full 78% of a desktop pane is a poster, not a message. Every
+   major chat caps media around this width. */
+.poolse-message--has-media {
+  max-width: min(78%, 420px);
+}
+
+/* When a caption or file cards follow the mosaic, its bottom corners
+   go square so the media flows into the text block — rounding them
+   left little "ears" of bubble color poking between image and
+   caption. Media-only bubbles keep the full rounding. */
+.poolse-message--has-media:not(.poolse-message--media-only) .poolse-message__media {
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
 }
 
 /* When the bubble has only the media + meta overlay (no body, no file
-   cards), extend the mosaic into the bubble's bottom padding too so
-   the image fully fills the bubble. The bubble's rounded corners +
-   overflow:hidden handle the bottom shape. */
+   cards), the frame wraps the bottom too. */
 .poolse-message--media-only .poolse-message__media {
-  margin-bottom: -7px;
+  margin-bottom: -5px;
+}
+
+/* A sender label or quote card above the media keeps its headroom —
+   without this the mosaic's negative top margin pulls the picture up
+   over the label. */
+.poolse-message__sender + .poolse-message__media,
+.poolse-quote + .poolse-message__media {
+  margin-top: 2px;
 }
 
 /* When body text or file cards follow the mosaic, add a small gap so
@@ -1381,6 +1469,12 @@
 .poolse-message__files + .poolse-message__body,
 .poolse-message__files + .poolse-message__body--deleted {
   margin-top: 6px;
+}
+
+/* File-only bubble: the meta row follows the cards directly — give
+   it air so the time doesn't sit glued to the card's border. */
+.poolse-message__files + .poolse-message__meta--block {
+  margin-top: 7px;
 }
 
 /* Layout templates by image count */
@@ -1818,20 +1912,26 @@
    without hover. On desktop: hidden by default, visible on row hover
    OR while the popover is open. WhatsApp-style affordance — discoverable
    without being visually noisy. */
+/* Floating control half outside the bubble's top-right corner, not a
+   translucent stamp inside it — overlaying the rounded corner always
+   fought the bubble shape. A small surface-colored disc with a border
+   and shadow reads as a control hovering NEXT to the message, the way
+   Slack/Discord float their action bars. Revealed on hover. */
 .poolse-message__chevron {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
+  top: -9px;
+  right: -6px;
+  width: 26px;
+  height: 26px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: none;
+  border: 1px solid var(--poolse-border);
   border-radius: 50%;
-  background: color-mix(in oklab, var(--poolse-ink) 18%, transparent);
-  color: var(--poolse-on-brand);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink-2);
+  box-shadow: 0 2px 8px rgba(16, 16, 32, 0.14);
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
@@ -1841,17 +1941,8 @@
   z-index: 2;
 }
 
-.poolse-message--other .poolse-message__chevron {
-  background: color-mix(in oklab, var(--poolse-ink-2) 18%, transparent);
-  color: var(--poolse-ink-2);
-}
-
 .poolse-message__chevron:hover {
-  background: color-mix(in oklab, var(--poolse-ink) 34%, transparent);
-}
-
-.poolse-message--other .poolse-message__chevron:hover {
-  background: color-mix(in oklab, var(--poolse-ink-2) 32%, transparent);
+  background: var(--poolse-surface-2);
   color: var(--poolse-ink);
 }
 

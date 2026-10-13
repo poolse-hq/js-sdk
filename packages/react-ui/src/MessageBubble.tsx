@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { userColor } from './userColor.js';
 
@@ -150,6 +151,23 @@ export function MessageBubble({
     !hasVisibleBody &&
     fileAttachments.length === 0;
 
+  // 1–3 emoji and nothing else → no bubble chrome, big glyphs.
+  const jumboCount =
+    hasVisibleBody && !hasAnyAttachment && !message.quoted_message_id
+      ? emojiOnlyCount(rawBody)
+      : 0;
+
+  // The timestamp shares the last text line (reserved by an invisible
+  // spacer) whenever the body is plain enough that it ends in a plain
+  // line box. Markdown block output and the Read-more toggle both own
+  // their last line, so those fall back to the meta row.
+  const trimToggleVisible = shouldTrim || (expanded && rawBody.length > maxBodyLength + TRIM_BUFFER);
+  const inlineMeta =
+    hasVisibleBody &&
+    jumboCount === 0 &&
+    !trimToggleVisible &&
+    (!markdown || !hasMarkdown(displayBody));
+
   const className = [
     'poolse-message',
     isSelf ? 'poolse-message--self' : 'poolse-message--other',
@@ -160,6 +178,7 @@ export function MessageBubble({
     // match the bubble's outer corner when nothing follows the media.
     hasAnyAttachment ? 'poolse-message--has-media' : '',
     metaOverlay ? 'poolse-message--media-only' : '',
+    jumboCount > 0 ? 'poolse-message--jumbo' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -210,72 +229,110 @@ export function MessageBubble({
           ))}
         </div>
       )}
-      {message.deleted_at ? (
-        <span className="poolse-message__body--deleted">[deleted]</span>
-      ) : hasVisibleBody ? (
-        <div className="poolse-message__body">
-          {markdown ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                // Force links to a new tab + no opener — chat content
-                // is user-supplied so security defaults matter.
-                a: ({ node: _node, ...props }) => (
-                  <a {...props} target="_blank" rel="noopener noreferrer nofollow" />
-                ),
-              }}
-            >
-              {displayBody}
-            </ReactMarkdown>
-          ) : (
-            <span>{displayBody}</span>
-          )}
-          {shouldTrim && (
-            <button
-              type="button"
-              className="poolse-message__read-more"
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpanded(true);
-              }}
-            >
-              Read more
-            </button>
-          )}
-          {!shouldTrim && expanded && rawBody.length > maxBodyLength + TRIM_BUFFER && (
-            <button
-              type="button"
-              className="poolse-message__read-more"
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpanded(false);
-              }}
-            >
-              Show less
-            </button>
-          )}
-        </div>
-      ) : null}
-      <span
-        className={
-          metaOverlay
-            ? 'poolse-message__meta poolse-message__meta--overlay'
-            : 'poolse-message__meta'
-        }
-      >
-        <span>{time}</span>
-        {message.edited_at ? <span> · edited</span> : null}
-        {/* Read-receipt glyph — only meaningful for self-sent rows.
-            Single check = delivered, double = at least one recipient
-            has advanced their read cursor past this message. */}
-        {isSelf && readState ? (
-          <PoolseIcon
-            name={readState === 'read' ? 'check-double' : 'check'}
-            size={14}
-            label={readState === 'read' ? 'Read' : 'Sent'}
-          />
-        ) : null}
-      </span>
+      {(() => {
+        // One meta fragment, three placements: floated into the last
+        // text line (plain text), its own right-aligned row (markdown
+        // / files / deleted), or a scrim pill over the media
+        // (image-only). Read-receipt glyph: single check = delivered,
+        // double = at least one recipient read past this message.
+        const metaContent = (
+          <>
+            <span>{time}</span>
+            {message.edited_at && !message.deleted_at ? <span>· edited</span> : null}
+            {isSelf && readState ? (
+              <PoolseIcon
+                name={readState === 'read' ? 'check-double' : 'check'}
+                size={14}
+                label={readState === 'read' ? 'Read' : 'Sent'}
+              />
+            ) : null}
+          </>
+        );
+
+        const body = message.deleted_at ? (
+          <span className="poolse-message__body--deleted">Message deleted</span>
+        ) : hasVisibleBody ? (
+          <div
+            className={
+              markdown && !inlineMeta && jumboCount === 0
+                ? 'poolse-message__body poolse-message__body--md'
+                : 'poolse-message__body'
+            }
+          >
+            {jumboCount > 0 ? (
+              <span
+                className="poolse-message__body--jumbo"
+                style={{ fontSize: emojiFontSize(jumboCount) }}
+              >
+                {displayBody}
+              </span>
+            ) : markdown && !inlineMeta ? (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  // Force links to a new tab + no opener — chat content
+                  // is user-supplied so security defaults matter.
+                  a: ({ node: _node, ...props }) => (
+                    <a {...props} target="_blank" rel="noopener noreferrer nofollow" />
+                  ),
+                }}
+              >
+                {displayBody}
+              </ReactMarkdown>
+            ) : (
+              <span>{displayBody}</span>
+            )}
+            {inlineMeta && (
+              // Invisible twin of the meta, inline after the text: it
+              // reserves exactly the meta's footprint on the last
+              // line, so the absolutely-positioned real meta never
+              // overlaps a glyph — and when the line is full, the
+              // reservation wraps and the meta drops a line, flush
+              // right. The WhatsApp trick.
+              <span className="poolse-message__meta poolse-message__meta--spacer" aria-hidden>
+                {metaContent}
+              </span>
+            )}
+            {shouldTrim && (
+              <button
+                type="button"
+                className="poolse-message__read-more"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded(true);
+                }}
+              >
+                Read more
+              </button>
+            )}
+            {!shouldTrim && expanded && rawBody.length > maxBodyLength + TRIM_BUFFER && (
+              <button
+                type="button"
+                className="poolse-message__read-more"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded(false);
+                }}
+              >
+                Show less
+              </button>
+            )}
+          </div>
+        ) : null;
+
+        const metaClass = metaOverlay
+          ? 'poolse-message__meta poolse-message__meta--overlay'
+          : inlineMeta
+            ? 'poolse-message__meta poolse-message__meta--inline'
+            : 'poolse-message__meta poolse-message__meta--block';
+
+        return (
+          <>
+            {body}
+            <span className={metaClass}>{metaContent}</span>
+          </>
+        );
+      })()}
     </div>
   );
 }

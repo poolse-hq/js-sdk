@@ -277,17 +277,11 @@ export function MessageRow({
               showSenderName={showSenderName}
               showAttachments={attachments}
               markdown={markdown}
-              actionsTrigger={
-                actions ? (
-                  <Pressable onPress={() => setActionsOpen(true)} hitSlop={8}>
-                    <PoolseIcon
-                      name="chevron-down"
-                      size={14}
-                      color={isSelf ? theme.colors.onBrand : theme.colors.ink3}
-                    />
-                  </Pressable>
-                ) : null
-              }
+              // No actionsTrigger: the always-visible chevron stamped
+              // into the bubble corner fought the bubble shape and
+              // duplicated affordances a phone already has — long-press
+              // opens the same sheet, swipe quotes. Touch conventions,
+              // not desktop ones.
             />
           </Pressable>
         </Animated.View>

@@ -17,6 +17,13 @@ export interface ImageMosaicProps {
    */
   maxWidth?: number;
   radius?: number;
+  /**
+   * Square off the bottom corners (a small 5px instead of `radius`).
+   * Pass when a caption or file cards follow the mosaic, so the media
+   * flows into the text block instead of leaving "ears" of bubble
+   * color between the image and the caption.
+   */
+  squareBottom?: boolean;
 }
 
 /**
@@ -31,9 +38,10 @@ export interface ImageMosaicProps {
  *   * n = 3 → 16:9 hero on top + row of 2 squares below.
  *   * n ≥ 4 → 2×2 grid with "+N more" overlay on the 4th tile.
  */
-export function ImageMosaic({ images, maxWidth, radius }: ImageMosaicProps) {
+export function ImageMosaic({ images, maxWidth, radius, squareBottom = false }: ImageMosaicProps) {
   const theme = usePoolseTheme();
   const r = radius ?? theme.radii.md;
+  const rBottom = squareBottom ? 5 : r;
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   if (images.length === 0) return null;
@@ -48,8 +56,17 @@ export function ImageMosaic({ images, maxWidth, radius }: ImageMosaicProps) {
         style={[
           styles.root,
           {
-            borderRadius: r,
-            ...(maxWidth ? { maxWidth } : {}),
+            borderTopLeftRadius: r,
+            borderTopRightRadius: r,
+            borderBottomLeftRadius: rBottom,
+            borderBottomRightRadius: rBottom,
+            // Explicit pixel width, not just a cap: the mosaic sits
+            // inside an auto-sized bubble, and a percentage width
+            // against an indefinite parent collapses (or, worse,
+            // resolves against the image's intrinsic size and blows
+            // the row open). Media bubbles are fixed-width — the
+            // WhatsApp convention anyway.
+            ...(maxWidth ? { width: maxWidth } : {}),
           },
         ]}
       >

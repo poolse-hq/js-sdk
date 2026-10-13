@@ -4,6 +4,14 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.20.0] — 2026-10-13
+
+### Changed
+
+- Version bump to stay in step with `@poolse/react-ui` and
+  `@poolse/react-native`, which carry this release's message-bubble
+  redesign.
+
 ## [2.19.0] — 2026-08-25
 
 ### Fixed

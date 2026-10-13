@@ -4,6 +4,36 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.20.0] — 2026-10-13
+
+### Changed
+
+- **The message bubble, rebuilt.** Same props, new rendering:
+  - The timestamp (with `edited` and the read ticks) sits on the last
+    line of plain-text bodies — an invisible spacer twin reserves its
+    exact footprint, so it shares the line or wraps flush right.
+  - Media bleeds to a 3px frame of bubble color, capped at 420px
+    (`.poolse-message--has-media`), and squares its bottom corners
+    into a following caption. Mosaic seams carry the bubble's color
+    instead of a grey backing. Bubble radius 16px → 18px.
+  - 1–3 emoji and nothing else render large, without bubble chrome
+    (`.poolse-message--jumbo`).
+  - Markdown bodies no longer inherit `white-space: pre-wrap`, which
+    rendered react-markdown's inter-element newlines as phantom blank
+    lines in lists.
+  - The hover actions chevron floats half outside the bubble's
+    top-right corner as a bordered disc, instead of a translucent
+    stamp overlapping the corner radius. The bubble no longer clips
+    its contents (`overflow: hidden` removed); the mosaic clips
+    itself.
+  - Quote cards: 10px radius; deleted messages read "Message deleted".
+
+### Fixed
+
+- **In-bubble file cards overflowed the bubble** — `width: 100%` plus
+  padding with no `box-sizing: border-box`, previously masked by the
+  bubble's overflow clip.
+
 ## [2.19.0] — 2026-08-25
 
 ### Changed

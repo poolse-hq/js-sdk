@@ -6,6 +6,7 @@ import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { ImageMosaic } from './ImageMosaic.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './internal/bubbleText.js';
 import { renderMarkdown } from './internal/markdown.js';
 import { userColor } from './primitives/userColor.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
@@ -41,6 +42,13 @@ export interface MessageBubbleProps {
   markdown?: boolean;
 }
 
+/**
+ * One message bubble, structured as stacked sections rather than one
+ * padded box: media bleeds to a 3px frame, text carries its own
+ * padding, and the timestamp lives ON the last text line (reserved by
+ * an invisible twin) instead of a full-width row of its own — which
+ * is what makes "ok" a one-line bubble instead of a squat rectangle.
+ */
 export function MessageBubble({
   message,
   currentUserId,
@@ -59,18 +67,12 @@ export function MessageBubble({
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
   const [expanded, setExpanded] = useState(false);
 
-  // Pixel-based bubble cap pinned to screen width, not to a
-  // percentage of an ambiguously-sized parent. Was '88%' on the
-  // wrap which resolves to 88% of the bubbleCol — and bubbleCol's
-  // width changes with the row's padding, so bumping row padding
-  // shrunk multi-line bubbles disproportionately. With a fixed
-  // pixel maxWidth + alignSelf:flex-end, single-line and multi-line
-  // both hit the same right edge regardless of nesting.
+  // Pixel cap pinned to screen width so single-line and multi-line
+  // bubbles hit the same edge regardless of row padding.
   const bubbleMaxWidth = Math.floor(screenWidth * 0.78);
-  // Image / file preview width is bubble width minus the 28px
-  // horizontal padding. Use flex '100%' style with a numeric ceiling
-  // so the mosaic adapts to the actual rendered bubble.
-  const contentMaxWidth = bubbleMaxWidth - 28;
+  // Media caps tighter than text — a photo at 78% of an iPad is a
+  // poster, not a message. 420 matches the web stylesheet's cap.
+  const mediaWidth = Math.min(bubbleMaxWidth - 6, 420);
 
   const sender = useUser(!isSelf ? message.sender_external_id : null);
   const senderFallbackName = message.sender_external_id ?? 'Unknown';
@@ -82,76 +84,120 @@ export function MessageBubble({
   const senderTint = userColor(message.sender_external_id ?? message.sender_id ?? message.id);
 
   const tailCorner = groupPosition === 'last' || groupPosition === 'standalone';
-  const bubbleColor = isSelf ? theme.colors.selfBubble : theme.colors.otherBubble;
+  const bubbleRadius = theme.radii.bubble;
   const textColor = isSelf ? theme.colors.selfBubbleText : theme.colors.otherBubbleText;
+  const mutedOnBubble = isSelf ? theme.colors.onBrand : theme.colors.ink3;
 
   const radii = {
-    topLeft: theme.radii.bubble,
-    topRight: theme.radii.bubble,
-    bottomLeft: theme.radii.bubble,
-    bottomRight: theme.radii.bubble,
+    topLeft: bubbleRadius,
+    topRight: bubbleRadius,
+    bottomLeft: bubbleRadius,
+    bottomRight: bubbleRadius,
   };
   if (tailCorner) {
-    if (isSelf) radii.bottomRight = 4;
-    else radii.bottomLeft = 4;
+    if (isSelf) radii.bottomRight = 5;
+    else radii.bottomLeft = 5;
   }
 
   const body = message.body ?? '';
-  const truncated =
-    maxBodyLength > 0 && body.length > maxBodyLength && !expanded
-      ? body.slice(0, maxBodyLength) + '…'
-      : body;
-
-  const time = formatTime(message.inserted_at);
   const isDeleted = !!message.deleted_at;
   const isEdited = !!message.edited_at && !isDeleted;
+  const trimmable = maxBodyLength > 0 && body.length > maxBodyLength;
+  const truncated = trimmable && !expanded ? body.slice(0, maxBodyLength) + '…' : body;
+  const time = formatTime(message.inserted_at);
 
-  const images = (message.attachments ?? []).filter((a) => isImageContentType(a.content_type));
-  const files = (message.attachments ?? []).filter((a) => !isImageContentType(a.content_type));
-  const renderAttachments = showAttachments && (images.length > 0 || files.length > 0);
+  const images =
+    showAttachments && !isDeleted
+      ? (message.attachments ?? []).filter((a) => isImageContentType(a.content_type))
+      : [];
+  const files =
+    showAttachments && !isDeleted
+      ? (message.attachments ?? []).filter((a) => !isImageContentType(a.content_type))
+      : [];
+  const hasMedia = images.length > 0;
+  const hasFiles = files.length > 0;
+  const hasBody = !isDeleted && body.length > 0;
 
-  return (
-    <View
-      style={[
-        styles.wrap,
-        {
-          alignSelf: isSelf ? 'flex-end' : 'flex-start',
-          // Pixel maxWidth (not percentage) so single-line and
-          // multi-line bubbles land at the same right edge — was
-          // 88% of the bubbleCol which produced inconsistent right
-          // padding when the row padding changed.
-          maxWidth: bubbleMaxWidth,
-        },
-      ]}
-    >
+  // Image-only bubble → the meta floats over the picture on a scrim
+  // pill, WhatsApp-style, and the bubble is nothing but the frame.
+  const metaOverlay = hasMedia && !hasBody && !hasFiles;
+
+  // 1–3 emoji and nothing else → no bubble chrome, big glyphs.
+  const jumboCount =
+    hasBody && !hasMedia && !hasFiles && !message.quoted_message_id ? emojiOnlyCount(body) : 0;
+
+  // Timestamp shares the last text line via the ghost-reservation
+  // trick — but only on the plain-text path; markdown blocks and the
+  // Read-more toggle own their last line, so those keep the meta row.
+  const inlineMeta =
+    hasBody && jumboCount === 0 && !trimmable && (!markdown || !hasMarkdown(truncated));
+
+  const sectionAbove = hasMedia || hasFiles || !!message.quoted_message || isDeleted;
+
+  // What the invisible twin reserves: approximately the meta's
+  // rendered footprint at fontSize 11 — "edited", the time, and two
+  // tick-glyph widths when a receipt will show.
+  const ghost = `   ${isEdited ? 'edited ' : ''}${time}${isSelf && readState ? ' ✓✓' : ''}`;
+
+  const metaRow = (variant: 'inline' | 'block' | 'overlay' | 'jumbo') => {
+    const color =
+      variant === 'overlay' ? '#FFFFFF' : variant === 'jumbo' ? theme.colors.ink3 : mutedOnBubble;
+    return (
       <View
         style={[
-          styles.bubble,
-          {
-            backgroundColor: bubbleColor,
+          styles.metaRow,
+          variant === 'inline' && styles.metaInline,
+          variant === 'overlay' && styles.metaOverlay,
+          variant === 'block' && styles.metaBlock,
+          // File-only bubble: the meta row follows the cards directly —
+          // give it air so the time doesn't sit glued to the card.
+          variant === 'block' && hasFiles && !hasBody && styles.metaBlockAfterFiles,
+          variant === 'jumbo' && styles.metaJumbo,
+        ]}
+        pointerEvents="none"
+      >
+        {isEdited ? (
+          <Text style={[styles.editedTag, { color, opacity: 0.8 }]}>edited</Text>
+        ) : null}
+        <Text style={[styles.meta, { color, opacity: variant === 'overlay' ? 1 : 0.75 }]}>
+          {time}
+        </Text>
+        {isSelf && readState ? (
+          <View style={styles.readTick}>
+            <PoolseIcon
+              name={readState === 'read' ? 'check-double' : 'check'}
+              size={13}
+              color={color}
+            />
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  return (
+    <View style={[styles.wrap, { alignSelf: isSelf ? 'flex-end' : 'flex-start', maxWidth: bubbleMaxWidth }]}>
+      <View
+        style={[
+          jumboCount === 0 && {
+            backgroundColor: isSelf ? theme.colors.selfBubble : theme.colors.otherBubble,
             borderColor: isSelf ? 'transparent' : theme.colors.border,
             borderWidth: isSelf ? 0 : StyleSheet.hairlineWidth,
             borderTopLeftRadius: radii.topLeft,
             borderTopRightRadius: radii.topRight,
             borderBottomLeftRadius: radii.bottomLeft,
             borderBottomRightRadius: radii.bottomRight,
-            // Slightly more breathing room — 14/10 reads tighter and
-            // matches the iMessage / WhatsApp bubble density.
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            // Floor the bubble at a width that always fits the meta row
-            // ("edited HH:MM ✓✓" → ~110px). Without this, short bodies
-            // like "ok" produce a bubble too narrow for the meta to lay
-            // out, and `edited` or the time gets clipped.
-            minWidth: isSelf && isEdited ? 130 : 90,
           },
-          theme.shadows.sm,
+          jumboCount === 0 && theme.shadows.sm,
         ]}
       >
         {showSenderName &&
         !isSelf &&
+        jumboCount === 0 &&
         (groupPosition === 'first' || groupPosition === 'standalone') ? (
-          <Text style={[styles.senderName, { color: senderTint, fontFamily: theme.type.fontBody }]}>
+          <Text
+            style={[styles.senderName, { color: senderTint, fontFamily: theme.type.fontBody }]}
+          >
             {senderLabel}
           </Text>
         ) : null}
@@ -165,114 +211,123 @@ export function MessageBubble({
           />
         ) : null}
 
-        {renderAttachments && images.length > 0 ? (
-          <ImageMosaic images={images} maxWidth={contentMaxWidth} />
+        {hasMedia ? (
+          // 3px of bubble color framing the picture; the mosaic clips
+          // itself 3px tighter than the bubble so the curves stay
+          // concentric.
+          <View style={styles.mediaFrame}>
+            <ImageMosaic
+              images={images}
+              maxWidth={mediaWidth}
+              radius={Math.max(bubbleRadius - 3, 8)}
+              squareBottom={!metaOverlay}
+            />
+            {metaOverlay ? metaRow('overlay') : null}
+          </View>
         ) : null}
 
-        {renderAttachments && files.length > 0 ? (
-          <View style={{ gap: theme.spacing.xs, marginBottom: theme.spacing.xs }}>
+        {hasFiles ? (
+          <View style={styles.filesBlock}>
             {files.map((att) => (
-              <AttachmentPreview key={att.id} attachment={att} maxWidth={contentMaxWidth} />
+              <AttachmentPreview
+                key={att.id}
+                attachment={att}
+                maxWidth={bubbleMaxWidth - 12}
+                tone={isSelf ? 'onBrand' : 'default'}
+              />
             ))}
           </View>
         ) : null}
 
-        {body.length > 0 ? (
-          isDeleted ? (
+        {isDeleted ? (
+          <View style={[styles.textBlock, sectionAbove && styles.textBlockAfter]}>
             <Text
-              style={[
-                styles.body,
-                {
-                  color: theme.colors.ink3,
-                  fontFamily: theme.type.fontBody,
-                  fontSize: theme.type.bodySize,
-                  lineHeight: theme.type.lineHeight,
-                  fontStyle: 'italic',
-                },
-              ]}
+              style={{
+                color: mutedOnBubble,
+                opacity: 0.7,
+                fontFamily: theme.type.fontBody,
+                fontSize: theme.type.bodySize,
+                lineHeight: theme.type.lineHeight,
+                fontStyle: 'italic',
+              }}
             >
               Message deleted
             </Text>
-          ) : markdown ? (
-            renderMarkdown(truncated, {
-              textColor,
-              linkColor: isSelf ? theme.colors.onBrand : theme.colors.brand,
-              fontFamily: theme.type.fontBody,
-              fontSize: theme.type.bodySize,
-              lineHeight: theme.type.lineHeight,
-              onLinkPress: (url: string) => {
-                void Linking.openURL(url).catch(() => undefined);
-                return false;
-              },
-            })
-          ) : (
+          </View>
+        ) : null}
+
+        {hasBody && jumboCount > 0 ? (
+          <View style={styles.jumboBlock}>
             <Text
-              style={[
-                styles.body,
-                {
+              style={{ fontSize: emojiFontSize(jumboCount), lineHeight: emojiFontSize(jumboCount) + 8 }}
+            >
+              {body}
+            </Text>
+          </View>
+        ) : null}
+
+        {hasBody && jumboCount === 0 ? (
+          <View style={[styles.textBlock, sectionAbove && styles.textBlockAfter]}>
+            {markdown && !inlineMeta ? (
+              renderMarkdown(truncated, {
+                textColor,
+                linkColor: isSelf ? theme.colors.onBrand : theme.colors.brand,
+                fontFamily: theme.type.fontBody,
+                fontSize: theme.type.bodySize,
+                lineHeight: theme.type.lineHeight,
+                onLinkPress: (url: string) => {
+                  void Linking.openURL(url).catch(() => undefined);
+                  return false;
+                },
+              })
+            ) : (
+              <Text
+                style={{
                   color: textColor,
                   fontFamily: theme.type.fontBody,
                   fontSize: theme.type.bodySize,
                   lineHeight: theme.type.lineHeight,
-                },
-              ]}
-            >
-              {truncated}
-            </Text>
-          )
+                }}
+              >
+                {truncated}
+                {inlineMeta ? (
+                  // The invisible twin: reserves the meta's footprint
+                  // at the end of the last line so the absolutely-
+                  // positioned real meta never covers a glyph — and
+                  // when the line is full, the reservation wraps and
+                  // the meta drops down, flush right.
+                  <Text style={styles.ghost}>{ghost}</Text>
+                ) : null}
+              </Text>
+            )}
+
+            {trimmable ? (
+              <Pressable onPress={() => setExpanded((e) => !e)}>
+                <Text
+                  style={[
+                    styles.readMore,
+                    { color: isSelf ? theme.colors.onBrand : theme.colors.brand },
+                  ]}
+                >
+                  {expanded ? 'Show less' : 'Read more'}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {inlineMeta ? metaRow('inline') : null}
+          </View>
         ) : null}
 
-        {maxBodyLength > 0 && body.length > maxBodyLength ? (
-          <Pressable onPress={() => setExpanded((e) => !e)}>
-            <Text
-              style={[
-                styles.readMore,
-                { color: isSelf ? theme.colors.onBrand : theme.colors.brand },
-              ]}
-            >
-              {expanded ? 'Show less' : 'Read more'}
-            </Text>
-          </Pressable>
-        ) : null}
-
-        <View style={styles.metaRow}>
-          {isEdited ? (
-            <Text
-              style={[
-                styles.editedTag,
-                {
-                  color: isSelf ? theme.colors.onBrand : theme.colors.ink3,
-                  opacity: 0.7,
-                },
-              ]}
-            >
-              edited
-            </Text>
-          ) : null}
-          <Text
-            style={[
-              styles.meta,
-              {
-                color: isSelf ? theme.colors.onBrand : theme.colors.ink3,
-                opacity: isSelf ? 0.85 : 1,
-              },
-            ]}
-          >
-            {time}
-          </Text>
-          {isSelf && readState ? (
-            <View style={styles.readTick}>
-              <PoolseIcon
-                name={readState === 'read' ? 'check-double' : 'check'}
-                size={13}
-                color={theme.colors.onBrand}
-              />
-            </View>
-          ) : null}
-        </View>
+        {/* Fallback meta row for everything that couldn't inline or
+            overlay it: markdown bodies, file bubbles, deleted rows. */}
+        {!inlineMeta && !metaOverlay && jumboCount === 0 ? metaRow('block') : null}
 
         {actionsTrigger ? <View style={styles.actionsSlot}>{actionsTrigger}</View> : null}
       </View>
+
+      {jumboCount > 0 ? (
+        <View style={{ alignSelf: isSelf ? 'flex-end' : 'flex-start' }}>{metaRow('jumbo')}</View>
+      ) : null}
     </View>
   );
 }
@@ -296,7 +351,9 @@ function QuotedCard({
       resolved.profile?.displayName ??
       quoted.sender_external_id)
     : 'Unknown';
-  const bg = isSelf ? 'rgba(255,255,255,0.18)' : theme.colors.surface2;
+  // Darker than the bubble on both sides, so the quote reads as
+  // something the message sits on top of.
+  const bg = isSelf ? 'rgba(0,0,0,0.16)' : theme.colors.surface2;
   const accent = isSelf ? theme.colors.onBrand : theme.colors.brand;
   const txt = isSelf ? theme.colors.onBrand : theme.colors.ink;
   return (
@@ -311,9 +368,11 @@ function QuotedCard({
         },
       ]}
     >
-      <Text style={[styles.quotedSender, { color: accent }]}>{senderName}</Text>
+      <Text style={[styles.quotedSender, { color: accent }]} numberOfLines={1}>
+        {senderName}
+      </Text>
       <Text style={[styles.quotedBody, { color: txt }]} numberOfLines={2}>
-        {quoted.body ?? '…'}
+        {quoted.deleted_at ? 'Original message deleted' : (quoted.body ?? '…')}
       </Text>
     </Pressable>
   );
@@ -363,16 +422,34 @@ const styles = StyleSheet.create({
   wrap: {
     marginBottom: 2,
   },
-  bubble: {
-    position: 'relative',
-  },
   senderName: {
     fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: '700',
+    paddingTop: 7,
+    paddingHorizontal: 12,
   },
-  body: {
-    flexShrink: 1,
+  mediaFrame: {
+    margin: 3,
+  },
+  filesBlock: {
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    gap: 4,
+  },
+  textBlock: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  // A hair less air when media / files / a quote already sit above.
+  textBlockAfter: {
+    paddingTop: 6,
+  },
+  jumboBlock: {
+    paddingVertical: 2,
+  },
+  ghost: {
+    color: 'transparent',
+    fontSize: 11,
   },
   readMore: {
     fontSize: 12,
@@ -382,10 +459,36 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+  },
+  metaInline: {
+    position: 'absolute',
+    right: 12,
+    // Optically centers the meta against the body's last line (22px
+    // line over the 7px bottom padding): 7 + (22 - 14) / 2. At 8 it
+    // sat visibly low beside a one-line message.
+    bottom: 11,
+  },
+  metaOverlay: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  metaBlock: {
     justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingBottom: 6,
+    marginTop: -2,
+  },
+  metaBlockAfterFiles: {
     marginTop: 6,
-    gap: 5,
-    flexShrink: 0,
+  },
+  metaJumbo: {
+    paddingTop: 2,
   },
   meta: {
     fontSize: 11,
@@ -398,7 +501,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   readTick: {
-    marginLeft: 2,
+    marginLeft: 1,
     marginTop: 1,
   },
   actionsSlot: {
@@ -408,19 +511,20 @@ const styles = StyleSheet.create({
   },
   quoted: {
     borderLeftWidth: 3,
-    paddingLeft: 8,
-    paddingVertical: 4,
-    paddingRight: 6,
-    marginBottom: 6,
-    borderRadius: 4,
+    paddingLeft: 9,
+    paddingVertical: 5,
+    paddingRight: 8,
+    margin: 4,
+    marginBottom: 0,
+    borderRadius: 10,
   },
   quotedSender: {
     fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: '700',
+    marginBottom: 1,
   },
   quotedBody: {
-    fontSize: 12,
-    opacity: 0.85,
+    fontSize: 12.5,
+    opacity: 0.8,
   },
 });

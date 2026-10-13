@@ -11,9 +11,20 @@ export interface AttachmentPreviewProps {
   onPress?: () => void;
   /** Render at this max width. Defaults to 280. */
   maxWidth?: number;
+  /**
+   * `'onBrand'` restyles the file card for a brand-colored self
+   * bubble — translucent white instead of surface grey, so the card
+   * reads as part of the bubble rather than a patch cut out of it.
+   */
+  tone?: 'default' | 'onBrand';
 }
 
-export function AttachmentPreview({ attachment, onPress, maxWidth = 280 }: AttachmentPreviewProps) {
+export function AttachmentPreview({
+  attachment,
+  onPress,
+  maxWidth = 280,
+  tone = 'default',
+}: AttachmentPreviewProps) {
   const theme = usePoolseTheme();
   const isImage = (attachment.content_type ?? '').startsWith('image/');
   const { url } = useAttachmentUrl(attachment.id);
@@ -51,6 +62,10 @@ export function AttachmentPreview({ attachment, onPress, maxWidth = 280 }: Attac
     );
   }
 
+  const onBrand = tone === 'onBrand';
+  const ink = onBrand ? theme.colors.onBrand : theme.colors.ink;
+  const inkSoft = onBrand ? theme.colors.onBrand : theme.colors.ink3;
+
   return (
     <Pressable
       onPress={onPress}
@@ -58,21 +73,21 @@ export function AttachmentPreview({ attachment, onPress, maxWidth = 280 }: Attac
       style={[
         styles.fileCard,
         {
-          backgroundColor: theme.colors.surface2,
-          borderColor: theme.colors.border,
+          backgroundColor: onBrand ? 'rgba(255,255,255,0.18)' : theme.colors.surface2,
+          borderColor: onBrand ? 'transparent' : theme.colors.border,
           borderRadius: theme.radii.md,
         },
       ]}
     >
-      <PoolseIcon name="attachment" size={18} color={theme.colors.ink2} />
+      <PoolseIcon name="attachment" size={18} color={onBrand ? ink : theme.colors.ink2} />
       <View style={{ flex: 1, marginLeft: 8 }}>
         <Text
-          style={[styles.fileName, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
+          style={[styles.fileName, { color: ink, fontFamily: theme.type.fontBody }]}
           numberOfLines={1}
         >
           {attachment.original_filename ?? 'file'}
         </Text>
-        <Text style={[styles.fileSize, { color: theme.colors.ink3 }]}>
+        <Text style={[styles.fileSize, { color: inkSoft, opacity: onBrand ? 0.8 : 1 }]}>
           {formatBytes(attachment.byte_size)}
         </Text>
       </View>

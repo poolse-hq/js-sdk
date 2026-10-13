@@ -74,7 +74,7 @@ const radii = {
   lg: 16,
   xl: 24,
   pill: 999,
-  bubble: 16,
+  bubble: 18,
 };
 
 const spacing = {

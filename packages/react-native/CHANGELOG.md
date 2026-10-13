@@ -4,6 +4,44 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.20.0] — 2026-10-13
+
+### Changed
+
+- **The message bubble, rebuilt.** Same props, new rendering:
+  - The timestamp (with `edited` and the read ticks) sits on the last
+    line of plain-text bodies — an invisible twin reserves its exact
+    footprint, so it shares the line or wraps flush right. Short
+    messages are one-line bubbles again; the `minWidth` floor that
+    padded them out is gone.
+  - Media bleeds to a 3px frame of bubble color, capped at 420pt,
+    corners concentric with the bubble (default radius 16 → 18). When
+    a caption or file cards follow, the mosaic squares its bottom
+    corners into the text instead of leaving "ears" of bubble color.
+  - Image-only messages float the meta on a scrim pill over the
+    picture, matching the web package.
+  - 1–3 emoji and nothing else render large, without bubble chrome.
+  - Quote cards: 10pt radius, darker-than-bubble tint on both sides,
+    and a quoted-of-deleted fallback matching web.
+  - A deleted message renders its tombstone even when the body was
+    cleared server-side.
+
+- **The always-visible corner chevron is gone.** It stamped a control
+  into the bubble's rounded corner and duplicated affordances a phone
+  already has — long-press opens the actions sheet, swipe quotes.
+  `MessageBubble`'s `actionsTrigger` slot remains for custom rows.
+
+### Added
+
+- `AttachmentPreview tone="onBrand"` — restyles the file card for
+  brand-colored self bubbles (translucent white instead of a surface
+  patch). `MessageBubble` passes it automatically.
+- `ImageMosaic squareBottom` — small bottom radii for mosaics that
+  flow into a caption; `radius` now applies per-corner. The mosaic
+  also takes an explicit pixel width from the bubble, fixing a layout
+  where a percentage against the auto-sized bubble could collapse or
+  blow the row open.
+
 ## [2.19.0] — 2026-08-25
 
 ### Added
