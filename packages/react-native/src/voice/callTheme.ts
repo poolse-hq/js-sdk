@@ -15,8 +15,15 @@
  * ring — it just doesn't set the background.
  */
 export const callColors = {
-  /** Behind everything. Near-black, warmed very slightly to match the brand. */
-  bg: '#101012',
+  /** Behind everything. Near-black, cooled toward the brand. */
+  bg: '#0B0B14',
+  /** The brand glow rising behind the identity block. */
+  glow: '#5B54E8',
+  /** The faint counter-glow low in the frame, for depth. */
+  glowWarm: '#B16CEA',
+  /** The floating control dock and the status pill. */
+  glass: 'rgba(255,255,255,0.08)',
+  glassBorder: 'rgba(255,255,255,0.12)',
   /** Behind a participant tile with no video. */
   tile: '#1c1c20',
   /** Scrim under the top/bottom chrome so text stays legible over video. */

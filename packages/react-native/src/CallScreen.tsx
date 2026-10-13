@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { AudioRouteSheet } from './voice/AudioRouteSheet.js';
+import { CallBackdrop } from './voice/CallBackdrop.js';
+import { PulseRings } from './voice/PulseRings.js';
 import { CallAvatar } from './voice/CallAvatar.js';
 import { CallControlButton } from './voice/CallControlButton.js';
 import { CallVideoGrid } from './voice/CallVideoGrid.js';
@@ -24,6 +26,14 @@ export interface CallScreenProps {
   userId: string;
   /** Resolves a user id to a display label. Defaults to a short id. */
   labelFor?: (userId: string) => string;
+  /**
+   * Resolves a conversation id to a display name — the group being
+   * called. When it returns one, the call is titled by it ("Fix the
+   * boiler") and the people move to the subtitle, which is how a
+   * group call reads everywhere else. Return null/undefined to fall
+   * back to participant names.
+   */
+  conversationLabel?: (conversationId: string) => string | null | undefined;
   /**
    * Escape hatch for apps that already own a `useCalls` instance (for
    * example to place calls from elsewhere in the UI). When omitted the
@@ -170,6 +180,7 @@ function isOver(phase: string): boolean {
 export function CallScreen({
   userId,
   labelFor,
+  conversationLabel,
   calls: callsProp,
   webrtc,
   livekit,
@@ -461,14 +472,26 @@ export function CallScreen({
         ? others.map((p) => p.userId)
         : (calls.outgoing?.calleeUserIds ?? []);
 
-  const title =
+  const peerTitle =
     peerIds.length === 0
       ? 'Call'
       : peerIds.length <= 2
         ? peerIds.map(label).join(', ')
         : `${label(peerIds[0]!)} and ${peerIds.length - 1} others`;
 
-  const subtitle = duration ?? statusLine(calls, status);
+  // A named conversation titles the call; the people become the
+  // subtitle. Incoming rings know their conversation before any media
+  // does, so look there too.
+  const titleConversationId =
+    conversationId ?? (ringingIn ? (calls.incoming?.conversationId ?? null) : null);
+  const convName = titleConversationId ? (conversationLabel?.(titleConversationId) ?? null) : null;
+  const title = convName || peerTitle;
+
+  const statusText = duration ?? statusLine(calls, status);
+  // With the loop name as the title, say who is involved before the
+  // status — "Elena · Incoming call" under "Fix the boiler".
+  const subtitle =
+    convName && !duration && peerIds.length > 0 ? `${peerTitle} · ${statusText}` : statusText;
 
   // The stage only earns the screen once media is flowing. Before that
   // there is nothing to render but a placeholder, and the identity card
@@ -494,6 +517,7 @@ export function CallScreen({
     >
       <StatusBar barStyle="light-content" />
       <Pressable style={styles.screen} onPress={toggleChrome} accessible={false}>
+        <CallBackdrop />
         {showStage ? (
           <CallVideoGrid
             participants={participants}
@@ -504,27 +528,43 @@ export function CallScreen({
             safeArea={{ top: insets.top, bottom: insets.bottom }}
           />
         ) : (
-          <View style={styles.identity}>
-            <CallAvatar
-              name={peerIds.length === 1 ? label(peerIds[0]!) : title}
-              seed={peerIds[0] ?? 'call'}
-              size={132}
-            />
+          // Audio (and pre-media) calls carry their identity in the
+          // middle of the scene — name under the avatar, status in a
+          // pill — rather than a bar pinned to the top of a void.
+          <View
+            style={[styles.identity, { paddingBottom: insets.bottom + 160 }]}
+            pointerEvents="none"
+          >
+            <View style={styles.avatarStage}>
+              {(ringingIn || ringingOut) && <PulseRings size={132} color={callColors.glow} />}
+              <CallAvatar
+                name={peerIds.length === 1 ? label(peerIds[0]!) : title}
+                seed={titleConversationId ?? peerIds[0] ?? 'call'}
+                size={132}
+              />
+            </View>
+            <Text numberOfLines={2} style={styles.identityTitle}>
+              {title}
+            </Text>
+            <View style={styles.statusPill}>
+              {connected && <View style={styles.statusDot} />}
+              <Text style={styles.statusText}>{subtitle}</Text>
+            </View>
           </View>
         )}
 
-        {/* ── header ─────────────────────────────────────────────── */}
-        {chromeVisible && (
+        {/* ── header — only over video, where the scene is the people */}
+        {chromeVisible && showStage && (
           <View style={[styles.header, { paddingTop: insets.top + 14 }]} pointerEvents="box-none">
             <Text numberOfLines={1} style={styles.title}>
               {title}
             </Text>
             <View style={styles.subtitleRow}>
-              {isGroup && showStage && (
+              {isGroup && (
                 <PoolseIcon name="users" size={14} color={callColors.textDim} label={null} />
               )}
               <Text style={styles.subtitle}>
-                {isGroup && showStage ? `${participants.length} · ${subtitle}` : subtitle}
+                {isGroup ? `${participants.length} · ${subtitle}` : subtitle}
               </Text>
             </View>
           </View>
@@ -542,11 +582,12 @@ export function CallScreen({
             )}
 
             {ringingIn ? (
-              <View style={styles.row}>
+              <View style={styles.answerRow}>
                 <CallControlButton
                   icon="phone-off"
                   tone="danger"
                   large
+                  label="Decline"
                   onPress={() => void calls.decline()}
                   accessibilityLabel="Decline call"
                 />
@@ -554,6 +595,7 @@ export function CallScreen({
                   icon={isVideoCall ? 'video' : 'phone'}
                   tone="accept"
                   large
+                  label="Accept"
                   onPress={() => void calls.accept()}
                   accessibilityLabel="Accept call"
                 />
@@ -569,7 +611,7 @@ export function CallScreen({
               </View>
             ) : (
               <>
-                <View style={styles.row}>
+                <View style={styles.dock}>
                   <CallControlButton
                     icon={micOn ? 'mic' : 'mic-off'}
                     label={micOn ? 'Mute' : 'Unmute'}
@@ -603,7 +645,7 @@ export function CallScreen({
                       accessibilityLabel="Switch camera"
                     />
                   )}
-                </View>
+                </View>{/* dock */}
 
                 <View style={styles.hangUpRow}>
                   <CallControlButton
@@ -675,7 +717,51 @@ function statusLine(calls: UseCalls, mediaStatus: string): string {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: callColors.bg },
-  identity: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  identity: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 18,
+  },
+  avatarStage: {
+    width: 132,
+    height: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  identityTitle: {
+    color: callColors.text,
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    textAlign: 'center',
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: callColors.glass,
+    borderWidth: 1,
+    borderColor: callColors.glassBorder,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: callColors.accept,
+  },
+  statusText: {
+    color: callColors.textDim,
+    fontSize: 13.5,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
 
   header: {
     position: 'absolute',
@@ -688,7 +774,7 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
     backgroundColor: callColors.scrim,
   },
-  title: { color: callColors.text, fontSize: 22, fontWeight: '600', textAlign: 'center' },
+  title: { color: callColors.text, fontSize: 22, fontWeight: '700', textAlign: 'center' },
   subtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   subtitle: { color: callColors.textDim, fontSize: 14.5 },
 
@@ -700,9 +786,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 18,
     paddingTop: 20,
-    backgroundColor: callColors.scrim,
+  },
+  // The floating control dock: one glass card carrying the in-call
+  // toggles, instead of loose buttons on a full-width scrim band.
+  dock: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    rowGap: 16,
+    backgroundColor: callColors.glass,
+    borderWidth: 1,
+    borderColor: callColors.glassBorder,
+    borderRadius: 44,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    marginHorizontal: 24,
   },
   row: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', rowGap: 16 },
+  answerRow: { flexDirection: 'row', justifyContent: 'center', gap: 72 },
   hangUpRow: { flexDirection: 'row', justifyContent: 'center' },
   error: {
     color: callColors.danger,

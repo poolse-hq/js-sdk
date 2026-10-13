@@ -88,6 +88,12 @@ export interface VoipIncomingCall {
   callerUserId: string;
   callerName: string;
   /**
+   * The conversation's display name, when the server sent one. CallKit
+   * titles the ring and the Recents entry with this — a group call is
+   * a call FROM the group, not from whoever tapped the button.
+   */
+  conversationName?: string | null;
+  /**
    * What the call opened as.
    *
    * Carried by the push because CallKit fixes the answer button when the
@@ -202,6 +208,7 @@ export interface PushPayload {
   conversation_id?: string;
   caller_user_id?: string;
   caller_name?: string;
+  conversation_name?: string | null;
   media?: string;
   has_video?: boolean;
   /** Only on `ended`: why, so CallKit's Recents entry tells the truth. */
@@ -245,6 +252,7 @@ export function readPush(payload: PushPayload): PushIntent {
       conversationId,
       callerUserId: payload.caller_user_id ?? '',
       callerName: payload.caller_name ?? 'Incoming call',
+      conversationName: payload.conversation_name ?? null,
       // `has_video` is what older servers sent; `media` supersedes it.
       // Either saying video means the system UI offers video.
       media: payload.media === 'video' || payload.has_video ? 'video' : 'audio',
@@ -357,7 +365,7 @@ export function useVoipCalls({
         callKeep.displayIncomingCall(
           call.callId,
           call.callerUserId,
-          call.callerName,
+          call.conversationName || call.callerName,
           'generic',
           call.media === 'video',
         );
