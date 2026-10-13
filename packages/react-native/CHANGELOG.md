@@ -4,6 +4,16 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.20.1] — 2026-10-13
+
+### Fixed
+
+- **Long-press on an image-only message never opened the actions
+  sheet.** The mosaic tiles are Pressables (tap opens the viewer) and
+  a nested Pressable wins the gesture, so the row's long-press never
+  fired when the image WAS the whole bubble. The long-press now
+  threads through `MessageBubble onLongPress` into every tile.
+
 ## [2.20.0] — 2026-10-13
 
 ### Changed

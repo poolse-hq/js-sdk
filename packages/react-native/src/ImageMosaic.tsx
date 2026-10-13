@@ -24,6 +24,14 @@ export interface ImageMosaicProps {
    * color between the image and the caption.
    */
   squareBottom?: boolean;
+  /**
+   * Long-press on any tile. The tiles are Pressables (tap opens the
+   * viewer), and a nested Pressable wins the gesture — so without
+   * this, holding an image-only message never reached the row's
+   * actions sheet. MessageRow threads its long-press down through
+   * here.
+   */
+  onLongPress?: () => void;
 }
 
 /**
@@ -38,7 +46,13 @@ export interface ImageMosaicProps {
  *   * n = 3 → 16:9 hero on top + row of 2 squares below.
  *   * n ≥ 4 → 2×2 grid with "+N more" overlay on the 4th tile.
  */
-export function ImageMosaic({ images, maxWidth, radius, squareBottom = false }: ImageMosaicProps) {
+export function ImageMosaic({
+  images,
+  maxWidth,
+  radius,
+  squareBottom = false,
+  onLongPress,
+}: ImageMosaicProps) {
   const theme = usePoolseTheme();
   const r = radius ?? theme.radii.md;
   const rBottom = squareBottom ? 5 : r;
@@ -72,6 +86,7 @@ export function ImageMosaic({ images, maxWidth, radius, squareBottom = false }: 
       >
         {n === 1 ? (
           <Tile
+            onLongPress={onLongPress}
             attachment={visible[0]!}
             style={styles.tileFull}
             onPress={() => setViewerIndex(0)}
@@ -82,12 +97,14 @@ export function ImageMosaic({ images, maxWidth, radius, squareBottom = false }: 
         {n === 2 ? (
           <View style={styles.rowEven}>
             <Tile
+              onLongPress={onLongPress}
               attachment={visible[0]!}
               style={styles.tileHalfSquare}
               onPress={() => setViewerIndex(0)}
               overlay={null}
             />
             <Tile
+              onLongPress={onLongPress}
               attachment={visible[1]!}
               style={styles.tileHalfSquare}
               onPress={() => setViewerIndex(1)}
@@ -99,6 +116,7 @@ export function ImageMosaic({ images, maxWidth, radius, squareBottom = false }: 
         {n === 3 ? (
           <>
             <Tile
+              onLongPress={onLongPress}
               attachment={visible[0]!}
               style={styles.tileHero}
               onPress={() => setViewerIndex(0)}
@@ -106,12 +124,14 @@ export function ImageMosaic({ images, maxWidth, radius, squareBottom = false }: 
             />
             <View style={[styles.rowEven, { marginTop: 2 }]}>
               <Tile
+                onLongPress={onLongPress}
                 attachment={visible[1]!}
                 style={styles.tileHalfSquare}
                 onPress={() => setViewerIndex(1)}
                 overlay={null}
               />
               <Tile
+                onLongPress={onLongPress}
                 attachment={visible[2]!}
                 style={styles.tileHalfSquare}
                 onPress={() => setViewerIndex(2)}
@@ -125,12 +145,14 @@ export function ImageMosaic({ images, maxWidth, radius, squareBottom = false }: 
           <>
             <View style={styles.rowEven}>
               <Tile
+                onLongPress={onLongPress}
                 attachment={visible[0]!}
                 style={styles.tileHalfSquare}
                 onPress={() => setViewerIndex(0)}
                 overlay={null}
               />
               <Tile
+                onLongPress={onLongPress}
                 attachment={visible[1]!}
                 style={styles.tileHalfSquare}
                 onPress={() => setViewerIndex(1)}
@@ -139,12 +161,14 @@ export function ImageMosaic({ images, maxWidth, radius, squareBottom = false }: 
             </View>
             <View style={[styles.rowEven, { marginTop: 2 }]}>
               <Tile
+                onLongPress={onLongPress}
                 attachment={visible[2]!}
                 style={styles.tileHalfSquare}
                 onPress={() => setViewerIndex(2)}
                 overlay={null}
               />
               <Tile
+                onLongPress={onLongPress}
                 attachment={visible[3]!}
                 style={styles.tileHalfSquare}
                 onPress={() => setViewerIndex(3)}
@@ -177,16 +201,18 @@ function Tile({
   style,
   overlay,
   onPress,
+  onLongPress,
 }: {
   attachment: Attachment;
   style: object;
   overlay: string | null;
   onPress: () => void;
+  onLongPress?: (() => void) | undefined;
 }) {
   const theme = usePoolseTheme();
   const { url } = useAttachmentUrl(attachment.id);
   return (
-    <Pressable onPress={onPress} style={[styles.tileBase, style]}>
+    <Pressable onPress={onPress} onLongPress={onLongPress} style={[styles.tileBase, style]}>
       {url ? (
         <Image
           source={{ uri: url }}

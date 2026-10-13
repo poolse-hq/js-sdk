@@ -31,6 +31,12 @@ export interface MessageBubbleProps {
   showSenderName?: boolean;
   /** Slot for an actions trigger — typically a chevron rendered by `<MessageRow>`. */
   actionsTrigger?: ReactNode;
+  /**
+   * Long-press, forwarded into the image tiles. The tiles are
+   * Pressables of their own and win the gesture, so a wrapper's
+   * onLongPress never fires over an image-only message without this.
+   */
+  onLongPress?: () => void;
   /** Render in-bubble attachments (images, file cards). Defaults to true. */
   showAttachments?: boolean;
   /**
@@ -61,6 +67,7 @@ export function MessageBubble({
   actionsTrigger,
   showAttachments = true,
   markdown = true,
+  onLongPress,
 }: MessageBubbleProps) {
   const theme = usePoolseTheme();
   const { width: screenWidth } = useWindowDimensions();
@@ -221,6 +228,7 @@ export function MessageBubble({
               maxWidth={mediaWidth}
               radius={Math.max(bubbleRadius - 3, 8)}
               squareBottom={!metaOverlay}
+              {...(onLongPress ? { onLongPress } : {})}
             />
             {metaOverlay ? metaRow('overlay') : null}
           </View>

@@ -282,6 +282,13 @@ export function MessageRow({
               // duplicated affordances a phone already has — long-press
               // opens the same sheet, swipe quotes. Touch conventions,
               // not desktop ones.
+              //
+              // The long-press is ALSO threaded into the bubble so the
+              // image tiles — Pressables of their own, which win the
+              // gesture — still open the sheet on an image-only message.
+              onLongPress={() => {
+                if (actions) setActionsOpen(true);
+              }}
             />
           </Pressable>
         </Animated.View>
