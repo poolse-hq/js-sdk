@@ -4,6 +4,17 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.21.1] — 2026-10-14
+
+### Fixed
+
+- **The composer sat underneath Android's navigation bar.** The
+  internal safe-inset hook lazy-required react-native-safe-area-context
+  inside a try/catch; in the ESM bundle `require` doesn't exist, so
+  every app silently got hardcoded fallback insets — 34 on iOS (right
+  by coincidence) and 0 on Android. The hook now imports the library
+  statically, which CallScreen already did anyway.
+
 ## [2.21.0] — 2026-10-13
 
 ### Added
