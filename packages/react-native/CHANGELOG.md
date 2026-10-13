@@ -4,6 +4,28 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.21.0] — 2026-10-13
+
+### Added
+
+- `CallScreen conversationLabel` — a named conversation titles the
+  call ("Fix the boiler"), and the people move into the status line.
+  A group call is a call FROM the group.
+- The VoIP push path reads `conversation_name` from the payload and
+  prefers it over `caller_name` for CallKit, so the lock-screen ring
+  and the Recents entry carry the conversation's name once servers
+  send the field. Old payloads behave exactly as before.
+
+### Changed
+
+- **The call scene, rebuilt.** A brand glow rises behind the identity
+  block instead of a flat void; pulse rings breathe while a call
+  rings; the name and status sit centered in the scene (status in a
+  glass pill, with a green dot and tabular duration once connected);
+  the in-call controls gather into one floating glass dock with the
+  hang-up below; incoming calls get labeled, spaced Decline/Accept.
+  No call logic changed.
+
 ## [2.20.1] — 2026-10-13
 
 ### Fixed
