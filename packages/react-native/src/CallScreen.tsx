@@ -87,6 +87,13 @@ export interface CallScreenProps {
   /** Called when the call's video state changes. */
   onVideoChange?: (video: boolean) => void;
   /**
+   * Called when the audio route changes: speaker on/off, or an
+   * external device (headset, Bluetooth) taking over. Hosts use this
+   * to drive the proximity sensor — the screen should only go dark
+   * near an ear when the sound is actually AT the ear.
+   */
+  onSpeakerChange?: (speakerOn: boolean, externalDevice: boolean) => void;
+  /**
    * `react-native-incall-manager`, imported by your app.
    *
    * Only used here for the ring tones — the earpiece purr while an
@@ -188,6 +195,7 @@ export function CallScreen({
   onStatusChange,
   onTransportChange,
   onVideoChange,
+  onSpeakerChange,
   inCallManager,
   nativeIncomingUi,
 }: CallScreenProps) {
@@ -287,6 +295,10 @@ export function CallScreen({
     livekitReactNative,
   });
   const [routesOpen, setRoutesOpen] = useState(false);
+
+  useEffect(() => {
+    onSpeakerChange?.(audio.speakerOn, audio.externalDevice);
+  }, [audio.speakerOn, audio.externalDevice, onSpeakerChange]);
 
   /**
    * The sound of a call in progress.
