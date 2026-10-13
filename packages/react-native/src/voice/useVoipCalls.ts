@@ -190,14 +190,66 @@ export function isStalePush(
   return age > staleAfterMs;
 }
 
-interface PushPayload {
+export interface PushPayload {
+  /**
+   * Which half of a call's life this push is about.
+   *
+   * Absent on servers that predate the field, and absence means a ring —
+   * that was the only kind of call push there was.
+   */
+  event?: 'incoming' | 'ended';
   call_id?: string;
   conversation_id?: string;
   caller_user_id?: string;
   caller_name?: string;
   media?: string;
   has_video?: boolean;
+  /** Only on `ended`: why, so CallKit's Recents entry tells the truth. */
+  reason?: string;
   sent_at?: number;
+}
+
+/** What a VoIP push is asking this device to do. */
+export type PushIntent =
+  | { kind: 'ring'; call: VoipIncomingCall; sentAt: number | undefined }
+  | { kind: 'teardown'; callId: string }
+  | { kind: 'ignore' };
+
+/**
+ * Decide what a VoIP push means, before any of it touches CallKit.
+ *
+ * Pure and exported so the decision can be tested on its own. The
+ * consequences of getting it wrong are not symmetrical: reading a ring
+ * as a teardown loses the call silently, while reading a teardown as a
+ * ring leaves a phone ringing for a call nobody is on.
+ *
+ * A payload with no `event` is a ring, because for a while that was the
+ * only kind of push there was and those servers are still out there.
+ */
+export function readPush(payload: PushPayload): PushIntent {
+  const callId = payload.call_id;
+  if (!callId) return { kind: 'ignore' };
+
+  if (payload.event === 'ended') return { kind: 'teardown', callId };
+
+  // A ring needs somewhere to answer into; a teardown does not, which is
+  // why this check sits below rather than above.
+  const conversationId = payload.conversation_id;
+  if (!conversationId) return { kind: 'ignore' };
+
+  return {
+    kind: 'ring',
+    sentAt: payload.sent_at,
+    call: {
+      callId,
+      conversationId,
+      callerUserId: payload.caller_user_id ?? '',
+      callerName: payload.caller_name ?? 'Incoming call',
+      // `has_video` is what older servers sent; `media` supersedes it.
+      // Either saying video means the system UI offers video.
+      media: payload.media === 'video' || payload.has_video ? 'video' : 'audio',
+    },
+  };
 }
 
 /**
@@ -369,22 +421,41 @@ export function useVoipCalls({
     let cancelled = false;
 
     const fromPush = (payload: PushPayload) => {
-      const callId = payload.call_id;
-      const conversationId = payload.conversation_id;
-      if (!callId || !conversationId) return;
+      const intent = readPush(payload);
 
-      present.current(
-        {
-          callId,
-          conversationId,
-          callerUserId: payload.caller_user_id ?? '',
-          callerName: payload.caller_name ?? 'Incoming call',
-          // `has_video` is what older servers sent; `media` supersedes
-          // it. Either says video, and the system UI offers video.
-          media: payload.media === 'video' || payload.has_video ? 'video' : 'audio',
-        },
-        payload.sent_at,
-      );
+      if (intent.kind === 'ignore') return;
+
+      // The call is over and this device may only just have woken up to
+      // hear it. Tear the ring down rather than starting one.
+      //
+      // The completion handler still has to go back to iOS, and the call
+      // still has to be reported before it can be ended — both happen
+      // natively, in the AppDelegate, because a push that reports
+      // nothing is the one thing iOS punishes. All that is left here is
+      // the app's own state.
+      if (intent.kind === 'teardown') {
+        dismiss.current(intent.callId);
+        handlers.current.calls?.dropped(intent.callId);
+        return;
+      }
+
+      present.current(intent.call, intent.sentAt);
+
+      // Tell the state machine as well as CallKit.
+      //
+      // Reporting the ring to iOS is not enough: every signal that ENDS
+      // a call — the caller hanging up, the call being answered
+      // elsewhere — is matched against the hook's own `incoming`, and a
+      // pushed call never set it. So a caller who gave up left the
+      // callee's phone ringing on, because nothing on this side could
+      // tell that `call:cancelled` was about the call CallKit was
+      // showing.
+      handlers.current.calls?.ring({
+        callId: intent.call.callId,
+        conversationId: intent.call.conversationId,
+        callerUserId: intent.call.callerUserId,
+        media: intent.call.media,
+      });
     };
 
     ready.current = callKeep

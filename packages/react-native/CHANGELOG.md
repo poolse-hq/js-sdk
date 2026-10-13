@@ -4,6 +4,33 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.19.0] — 2026-08-25
+
+### Added
+
+- **The end of a call now travels by push, like its start.** A device
+  woken by a VoIP push is ringing on a lock screen with a socket that
+  may not be connected, so the broadcast that ends a call reaches
+  nothing there. `useVoipCalls` now understands a teardown push
+  (`event: "ended"`) and tears the ring down instead of starting one.
+  Needs a server that sends them, and an AppDelegate that reports the
+  call before ending it — see the sample's `plugins/withVoipPush.js`.
+
+- `readPush()` — exported and pure, so what a push MEANS can be tested
+  apart from what CallKit does about it. A missing `event` reads as a
+  ring, which is what servers predating the field send.
+
+### Fixed
+
+- **A ring that arrived by push is now registered with `useCalls`**, so
+  every signal that ends a call can match it. Previously only CallKit
+  knew about it. See `@poolse/react` 2.19.0.
+
+### Changed
+
+- A finished call — declined, busy, no answer — closes itself after a
+  short pause instead of waiting behind a Close button.
+
 ## [2.18.0] — 2026-08-24
 
 ### Fixed

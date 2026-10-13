@@ -4,6 +4,40 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.19.0] — 2026-08-25
+
+### Fixed
+
+- **A call cancelled by the caller left the callee's phone ringing.**
+  A ring delivered by VoIP push was shown by CallKit without the state
+  machine ever hearing about it, so `call:cancelled` was matched against
+  an `incoming` that had never been set, failed the guard, and did
+  nothing. The phone rang on until its own 45-second timeout. New
+  `ring()` registers a ring that arrived off-socket; `onIncoming` now
+  recognises the same call arriving by both routes instead of answering
+  your own ring with `call:busy`.
+
+- **Declining a call before the socket was ready told nobody.** The
+  hook builds nothing until it has a user id, and host apps get that
+  from `useMe()` — a network round trip. A VoIP push launches the app
+  cold and CallKit lets you answer or refuse from the lock screen well
+  before that returns, so both actions hit `if (!calls) return` and were
+  dropped. They are now queued and sent the moment the resource exists.
+  `accept()` had the identical hole.
+
+### Changed
+
+- **A group ring no longer ends on the first refusal.** Declines and
+  busies accumulate per callee, and the call ends only once nobody is
+  left who might still pick up. All busy reports busy; any outright
+  refusal reports declined. A decline arriving after somebody answered
+  no longer ends the active call.
+
+### Added
+
+- `dropped(callId)` — a call torn down from outside the state machine,
+  which is how the end of a call reaches a device whose socket isn't up.
+
 ## [2.18.0] — 2026-08-24
 
 Republished in lockstep.

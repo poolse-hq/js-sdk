@@ -4,6 +4,12 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.19.0] — 2026-08-25
+
+### Changed
+
+- Version bump to stay in step with the rest of the workspace.
+
 ## [2.18.0] — 2026-08-24
 
 Republished in lockstep.

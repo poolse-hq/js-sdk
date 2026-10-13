@@ -154,6 +154,19 @@ type RingTone = (tone: string) => void;
  * The fallback is automatic and silent by design. A deployment without
  * an SFU is a supported configuration, not a broken one.
  */
+/** How long a finished call stays on screen before closing itself. */
+const ENDED_LINGER_MS = 2500;
+
+/**
+ * Phases that mean the call is finished and the screen is only
+ * reporting the outcome. Shared by the render branch and the
+ * self-dismiss timer so the two can never disagree about what "over"
+ * means.
+ */
+function isOver(phase: string): boolean {
+  return phase === 'declined' || phase === 'busy' || phase === 'timed-out';
+}
+
 export function CallScreen({
   userId,
   labelFor,
@@ -395,6 +408,22 @@ export function CallScreen({
     hangUp();
   }, [alone, calls.phase, hangUp]);
 
+  /**
+   * Close a finished call by itself.
+   *
+   * "Declined", "Busy" and "No answer" are the end of the story, and
+   * leaving them behind a Close button meant every unanswered call
+   * ended with the caller dismissing a dialog nobody reads. Long enough
+   * to read the word, short enough that it never feels stuck — and the
+   * button stays, so a person who looks down mid-countdown still has
+   * something to tap.
+   */
+  useEffect(() => {
+    if (!isOver(calls.phase)) return;
+    const timer = setTimeout(calls.reset, ENDED_LINGER_MS);
+    return () => clearTimeout(timer);
+  }, [calls.phase, calls.reset]);
+
   const micOn = usingSfu ? sfu.micEnabled : !mesh.muted;
   const toggleMic = useCallback(() => {
     if (usingSfu) void sfu.toggleMic();
@@ -417,7 +446,7 @@ export function CallScreen({
 
   const ringingIn = calls.phase === 'ringing-in';
   const ringingOut = calls.phase === 'ringing-out';
-  const ended = calls.phase === 'declined' || calls.phase === 'busy' || calls.phase === 'timed-out';
+  const ended = isOver(calls.phase);
   const visible = calls.phase !== 'idle' && !(nativeIncomingUi && ringingIn);
 
   const duration = useCallDuration(connected);

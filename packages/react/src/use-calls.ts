@@ -56,6 +56,33 @@ export interface UseCalls {
   /** Ring every other member of a conversation. */
   call: (conversationId: string, media?: CallMedia) => Promise<void>;
   /**
+   * Register a ring that arrived by some route other than the socket —
+   * in practice a VoIP push.
+   *
+   * Without this the push path shows a ring the state machine knows
+   * nothing about, and every signal that ends a call is guarded on
+   * state the machine never had: the caller hanging up sent
+   * `call:cancelled`, the guard found no matching `incoming`, and the
+   * callee's phone rang on until its own timeout.
+   *
+   * Idempotent per call id, because the socket almost always delivers
+   * the same call a moment later — that is one ring arriving twice, not
+   * a second caller.
+   */
+  ring: (call: IncomingCall) => void;
+  /**
+   * A call was torn down from outside this state machine.
+   *
+   * The counterpart to {@link ring}: the caller withdrew, or the call
+   * ended, and the news reached this device as a VoIP push rather than
+   * over the socket — which is the normal case for a phone that was
+   * asleep when the ring arrived and whose socket may not be up yet.
+   *
+   * Ignores call ids this client is not in, so a teardown for a
+   * previous call cannot end the current one.
+   */
+  dropped: (callId: string) => void;
+  /**
    * Answer the inbound ring.
    *
    * Pass the call explicitly when it didn't arrive over the socket — a
@@ -165,6 +192,32 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     );
   }, []);
 
+  /**
+   * Who has said no to the outbound call, and how.
+   *
+   * A group ring is not over because one person waved it away. Everyone
+   * still has a phone ringing, and ending the call on the first refusal
+   * hangs up on all of them. So refusals accumulate here and the call
+   * only ends once nobody is left who might still pick up.
+   *
+   * Keyed by user id, so the same person's device sending both a busy
+   * and a decline counts once.
+   */
+  const rejectedRef = useRef<Map<string, 'declined' | 'busy'>>(new Map());
+
+  /**
+   * An accept or decline the user made before the socket resource
+   * existed.
+   *
+   * `useCalls(userId)` builds nothing until it has a user id, and the
+   * host app gets that from `useMe()` — a network round trip. A VoIP
+   * push launches the app cold and CallKit lets the user answer or
+   * refuse immediately, which is comfortably before that request comes
+   * back. Both actions then hit `if (!calls) return` and were dropped on
+   * the floor: the caller was told nothing and rang on.
+   */
+  const pendingRef = useRef<{ kind: 'accept' | 'decline'; call: IncomingCall } | null>(null);
+
   // Held in a ref so the timeout effect can reach the current handlers
   // without re-arming the timer every time one of them is recreated —
   // re-arming would silently extend the ring forever.
@@ -175,10 +228,50 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
 
   const calls = useMemo(() => (userId ? poolse.realtime.calls(userId) : null), [poolse, userId]);
 
+  /**
+   * Apply one callee's refusal to an outbound ring.
+   *
+   * Ends the call only when there is nobody left it could still be
+   * answered by — see {@link rejectedRef}. A server that doesn't report
+   * who was rung leaves `calleeUserIds` empty, and then the first
+   * refusal ends the call, which is the old behaviour and the right
+   * fallback: better to hang up early than to ring forever.
+   */
+  const reject = useCallback((callId: string, userId: string, kind: 'declined' | 'busy') => {
+    // Only a ring can be refused. Once somebody has answered, a decline
+    // from a member who never joined is them dropping out of a call that
+    // is happily going on without them — not the end of it.
+    if (phaseRef.current !== 'ringing-out') return;
+
+    const out = outgoingRef.current;
+    if (!out || out.callId !== callId) return;
+
+    rejectedRef.current.set(userId, kind);
+
+    const outstanding = out.calleeUserIds.filter((id) => !rejectedRef.current.has(id));
+    if (out.calleeUserIds.length > 0 && outstanding.length > 0) return;
+
+    // "Busy" and "declined" are different sentences to show the user, so
+    // a call that everybody was busy for says so; any outright refusal
+    // makes it a decline.
+    const allBusy = [...rejectedRef.current.values()].every((k) => k === 'busy');
+    setPhase(allBusy ? 'busy' : 'declined');
+    setOutgoing(null);
+    setActiveCallId(null);
+    setActiveMedia(null);
+  }, []);
+
   useEffect(() => {
     if (!calls) return;
 
     const offIncoming = calls.onIncoming((call) => {
+      // The same ring arriving by both routes. A VoIP push gets here
+      // first and `ring()` recorded it; the socket then delivers the
+      // identical call. Treating that as a second caller would answer
+      // the user's own call with `call:busy`.
+      if (call.callId === incomingRef.current?.callId) return;
+      if (call.callId === activeCallIdRef.current) return;
+
       // One call at a time. A second ring must not replace the screen
       // mid-decision — but it must not vanish silently either, or the
       // second caller can't tell "busy" from "ignoring me". Answer it
@@ -217,18 +310,12 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
 
     const offDeclined = calls.onDeclined((call) => {
       if (!isCurrent(call.callId)) return;
-      setPhase('declined');
-      setOutgoing(null);
-      setActiveCallId(null);
-      setActiveMedia(null);
+      reject(call.callId, call.userId, 'declined');
     });
 
     const offBusy = calls.onBusy((call) => {
       if (!isCurrent(call.callId)) return;
-      setPhase('busy');
-      setOutgoing(null);
-      setActiveCallId(null);
-      setActiveMedia(null);
+      reject(call.callId, call.userId, 'busy');
     });
 
     // The other side hung up a connected call. Without this the screen
@@ -266,12 +353,34 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
       offEnded();
       offCancelled();
     };
-  }, [calls, isCurrent]);
+  }, [calls, isCurrent, reject]);
+
+  /**
+   * Send whatever the user decided before the socket was ready.
+   *
+   * Runs the moment `calls` exists — see {@link pendingRef}. The local
+   * state was already moved when the action was taken, so this is purely
+   * about telling the other side.
+   */
+  useEffect(() => {
+    if (!calls) return;
+    const queued = pendingRef.current;
+    if (!queued) return;
+    pendingRef.current = null;
+
+    const sent = queued.kind === 'accept' ? calls.accept(queued.call) : calls.decline(queued.call);
+    void sent.catch((err: unknown) => {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    });
+  }, [calls]);
 
   const call = useCallback(
     async (conversationId: string, media: CallMedia = 'audio') => {
       if (!calls) return;
       setError(null);
+      // A fresh ring, so nobody has refused it yet. Left over from the
+      // previous call, one stale entry could end this one early.
+      rejectedRef.current = new Map();
       try {
         const placed = await calls.invite(conversationId, media);
         setOutgoing(placed);
@@ -286,10 +395,63 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     [calls],
   );
 
+  /**
+   * Record a ring that reached us outside the socket. See {@link
+   * UseCalls.ring}.
+   */
+  const ring = useCallback((call: IncomingCall) => {
+    // Already showing it, or already in it. Both mean this is the same
+    // call arriving twice rather than anything new.
+    if (incomingRef.current?.callId === call.callId) return;
+    if (activeCallIdRef.current === call.callId) return;
+    // Deliberately silent when busy: the socket's `onIncoming` is what
+    // sends `call:busy`, and doing it here too would send it twice.
+    if (phaseRef.current !== 'idle') return;
+
+    setIncoming(call);
+    setPhase('ringing-in');
+  }, []);
+
+  /** See {@link UseCalls.dropped}. */
+  const dropped = useCallback(
+    (callId: string) => {
+      // Whatever was waiting to be sent about THIS call is moot — there
+      // is no longer a call to accept or refuse. Checked before the
+      // guard below, because taking the action already cleared the
+      // state that guard reads: a decline made before the socket was up
+      // leaves nothing behind but the queued signal itself.
+      if (pendingRef.current?.call.callId === callId) pendingRef.current = null;
+
+      if (!isCurrent(callId)) return;
+      rejectedRef.current = new Map();
+      setPhase('idle');
+      setIncoming(null);
+      setOutgoing(null);
+      setActiveConversationId(null);
+      setActiveCallId(null);
+      setActiveMedia(null);
+    },
+    [isCurrent],
+  );
+
   const accept = useCallback(
     async (call?: IncomingCall) => {
       const target = call ?? incoming;
-      if (!calls || !target) return;
+      if (!target) return;
+
+      // Answered before the socket resource exists — hold it and send it
+      // the moment there is somewhere to send it to. Local state still
+      // moves, so the UI follows the user rather than the network.
+      if (!calls) {
+        pendingRef.current = { kind: 'accept', call: target };
+        setActiveConversationId(target.conversationId);
+        setActiveCallId(target.callId);
+        setActiveMedia(target.media);
+        setPhase('active');
+        setIncoming(null);
+        return;
+      }
+
       try {
         await calls.accept(target);
         setActiveConversationId(target.conversationId);
@@ -310,7 +472,19 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
   const decline = useCallback(
     async (call?: IncomingCall) => {
       const target = call ?? incoming;
-      if (!calls || !target) return;
+      if (!target) return;
+
+      // Same as `accept`: refusing a call before the socket is up must
+      // still reach the caller, or their phone rings until it times out.
+      if (!calls) {
+        pendingRef.current = { kind: 'decline', call: target };
+        setIncoming(null);
+        setActiveCallId(null);
+        setActiveMedia(null);
+        setPhase('idle');
+        return;
+      }
+
       try {
         await calls.decline(target);
       } catch (err) {
@@ -401,6 +575,8 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
   }, [calls, phase, incoming, outgoing, activeConversationId, activeCallId]);
 
   const reset = useCallback(() => {
+    rejectedRef.current = new Map();
+    pendingRef.current = null;
     setPhase('idle');
     setIncoming(null);
     setOutgoing(null);
@@ -426,6 +602,8 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     media,
     error,
     call,
+    ring,
+    dropped,
     accept,
     decline,
     cancel,

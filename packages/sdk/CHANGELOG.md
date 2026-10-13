@@ -4,6 +4,13 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.19.0] — 2026-08-25
+
+### Changed
+
+- Version bump to stay in step with `@poolse/react` and
+  `@poolse/react-native`, which carry this release's call fixes.
+
 ## [2.18.0] — 2026-08-24
 
 Republished in lockstep.
