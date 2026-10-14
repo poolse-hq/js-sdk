@@ -86,7 +86,15 @@ export function CallVideoGrid({
 
   const columns = others.length + 1 <= 6 ? 2 : 3;
   const rows = Math.ceil((others.length + 1) / columns);
-  const tileHeight = size.height > 0 ? (size.height - GAP * (rows - 1)) / rows : 0;
+  // The filling grid must never put a row under the system bars: on
+  // edge-to-edge Android the stage spans the whole window, and an
+  // unpadded bottom row sat underneath the navigation buttons. The
+  // floating call chrome may still overlap tiles — it hides on tap —
+  // but the OS's own UI never moves.
+  const padTop = safeArea?.top ?? 0;
+  const padBottom = safeArea?.bottom ?? 0;
+  const availableHeight = size.height > 0 ? size.height - padTop - padBottom : 0;
+  const tileHeight = availableHeight > 0 ? (availableHeight - GAP * (rows - 1)) / rows : 0;
   const scrolls = tileHeight > 0 && tileHeight < MIN_TILE_HEIGHT;
 
   if (participants.length === 0) return <View style={styles.stage} onLayout={onLayout} />;
@@ -154,7 +162,10 @@ export function CallVideoGrid({
   );
 
   return (
-    <View style={styles.stage} onLayout={onLayout}>
+    <View
+      style={[styles.stage, { paddingTop: padTop, paddingBottom: padBottom }]}
+      onLayout={onLayout}
+    >
       {scrolls ? (
         <ScrollView
           // Padding rather than `contentInset`, which is iOS-only. The

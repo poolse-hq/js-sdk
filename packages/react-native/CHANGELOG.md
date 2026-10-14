@@ -4,6 +4,16 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.23.1] — 2026-10-14
+
+### Fixed
+
+- **The 2x2 video grid's bottom row sat under Android's navigation
+  bar.** The filling grid spanned the whole edge-to-edge window; it
+  now pads by the safe area, so tiles never sit under system UI. The
+  auto-hiding call chrome may still float over a tile — tap to clear
+  it — but the OS bars never cover a face.
+
 ## [2.23.0] — 2026-10-14
 
 ### Fixed
