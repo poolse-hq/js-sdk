@@ -51,9 +51,9 @@ export interface MessageBubbleProps {
 /**
  * One message bubble, structured as stacked sections rather than one
  * padded box: media bleeds to a 3px frame, text carries its own
- * padding, and the timestamp lives ON the last text line (reserved by
- * an invisible twin) instead of a full-width row of its own — which
- * is what makes "ok" a one-line bubble instead of a squat rectangle.
+ * padding, and the timestamp shares the last text line when measured
+ * room allows — which is what makes "ok" a one-line bubble instead of
+ * a squat rectangle.
  */
 export function MessageBubble({
   message,
@@ -73,6 +73,15 @@ export function MessageBubble({
   const { width: screenWidth } = useWindowDimensions();
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
   const [expanded, setExpanded] = useState(false);
+  // Measured, not reserved: the old trick put an invisible twin of the
+  // meta inline after the text — but `color: transparent` on a nested
+  // Text does not reliably apply on Android, so the "invisible" twin
+  // rendered visibly at the end of every message. Now the text's last
+  // line and the meta are measured, and the meta either shares the
+  // last line (when it provably fits) or takes its own row.
+  const [lastLineWidth, setLastLineWidth] = useState<number | null>(null);
+  const [textBoxWidth, setTextBoxWidth] = useState<number | null>(null);
+  const [metaWidth, setMetaWidth] = useState<number | null>(null);
 
   // Pixel cap pinned to screen width so single-line and multi-line
   // bubbles hit the same edge regardless of row padding.
@@ -133,20 +142,24 @@ export function MessageBubble({
   const jumboCount =
     hasBody && !hasMedia && !hasFiles && !message.quoted_message_id ? emojiOnlyCount(body) : 0;
 
-  // Timestamp shares the last text line via the ghost-reservation
-  // trick — but only on the plain-text path; markdown blocks and the
-  // Read-more toggle own their last line, so those keep the meta row.
+  // Timestamp may share the last text line — but only on the
+  // plain-text path; markdown blocks and the Read-more toggle own
+  // their last line, so those keep the meta row.
   const inlineMeta =
     hasBody && jumboCount === 0 && !trimmable && (!markdown || !hasMarkdown(truncated));
 
   const sectionAbove = hasMedia || hasFiles || !!message.quoted_message || isDeleted;
 
-  // What the invisible twin reserves: approximately the meta's
-  // rendered footprint at fontSize 11 — "edited", the time, and two
-  // tick-glyph widths when a receipt will show.
-  const ghost = `   ${isEdited ? 'edited ' : ''}${time}${isSelf && readState ? ' ✓✓' : ''}`;
+  // The meta shares the last text line only when measurement proves
+  // there is room for it; until the three measurements land, it takes
+  // its own row, which is always safe.
+  const metaFits =
+    lastLineWidth !== null &&
+    textBoxWidth !== null &&
+    metaWidth !== null &&
+    lastLineWidth + metaWidth + 14 <= textBoxWidth;
 
-  const metaRow = (variant: 'inline' | 'block' | 'overlay' | 'jumbo') => {
+  const metaRow = (variant: 'inline' | 'wrapped' | 'block' | 'overlay' | 'jumbo') => {
     const color =
       variant === 'overlay' ? '#FFFFFF' : variant === 'jumbo' ? theme.colors.ink3 : mutedOnBubble;
     return (
@@ -154,6 +167,7 @@ export function MessageBubble({
         style={[
           styles.metaRow,
           variant === 'inline' && styles.metaInline,
+          variant === 'wrapped' && styles.metaWrapped,
           variant === 'overlay' && styles.metaOverlay,
           variant === 'block' && styles.metaBlock,
           // File-only bubble: the meta row follows the cards directly —
@@ -161,6 +175,11 @@ export function MessageBubble({
           variant === 'block' && hasFiles && !hasBody && styles.metaBlockAfterFiles,
           variant === 'jumbo' && styles.metaJumbo,
         ]}
+        onLayout={
+          variant === 'inline' || variant === 'wrapped'
+            ? (e) => setMetaWidth(e.nativeEvent.layout.width)
+            : undefined
+        }
         pointerEvents="none"
       >
         {isEdited ? (
@@ -275,7 +294,12 @@ export function MessageBubble({
         ) : null}
 
         {hasBody && jumboCount === 0 ? (
-          <View style={[styles.textBlock, sectionAbove && styles.textBlockAfter]}>
+          <View
+            style={[styles.textBlock, sectionAbove && styles.textBlockAfter]}
+            onLayout={
+              inlineMeta ? (e) => setTextBoxWidth(e.nativeEvent.layout.width - 24) : undefined
+            }
+          >
             {markdown && !inlineMeta ? (
               renderMarkdown(truncated, {
                 textColor,
@@ -296,16 +320,17 @@ export function MessageBubble({
                   fontSize: theme.type.bodySize,
                   lineHeight: theme.type.lineHeight,
                 }}
+                onTextLayout={
+                  inlineMeta
+                    ? (e) => {
+                        const lines = e.nativeEvent.lines;
+                        const last = lines[lines.length - 1];
+                        setLastLineWidth(last ? Math.ceil(last.width) : 0);
+                      }
+                    : undefined
+                }
               >
                 {truncated}
-                {inlineMeta ? (
-                  // The invisible twin: reserves the meta's footprint
-                  // at the end of the last line so the absolutely-
-                  // positioned real meta never covers a glyph — and
-                  // when the line is full, the reservation wraps and
-                  // the meta drops down, flush right.
-                  <Text style={styles.ghost}>{ghost}</Text>
-                ) : null}
               </Text>
             )}
 
@@ -322,7 +347,7 @@ export function MessageBubble({
               </Pressable>
             ) : null}
 
-            {inlineMeta ? metaRow('inline') : null}
+            {inlineMeta ? metaRow(metaFits ? 'inline' : 'wrapped') : null}
           </View>
         ) : null}
 
@@ -455,9 +480,11 @@ const styles = StyleSheet.create({
   jumboBlock: {
     paddingVertical: 2,
   },
-  ghost: {
-    color: 'transparent',
-    fontSize: 11,
+  // The meta on its own line inside the text block, flush right —
+  // the fallback whenever the last text line has no room for it.
+  metaWrapped: {
+    alignSelf: 'flex-end',
+    marginTop: 3,
   },
   readMore: {
     fontSize: 12,

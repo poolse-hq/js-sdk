@@ -4,6 +4,19 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.22.1] — 2026-10-14
+
+### Fixed
+
+- **Bubble text rendered doubled on Android.** The inline timestamp
+  reserved its spot with an invisible twin of itself — but
+  `color: transparent` on a nested Text does not reliably apply on
+  Android, so the twin rendered visibly at the end of every plain
+  message, with the real meta overlaid. The reservation trick is gone:
+  the last text line and the meta are measured (`onTextLayout`), and
+  the meta shares the line only when it provably fits, else takes its
+  own flush-right row.
+
 ## [2.22.0] — 2026-10-14
 
 ### Added
