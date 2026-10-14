@@ -4,6 +4,17 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.23.0] — 2026-10-14
+
+### Fixed
+
+- **Answering is optimistic.** `accept()` moves local state before the
+  server's ack, so a slow socket no longer strands the user on the
+  ring screen behind a red "call:accept timed out" while the call was
+  in fact connecting. A lost ack is swallowed — the call proves itself
+  through media — while an explicit server rejection still stands the
+  call down with the error.
+
 ## [2.20.0] — 2026-10-13
 
 ### Changed

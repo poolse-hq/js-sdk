@@ -4,6 +4,20 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.23.0] — 2026-10-14
+
+### Fixed
+
+- **Leaving a group call no longer ends it for everyone.** With two or
+  more others still connected, hanging up just walks out — the room's
+  presence tells them — and the end-the-call signal is only sent when
+  at most one other person remains. WhatsApp semantics.
+- **The video grid clears the control dock.** The grid's bottom
+  clearance matched the old chrome; a group call's last row of tiles
+  hid behind the new dock and hang-up button.
+- Errors only show while the call is NOT working — a stale "timed out"
+  banner no longer sits over a healthy connected call.
+
 ## [2.22.1] — 2026-10-14
 
 ### Fixed

@@ -408,10 +408,19 @@ export function CallScreen({
   // `reset()` alone only cleared local state, leaving the peer in a call
   // with a screen it had no reason to close.
   const hangUp = useCallback(() => {
+    // Leaving a GROUP call is not ending it. With two or more others
+    // still connected, just walk out — they learn it from room
+    // presence, exactly like WhatsApp. The hang-up signal (which ends
+    // the call for everyone still ringing or alone) is only sent when
+    // at most one other person is on the call.
+    const othersOnCall = (usingSfu ? sfu.participants : mesh.participants).filter(
+      (p) => !p.isSelf,
+    ).length;
     sfu.leave();
     mesh.leave();
-    void calls.hangUp();
-  }, [sfu, mesh, calls]);
+    if (calls.phase === 'active' && othersOnCall >= 2) calls.reset();
+    else void calls.hangUp();
+  }, [sfu, mesh, calls, usingSfu]);
 
   // Everyone else vanished without hanging up — their app was killed or
   // their phone lost signal, so no `call:hangup` will ever arrive. End
@@ -510,13 +519,19 @@ export function CallScreen({
   // says far more.
   const showStage = connected && usingSfu && participants.length > 0;
 
-  const error = calls.error ?? (usingSfu ? sfu.error : mesh.error);
+  // Errors are for calls that are NOT working. Once media is flowing,
+  // a stale "timed out" banner over a healthy call is just noise.
+  const rawError = calls.error ?? (usingSfu ? sfu.error : mesh.error);
+  const error = connected ? null : rawError;
   // Only the scrolling group grid uses this — it keeps the last row
   // clear of the control bar. The floating preview is bounded by the
   // safe area instead, so it can sit in a real corner.
+  // Matches the real height of the new chrome: the glass dock
+  // (~106) + gap (18) + hang-up (68) + its padding — so the last row
+  // of a group grid never hides behind the controls.
   const chromeInsets = {
     top: insets.top + 72,
-    bottom: insets.bottom + 150,
+    bottom: insets.bottom + 236,
   };
 
   return (

@@ -452,17 +452,34 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
         return;
       }
 
+      // Local state moves FIRST — the UI follows the user's answer, not
+      // the network. Waiting for the server's reply before showing the
+      // call meant a slow ack stranded the user on the ring screen with
+      // a red "timed out" while the call was in fact connecting.
+      setActiveConversationId(target.conversationId);
+      // Recorded BEFORE `incoming` is cleared — it is the only thing
+      // that will still know which call this is once the ring state
+      // is gone, and it is what `hangUp` needs to tell the other side.
+      setActiveCallId(target.callId);
+      setActiveMedia(target.media);
+      setPhase('active');
+      setIncoming(null);
+
       try {
         await calls.accept(target);
-        setActiveConversationId(target.conversationId);
-        // Recorded BEFORE `incoming` is cleared — it is the only thing
-        // that will still know which call this is once the ring state
-        // is gone, and it is what `hangUp` needs to tell the other side.
-        setActiveCallId(target.callId);
-        setActiveMedia(target.media);
-        setPhase('active');
-        setIncoming(null);
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        // A TIMEOUT is not a verdict: the server usually processed the
+        // accept and only the ack was lost. The call proves itself —
+        // media connects, or the alone-watch ends it. Showing an error
+        // over a working call taught people to ignore errors.
+        if (message.includes('timed out')) return;
+        // An explicit rejection IS a verdict — the call is gone
+        // (withdrawn, rung out, hung up). Stand down.
+        setPhase('idle');
+        setActiveConversationId(null);
+        setActiveCallId(null);
+        setActiveMedia(null);
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     },
