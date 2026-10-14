@@ -2,7 +2,7 @@ import { useCallRoom, useCalls, useVoiceRoom, type UseCalls } from '@poolse/reac
 import type { CallParticipant, LiveKitModule, VoiceStatus } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { AudioRouteSheet } from './voice/AudioRouteSheet.js';
@@ -199,7 +199,13 @@ export function CallScreen({
   inCallManager,
   nativeIncomingUi,
 }: CallScreenProps) {
-  const insets = useSafeAreaInsets();
+  // Insets must be measured INSIDE the Modal: a Modal is its own
+  // Android window, and insets inherited from the root provider can
+  // be stale or zero there — which is exactly how the call UI ended
+  // up underneath the navigation bar while every normal screen
+  // respected it. An InsetsProbe under a fresh SafeAreaProvider
+  // inside the Modal reports the truth for THIS window.
+  const [insets, setInsets] = useState({ top: 0, bottom: 0, left: 0, right: 0 });
   const ownCalls = useCalls(callsProp ? null : userId);
   const calls = callsProp ?? ownCalls;
 
@@ -408,19 +414,22 @@ export function CallScreen({
   // `reset()` alone only cleared local state, leaving the peer in a call
   // with a screen it had no reason to close.
   const hangUp = useCallback(() => {
-    // Leaving a GROUP call is not ending it. With two or more others
-    // still connected, just walk out — they learn it from room
-    // presence, exactly like WhatsApp. The hang-up signal (which ends
-    // the call for everyone still ringing or alone) is only sent when
-    // at most one other person is on the call.
-    const othersOnCall = (usingSfu ? sfu.participants : mesh.participants).filter(
-      (p) => !p.isSelf,
-    ).length;
     sfu.leave();
     mesh.leave();
-    if (calls.phase === 'active' && othersOnCall >= 2) calls.reset();
-    else void calls.hangUp();
-  }, [sfu, mesh, calls, usingSfu]);
+    // Group semantics live in the hook's hangUp — the one chokepoint
+    // every end-path shares (this button, CallKit's end event, the OS
+    // back gesture) — fed by the participant report below.
+    void calls.hangUp();
+  }, [sfu, mesh, calls]);
+
+  // Keep the hook's picture of the call current, so ANY hang-up path
+  // knows whether leaving should end the call or just exit it.
+  const othersNow = (usingSfu ? sfu.participants : mesh.participants).filter(
+    (p) => !p.isSelf,
+  ).length;
+  useEffect(() => {
+    calls.reportOthersOnCall?.(othersNow);
+  }, [calls, othersNow]);
 
   // Everyone else vanished without hanging up — their app was killed or
   // their phone lost signal, so no `call:hangup` will ever arrive. End
@@ -543,6 +552,8 @@ export function CallScreen({
       onRequestClose={hangUp}
     >
       <StatusBar barStyle="light-content" />
+      <SafeAreaProvider>
+      <InsetsProbe onChange={setInsets} />
       <Pressable style={styles.screen} onPress={toggleChrome} accessible={false}>
         <CallBackdrop />
         {showStage ? (
@@ -696,8 +707,27 @@ export function CallScreen({
           onClose={() => setRoutesOpen(false)}
         />
       </Pressable>
+      </SafeAreaProvider>
     </Modal>
   );
+}
+
+/**
+ * Reads the safe-area insets of the window it is mounted in and
+ * reports them upward. Mounted under the Modal's own SafeAreaProvider,
+ * so the values describe the MODAL's window — the root provider's
+ * insets are not trustworthy inside a Modal on Android.
+ */
+function InsetsProbe({
+  onChange,
+}: {
+  onChange: (insets: { top: number; bottom: number; left: number; right: number }) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  useEffect(() => {
+    onChange({ top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right });
+  }, [insets.top, insets.bottom, insets.left, insets.right, onChange]);
+  return null;
 }
 
 function speakerIcon(audio: { speakerOn: boolean; externalDevice: boolean }) {

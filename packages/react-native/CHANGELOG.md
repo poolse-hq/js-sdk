@@ -4,6 +4,20 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.24.0] — 2026-10-14
+
+### Fixed
+
+- **The call UI finally respects Android's navigation bar.** A Modal
+  is its own Android window, and safe-area insets inherited from the
+  root provider are stale or zero inside it — so the dock, grid and
+  controls all sat under the system bar while every non-modal screen
+  behaved. CallScreen now mounts its own SafeAreaProvider inside the
+  Modal and measures insets there.
+- CallScreen feeds `reportOthersOnCall` so EVERY hang-up path — not
+  just its own button — knows a group call must survive a leaver (see
+  @poolse/react 2.24.0).
+
 ## [2.23.1] — 2026-10-14
 
 ### Fixed

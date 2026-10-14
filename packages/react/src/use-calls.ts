@@ -109,6 +109,16 @@ export interface UseCalls {
    *  `declined` / `busy` / `timed-out` state the UI has finished
    *  showing. */
   reset: () => void;
+  /**
+   * Tell the hook how many OTHER people are currently on the call's
+   * media. `hangUp` consults it: with two or more others connected,
+   * hanging up just leaves — the call continues without you — and the
+   * end-the-call signal is only sent when at most one other remains.
+   * Every hang-up path funnels through the hook (the in-call button,
+   * CallKit's end event, the OS back gesture), so this is the ONE
+   * place group calls are protected from being ended by a leaver.
+   */
+  reportOthersOnCall: (count: number) => void;
 }
 
 /**
@@ -560,7 +570,25 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
    * Local state is cleared in `finally` on purpose: a failed signal must
    * never strand the user on a call screen they cannot dismiss.
    */
+  const othersOnCallRef = useRef(0);
+  const reportOthersOnCall = useCallback((count: number) => {
+    othersOnCallRef.current = count;
+  }, []);
+
   const hangUp = useCallback(async () => {
+    // Leaving a GROUP call is not ending it: walk out quietly and the
+    // others keep talking. The signal that tears the call down for
+    // everyone is reserved for the last pair.
+    if (phaseRef.current === 'active' && othersOnCallRef.current >= 2) {
+      setPhase('idle');
+      setIncoming(null);
+      setOutgoing(null);
+      setActiveConversationId(null);
+      setActiveCallId(null);
+      setActiveMedia(null);
+      setError(null);
+      return;
+    }
     const conversationId =
       activeConversationId ?? incoming?.conversationId ?? outgoing?.conversationId;
     // `activeCallId` first, and that is the whole fix: answering a call
@@ -625,6 +653,7 @@ export function useCalls(userId: string | null, opts: UseCallsOptions = {}): Use
     decline,
     cancel,
     hangUp,
+    reportOthersOnCall,
     reset,
   };
 }

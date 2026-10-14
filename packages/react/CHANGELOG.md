@@ -4,6 +4,23 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.24.0] — 2026-10-14
+
+### Fixed
+
+- **Group calls survive any hang-up path.** `hangUp` is the one
+  chokepoint every end-path shares — the in-call button, CallKit's
+  end event, the OS back gesture — and it now consults
+  `reportOthersOnCall`: with two or more others on the call, hanging
+  up leaves quietly; the end-the-call signal is reserved for the last
+  pair. The earlier guard lived only in CallScreen's button, so
+  CallKit's end event still tore down group calls for everyone.
+
+### Added
+
+- `reportOthersOnCall(count)` — hosts (CallScreen does it
+  automatically) keep the hook's picture of the call current.
+
 ## [2.23.0] — 2026-10-14
 
 ### Fixed
