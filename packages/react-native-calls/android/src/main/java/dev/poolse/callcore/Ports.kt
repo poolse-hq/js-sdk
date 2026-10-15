@@ -81,7 +81,7 @@ interface CallSessionPort {
 }
 
 /** Snapshots out — the bridge turns these into JS events. */
-interface SnapshotSink {
+fun interface SnapshotSink {
   fun emit(state: MachineState)
 }
 

@@ -9,6 +9,24 @@ plugins {
 
 repositories { mavenCentral() }
 
+// Single source of truth for the core lives inside the shippable
+// npm package; this project is its pure-JVM conformance harness. Only
+// the dependency-free `dev.poolse.callcore` package is compiled here —
+// the `…callcore.android` adapters need the Android SDK and are
+// compiled by the app build instead.
+sourceSets {
+  main {
+    kotlin {
+      setSrcDirs(listOf("../react-native-calls/android/src/main/java"))
+      // Only the dependency-free core package — the sibling `.android`
+      // package needs the Android SDK and is built by the library.
+      include("dev/poolse/callcore/CallMachine.kt")
+      include("dev/poolse/callcore/CallCoreRuntime.kt")
+      include("dev/poolse/callcore/Ports.kt")
+    }
+  }
+}
+
 dependencies {
   testImplementation(kotlin("test"))
   testImplementation("com.google.code.gson:gson:2.11.0")
