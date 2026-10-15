@@ -84,3 +84,11 @@ interface CallSessionPort {
 interface SnapshotSink {
   fun emit(state: MachineState)
 }
+
+/** Time, injectable: real adapters use a Handler/looper; tests a fake. */
+interface TimerPort {
+  fun nowMs(): Long
+  /** Scheduling an existing key replaces it. */
+  fun schedule(key: String, delayMs: Long, fire: () -> Unit)
+  fun cancel(key: String)
+}
