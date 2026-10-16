@@ -36,6 +36,14 @@ android {
   }
 }
 
+// The Expo bridge (expo/modules/poolsecalls) needs expo-modules-core,
+// which only the app's Expo autolinking wires in. This standalone build
+// exists to verify the core and the Android adapters, so it excludes
+// the bridge from compilation; the app build compiles it.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+  exclude("**/expo/modules/poolsecalls/**")
+}
+
 repositories {
   google()
   mavenCentral()
