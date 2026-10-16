@@ -106,27 +106,97 @@ class CallCore private constructor(context: Context) {
 
   companion object {
     const val EXTRA_LAUNCH_CALL = "poolse_launch_call"
+    private const val PREFS = "dev.poolse.callcore"
 
     @Volatile private var instance: CallCore? = null
     @Volatile private var config: CallCoreConfig? = null
 
     /**
-     * Host apps call this once (the bridge does it on configure, or an
-     * app can do it in Application.onCreate) before any ring can arrive.
+     * Configure the core and PERSIST the inputs. A ring can wake a killed
+     * app: the OS spawns the process cold to run [CallMessagingService],
+     * with no React context and no chance for the JS bridge to call this.
+     * Persisting lets [restoreConfig] rebuild the same config from disk on
+     * that cold start, so closed-app ringing works. The bridge calls this
+     * each time the app opens; the resource names (not the resolved ids)
+     * are stored, since ids are not stable across installs.
      */
-    fun configure(config: CallCoreConfig) {
-      this.config = config
+    fun configure(context: Context, apiBaseUrl: String, smallIconName: String?, ringbackName: String?) {
+      val ctx = context.applicationContext
+      ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        .putString("apiBaseUrl", apiBaseUrl)
+        .putString("smallIcon", smallIconName)
+        .putString("ringback", ringbackName)
+        .apply()
+      config = build(ctx, apiBaseUrl, smallIconName, ringbackName)
     }
 
     fun get(context: Context): CallCore =
       instance ?: synchronized(this) {
-        instance ?: CallCore(context).also { instance = it }
+        instance ?: run {
+          if (config == null) restoreConfig(context.applicationContext)
+          CallCore(context).also { instance = it }
+        }
       }
 
     internal fun peekConfig(): CallCoreConfig? = config
 
     internal fun requireConfig(): CallCoreConfig =
       config ?: error("CallCore.configure() must be called before use")
+
+    // Rebuild config from the persisted inputs on a cold start. Leaves
+    // config null if the app was never configured — impossible in
+    // practice, since registering for pushes requires opening the app.
+    private fun restoreConfig(context: Context) {
+      val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      val url = p.getString("apiBaseUrl", null) ?: return
+      config = build(context, url, p.getString("smallIcon", null), p.getString("ringback", null))
+    }
+
+    private fun build(
+      context: Context,
+      apiBaseUrl: String,
+      smallIconName: String?,
+      ringbackName: String?,
+    ): CallCoreConfig {
+      val iconId = smallIconName
+        ?.let { context.resources.getIdentifier(it, "drawable", context.packageName) } ?: 0
+      val ringbackId = ringbackName
+        ?.let { context.resources.getIdentifier(it, "raw", context.packageName) } ?: 0
+      return CallCoreConfig(
+        apiBaseUrl = apiBaseUrl.trimEnd('/'),
+        // Fall back to the app's launcher icon rather than crash on a typo.
+        smallIcon = if (iconId != 0) iconId else context.applicationInfo.icon,
+        ringbackRawRes = ringbackId,
+        mediaFactory = resolveMediaFactory(),
+      )
+    }
+
+    /**
+     * The shipped LiveKit adapter is loaded reflectively so the core
+     * library carries no static dependency on the SFU source set. Absent
+     * (LiveKit not built in), calls still ring and signal; there is just
+     * no media — a supported degraded mode, not a crash.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun resolveMediaFactory(): (Context, MediaEvents) -> MediaPort =
+      runCatching {
+        val companion = Class.forName("dev.poolse.callcore.livekit.LiveKitMediaPort\$Companion")
+        val livekit = Class.forName("dev.poolse.callcore.livekit.LiveKitMediaPort")
+          .getField("Companion").get(null)
+        companion.getMethod("getFactory").invoke(livekit) as (Context, MediaEvents) -> MediaPort
+      }.getOrElse {
+        { _, _ -> NoMediaPort }
+      }
+
+    /** Signalling-only fallback: the call rings and the state machine
+     *  runs, there is simply no audio/video transport. */
+    private object NoMediaPort : MediaPort {
+      override fun join(bundle: dev.poolse.callcore.CallSessionBundle) {}
+      override fun leave() {}
+      override fun setMuted(muted: Boolean) {}
+      override fun setCamera(on: Boolean) {}
+      override fun switchCamera() {}
+    }
   }
 }
 

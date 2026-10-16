@@ -35,7 +35,14 @@ class PoolseCallsModule : Module() {
     }
 
     AsyncFunction("configure") { apiBaseUrl: String, options: Map<String, Any?>? ->
-      CallCore.configure(buildConfig(apiBaseUrl, options))
+      // Resource NAMES go to the core, which resolves + persists them —
+      // so a killed app woken by a ring can rebuild this without JS.
+      CallCore.configure(
+        context,
+        apiBaseUrl,
+        options?.get("smallIcon") as? String,
+        options?.get("ringback") as? String,
+      )
     }
 
     Function("getCallState") {
@@ -57,53 +64,4 @@ class PoolseCallsModule : Module() {
   }
 
   private val context get() = requireNotNull(appContext.reactContext) { "no react context" }
-
-  private fun buildConfig(apiBaseUrl: String, options: Map<String, Any?>?) =
-    dev.poolse.callcore.android.CallCoreConfig(
-      apiBaseUrl = apiBaseUrl.trimEnd('/'),
-      smallIcon = resolveDrawable(options?.get("smallIcon") as? String),
-      ringbackRawRes = resolveRaw(options?.get("ringback") as? String),
-      mediaFactory = resolveMediaFactory(),
-    )
-
-  private fun resolveDrawable(name: String?): Int {
-    val ctx = context
-    val id = name?.let { ctx.resources.getIdentifier(it, "drawable", ctx.packageName) } ?: 0
-    // Fall back to the app's launcher icon rather than crash on a typo.
-    return if (id != 0) id else ctx.applicationInfo.icon
-  }
-
-  private fun resolveRaw(name: String?): Int {
-    val ctx = context
-    return name?.let { ctx.resources.getIdentifier(it, "raw", ctx.packageName) } ?: 0
-  }
-
-  /**
-   * The shipped LiveKit adapter is loaded reflectively so the core
-   * library does not statically depend on the SFU source set. Absent
-   * (LiveKit not built in), calls still ring and signal; there is just
-   * no media — a supported degraded mode, not a crash.
-   */
-  @Suppress("UNCHECKED_CAST")
-  private fun resolveMediaFactory(): (android.content.Context, dev.poolse.callcore.android.MediaEvents) -> dev.poolse.callcore.MediaPort {
-    return runCatching {
-      val companion = Class.forName("dev.poolse.callcore.livekit.LiveKitMediaPort\$Companion")
-      val instance = Class.forName("dev.poolse.callcore.livekit.LiveKitMediaPort")
-        .getField("Companion").get(null)
-      val getter = companion.getMethod("getFactory")
-      getter.invoke(instance) as (android.content.Context, dev.poolse.callcore.android.MediaEvents) -> dev.poolse.callcore.MediaPort
-    }.getOrElse {
-      { _, _ -> NoMediaPort }
-    }
-  }
-
-  /** Signalling-only fallback: the call rings and the state machine
-   *  runs, there is simply no audio/video transport. */
-  private object NoMediaPort : dev.poolse.callcore.MediaPort {
-    override fun join(bundle: dev.poolse.callcore.CallSessionBundle) {}
-    override fun leave() {}
-    override fun setMuted(muted: Boolean) {}
-    override fun setCamera(on: Boolean) {}
-    override fun switchCamera() {}
-  }
 }
