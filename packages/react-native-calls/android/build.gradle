@@ -1,0 +1,51 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+group = 'dev.poolse.callcore'
+version = '0.1.0'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+
+def safeExtGet(prop, fallback) {
+  rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}
+
+// The shipped LiveKit MediaPort lives in its own source set, off the
+// core classpath, so the library carries no SFU dependency unless the
+// app opts in with `-Ppoolse.livekit` (or ext.poolseLiveKit = true).
+def useLiveKit = project.hasProperty('poolse.livekit') ||
+  (rootProject.ext.has('poolseLiveKit') && rootProject.ext.get('poolseLiveKit'))
+
+android {
+  namespace "dev.poolse.callcore"
+  compileSdk safeExtGet("compileSdkVersion", 36)
+
+  defaultConfig {
+    minSdkVersion safeExtGet("minSdkVersion", 24)
+    targetSdkVersion safeExtGet("targetSdkVersion", 36)
+    versionCode 1
+    versionName "0.1.0"
+  }
+
+  if (useLiveKit) {
+    sourceSets {
+      main {
+        java.srcDir "src/main/livekit/java"
+      }
+    }
+  }
+}
+
+dependencies {
+  implementation 'androidx.core:core-ktx:1.13.1'
+  implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+  implementation 'com.google.firebase:firebase-messaging:24.0.3'
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+
+  if (useLiveKit) {
+    implementation 'io.livekit:livekit-android:2.11.0'
+  }
+}
