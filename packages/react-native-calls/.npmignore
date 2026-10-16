@@ -1,0 +1,9 @@
+# Gradle/Kotlin build output — the host app compiles the module from
+# source, so none of this belongs in the published tarball.
+android/build
+android/.gradle
+android/.kotlin
+
+# Dev-only config.
+tsup.config.ts
+tsconfig.json

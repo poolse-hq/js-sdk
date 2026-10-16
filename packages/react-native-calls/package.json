@@ -16,7 +16,14 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["src", "dist", "android", "expo-module.config.json", "README.md"],
+  "files": [
+    "src",
+    "dist",
+    "android/build.gradle",
+    "android/src",
+    "expo-module.config.json",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup",
     "prepublishOnly": "tsup",
