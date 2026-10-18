@@ -37,6 +37,16 @@ class IncomingCallActivity : Activity() {
     val ring = intent.getBundleExtra(EXTRA_RING)?.toRingContext()
     if (ring == null) { finish(); return }
 
+    // Answered from the notification: this activity exists only to be the
+    // foreground context that is ALLOWED to bring the app up (a
+    // background receiver is not). Answer and get out before drawing —
+    // onUserAnswer launches the app over the keyguard.
+    if (intent.getBooleanExtra(AndroidRingSurface.EXTRA_AUTO_ANSWER, false)) {
+      CallCore.get(this).onUserAnswer(ring)
+      finish()
+      return
+    }
+
     val title = ring.conversationName ?: ring.callerName ?: "Incoming call"
     val body = if (ring.media == "video") "Incoming video call" else "Incoming call"
     setContentView(buildScene(title, body, ring))

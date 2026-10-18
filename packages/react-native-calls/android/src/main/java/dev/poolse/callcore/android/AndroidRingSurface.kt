@@ -57,14 +57,28 @@ internal class AndroidRingSurface(
       )
     }
 
-    val fullScreen = PendingIntent.getActivity(
-      context,
-      ring.callId.hashCode(),
-      Intent(context, IncomingCallActivity::class.java)
+    fun incomingActivity(autoAnswer: Boolean, requestOffset: Int): PendingIntent {
+      val intent = Intent(context, IncomingCallActivity::class.java)
         .putExtra(EXTRA_RING, extras)
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-    )
+        .putExtra(EXTRA_AUTO_ANSWER, autoAnswer)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+      return PendingIntent.getActivity(
+        context,
+        ring.callId.hashCode() + requestOffset,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+    }
+
+    val fullScreen = incomingActivity(autoAnswer = false, requestOffset = 0)
+
+    // Answer launches an ACTIVITY, not a broadcast: a background receiver
+    // cannot start an activity (Android 10+), so answering from the
+    // notification used to connect audio while the app stayed hidden. An
+    // activity launched from a notification tap is allowed to come
+    // forward — it answers and brings the app up. Decline stays a
+    // broadcast; it needs no UI.
+    val answer = incomingActivity(autoAnswer = true, requestOffset = 2)
 
     val caller = Person.Builder()
       .setName(ring.conversationName ?: ring.callerName ?: "Incoming call")
@@ -83,7 +97,7 @@ internal class AndroidRingSurface(
         NotificationCompat.CallStyle.forIncomingCall(
           caller,
           actionPending(ACTION_DECLINE, 1),
-          actionPending(ACTION_ANSWER, 2),
+          answer,
         ),
       )
       .build()
@@ -169,6 +183,7 @@ internal class AndroidRingSurface(
     const val ACTION_DECLINE = "DECLINE"
     const val ACTION_OPEN = "OPEN"
     const val EXTRA_RING = "poolse_ring"
+    const val EXTRA_AUTO_ANSWER = "poolse_auto_answer"
 
     /** Stable per-call notification id, so teardown targets the right one. */
     fun String.notificationId(): Int = hashCode()
