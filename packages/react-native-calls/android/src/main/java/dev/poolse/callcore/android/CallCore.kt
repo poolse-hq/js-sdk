@@ -62,6 +62,7 @@ class CallCore private constructor(context: Context) {
   // ── snapshot extras (runtime thread only) ───────────────────────────
 
   private var extrasCallId: String? = null
+  private var extrasMedia: String? = null
   private var roster: List<MediaParticipant> = emptyList()
   private var conversationName: String? = null
   private var mutedSelf = false
@@ -171,11 +172,27 @@ class CallCore private constructor(context: Context) {
 
   private fun onState(state: MachineState) {
     if (state.phase == Phase.IDLE) {
+      if (extrasCallId != null) {
+        // Idle: no call owns media any more. Clears the port's per-call
+        // mute/camera/speaker choices even when the call ended on a path
+        // with no MEDIA_LEAVE (e.g. refused while connecting).
+        media.leave()
+      }
       resetExtras(null, null)
     } else if (state.callId != extrasCallId) {
       // `pending:<conv>` → the server-minted id is the same call.
       if (extrasCallId?.startsWith("pending:") == true) extrasCallId = state.callId
       else resetExtras(state.callId, state.media)
+    }
+    if (state.phase != Phase.IDLE && state.media != extrasMedia) {
+      // The server corrected the media (a join defaults to audio until
+      // its bundle says otherwise): re-derive what depends on it.
+      if (extrasMedia != null) {
+        cameraOn = state.media == "video"
+        audioRoute = null
+        CallForegroundService.updateCall(state.callId ?: "", state.media)
+      }
+      extrasMedia = state.media
     }
     runtime.conversationName?.let { conversationName = it }
 
@@ -201,6 +218,7 @@ class CallCore private constructor(context: Context) {
 
   private fun resetExtras(callId: String?, media: String?) {
     extrasCallId = callId
+    extrasMedia = media
     roster = emptyList()
     conversationName = null
     mutedSelf = false

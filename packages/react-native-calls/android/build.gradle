@@ -28,6 +28,8 @@ android {
     targetSdkVersion safeExtGet("targetSdkVersion", 36)
     versionCode 1
     versionName "0.1.0"
+    // Keeps the reflectively-loaded LiveKit adapter in minified apps.
+    consumerProguardFiles "consumer-rules.pro"
   }
 
   if (useLiveKit) {

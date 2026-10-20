@@ -151,6 +151,16 @@ object CallMachine {
           s.copy(phase = Phase.ENDED, reason = EndReason.FINISHED),
           listOf(Effect.MediaLeave, Effect.CallSessionStop),
         )
+        // Lingering "ended": a later finish with a real outcome (the FCM
+        // push after a reason-less socket event, or vice versa) corrects
+        // an unanswered outgoing call's generic "finished" to what
+        // actually happened. Display only — nothing left to tear down.
+        Phase.ENDED -> {
+          val outcome = ringOutcome(e.reason)
+          if (s.direction == Direction.OUTGOING && s.reason == EndReason.FINISHED &&
+            outcome != EndReason.FINISHED
+          ) Transition(s.copy(reason = outcome), emptyList()) else noop(s)
+        }
         else -> noop(s)
       } else noop(s)
 

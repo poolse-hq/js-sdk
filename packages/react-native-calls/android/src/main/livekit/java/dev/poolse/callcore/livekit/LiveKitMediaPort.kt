@@ -52,8 +52,23 @@ class LiveKitMediaPort(
   /** Speaker forced by the user; null = the media-type default. */
   private var speakerWanted: Boolean? = null
 
+  /**
+   * The user's mute / camera choices for the CURRENT call. They survive
+   * a rejoin: /reconnect rebuilds the room, and blindly re-enabling the
+   * mic there went live while the UI still showed "muted". Reset only
+   * when the call ends ([leave]) or a different call joins.
+   */
+  private var mutedWanted = false
+  private var cameraWanted: Boolean? = null
+  private var joinedCallId: String? = null
+
   override fun join(bundle: CallSessionBundle) {
-    leave()
+    // Rejoin of the same call keeps the user's choices; so do choices
+    // made while this call was still connecting (joinedCallId null). A
+    // different call joining without a leave starts clean.
+    if (joinedCallId != null && bundle.callId != joinedCallId) resetWanted()
+    joinedCallId = bundle.callId
+    detach()
     media = bundle.media
     val wantsVideo = bundle.media == "video"
     val newRoom = LiveKit.create(appContext = context.applicationContext)
@@ -64,8 +79,8 @@ class LiveKitMediaPort(
       runCatching {
         newRoom.connect(bundle.livekitUrl, bundle.livekitToken)
         if (room !== newRoom) return@runCatching
-        newRoom.localParticipant.setMicrophoneEnabled(true)
-        if (wantsVideo) newRoom.localParticipant.setCameraEnabled(true)
+        newRoom.localParticipant.setMicrophoneEnabled(!mutedWanted)
+        if (cameraWanted ?: wantsVideo) newRoom.localParticipant.setCameraEnabled(true)
       }.onFailure {
         Log.w(TAG, "connect failed", it)
         if (room === newRoom) {
@@ -80,7 +95,21 @@ class LiveKitMediaPort(
     }
   }
 
+  /** The call is over for this device: drop the room AND the call's choices. */
   override fun leave() {
+    detach()
+    resetWanted()
+    joinedCallId = null
+  }
+
+  private fun resetWanted() {
+    mutedWanted = false
+    cameraWanted = null
+    speakerWanted = null
+  }
+
+  /** Drop the current room only (a rejoin replaces it). */
+  private fun detach() {
     eventJob?.cancel()
     eventJob = null
     val r = room ?: return
@@ -97,11 +126,13 @@ class LiveKitMediaPort(
   }
 
   override fun setMuted(muted: Boolean) {
+    mutedWanted = muted
     val r = room ?: return
     scope.launch { runCatching { r.localParticipant.setMicrophoneEnabled(!muted) } }
   }
 
   override fun setCamera(on: Boolean) {
+    cameraWanted = on
     val r = room ?: return
     scope.launch { runCatching { r.localParticipant.setCameraEnabled(on) } }
   }

@@ -48,6 +48,7 @@ class ConformanceTest {
       callId = g["callId"]?.asString ?: "c1",
       direction = g["direction"]?.asString?.let { Direction.valueOf(it.uppercase()) },
       httpAttempts = g["httpAttempts"]?.asInt ?: 1,
+      reason = g["reason"]?.asString?.let { w -> EndReason.entries.first { it.wire == w } },
     )
   }
 

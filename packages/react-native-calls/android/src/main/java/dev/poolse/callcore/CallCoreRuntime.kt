@@ -323,11 +323,14 @@ class CallCoreRuntime(
           return
         }
         bundle = result.bundle
-        // The server minted the real call id on place.
-        if (state.callId?.startsWith("pending:") == true) {
-          state = state.copy(callId = result.bundle.callId, conversationId = result.bundle.conversationId)
-        }
-        dispatch(Event.HttpOk(created = result.bundle.created))
+        // The server is the authority on the call's identity: the real
+        // id minted on place, and — for a join, which starts with only a
+        // call id and an "audio" default — its conversation and media.
+        // A video join left as "audio" took the earpiece wake lock, said
+        // "Voice call" and hid the camera; a null conversationId broke JS.
+        val b = result.bundle
+        state = state.copy(callId = b.callId, conversationId = b.conversationId, media = b.media)
+        dispatch(Event.HttpOk(created = b.created))
       }
       HttpResult.Gone -> dispatch(Event.HttpGone)
       HttpResult.Timeout -> dispatch(Event.HttpTimeout)

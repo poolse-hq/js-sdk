@@ -123,6 +123,8 @@ internal class AndroidRingSurface(
       )
       .build()
 
+    // The ring-mode foreground service adopts this exact notification.
+    shownRing = ring.callId to notification
     try {
       NotificationManagerCompat.from(context).notify(ring.callId.notificationId(), notification)
     } catch (e: SecurityException) {
@@ -133,6 +135,7 @@ internal class AndroidRingSurface(
   }
 
   override fun dismiss(callId: String) {
+    if (shownRing?.first == callId) shownRing = null
     runCatching { NotificationManagerCompat.from(context).cancel(callId.notificationId()) }
     // The full-screen activity is its own window: tell it to close.
     runCatching {
@@ -225,6 +228,9 @@ internal class AndroidRingSurface(
     const val ACTION_RING_CLOSED = "dev.poolse.callcore.RING_CLOSED"
     const val EXTRA_CALL_ID = "poolse_call_id"
     private const val TAG = "PoolseRingSurface"
+
+    /** The CallStyle notification on screen, for the ring-mode service to wear. */
+    @Volatile internal var shownRing: Pair<String, android.app.Notification>? = null
 
     /** Stable per-call notification id, so teardown targets the right one. */
     fun String.notificationId(): Int = hashCode()

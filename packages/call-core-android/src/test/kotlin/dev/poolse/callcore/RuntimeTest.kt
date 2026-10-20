@@ -508,4 +508,30 @@ class RuntimeTest {
     staleFire()
     assertEquals(Phase.CONNECTING, r.runtime.currentState().phase)
   }
+
+  // ── review fixes ────────────────────────────────────────────────────
+
+  @Test
+  fun `a join adopts the server's conversation and media`() {
+    val r = Rig()
+    r.runtime.join("c1", null, "sess")
+    assertEquals("audio", r.runtime.currentState().media)
+    r.http.lastCb!!(HttpResult.Ok(bundle().copy(media = "video", conversationId = "conv-x")))
+    val s = r.runtime.currentState()
+    assertEquals("video", s.media)
+    assertEquals("conv-x", s.conversationId)
+    assertEquals("video", r.sink.states.last().media)
+  }
+
+  @Test
+  fun `a later finish with an outcome corrects the lingering ended reason`() {
+    val r = Rig()
+    val id = r.ringingOut()
+    r.runtime.onCallFinished(id, null) // socket, no reason
+    assertEquals(EndReason.FINISHED, r.runtime.currentState().reason)
+    r.runtime.onCallFinished(id, "declined_all") // FCM, with reason
+    assertEquals(EndReason.DECLINED_ALL, r.runtime.currentState().reason)
+    assertEquals(EndReason.DECLINED_ALL, r.sink.states.last().reason)
+    assertTrue(r.timers.scheduled.containsKey("linger"), "linger untouched")
+  }
 }

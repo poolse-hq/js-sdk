@@ -71,7 +71,7 @@ interface PoolseCallsNative {
   switchCamera(): void;
   setSpeaker(on: boolean): void;
   onRingEnded(callId: string, reason: string): void;
-  onCallFinished(callId: string): void;
+  onCallFinished(callId: string, reason: string | null): void;
   canUseFullScreenIntent(): boolean;
   openFullScreenIntentSettings(): void;
   addListener(event: 'onCallState', cb: (payload: NativeSnapshot) => void): { remove(): void };
@@ -129,8 +129,14 @@ export const setSpeaker = (on: boolean): void => native?.setSpeaker(on);
 export const onRingEnded = (callId: string, reason: string): void =>
   native?.onRingEnded(callId, reason);
 
-/** Socket forwarding: `call:finished`. Idempotent with the `finished` push. */
-export const onCallFinished = (callId: string): void => native?.onCallFinished(callId);
+/**
+ * Socket forwarding: `call:finished`. Pass the payload's `reason`
+ * (`finished` | `declined_all` | `no_answer` | `cancelled`) so an
+ * unanswered caller sees "Declined"/"No answer", not "Call ended".
+ * Idempotent with the `finished` push.
+ */
+export const onCallFinished = (callId: string, reason?: string): void =>
+  native?.onCallFinished(callId, reason ?? null);
 
 /**
  * Android 14+: whether the app may show the full-screen ring over the

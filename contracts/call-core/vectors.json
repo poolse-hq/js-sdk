@@ -306,6 +306,21 @@
       "event": { "type": "RING_ENDED", "callId": "c1", "reason": "answered_elsewhere" },
       "expect": { "phase": "connecting", "effects": [] } },
 
+    { "name": "a later finish with an outcome corrects a lingering outgoing ended", "scenario": "s4",
+      "given": { "phase": "ended", "callId": "c1", "direction": "outgoing", "reason": "finished" },
+      "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "declined_all" },
+      "expect": { "phase": "ended", "reason": "declined_all", "effects": [] } },
+
+    { "name": "a later finish never rewrites an ended incoming call", "scenario": "s3",
+      "given": { "phase": "ended", "callId": "c1", "direction": "incoming", "reason": "finished" },
+      "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "no_answer" },
+      "expect": { "phase": "ended", "reason": "finished", "effects": [] } },
+
+    { "name": "a later finish never rewrites a non-generic ended reason", "scenario": "s6",
+      "given": { "phase": "ended", "callId": "c1", "direction": "outgoing", "reason": "cancelled" },
+      "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "no_answer" },
+      "expect": { "phase": "ended", "reason": "cancelled", "effects": [] } },
+
     { "name": "video ring behaves identically", "scenario": "s18",
       "given": { "phase": "idle" },
       "event": { "type": "PUSH_RING", "callId": "c1", "media": "video" },

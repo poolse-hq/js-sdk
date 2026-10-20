@@ -78,7 +78,9 @@ class PoolseCallsModule : Module() {
 
     // Socket forwarding (open app): idempotent with the FCM path.
     Function("onRingEnded") { callId: String, reason: String -> core()?.onRingEnded(callId, reason) }
-    Function("onCallFinished") { callId: String -> core()?.onCallFinished(callId) }
+    Function("onCallFinished") { callId: String, reason: String? ->
+      core()?.onCallFinished(callId, reason?.ifEmpty { null })
+    }
 
     // Android 14+: full-screen intents need a user grant for non-dialer apps.
     Function("canUseFullScreenIntent") {

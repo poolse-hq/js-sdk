@@ -75,22 +75,61 @@ class CallForegroundService : Service() {
 
   internal fun stopNow() {
     runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+    shownId = null
     stopSelf()
   }
 
-  private fun tryStartForeground(want: Desired): Boolean = try {
-    val notification = buildNotification(want)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      startForeground(NOTIFICATION_ID, notification, typeFor(want.mode))
-    } else {
-      startForeground(NOTIFICATION_ID, notification)
+  /** The notification id we are currently foreground with. */
+  private var shownId: Int? = null
+
+  /**
+   * Start (or switch) foreground. If the full type is refused — the
+   * microphone type can be, on Android 14, when the app is not in a
+   * while-in-use state — fall back to phoneCall only rather than stop:
+   * stopping dropped the ring-mode service that was already working.
+   * Stop only when even that fails.
+   */
+  private fun tryStartForeground(want: Desired): Boolean {
+    val (id, notification) = notificationFor(want)
+    val full = typeFor(want.mode)
+    val attempts = if (full != ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL) {
+      listOf(full, ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
+    } else listOf(full)
+    for (type in attempts) {
+      try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(id, notification, type)
+        else startForeground(id, notification)
+        // Switching id (ring → call) leaves the old one as a plain
+        // notification; the ring is over, so remove it.
+        shownId?.takeIf { it != id }?.let { old ->
+          runCatching { getSystemService(android.app.NotificationManager::class.java).cancel(old) }
+        }
+        shownId = id
+        return true
+      } catch (t: Throwable) {
+        // ForegroundServiceStartNotAllowedException, SecurityException
+        // (missing type permission), InvalidForegroundServiceTypeException…
+        Log.e(TAG, "startForeground(${want.mode}, type=$type) failed", t)
+      }
     }
-    true
-  } catch (t: Throwable) {
-    // ForegroundServiceStartNotAllowedException, SecurityException
-    // (missing type permission), InvalidForegroundServiceTypeException…
-    Log.e(TAG, "startForeground(${want.mode}) failed", t)
-    false
+    return false
+  }
+
+  /**
+   * Ring mode wears the CallStyle ring notification itself (same id),
+   * so a ringing phone shows ONE notification, not the ring plus an
+   * "Incoming call" service notice. Falls back to our own if the ring
+   * surface has not posted yet.
+   */
+  private fun notificationFor(want: Desired): Pair<Int, Notification> {
+    if (want.mode == Mode.RING) {
+      AndroidRingSurface.shownRing?.let { (callId, n) ->
+        if (callId == want.callId) {
+          return with(AndroidRingSurface) { callId.notificationId() } to n
+        }
+      }
+    }
+    return NOTIFICATION_ID to buildNotification(want)
   }
 
   private fun typeFor(mode: Mode): Int {
@@ -198,6 +237,17 @@ class CallForegroundService : Service() {
       if (d?.mode == Mode.RING && d.callId == callId) return@onMain
       desired = Desired(Mode.RING, callId, "audio")
       launch()
+    }
+
+    /**
+     * The call's media became known/changed (a join's bundle said video):
+     * refresh the notification and type in place — no new start needed.
+     */
+    fun updateCall(callId: String, media: String) = onMain {
+      val d = desired
+      if (d?.mode != Mode.CALL || (d.callId == callId && d.media == media)) return@onMain
+      desired = d.copy(callId = callId, media = media)
+      if (pendingStarts == 0) instance?.reconcile(desired)
     }
 
     /** Leave ring mode — never touches a call that took the service over. */
