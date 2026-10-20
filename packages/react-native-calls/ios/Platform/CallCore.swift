@@ -168,6 +168,9 @@ final class CallCore {
     eventsAdapter.core = self
     surfaceAdapter.core = self
     callKit.actions = self
+    // LiveKit's audio stays off until CallKit activates the session —
+    // configured now, at launch, before any activation can happen.
+    mediaPort.prepareAudio()
   }
 
   // MARK: - native entry points

@@ -61,13 +61,24 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     super.init()
     NotificationCenter.default.addObserver(self, selector: #selector(routeChanged),
                                            name: AVAudioSession.routeChangeNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(interrupted),
+                                           name: AVAudioSession.interruptionNotification, object: nil)
+    NotificationCenter.default.addObserver(self, selector: #selector(mediaServicesReset),
+                                           name: AVAudioSession.mediaServicesWereResetNotification,
+                                           object: nil)
   }
 
   // MARK: - audio session (CallKit-driven)
 
   /// Before any room exists: LiveKit must not configure the session nor
   /// start its engine outside CallKit's activation window.
-  private func prepareAudio() {
+  ///
+  /// Called at app LAUNCH (CallCore.init, from the app-delegate
+  /// subscriber), as LiveKit's CallKit integration requires — before any
+  /// audio session can be activated. Doing it inside didActivate meant a
+  /// call answered with the app closed created and reconfigured LiveKit's
+  /// audio manager mid-activation, and came up with no audio.
+  func prepareAudio() {
     guard !audioPrepared else { return }
     audioPrepared = true
     AudioManager.shared.audioSession.isAutomaticConfigurationEnabled = false
@@ -80,17 +91,31 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   func audioActivated(_ session: AVAudioSession, media: String) {
     prepareAudio()
     audioActive = true
-    let video = media == "video"
-    do {
-      try session.setCategory(.playAndRecord, mode: video && speakerWanted != false ? .videoChat : .voiceChat,
-                              options: [.allowBluetooth, .allowBluetoothA2DP])
-    } catch {
-      NSLog("[PoolseCalls] audio session category failed: %@", "\(error)")
+    if media != self.media && room == nil { self.media = media }
+    reassertAudio(session)
+  }
+
+  /// Put the call's audio back the way the call needs it: play-and-record
+  /// in the voice/video chat mode, LiveKit's engine available, the chosen
+  /// route. Idempotent — only touches what differs — so it is safe to run
+  /// whenever anything may have changed the session behind the call's
+  /// back (another audio library reconfiguring it as JS boots mid-call,
+  /// an interruption, a media-services reset). Only while CallKit (or the
+  /// no-CallKit fallback) holds the session active.
+  func reassertAudio(_ session: AVAudioSession = .sharedInstance()) {
+    guard audioActive else { return }
+    let mode: AVAudioSession.Mode = media == "video" && speakerWanted != false ? .videoChat : .voiceChat
+    if session.category != .playAndRecord || session.mode != mode {
+      do {
+        try session.setCategory(.playAndRecord, mode: mode,
+                                options: [.allowBluetooth, .allowBluetoothA2DP])
+      } catch {
+        NSLog("[PoolseCalls] audio session category failed: %@", "\(error)")
+      }
     }
     do { try AudioManager.shared.setEngineAvailability(.default) } catch {
       NSLog("[PoolseCalls] setEngineAvailability(.default) failed: %@", "\(error)")
     }
-    if media != self.media && room == nil { self.media = media }
     applyRoute()
   }
 
@@ -159,6 +184,9 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       do { try await r.localParticipant.setMicrophone(enabled: !muted) } catch {
         NSLog("[PoolseCalls] microphone publish failed: %@", "\(error)")
       }
+      // Connected and publishing: make sure nothing changed the session
+      // while we connected (a cold answer boots JS in exactly this window).
+      await MainActor.run { self.reassertAudio() }
       let camera = await MainActor.run { self.cameraWanted ?? wantsVideo }
       if camera { await self.enableCamera(r, true) }
       await MainActor.run {
@@ -297,9 +325,28 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     events?.onAudioRoute(currentRoute())
   }
 
+  /// An interruption (another app's audio, Siri) ended: the session may
+  /// have been reconfigured; restore the call's.
+  @objc private func interrupted(_ note: Notification) {
+    guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+          AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+    DispatchQueue.main.async { [weak self] in self?.reassertAudio() }
+  }
+
+  @objc private func mediaServicesReset(_ note: Notification) {
+    DispatchQueue.main.async { [weak self] in self?.reassertAudio() }
+  }
+
   @objc private func routeChanged(_ note: Notification) {
+    let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt)
+      .flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
     DispatchQueue.main.async { [weak self] in
       guard let self = self, self.audioActive else { return }
+      // Something reconfigured the shared session mid-call: put it back.
+      if reason == .categoryChange {
+        self.reassertAudio()
+        return
+      }
       // A user's speaker choice survives route changes, except that a
       // newly connected headset/Bluetooth device always wins.
       let route = self.currentRoute()
