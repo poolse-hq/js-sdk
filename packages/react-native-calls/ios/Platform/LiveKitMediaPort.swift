@@ -26,6 +26,21 @@ protocol MediaEvents: AnyObject {
   func onLocalCamera(on: Bool, facing: String?)
 }
 
+/// Step-by-step trace of the audio path, in the device log as
+/// "[PoolseCalls] trace …" — the order of activation, engine availability,
+/// connect and publish is what cold-answer audio failures hinge on.
+func pcTrace(_ message: @autoclosure () -> String) {
+  NSLog("[PoolseCalls] trace %@", message())
+}
+
+func pcSessionDescription(_ s: AVAudioSession = .sharedInstance()) -> String {
+  let outs = s.currentRoute.outputs.map { $0.portType.rawValue }.joined(separator: ",")
+  let ins = s.currentRoute.inputs.map { $0.portType.rawValue }.joined(separator: ",")
+  return "category=\(s.category.rawValue) mode=\(s.mode.rawValue) in=[\(ins)] out=[\(outs)] " +
+    "otherAudio=\(s.isOtherAudioPlaying) inputAvailable=\(s.isInputAvailable) " +
+    "record=\(s.recordPermission.rawValue)"
+}
+
 /// The shipped MediaPort over LiveKit's Swift SDK — LiveKitMediaPort.kt
 /// for iOS. Joins with the server-minted token, publishes the mic (and
 /// the camera for video), tracks the roster and reports room transitions.
@@ -83,6 +98,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   func prepareAudio() {
     guard !audioPrepared else { return }
     audioPrepared = true
+    pcTrace("prepareAudio (automatic config off, engine .none)")
     AudioManager.shared.audioSession.isAutomaticConfigurationEnabled = false
     do { try AudioManager.shared.setEngineAvailability(.none) } catch {
       NSLog("[PoolseCalls] setEngineAvailability(.none) failed: %@", "\(error)")
@@ -91,6 +107,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
 
   /// CallKit activated the session (or, without CallKit, we did).
   func audioActivated(_ session: AVAudioSession, media: String) {
+    pcTrace("audioActivated media=\(media) room=\(room != nil) connected=\(connectedRoom != nil) \(pcSessionDescription(session))")
     prepareAudio()
     audioActive = true
     if media != self.media && room == nil { self.media = media }
@@ -115,6 +132,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
           audioKicked != ObjectIdentifier(r), !mutedWanted else { return }
     guard r.localParticipant.isMicrophoneEnabled() else { return }
     audioKicked = ObjectIdentifier(r)
+    pcTrace("kick: cycling engine availability + mic")
     do {
       try AudioManager.shared.setEngineAvailability(.none)
       try AudioManager.shared.setEngineAvailability(.default)
@@ -134,6 +152,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       } catch {
         NSLog("[PoolseCalls] mic cycle failed: %@", "\(error)")
       }
+      pcTrace("kick done enabled=\(r.localParticipant.isMicrophoneEnabled()) \(pcSessionDescription())")
       await MainActor.run { self?.reassertAudio() }
     }
   }
@@ -147,6 +166,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   /// no-CallKit fallback) holds the session active.
   func reassertAudio(_ session: AVAudioSession = .sharedInstance()) {
     guard audioActive else { return }
+    pcTrace("reassertAudio before: \(pcSessionDescription(session))")
     let mode: AVAudioSession.Mode = media == "video" && speakerWanted != false ? .videoChat : .voiceChat
     if session.category != .playAndRecord || session.mode != mode {
       do {
@@ -163,6 +183,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   }
 
   func audioDeactivated() {
+    pcTrace("audioDeactivated")
     audioActive = false
     guard audioPrepared else { return }
     do { try AudioManager.shared.setEngineAvailability(.none) } catch {
@@ -181,6 +202,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   // MARK: - MediaPort
 
   func join(bundle: CallSessionBundle) {
+    pcTrace("join call=\(bundle.callId) media=\(bundle.media) audioActive=\(audioActive)")
     prepareAudio()
     if let joined = joinedCallId, joined != bundle.callId { resetWanted() }
     joinedCallId = bundle.callId
@@ -224,10 +246,13 @@ final class LiveKitMediaPort: NSObject, MediaPort {
         return
       }
       let muted = await MainActor.run { self.mutedWanted }
+      let activeNow = await MainActor.run { self.audioActive }
+      pcTrace("connected; publishing mic muted=\(muted) audioActive=\(activeNow)")
       do { try await r.localParticipant.setMicrophone(enabled: !muted) } catch {
         NSLog("[PoolseCalls] microphone publish failed: %@", "\(error)")
       }
       // Connected and publishing: make sure nothing changed the session
+      pcTrace("mic published enabled=\(r.localParticipant.isMicrophoneEnabled()) \(pcSessionDescription())")
       // while we connected (a cold answer boots JS in exactly this window),
       // then make sure the engine is actually carrying the mic.
       await MainActor.run {
@@ -375,18 +400,21 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   /// An interruption (another app's audio, Siri) ended: the session may
   /// have been reconfigured; restore the call's.
   @objc private func interrupted(_ note: Notification) {
+    pcTrace("interruption \(note.userInfo ?? [:])")
     guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
           AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
     DispatchQueue.main.async { [weak self] in self?.reassertAudio() }
   }
 
   @objc private func mediaServicesReset(_ note: Notification) {
+    pcTrace("mediaServicesWereReset")
     DispatchQueue.main.async { [weak self] in self?.reassertAudio() }
   }
 
   @objc private func routeChanged(_ note: Notification) {
     let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt)
       .flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
+    pcTrace("routeChange reason=\(reason.map { String($0.rawValue) } ?? "?") \(pcSessionDescription())")
     DispatchQueue.main.async { [weak self] in
       guard let self = self, self.audioActive else { return }
       // Something reconfigured the shared session mid-call: put it back.

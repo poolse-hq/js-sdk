@@ -1,6 +1,7 @@
 import CallKit
 import Foundation
 import PushKit
+import UIKit
 
 /// Native PushKit intake — the iOS twin of CallMessagingService. The
 /// registry is created at launch (PoolseCallsAppDelegateSubscriber →
@@ -59,6 +60,7 @@ final class VoipPush: NSObject, PKPushRegistryDelegate {
 
   func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload,
                     for type: PKPushType, completion: @escaping () -> Void) {
+    pcTrace("VoIP push received appState=\(UIApplication.shared.applicationState.rawValue)")
     if type == .voIP { handle(payload.dictionaryPayload) }
     completion()
   }

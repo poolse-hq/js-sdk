@@ -224,6 +224,7 @@ final class CallKitController: NSObject, CXProviderDelegate {
   }
 
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+    pcTrace("CallKit answer action")
     guard let t = calls[action.callUUID], !t.ended else { action.fail(); return }
     let fromUs = t.answered
     t.answered = true
@@ -259,10 +260,12 @@ final class CallKitController: NSObject, CXProviderDelegate {
   }
 
   func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+    pcTrace("CallKit didActivate \(pcSessionDescription(audioSession))")
     actions?.callKitAudioActivated(audioSession)
   }
 
   func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
+    pcTrace("CallKit didDeactivate")
     actions?.callKitAudioDeactivated(audioSession)
   }
 }
