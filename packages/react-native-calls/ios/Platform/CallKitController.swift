@@ -89,7 +89,7 @@ final class CallKitController: NSObject, CXProviderDelegate {
   func reportIncoming(ring: RingContext) {
     let hasVideo = ring.media == "video"
     let title = ring.conversationName ?? ring.callerName
-    if let existing = calls.values.first(where: { $0.callId == ring.callId }) {
+    if let existing = calls.values.first(where: { $0.callId == ring.callId && !$0.ended }) {
       provider.reportNewIncomingCall(with: existing.uuid, update: update(title: title, handle: ring.conversationId, video: hasVideo)) { _ in }
       return
     }
@@ -99,8 +99,13 @@ final class CallKitController: NSObject, CXProviderDelegate {
       guard let error = error else { return }
       NSLog("[PoolseCalls] CallKit refused incoming call %@: %@", ring.callId, error.localizedDescription)
       // Refused (DND, blocked, busy group): CallKit holds nothing for it.
-      t.ended = true
-      self?.calls.removeValue(forKey: t.uuid)
+      // End the ring in the core too — silently (no decline is sent), so
+      // the engine is not left RINGING_IN with no UI, counting as busy.
+      DispatchQueue.main.async {
+        t.ended = true
+        self?.calls.removeValue(forKey: t.uuid)
+        CallCore.peek()?.onRingEnded(callId: ring.callId, reason: "cancelled")
+      }
     }
   }
 

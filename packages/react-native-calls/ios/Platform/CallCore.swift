@@ -45,6 +45,7 @@ final class CallCore {
     defaults.set(trimmed, forKey: "apiBaseUrl")
     defaults.set(ringback, forKey: "ringback")
     defaults.set(apnsEnvironment, forKey: "apnsEnvironment")
+    writeConfigFile(apiBaseUrl: trimmed, ringback: ringback, apnsEnvironment: apnsEnvironment)
     configLock.lock()
     _config = CallCoreConfig(apiBaseUrl: trimmed, ringback: ringback, apnsEnvironment: apnsEnvironment)
     configLock.unlock()
@@ -52,16 +53,63 @@ final class CallCore {
 
   /// The APNs environment last configured (persisted), if any.
   static var apnsEnvironment: String? {
-    config?.apnsEnvironment ?? defaults.string(forKey: "apnsEnvironment")
+    config?.apnsEnvironment ?? defaults.string(forKey: "apnsEnvironment") ?? readConfigFile()?.apnsEnvironment
   }
 
   private static func restoreConfig() {
-    guard config == nil, let url = defaults.string(forKey: "apiBaseUrl") else { return }
+    guard config == nil else { return }
+    let restored: CallCoreConfig
+    if let url = defaults.string(forKey: "apiBaseUrl") {
+      restored = CallCoreConfig(apiBaseUrl: url,
+                                ringback: defaults.string(forKey: "ringback"),
+                                apnsEnvironment: defaults.string(forKey: "apnsEnvironment"))
+    } else if let fromFile = readConfigFile() {
+      // Locked since reboot: UserDefaults is unreadable before first
+      // unlock, the unprotected file is not.
+      restored = fromFile
+    } else {
+      return
+    }
     configLock.lock()
-    _config = CallCoreConfig(apiBaseUrl: url,
-                             ringback: defaults.string(forKey: "ringback"),
-                             apnsEnvironment: defaults.string(forKey: "apnsEnvironment"))
+    _config = restored
     configLock.unlock()
+  }
+
+  // MARK: config file (readable before first unlock)
+
+  /// Application Support/dev.poolse.callcore/config.json, written with
+  /// FileProtectionType.none so a PushKit wake while the device has been
+  /// locked since reboot can still rebuild the core. Holds no secrets —
+  /// only the API origin, a sound name and the APNs environment.
+  private static var configFileURL: URL? {
+    guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+    return base.appendingPathComponent("dev.poolse.callcore", isDirectory: true).appendingPathComponent("config.json")
+  }
+
+  private static func writeConfigFile(apiBaseUrl: String, ringback: String?, apnsEnvironment: String?) {
+    guard let url = configFileURL else { return }
+    var obj: [String: Any] = ["apiBaseUrl": apiBaseUrl]
+    if let ringback = ringback { obj["ringback"] = ringback }
+    if let apnsEnvironment = apnsEnvironment { obj["apnsEnvironment"] = apnsEnvironment }
+    do {
+      let fm = FileManager.default
+      let dir = url.deletingLastPathComponent()
+      try fm.createDirectory(at: dir, withIntermediateDirectories: true,
+                             attributes: [.protectionKey: FileProtectionType.none])
+      let data = try JSONSerialization.data(withJSONObject: obj)
+      try data.write(to: url, options: [.atomic, .noFileProtection])
+      try? fm.setAttributes([.protectionKey: FileProtectionType.none], ofItemAtPath: url.path)
+    } catch {
+      NSLog("[PoolseCalls] config file write failed: %@", "\(error)")
+    }
+  }
+
+  private static func readConfigFile() -> CallCoreConfig? {
+    guard let url = configFileURL, let data = try? Data(contentsOf: url),
+          let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+          let api = obj["apiBaseUrl"] as? String, !api.isEmpty else { return nil }
+    return CallCoreConfig(apiBaseUrl: api, ringback: obj["ringback"] as? String,
+                          apnsEnvironment: obj["apnsEnvironment"] as? String)
   }
 
   /// The core, or nil if this install was never configured. Main thread.

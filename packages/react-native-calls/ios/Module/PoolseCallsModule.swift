@@ -17,18 +17,25 @@ public class PoolseCallsModule: Module {
       PoolseCallsSetup.registerVoipEarly()
     }
 
+    // The listeners are process-level statics read on main: assign and
+    // clear them on main too (these closures run on the module's queue).
     OnStartObserving {
-      CallCore.listener = { [weak self] snapshot in
-        self?.sendEvent("onCallState", ["snapshot": snapshot ?? NSNull()])
-      }
-      VoipPush.tokenListener = { [weak self] token in
-        self?.sendEvent("onVoipToken", ["token": token, "environment": PoolseCallsModule.environment()])
+      DispatchQueue.main.async { [weak self] in
+        guard self != nil else { return }
+        CallCore.listener = { [weak self] snapshot in
+          self?.sendEvent("onCallState", ["snapshot": snapshot ?? NSNull()])
+        }
+        VoipPush.tokenListener = { [weak self] token in
+          self?.sendEvent("onVoipToken", ["token": token, "environment": PoolseCallsModule.environment()])
+        }
       }
     }
 
     OnStopObserving {
-      CallCore.listener = nil
-      VoipPush.tokenListener = nil
+      DispatchQueue.main.async {
+        CallCore.listener = nil
+        VoipPush.tokenListener = nil
+      }
     }
 
     AsyncFunction("configure") { (apiBaseUrl: String, options: [String: Any]?) in
