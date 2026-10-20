@@ -6,7 +6,9 @@
 // On a platform or build without the native module (Expo Go, web,
 // unlinked), every command is a safe no-op and the state stays idle —
 // so a host can render against this unconditionally.
-import { requireOptionalNativeModule } from 'expo-modules-core';
+import { createElement, type ComponentType, type ReactElement } from 'react';
+import { View, type ViewProps } from 'react-native';
+import { requireNativeViewManager, requireOptionalNativeModule } from 'expo-modules-core';
 
 /**
  * A call's complete state. `null` means idle — no call. After a call
@@ -36,11 +38,15 @@ export interface Snapshot {
     externalId: string;
     speaking: boolean;
     muted: boolean;
+    /** True only with a published, subscribed, unmuted camera track (show video, not avatar). */
     cameraOn: boolean;
   }>;
   audioRoute: 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
   mutedSelf: boolean;
+  /** True only while the local camera track is actually published and enabled. */
   cameraOn: boolean;
+  /** Facing of the published local camera; absent when the camera is off. */
+  cameraFacing?: 'front' | 'back';
 }
 
 export interface ConfigureOptions {
@@ -146,3 +152,48 @@ export const canUseFullScreenIntent = (): boolean => native?.canUseFullScreenInt
 
 /** Open the system screen where the user grants full-screen intents (falls back to notification settings). */
 export const openFullScreenIntentSettings = (): void => native?.openFullScreenIntentSettings();
+
+// ── video ─────────────────────────────────────────────────────────────
+
+export interface CallVideoViewProps extends ViewProps {
+  /** Remote participant's userId (LiveKit identity). Omit with local=true for self view. */
+  participantId?: string;
+  local?: boolean;
+  /** default: true for local front camera, false otherwise */
+  mirror?: boolean;
+  /** default 'cover' */
+  fit?: 'cover' | 'contain';
+}
+
+type NativeVideoProps = CallVideoViewProps;
+
+let nativeVideo: ComponentType<NativeVideoProps> | null | undefined;
+
+/** Resolved lazily (first render) and only when the native module exists. */
+function nativeVideoView(): ComponentType<NativeVideoProps> | null {
+  if (nativeVideo !== undefined) return nativeVideo;
+  nativeVideo = null;
+  if (native) {
+    try {
+      nativeVideo = requireNativeViewManager<NativeVideoProps>('PoolseCalls', 'PoolseCallVideo');
+    } catch {
+      nativeVideo = null; // an older native build without the view
+    }
+  }
+  return nativeVideo;
+}
+
+/**
+ * A participant's camera (or, with `local`, your own), rendered natively
+ * by the call core. Shows nothing (stays transparent) while that camera
+ * is off — draw the avatar from the snapshot's `cameraOn` underneath.
+ * Without the native module it renders an empty View.
+ */
+export function CallVideoView(props: CallVideoViewProps): ReactElement | null {
+  const Native = nativeVideoView();
+  if (!Native) {
+    const { participantId: _p, local: _l, mirror: _m, fit: _f, ...rest } = props;
+    return createElement(View, rest);
+  }
+  return createElement(Native, props);
+}

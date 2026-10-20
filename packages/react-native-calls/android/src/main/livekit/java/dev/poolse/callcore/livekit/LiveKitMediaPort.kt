@@ -1,12 +1,18 @@
 package dev.poolse.callcore.livekit
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.twilio.audioswitch.AudioDevice
 import dev.poolse.callcore.CallSessionBundle
 import dev.poolse.callcore.MediaPort
+import dev.poolse.callcore.android.CallVideoSource
+import dev.poolse.callcore.android.CallVideoSurface
 import dev.poolse.callcore.android.MediaEvents
 import dev.poolse.callcore.android.MediaParticipant
+import io.livekit.android.ConnectOptions
 import io.livekit.android.LiveKit
 import io.livekit.android.audio.AudioSwitchHandler
 import io.livekit.android.events.DisconnectReason
@@ -14,11 +20,17 @@ import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.track.CameraPosition
+import io.livekit.android.room.track.LocalVideoTrack
+import io.livekit.android.room.track.RemoteTrackPublication
+import io.livekit.android.room.track.Track
+import io.livekit.android.room.track.VideoTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -42,7 +54,7 @@ import org.json.JSONObject
 class LiveKitMediaPort(
   private val context: Context,
   private val events: MediaEvents,
-) : MediaPort {
+) : MediaPort, CallVideoSource {
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   @Volatile private var room: Room? = null
@@ -62,6 +74,9 @@ class LiveKitMediaPort(
   private var cameraWanted: Boolean? = null
   private var joinedCallId: String? = null
 
+  /** Live `<CallVideoView>` slots; rebound whenever what they show may have changed. */
+  private val surfaces = linkedSetOf<LiveKitVideoSurface>()
+
   override fun join(bundle: CallSessionBundle) {
     // Rejoin of the same call keeps the user's choices; so do choices
     // made while this call was still connecting (joinedCallId null). A
@@ -73,26 +88,55 @@ class LiveKitMediaPort(
     val wantsVideo = bundle.media == "video"
     val newRoom = LiveKit.create(appContext = context.applicationContext)
     configureAudio(newRoom, wantsVideo)
+    // A 1:1/small call: never let the SFU pause a subscribed camera for
+    // "not visible" — a track whose view mounts late would stay black.
+    // (Renderers are still registered with visibility via addRenderer.)
+    newRoom.adaptiveStream = false
+    newRoom.dynacast = false
     room = newRoom
+    refreshVideo() // surfaces re-initialise against the new room's EGL
     eventJob = scope.launch { observe(newRoom) }
     scope.launch {
-      runCatching {
-        newRoom.connect(bundle.livekitUrl, bundle.livekitToken)
-        if (room !== newRoom) return@runCatching
-        newRoom.localParticipant.setMicrophoneEnabled(!mutedWanted)
-        if (cameraWanted ?: wantsVideo) newRoom.localParticipant.setCameraEnabled(true)
+      val connected = runCatching {
+        newRoom.connect(bundle.livekitUrl, bundle.livekitToken, ConnectOptions(autoSubscribe = true))
       }.onFailure {
         Log.w(TAG, "connect failed", it)
         if (room === newRoom) {
           // Don't leave a half-open room (and its audio mode) behind.
           eventJob?.cancel()
           eventJob = null
-          teardown(newRoom)
           room = null
+          refreshVideo()
+          teardown(newRoom)
           events.onFailed()
         }
-      }
+      }.isSuccess
+      if (!connected || room !== newRoom) return@launch
+      // Publishing failures must not fail the call: audio-only is a call.
+      runCatching { newRoom.localParticipant.setMicrophoneEnabled(!mutedWanted) }
+        .onFailure { Log.w(TAG, "microphone publish failed", it) }
+      if (cameraWanted ?: wantsVideo) enableCamera(newRoom, true)
+      reportLocalCamera(newRoom)
+      refreshVideo()
     }
+  }
+
+  private fun cameraGranted() =
+    ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+      PackageManager.PERMISSION_GRANTED
+
+  /**
+   * Publish / unpublish the camera. Without the CAMERA grant a video
+   * call joins audio-only instead of failing; a later setCamera(true)
+   * after the user grants it publishes then.
+   */
+  private suspend fun enableCamera(r: Room, on: Boolean) {
+    if (on && !cameraGranted()) {
+      Log.i(TAG, "CAMERA not granted: staying audio-only")
+      return
+    }
+    runCatching { r.localParticipant.setCameraEnabled(on) }
+      .onFailure { Log.w(TAG, "camera ${if (on) "publish" else "unpublish"} failed", it) }
   }
 
   /** The call is over for this device: drop the room AND the call's choices. */
@@ -114,7 +158,10 @@ class LiveKitMediaPort(
     eventJob = null
     val r = room ?: return
     room = null
+    // Unbind every view from this room's tracks BEFORE its EGL is released.
+    refreshVideo()
     teardown(r)
+    events.onLocalCamera(false, null)
   }
 
   private fun teardown(r: Room) {
@@ -134,12 +181,78 @@ class LiveKitMediaPort(
   override fun setCamera(on: Boolean) {
     cameraWanted = on
     val r = room ?: return
-    scope.launch { runCatching { r.localParticipant.setCameraEnabled(on) } }
+    scope.launch {
+      enableCamera(r, on)
+      if (room !== r) return@launch
+      reportLocalCamera(r)
+      refreshVideo()
+    }
   }
 
+  /** Front ↔ back on the published camera track. */
   override fun switchCamera() {
-    // The host's VideoTrackView performs the actual flip; exposing the
-    // control here keeps the port surface complete.
+    val r = room ?: return
+    val track = localCameraTrack(r) ?: return
+    val next = if (track.options.position == CameraPosition.BACK) CameraPosition.FRONT else CameraPosition.BACK
+    runCatching { track.switchCamera(null, next) }.onFailure { Log.w(TAG, "switchCamera failed", it) }
+    // The capturer switches asynchronously and updates the options when
+    // done: report (and re-mirror the self view) once it has.
+    scope.launch {
+      delay(SWITCH_SETTLE_MS)
+      if (room !== r) return@launch
+      reportLocalCamera(r)
+      refreshVideo()
+    }
+  }
+
+  // ── video ───────────────────────────────────────────────────────────
+
+  override fun createVideoSurface(context: Context): CallVideoSurface =
+    LiveKitVideoSurface(context, this).also { surfaces += it }
+
+  internal fun unregister(surface: LiveKitVideoSurface) { surfaces -= surface }
+
+  internal fun currentRoom(): Room? = room
+
+  private fun refreshVideo() {
+    for (s in surfaces.toList()) s.rebind()
+  }
+
+  private fun localCameraTrack(r: Room): LocalVideoTrack? =
+    r.localParticipant.getTrackPublication(Track.Source.CAMERA)
+      ?.takeIf { !it.muted }?.track as? LocalVideoTrack
+
+  /**
+   * The camera track a view should show: the local one, or the remote
+   * participant's — only once it is published, SUBSCRIBED and unmuted.
+   */
+  internal fun cameraTrack(participantId: String?, local: Boolean): VideoTrack? {
+    val r = room ?: return null
+    if (local) return localCameraTrack(r)
+    val p = r.remoteParticipants.values.firstOrNull { it.identity?.value == participantId } ?: return null
+    return remoteCamera(p)
+  }
+
+  private fun remoteCamera(p: Participant): VideoTrack? {
+    val pub = p.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication ?: return null
+    if (!pub.subscribed || pub.muted) return null
+    return pub.track as? VideoTrack
+  }
+
+  /** `front` | `back` of the published local camera, or null when none. */
+  internal fun cameraFacing(): String? {
+    val r = room ?: return null
+    return when (localCameraTrack(r)?.options?.position) {
+      CameraPosition.FRONT -> "front"
+      CameraPosition.BACK -> "back"
+      null -> null
+    }
+  }
+
+  private fun reportLocalCamera(r: Room) {
+    if (room !== r) return
+    val on = localCameraTrack(r) != null
+    events.onLocalCamera(on, if (on) cameraFacing() else null)
   }
 
   override fun setSpeaker(on: Boolean) {
@@ -219,6 +332,7 @@ class LiveKitMediaPort(
           // answered before our media came up): they will not "connect".
           if (room.remoteParticipants.isNotEmpty()) events.onRemoteJoined()
           emit(room)
+          refreshVideo()
         }
         // LiveKit is resuming the SAME session (ICE restart / signal
         // resume). Only reflect it: tearing the room down here fought
@@ -230,13 +344,23 @@ class LiveKitMediaPort(
         is RoomEvent.Disconnected -> {
           if (event.reason != DisconnectReason.CLIENT_INITIATED) events.onLost()
         }
-        is RoomEvent.ParticipantConnected -> { events.onRemoteJoined(); emit(room) }
+        is RoomEvent.ParticipantConnected -> { events.onRemoteJoined(); emit(room); refreshVideo() }
+        // Anything that can make a camera appear, vanish or freeze:
+        // update the roster's cameraOn, the local camera state, and
+        // rebind every video view.
         is RoomEvent.ParticipantDisconnected,
-        is RoomEvent.ActiveSpeakersChanged,
+        is RoomEvent.TrackSubscribed,
+        is RoomEvent.TrackUnsubscribed,
         is RoomEvent.TrackMuted,
         is RoomEvent.TrackUnmuted,
         is RoomEvent.TrackPublished,
         is RoomEvent.TrackUnpublished,
+        is RoomEvent.LocalTrackSubscribed -> {
+          emit(room)
+          reportLocalCamera(room)
+          refreshVideo()
+        }
+        is RoomEvent.ActiveSpeakersChanged,
         is RoomEvent.ParticipantMetadataChanged,
         is RoomEvent.ParticipantAttributesChanged -> emit(room)
         else -> Unit
@@ -254,7 +378,9 @@ class LiveKitMediaPort(
           identity = identity,
           speaking = it.isSpeaking,
           muted = !it.isMicrophoneEnabled(),
-          cameraOn = it.isCameraEnabled(),
+          // Video, not avatar, only when there is a frame to draw:
+          // published, subscribed and unmuted.
+          cameraOn = remoteCamera(it) != null,
           externalId = externalIdOf(it) ?: identity,
         )
       },
@@ -270,11 +396,13 @@ class LiveKitMediaPort(
 
   fun dispose() {
     leave()
+    for (s in surfaces.toList()) s.release()
     scope.cancel()
   }
 
   companion object {
     private const val TAG = "PoolseLiveKit"
+    private const val SWITCH_SETTLE_MS = 600L
 
     /** Pass as `mediaFactory` in CallCoreConfig. */
     val factory: (Context, MediaEvents) -> MediaPort = { ctx, ev -> LiveKitMediaPort(ctx, ev) }

@@ -67,6 +67,7 @@ class CallCore private constructor(context: Context) {
   private var conversationName: String? = null
   private var mutedSelf = false
   private var cameraOn = false
+  private var cameraFacing: String? = null
   private var audioRoute: String? = null
 
   /** Last snapshot emitted; read by the bridge's getCallState from any thread. */
@@ -146,13 +147,21 @@ class CallCore private constructor(context: Context) {
     runtime.reemit()
   }
 
-  fun setCamera(on: Boolean) {
-    runtime.post { cameraOn = on }
-    runtime.setCamera(on)
-    runtime.reemit()
-  }
+  /**
+   * Not optimistic: `cameraOn` in the snapshot flips only when the
+   * media adapter reports the local camera track actually published
+   * (it may be refused — e.g. no CAMERA permission).
+   */
+  fun setCamera(on: Boolean) = runtime.setCamera(on)
 
   fun switchCamera() = runtime.switchCamera()
+
+  /**
+   * A video slot for `<CallVideoView>`, or null when the media engine
+   * renders no video (signalling-only build). Main thread.
+   */
+  fun createVideoSurface(context: Context): CallVideoSurface? =
+    (media as? CallVideoSource)?.createVideoSurface(context)
 
   fun setSpeaker(on: Boolean) {
     // Optimistic; the media adapter reports the route it actually got.
@@ -188,7 +197,6 @@ class CallCore private constructor(context: Context) {
       // The server corrected the media (a join defaults to audio until
       // its bundle says otherwise): re-derive what depends on it.
       if (extrasMedia != null) {
-        cameraOn = state.media == "video"
         audioRoute = null
         CallForegroundService.updateCall(state.callId ?: "", state.media)
       }
@@ -210,6 +218,7 @@ class CallCore private constructor(context: Context) {
       audioRoute = audioRoute ?: if (state.media == "video") "speaker" else "earpiece",
       mutedSelf = mutedSelf,
       cameraOn = cameraOn,
+      cameraFacing = cameraFacing,
     )
     lastSnapshot = snap
     reconcileAndroid(state)
@@ -222,8 +231,9 @@ class CallCore private constructor(context: Context) {
     roster = emptyList()
     conversationName = null
     mutedSelf = false
-    // Video calls publish the camera on join (LiveKitMediaPort).
-    cameraOn = media == "video"
+    // Reported by the media adapter once the camera is really published.
+    cameraOn = false
+    cameraFacing = null
     audioRoute = null
   }
 
@@ -284,6 +294,10 @@ class CallCore private constructor(context: Context) {
     }
     override fun onAudioRoute(route: String) {
       runtime.post { audioRoute = route }
+      runtime.reemit()
+    }
+    override fun onLocalCamera(on: Boolean, facing: String?) {
+      runtime.post { cameraOn = on; cameraFacing = facing }
       runtime.reemit()
     }
   }
@@ -450,6 +464,8 @@ interface MediaEvents {
   fun onParticipants(participants: List<MediaParticipant>)
   /** `earpiece` | `speaker` | `bluetooth` | `headset`. */
   fun onAudioRoute(route: String)
+  /** The local camera track is (not) published + enabled; [facing] `front` | `back`. */
+  fun onLocalCamera(on: Boolean, facing: String?) {}
 }
 
 data class MediaParticipant(
@@ -457,6 +473,7 @@ data class MediaParticipant(
   val identity: String,
   val speaking: Boolean,
   val muted: Boolean,
+  /** True only with a published, subscribed, unmuted camera track — a frame to draw. */
   val cameraOn: Boolean = false,
   /** The host app's own id for the user, when the SFU carries it; else the identity. */
   val externalId: String = identity,

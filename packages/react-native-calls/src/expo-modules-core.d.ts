@@ -8,4 +8,9 @@
 // cannot collide with the app's own copy of the types.
 declare module 'expo-modules-core' {
   export function requireOptionalNativeModule<T>(name: string): T | null;
+  /** A native view registered by an Expo module (`View(...)` + `Name(...)`). */
+  export function requireNativeViewManager<P>(
+    moduleName: string,
+    viewName?: string,
+  ): import('react').ComponentType<P>;
 }

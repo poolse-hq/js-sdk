@@ -32,6 +32,16 @@ class PoolseCallsModule : Module() {
 
     Events("onCallState")
 
+    // <CallVideoView>: renders a participant's (or our own) camera.
+    View(PoolseCallVideoView::class) {
+      Name("PoolseCallVideo")
+      Prop("participantId") { view: PoolseCallVideoView, id: String? -> view.participantId = id }
+      Prop("local") { view: PoolseCallVideoView, local: Boolean? -> view.local = local ?: false }
+      Prop("mirror") { view: PoolseCallVideoView, mirror: Boolean? -> view.mirror = mirror }
+      Prop("fit") { view: PoolseCallVideoView, fit: String? -> view.fit = fit ?: "cover" }
+      OnViewDestroys { view: PoolseCallVideoView -> view.detachSurface() }
+    }
+
     // Snapshots → the single JS event. Null (idle) becomes an explicit
     // cleared payload so the JS side always has a definite state. The
     // listener is process-level, so subscribing before configure works.
