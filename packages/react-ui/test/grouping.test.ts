@@ -128,3 +128,28 @@ describe('formatDayLabel', () => {
     expect(label).toMatch(/2025/);
   });
 });
+
+describe('call-log rows break grouping', () => {
+  const callLog = msg({
+    id: 'call',
+    sender_id: 'alice',
+    type: 'system',
+    body: JSON.stringify({
+      kind: 'call',
+      call_id: 'c1',
+      media: 'audio',
+      duration_ms: 1000,
+      joined_user_ids: [],
+    }),
+    inserted_at: '2026-06-01T10:01:00Z',
+  });
+  const before = msg({ id: 'b', sender_id: 'alice', inserted_at: '2026-06-01T10:00:00Z' });
+  const after = msg({ id: 'a', sender_id: 'alice', inserted_at: '2026-06-01T10:02:00Z' });
+
+  it('never groups a call log with neighbours', () => {
+    expect(sameGroup(callLog, before, FIVE_MIN)).toBe(false);
+    expect(sameGroup(after, callLog, FIVE_MIN)).toBe(false);
+    expect(computeGroupPosition(before, null, callLog, FIVE_MIN)).toBe('standalone');
+    expect(computeGroupPosition(callLog, before, after, FIVE_MIN)).toBe('standalone');
+  });
+});

@@ -1,29 +1,143 @@
 package dev.poolse.callcore.android
 
+import android.Manifest
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import dev.poolse.callcore.CallSessionPort
 
 /**
- * Keeps a live call alive when the app is backgrounded or killed:
- * a `phoneCall|microphone` foreground service that owns the ongoing
- * notification for the call's whole lifetime. Android will not reclaim
- * the process while this runs, so media keeps flowing with the screen
- * off.
+ * Keeps the process alive while a call needs it:
  *
- * [CallSessionPort] is driven by the runtime (CALL_SESSION_START/STOP);
- * the service itself holds no call logic — it is the OS contract that
- * says "a call is happening here".
+ * - **ring** mode (`phoneCall` type only) for the length of an incoming
+ *   ring, so an OEM freezer (Samsung, Android 14 cached-app freezer)
+ *   does not kill the ringtone and the ring-deadline timer of a closed
+ *   app;
+ * - **call** mode (`phoneCall|microphone`) for a live call's whole
+ *   lifetime, so media keeps flowing with the screen off.
+ *
+ * [CallSessionPort] is driven by the runtime (CALL_SESSION_START/STOP),
+ * ring mode by [CallCore]'s state reconcile; the service itself holds no
+ * call logic — it is the OS contract that says "a call is happening".
+ *
+ * Robustness rules, each one a crash seen in the field:
+ * - every `startForegroundService` MUST be answered by `startForeground`,
+ *   even if the call already ended before `onStartCommand` ran — so a
+ *   stop never calls `stopService` on a not-yet-started service; the
+ *   service starts foreground and then stops itself;
+ * - the microphone type is claimed only with RECORD_AUDIO granted
+ *   (Android 14 throws otherwise);
+ * - `startForeground` failures are caught and the service stops, never
+ *   taking the app down with it.
  */
 class CallForegroundService : Service() {
 
   override fun onBind(intent: Intent?): IBinder? = null
+
+  override fun onCreate() {
+    super.onCreate()
+    instance = this
+  }
+
+  override fun onDestroy() {
+    if (instance === this) instance = null
+    super.onDestroy()
+  }
+
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    pendingStarts = (pendingStarts - 1).coerceAtLeast(0)
+    reconcile(desired)
+    // Sticky-less: if the system kills us, the call is already gone with
+    // the process; a relaunched empty service would be a ghost.
+    return START_NOT_STICKY
+  }
+
+  /** Bring the service in line with [want]; null = stop (after honouring the start). */
+  internal fun reconcile(want: Desired?) {
+    // Always answer the start with startForeground — a placeholder ring
+    // notification if the call is already gone.
+    val ok = tryStartForeground(want ?: Desired(Mode.RING, "", "audio"))
+    if (want == null || !ok) {
+      if (pendingStarts == 0) stopNow()
+    }
+  }
+
+  internal fun stopNow() {
+    runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+    stopSelf()
+  }
+
+  private fun tryStartForeground(want: Desired): Boolean = try {
+    val notification = buildNotification(want)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      startForeground(NOTIFICATION_ID, notification, typeFor(want.mode))
+    } else {
+      startForeground(NOTIFICATION_ID, notification)
+    }
+    true
+  } catch (t: Throwable) {
+    // ForegroundServiceStartNotAllowedException, SecurityException
+    // (missing type permission), InvalidForegroundServiceTypeException…
+    Log.e(TAG, "startForeground(${want.mode}) failed", t)
+    false
+  }
+
+  private fun typeFor(mode: Mode): Int {
+    var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+    if (mode == Mode.CALL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && micGranted()) {
+      type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+    }
+    return type
+  }
+
+  private fun micGranted() =
+    ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+      PackageManager.PERMISSION_GRANTED
+
+  private fun buildNotification(want: Desired): Notification {
+    ensureChannel()
+    val config = CallCore.peekConfig()
+    val title: String
+    val text: String
+    if (want.mode == Mode.RING) {
+      title = "Incoming call"; text = "Ringing…"
+    } else {
+      title = "Ongoing call"; text = if (want.media == "video") "Video call" else "Voice call"
+    }
+    val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+      .setSmallIcon(config?.smallIcon ?: android.R.drawable.sym_call_outgoing)
+      .setContentTitle(title)
+      .setContentText(text)
+      .setOngoing(true)
+      .setCategory(NotificationCompat.CATEGORY_CALL)
+      .setPriority(NotificationCompat.PRIORITY_LOW)
+    // Tapping the ongoing-call notification returns to the call.
+    if (want.mode == Mode.CALL) launchIntent(want.callId)?.let(builder::setContentIntent)
+    return builder.build()
+  }
+
+  private fun launchIntent(callId: String): PendingIntent? {
+    val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    launch.putExtra(CallCore.EXTRA_LAUNCH_CALL, callId)
+    return PendingIntent.getActivity(
+      this,
+      NOTIFICATION_ID,
+      launch,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+  }
 
   // The ongoing-call notification has its own channel, created here so it
   // exists on an OUTGOING call too — the incoming ring surface's channel
@@ -42,58 +156,75 @@ class CallForegroundService : Service() {
     )
   }
 
-  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    val media = intent?.getStringExtra(EXTRA_MEDIA) ?: "audio"
-    startInForeground(media)
-    // Sticky-less: if the system kills us, the call is already gone with
-    // the process; a relaunched empty service would be a ghost.
-    return START_NOT_STICKY
-  }
+  internal enum class Mode { RING, CALL }
+  internal data class Desired(val mode: Mode, val callId: String, val media: String)
 
-  private fun startInForeground(media: String) {
-    ensureChannel()
-    val config = CallCore.peekConfig()
-    val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-      .setSmallIcon(config?.smallIcon ?: android.R.drawable.sym_call_outgoing)
-      .setContentTitle("Ongoing call")
-      .setContentText(if (media == "video") "Video call" else "Voice call")
-      .setOngoing(true)
-      .setCategory(NotificationCompat.CATEGORY_CALL)
-      .setPriority(NotificationCompat.PRIORITY_LOW)
-      .build()
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-        type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
-      }
-      startForeground(NOTIFICATION_ID, notification, type)
-    } else {
-      startForeground(NOTIFICATION_ID, notification)
-    }
-  }
-
+  /**
+   * All companion state is touched on the main thread only (the
+   * runtime's thread and the service lifecycle's), so no locking.
+   */
   companion object : CallSessionPort {
+    private const val TAG = "PoolseCallFgs"
     private const val NOTIFICATION_ID = 0x9C0FE
-    private const val EXTRA_MEDIA = "media"
     private const val CHANNEL_ID = "poolse_ongoing_call"
 
     private lateinit var appContext: Context
+    private val main by lazy { Handler(Looper.getMainLooper()) }
+
+    private var desired: Desired? = null
+    private var instance: CallForegroundService? = null
+    /** startForegroundService calls not yet delivered to onStartCommand. */
+    private var pendingStarts = 0
 
     /** Wired once by [CallCore] so the port can start/stop the service. */
     fun attach(context: Context) { appContext = context.applicationContext }
 
-    override fun start(callId: String, media: String) {
-      val intent = Intent(appContext, CallForegroundService::class.java).putExtra(EXTRA_MEDIA, media)
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        appContext.startForegroundService(intent)
-      } else {
-        appContext.startService(intent)
+    override fun start(callId: String, media: String) = onMain {
+      desired = Desired(Mode.CALL, callId, media)
+      launch()
+    }
+
+    override fun stop() = onMain {
+      desired = null
+      // Only a started instance with nothing pending may stop now; a
+      // pending start stops itself after startForeground.
+      if (pendingStarts == 0) instance?.stopNow()
+    }
+
+    /** Ring mode for [callId]; a no-op while a call holds the service. */
+    fun startRing(callId: String) = onMain {
+      val d = desired
+      if (d?.mode == Mode.CALL) return@onMain
+      if (d?.mode == Mode.RING && d.callId == callId) return@onMain
+      desired = Desired(Mode.RING, callId, "audio")
+      launch()
+    }
+
+    /** Leave ring mode — never touches a call that took the service over. */
+    fun stopRing() = onMain {
+      if (desired?.mode == Mode.RING) stop()
+    }
+
+    private fun launch() {
+      if (!::appContext.isInitialized) return
+      val intent = Intent(appContext, CallForegroundService::class.java)
+      try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          appContext.startForegroundService(intent)
+        } else {
+          appContext.startService(intent)
+        }
+        pendingStarts++
+      } catch (t: Throwable) {
+        // Background-start restriction (no FCM/user exemption at hand).
+        // A running instance can still switch type in place.
+        Log.w(TAG, "could not start the call service", t)
+        instance?.reconcile(desired)
       }
     }
 
-    override fun stop() {
-      appContext.stopService(Intent(appContext, CallForegroundService::class.java))
+    private inline fun onMain(crossinline block: () -> Unit) {
+      if (Looper.myLooper() == Looper.getMainLooper()) block() else main.post { block() }
     }
   }
 }

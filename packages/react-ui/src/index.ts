@@ -36,6 +36,7 @@ export { GroupDetailsSheet, type GroupDetailsSheetProps } from './GroupDetailsSh
 
 // ── Pieces of the chat surface ────────────────────────────────
 export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';
+export { CallLogRow, type CallLogRowProps } from './CallLogRow.js';
 export { EditableMessageBubble, type EditableMessageBubbleProps } from './EditableMessageBubble.js';
 export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';
 export { MessageActions, type MessageActionsProps } from './MessageActions.js';

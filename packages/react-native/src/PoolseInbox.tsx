@@ -1,5 +1,5 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { useConversations, useMe, useUser } from '@poolse/react';
+import { formatCallLogPreview, useConversations, useMe, useUser } from '@poolse/react';
 import {
   forwardRef,
   useCallback,
@@ -134,6 +134,7 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
       refetch: refetchConversations,
     } = useConversations();
     const meExternalId = me?.external_id ?? null;
+    const meId = me?.id ?? null;
     // KAV.frame.y is measured relative to the SafeAreaView's
     // coordinate space (the SafeAreaView already absorbs the
     // safe-area-top inset). So the only chrome we need to compensate
@@ -300,6 +301,7 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
             conv={conv}
             selected={selected}
             meExternalId={meExternalId}
+            meId={meId}
             unread={unread}
             {...(labelFor ? { labelFor } : {})}
             {...(avatarFor ? { avatarFor } : {})}
@@ -307,7 +309,7 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
           />
         );
       },
-      [renderConversationRow, meExternalId, labelFor, avatarFor, unreadCounts],
+      [renderConversationRow, meExternalId, meId, labelFor, avatarFor, unreadCounts],
     );
 
     return (
@@ -470,6 +472,7 @@ function DefaultConversationRow({
   conv,
   selected,
   meExternalId,
+  meId = null,
   unread,
   labelFor,
   avatarFor,
@@ -478,6 +481,7 @@ function DefaultConversationRow({
   conv: Conversation;
   selected: boolean;
   meExternalId: string | null;
+  meId?: string | null;
   unread: number;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
@@ -535,7 +539,8 @@ function DefaultConversationRow({
           {title}
         </Text>
         <Text style={[styles.rowSubtitle, { color: theme.colors.ink3 }]} numberOfLines={1}>
-          {conv.last_message_preview ??
+          {formatCallLogPreview(conv.last_message_preview, meId) ??
+            conv.last_message_preview ??
             (isDirect ? (otherExtId ?? '') : `${(conv.member_external_ids ?? []).length} members`)}
         </Text>
       </View>

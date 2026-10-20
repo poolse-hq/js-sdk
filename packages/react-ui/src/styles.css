@@ -323,6 +323,56 @@
   border-radius: var(--poolse-radius-pill);
 }
 
+/* Call-log line — centered compact pill between bubble clusters,
+   same family as the day separator (surface chip, hairline border,
+   small semibold label). Missed calls take the error tone. */
+.poolse-call-log {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.poolse-call-log__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 12px;
+  font: 600 12px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+}
+
+.poolse-call-log__icon {
+  flex: none;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-call-log__title {
+  color: var(--poolse-ink);
+}
+
+.poolse-call-log__detail,
+.poolse-call-log__time {
+  font-weight: 500;
+  color: var(--poolse-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.poolse-call-log__detail::before,
+.poolse-call-log__time::before {
+  content: '·';
+  margin-right: 6px;
+}
+
+.poolse-call-log--missed .poolse-call-log__icon,
+.poolse-call-log--missed .poolse-call-log__title {
+  color: var(--poolse-error);
+}
+
 .poolse-conversation__load-more {
   align-self: center;
   margin-bottom: 8px;

@@ -2,11 +2,17 @@ package dev.poolse.callcore.android
 
 import android.animation.ValueAnimator
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -14,6 +20,10 @@ import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
+import dev.poolse.callcore.RingContext
+import dev.poolse.callcore.android.AndroidRingSurface.Companion.ACTION_RING_CLOSED
+import dev.poolse.callcore.android.AndroidRingSurface.Companion.EXTRA_CALL_ID
 import dev.poolse.callcore.android.AndroidRingSurface.Companion.EXTRA_RING
 
 /**
@@ -23,39 +33,116 @@ import dev.poolse.callcore.android.AndroidRingSurface.Companion.EXTRA_RING
  * ground, brand glow, a breathing ring) in plain views. The buttons
  * resolve into [CallCore], the same entry point every other surface
  * uses; answering brings the app forward over the keyguard.
+ *
+ * It closes itself when the ring ends anywhere else (caller cancelled,
+ * answered on another device, deadline) via the package-local
+ * [ACTION_RING_CLOSED] broadcast — before, a remotely-ended ring left
+ * this screen up with dead buttons.
  */
 class IncomingCallActivity : Activity() {
 
   private var pulse: ValueAnimator? = null
   private val density by lazy { resources.displayMetrics.density }
   private fun px(v: Int): Int = (v * density).toInt()
+  private val main = Handler(Looper.getMainLooper())
+
+  /** The ring on screen. */
+  private var ring: RingContext? = null
+
+  /**
+   * Answered: we are only waiting for the app to come forward over us.
+   * Our own DISMISS_RING broadcast must not close us before it does —
+   * finishing first left the app behind the keyguard.
+   */
+  private var awaitingForward = false
+
+  private val ringClosed = object : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+      val callId = intent.getStringExtra(EXTRA_CALL_ID) ?: return
+      if (callId == ring?.callId && !awaitingForward) finish()
+    }
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     showOverKeyguard()
+    ContextCompat.registerReceiver(
+      this,
+      ringClosed,
+      IntentFilter(ACTION_RING_CLOSED),
+      ContextCompat.RECEIVER_NOT_EXPORTED,
+    )
+    handle(intent)
+  }
 
-    val ring = intent.getBundleExtra(EXTRA_RING)?.toRingContext()
-    if (ring == null) { finish(); return }
+  /** singleInstance: a new ring (or the answer action) arrives here, not in onCreate. */
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handle(intent)
+  }
+
+  private fun handle(intent: Intent) {
+    val next = intent.getBundleExtra(EXTRA_RING)?.toRingContext()
+    if (next == null) { if (ring == null) finish(); return }
+    val core = CallCore.getOrNull(this)
+    if (core == null) { finish(); return }
 
     // Answered from the notification: this activity exists only to be the
     // foreground context that is ALLOWED to bring the app up (a
-    // background receiver is not). Answer and get out before drawing —
-    // onUserAnswer launches the app over the keyguard.
+    // background receiver is not).
     if (intent.getBooleanExtra(AndroidRingSurface.EXTRA_AUTO_ANSWER, false)) {
-      CallCore.get(this).onUserAnswer(ring)
-      finish()
+      ring = next
+      answerAndForward(core, next)
       return
     }
 
-    val title = ring.conversationName ?: ring.callerName ?: "Incoming call"
-    val body = if (ring.media == "video") "Incoming video call" else "Incoming call"
-    setContentView(buildScene(title, body, ring))
+    // A stale tap (the ring resolved, or the process restarted after it
+    // ended): there is nothing to answer.
+    if (!core.isRingLive(next)) {
+      if (ring == null || ring?.callId == next.callId) finish()
+      return
+    }
+    ring = next
+    awaitingForward = false
+    pulse?.cancel()
+    val title = next.conversationName ?: next.callerName ?: "Incoming call"
+    val body = if (next.media == "video") "Incoming video call" else "Incoming call"
+    setContentView(buildScene(title, body, next))
+  }
+
+  /**
+   * Answer, then bring the app forward FROM THIS ACTIVITY, and stay
+   * (as a plain dark window) until the app is in front — finishing at
+   * once dropped the start on some OEMs and left the call audible
+   * behind the lock screen. onStop (we got covered) finishes us; a
+   * timer is the fallback.
+   */
+  private fun answerAndForward(core: CallCore, ring: RingContext) {
+    awaitingForward = true
+    pulse?.cancel()
+    pulse = null
+    setContentView(View(this).apply { setBackgroundColor(Color.parseColor("#0B0B14")) })
+    val launched = core.onUserAnswer(ring, this)
+    if (!launched) { finish(); return }
+    main.postDelayed({ if (!isFinishing) finish() }, FORWARD_FALLBACK_MS)
+  }
+
+  override fun onStop() {
+    super.onStop()
+    if (awaitingForward && !isFinishing) finish()
   }
 
   override fun onDestroy() {
+    main.removeCallbacksAndMessages(null)
+    runCatching { unregisterReceiver(ringClosed) }
     pulse?.cancel()
     pulse = null
     super.onDestroy()
+  }
+
+  private companion object {
+    const val FORWARD_FALLBACK_MS = 4_000L
   }
 
   private fun showOverKeyguard() {
@@ -72,7 +159,7 @@ class IncomingCallActivity : Activity() {
     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
   }
 
-  private fun buildScene(title: String, body: String, ring: dev.poolse.callcore.RingContext): View {
+  private fun buildScene(title: String, body: String, ring: RingContext): View {
     val root = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#0B0B14")) }
 
     root.addView(
@@ -147,10 +234,11 @@ class IncomingCallActivity : Activity() {
       layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, wrap())
     }
     val decline = actionButton("Decline", "✕", "#EF4444") {
-      CallCore.get(this).onUserDecline(ring); finish()
+      CallCore.getOrNull(this)?.onUserDecline(ring); finish()
     }
     val accept = actionButton("Answer", "✓", "#22C55E") {
-      CallCore.get(this).onUserAnswer(ring); finish()
+      val core = CallCore.getOrNull(this)
+      if (core == null) finish() else answerAndForward(core, ring)
     }
     buttons.addView(decline, LinearLayout.LayoutParams(wrap(), wrap()).apply { rightMargin = px(52) })
     buttons.addView(accept, LinearLayout.LayoutParams(wrap(), wrap()).apply { leftMargin = px(52) })

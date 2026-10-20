@@ -126,6 +126,25 @@ export type {
 
 export { version } from './version.js';
 
+// Call-log system messages (`{"kind":"call",…}` bodies) — shared
+// parser + display helpers used by @poolse/react-ui and
+// @poolse/react-native.
+export {
+  parseCallLog,
+  parseCallLogBody,
+  isCallLogMessage,
+  isMessageVisibleTo,
+  describeCallLog,
+  callLogDisplayFor,
+  formatCallDuration,
+  formatCallLogPreview,
+  type CallLog,
+  type CallLogEntry,
+  type CallMissedEntry,
+  type CallLogMedia,
+  type CallLogDisplay,
+} from './call-log.js';
+
 // Cross-runtime UUID v4 used internally for idempotency keys, client
 // message ids, upload queue local ids. Exported so RN consumers can
 // reuse the same fallback in their own config callbacks if they want.

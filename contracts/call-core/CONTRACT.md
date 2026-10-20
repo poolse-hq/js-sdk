@@ -80,7 +80,12 @@ effect.
 | `POST /calls/:id/join` | session | `200 CallSessionBundle` | `410 call_finished` · `403 not_member` |
 | `POST /calls/:id/decline` body `{reason?: "declined"\|"busy"}` | grant or session | `204` (also `204` after the call finished — a late decline is harmless) | `401` invalid grant |
 | `POST /calls/:id/hangup` | control | `204` ("I left" — ends the call only per the §1 finish rule) | `204` even if already finished |
-| `POST /calls/:id/reconnect` | control | `200 {cv, livekit: {url, token}}` | `410 call_finished` |
+| `POST /calls/:id/reconnect` | control | `200 CallSessionBundle` (full bundle, same shape as answer/join — one parser; cores still accept the older `{cv, livekit: {url, token}}` and apply it onto the current bundle) | `410 call_finished` · `401` control token invalid |
+
+Error bodies use the envelope `{"error": {"code": "grant_spent", …}}`.
+Clients map: `404`/`410` → gone (`ended(finished)`); `401`/`403`/`503`, other
+`4xx`, or an unparseable `2xx` → `HTTP_FAILED` (`ended(failed)`, never
+`finished`); `408`/`429`/other `5xx`/network → timeout (retried).
 
 ### 4.1 `CallSessionBundle`
 
@@ -144,15 +149,36 @@ surfaced — or is dismissed instantly if it already was.
 
 ```jsonc
 {
-  "cv": "1", "type": "call", "event": "ring_ended",
+  "cv": "1", "type": "call_event", "event": "ring_ended",   // type=call_event: old JS builds ring on any type=call
   "call_id": "…", "conversation_id": "…",
-  "reason": "cancelled",   // cancelled | answered_elsewhere | declined_elsewhere | timeout | finished
+  "reason": "cancelled",   // cancelled | answered_elsewhere | declined | timeout | finished
+  "device_id": "…",        // optional: the device that answered/declined
   "sent_at": "…"
 }
 ```
 
 Sent to **every device whose surface might be ringing** when its ring
-resolves for any reason, including the call finishing mid-ring.
+resolves for any reason, including the call finishing mid-ring. It only ever
+ends a `ringing_in`: an `answered_elsewhere` echo of this device's own answer
+never ends a call it already answered. Cores accept `type` `call` or
+`call_event` and dispatch on `event`; a `type: "call"` push with no `event` is
+a ring (backward compatibility).
+
+### 5.3 Call finished (Android native core)
+
+```jsonc
+{
+  "cv": "1", "type": "call_event", "event": "finished",
+  "call_id": "…", "conversation_id": "…",
+  "reason": "finished"     // finished | declined_all | no_answer | cancelled
+}
+```
+
+Sent to the Android devices of every user who joined or was rung when the
+call finishes → `CALL_FINISHED(reason)`. For a caller still in `ringing_out`
+the reason becomes the ended reason; a core receiving `ring_ended` or
+`finished` ALWAYS tears down any ring surface for that `call_id` (even with no
+matching machine state, e.g. after a process restart).
 
 ## 6 · Socket events
 
@@ -187,12 +213,12 @@ least one ring is unresolved with nobody joined yet" — the caller's media
 joins during the ring so the first word is never clipped.
 
 ### Inputs (events)
-`PUSH_RING · SOCKET_RING · RING_ENDED(reason) · CALL_FINISHED ·
+`PUSH_RING · SOCKET_RING · RING_ENDED(reason) · CALL_FINISHED(reason?) ·
 USER_ANSWER · USER_DECLINE · USER_PLACE · USER_JOIN · USER_HANGUP ·
-HTTP_OK(bundle) · HTTP_GONE · HTTP_AUTH_FAIL ·
-MEDIA_CONNECTED · MEDIA_FAILED · MEDIA_LOST · MEDIA_RECOVERED ·
-REMOTE_JOINED · ALL_RINGS_RESOLVED(outcome) · RING_DEADLINE ·
-LINGER_ELAPSED`
+HTTP_OK(bundle) · HTTP_GONE · HTTP_TIMEOUT · HTTP_FAILED(code) ·
+MEDIA_CONNECTED · MEDIA_FAILED · MEDIA_LOST · MEDIA_RECONNECTING ·
+MEDIA_RECOVERED · REMOTE_JOINED · ALL_RINGS_RESOLVED(outcome) ·
+RING_DEADLINE · RECONNECT_BUDGET_ELAPSED · CONNECT_TIMEOUT · LINGER_ELAPSED`
 
 ### Abstract effects (each core maps to its platform)
 `SHOW_RING · DISMISS_RING · RINGTONE_START/STOP · RINGBACK_START/STOP ·
@@ -207,14 +233,27 @@ IS `vectors.json`; prose highlights only the non-obvious rules:
 - **Busy**: any ring input while `phase ≠ idle` for a *different* call →
   `HTTP_DECLINE(busy)` for the new call, no phase change (vector S9).
 - **Answer is optimistic**: `USER_ANSWER` → `connecting` + `HTTP_ANSWER`
-  immediately; `HTTP_GONE` → `ended(finished)`; HTTP timeout retries once then
-  relies on media join (`HTTP_OK` may arrive after `MEDIA_CONNECTED` — ignore).
+  immediately; `HTTP_GONE` → `ended(finished)`; `HTTP_FAILED` → `ended(failed)`;
+  HTTP timeout retries once, a second timeout → `ended(failed)` (with no bundle
+  media can never join). A `CONNECT_TIMEOUT` watchdog (~20 s) bounds
+  `connecting`. A late `HTTP_OK` after the phase moved on is ignored by the
+  machine; the runtime hangs up a bundle that arrives after the user already
+  hung up, and never carries a bundle into the next call.
 - **Leaving ≠ ending**: `USER_HANGUP` always sends `HTTP_HANGUP` and goes to
   `ended(left)` locally. Whether others end is the server's call (§1); clients
   never count participants to decide.
-- **Reconnect**: `MEDIA_LOST` in `active` → `reconnecting` + `HTTP_RECONNECT`;
-  `MEDIA_RECOVERED` → `active`; `HTTP_GONE` or retry budget exhausted
+- **Reconnect**: `MEDIA_RECONNECTING` (the SFU resuming on its own) in
+  `active` → `reconnecting`, no effects — never tear down a room the SFU is
+  recovering. `MEDIA_LOST` (unexpected disconnect) in `active` or
+  `reconnecting` → `reconnecting` + `HTTP_RECONNECT` (rejoin with the fresh
+  bundle); `MEDIA_RECOVERED` or `MEDIA_CONNECTED` → `active`; `HTTP_GONE` →
+  `ended(left)`; `HTTP_FAILED` → `ended(failed)`; budget exhausted
   (`RECONNECT_BUDGET_MS = 25_000`) → `ended(connection_lost)`.
+- **Caller media failure**: `MEDIA_FAILED` in `ringing_out` → `ended(failed)`
+  with ringback stop, media leave and hangup.
+- **Duplicates**: cores keep a small LRU (~32) of resolved call ids and drop
+  rings for them; a ring is stale only once `ring_deadline + 10 s` (clock
+  slack) has passed.
 
 ## 8 · Snapshot (bridge type)
 
@@ -249,7 +288,14 @@ place(conversationId, { media, sessionToken });
 join(callId, { sessionToken });
 answer(); decline(); hangUp();
 setMuted(b); setSpeaker(b); setCamera(b); switchCamera();
+onRingEnded(callId, reason); onCallFinished(callId);   // socket forwarding, idempotent with push
+canUseFullScreenIntent(); openFullScreenIntentSettings(); // Android
 ```
+
+`participants` are REMOTE only (`userId` = LiveKit identity). `getCallState()`
+and `onCallState` are safe before `configure` (idle / no-op). On end the
+snapshot stays `phase: 'ended'` with its reason for `ENDED_LINGER_MS`, then
+becomes `null`.
 
 ## 9 · Multi-device & policy rules
 

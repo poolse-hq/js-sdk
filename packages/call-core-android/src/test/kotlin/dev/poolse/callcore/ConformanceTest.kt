@@ -60,7 +60,7 @@ class ConformanceTest {
         stale = e["stale"]?.asBoolean ?: false,
       )
       "RING_ENDED" -> Event.RingEnded(callId(), e["reason"].asString)
-      "CALL_FINISHED" -> Event.CallFinished(callId())
+      "CALL_FINISHED" -> Event.CallFinished(callId(), e["reason"]?.asString)
       "USER_ANSWER" -> Event.UserAnswer
       "USER_DECLINE" -> Event.UserDecline
       "USER_PLACE" -> Event.UserPlace(callId(), media = e["media"]?.asString ?: "audio")
@@ -69,15 +69,18 @@ class ConformanceTest {
       "HTTP_OK" -> Event.HttpOk(created = e["created"]?.asBoolean ?: true)
       "HTTP_GONE" -> Event.HttpGone
       "HTTP_TIMEOUT" -> Event.HttpTimeout
+      "HTTP_FAILED" -> Event.HttpFailed(e["code"]?.asString ?: "failed")
       "MEDIA_CONNECTED" -> Event.MediaConnected
       "MEDIA_FAILED" -> Event.MediaFailed
       "MEDIA_LOST" -> Event.MediaLost
+      "MEDIA_RECONNECTING" -> Event.MediaReconnecting
       "MEDIA_RECOVERED" -> Event.MediaRecovered
       "REMOTE_JOINED" -> Event.RemoteJoined
       "ALL_RINGS_RESOLVED" -> Event.AllRingsResolved(e["outcome"].asString)
       "RING_DEADLINE" -> Event.RingDeadline
       "RECONNECT_BUDGET_ELAPSED" -> Event.ReconnectBudgetElapsed
       "LINGER_ELAPSED" -> Event.LingerElapsed
+      "CONNECT_TIMEOUT" -> Event.ConnectTimeout
       else -> fail("unknown event type: $type")
     }
   }

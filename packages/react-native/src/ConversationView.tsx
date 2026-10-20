@@ -2,6 +2,7 @@ import type { Message, Uuid } from '@poolse/sdk';
 import {
   computeGroupPosition,
   formatDayLabel,
+  isMessageVisibleTo,
   sameDay,
   useMe,
   useMembers,
@@ -39,7 +40,12 @@ const GROUPING_WINDOW_MS = 5 * 60 * 1000;
 export interface ConversationViewProps {
   conversationId: Uuid;
   emptyState?: ReactElement | string;
-  renderMessage?: (msg: Message, currentUserId: string | null) => ReactElement;
+  /**
+   * Custom row renderer. Return `null` / `undefined` to fall back to
+   * the default row for that message (so you can override just the
+   * message kinds you care about).
+   */
+  renderMessage?: (msg: Message, currentUserId: string | null) => ReactElement | null | undefined;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
 
@@ -217,21 +223,35 @@ export function ConversationView({
   // Precompute per-message group position (drives the bubble's
   // corner treatment + inter-cluster spacing). Same logic as
   // react-ui's ConversationView; the helpers live in @poolse/react.
+  //
+  // Runs over the *rendered* feed: call-log markers addressed to
+  // someone else (a `call_missed` for another callee) are dropped
+  // first so a hidden row never splits a bubble cluster or spawns an
+  // orphan day separator. Call-log rows themselves never group
+  // (`sameGroup` treats them as separators).
+  const visibleMessages = useMemo(
+    () => messages.filter((m) => isMessageVisibleTo(m, meId)),
+    [messages, meId],
+  );
   const groupPositionById = useMemo(() => {
     const map = new Map<string, ReturnType<typeof computeGroupPosition>>();
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
+    for (let i = 0; i < visibleMessages.length; i++) {
+      const msg = visibleMessages[i];
       if (!msg) continue;
-      const prev = i > 0 ? (messages[i - 1] ?? null) : null;
-      const next = i < messages.length - 1 ? (messages[i + 1] ?? null) : null;
+      const prev = i > 0 ? (visibleMessages[i - 1] ?? null) : null;
+      const next = i < visibleMessages.length - 1 ? (visibleMessages[i + 1] ?? null) : null;
       map.set(msg.id, computeGroupPosition(msg, prev, next, GROUPING_WINDOW_MS));
     }
     return map;
-  }, [messages]);
+  }, [visibleMessages]);
 
   const renderItem = useCallback(
     (msg: Message): ReactElement => {
-      if (renderMessage) return <>{renderMessage(msg, meId)}</>;
+      if (renderMessage) {
+        // null / undefined → fall through to the default row.
+        const custom = renderMessage(msg, meId);
+        if (custom !== null && custom !== undefined) return custom;
+      }
       const readState: 'sent' | 'read' | undefined =
         readReceipts && meId !== null && msg.sender_id === meId
           ? readStateForMessage(msg, members, meId, sequenceByMessageId)
@@ -304,7 +324,7 @@ export function ConversationView({
   const listItems = useMemo<MessageListItem[]>(() => {
     const out: MessageListItem[] = [];
     let prev: Message | null = null;
-    for (const msg of messages) {
+    for (const msg of visibleMessages) {
       if (prev === null || !sameDay(msg.inserted_at, prev.inserted_at)) {
         const label = formatDayLabel(msg.inserted_at);
         out.push({
@@ -317,7 +337,7 @@ export function ConversationView({
       prev = msg;
     }
     return out;
-  }, [messages]);
+  }, [visibleMessages]);
 
   const composerProps = useMemo(
     () => ({
@@ -397,7 +417,7 @@ export function ConversationView({
         {headerNode}
         <View style={styles.listWrap}>
           <MessageList
-            messages={messages}
+            messages={visibleMessages}
             items={listItems}
             meId={meId}
             loading={loading}

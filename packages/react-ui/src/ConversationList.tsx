@@ -9,7 +9,7 @@
 // sends a message into an existing one (no refetch).
 
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { useConversations, useMe } from '@poolse/react';
+import { formatCallLogPreview, useConversations, useMe } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 
@@ -67,6 +67,7 @@ export function ConversationList({
   const auto = useConversations();
   const { me } = useMe();
   const meExternalId = me?.external_id ?? null;
+  const meId = me?.id ?? null;
   const isControlled = controlledConversations !== undefined;
   const conversations = isControlled ? controlledConversations : auto.conversations;
   const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
@@ -109,6 +110,7 @@ export function ConversationList({
             selected={selected}
             unread={unread}
             meExternalId={meExternalId}
+            meId={meId}
             {...(labelFor ? { labelFor } : {})}
             {...(avatarFor ? { avatarFor } : {})}
           />
@@ -142,6 +144,7 @@ function DefaultRow({
   selected: _selected,
   unread,
   meExternalId,
+  meId = null,
   labelFor,
   avatarFor,
 }: {
@@ -149,6 +152,7 @@ function DefaultRow({
   selected: boolean;
   unread: number;
   meExternalId: string | null;
+  meId?: string | null;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
 }) {
@@ -180,7 +184,10 @@ function DefaultRow({
   // Messaging.send_message) is the source of truth. Fall back to a
   // sequence-count blurb when the server hasn't filled it in yet
   // (legacy rooms before the column was added).
+  // Call-log previews arrive as the raw JSON body — render them as
+  // "Voice call · 3:12" / "Missed call" instead.
   const preview =
+    formatCallLogPreview(conv.last_message_preview, meId) ??
     conv.last_message_preview ??
     (conv.last_sequence > 0
       ? `${conv.last_sequence} message${conv.last_sequence === 1 ? '' : 's'}`

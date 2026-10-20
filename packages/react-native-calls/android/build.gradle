@@ -48,4 +48,9 @@ dependencies {
   if (useLiveKit) {
     implementation 'io.livekit:livekit-android:2.11.0'
   }
+
+  // JVM unit tests (CallHttpClient's parser). The real org.json replaces
+  // android.jar's throwing stubs on the test classpath.
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20180813'
 }

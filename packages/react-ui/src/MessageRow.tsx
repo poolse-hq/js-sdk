@@ -9,9 +9,10 @@
 // actions, edit/delete, read receipts) without re-wiring.
 
 import type { Message, Uuid } from '@poolse/sdk';
-import { useReactions, useUser } from '@poolse/react';
+import { callLogDisplayFor, useReactions, useUser } from '@poolse/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
+import { CallLogRow } from './CallLogRow.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
@@ -69,7 +70,20 @@ export interface MessageRowProps {
   showAvatar?: boolean;
 }
 
-export function MessageRow({
+export function MessageRow(props: MessageRowProps) {
+  // Call-log system messages render as a centered compact line with
+  // no bubble / reactions / actions. `undefined` = not a call log;
+  // `null` = a call log hidden for this viewer (someone else's
+  // missed-call marker). Split into its own component so the bubble
+  // row's hooks never run conditionally.
+  const callLog = callLogDisplayFor(props.msg, props.meId);
+  if (callLog !== undefined) {
+    return callLog ? <CallLogRow msg={props.msg} meId={props.meId} /> : null;
+  }
+  return <BubbleMessageRow {...props} />;
+}
+
+function BubbleMessageRow({
   msg,
   meId,
   reactions = true,

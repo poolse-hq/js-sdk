@@ -25,7 +25,12 @@ import org.json.JSONObject
  * those (one retry, then media decides).
  */
 internal class CallHttpClient(
-  private val baseUrl: String,
+  /**
+   * Read per request, not captured: a later `configure()` with another
+   * API origin (staging ↔ prod switch) takes effect on the next call
+   * without rebuilding the process-wide runtime.
+   */
+  private val baseUrl: () -> String,
   private val client: OkHttpClient = defaultClient(),
 ) : HttpPort {
 
@@ -47,8 +52,8 @@ internal class CallHttpClient(
     cb = cb,
   )
 
-  override fun reconnect(callId: String, controlToken: String, cb: (HttpResult) -> Unit) =
-    post("calls/$callId/reconnect", controlToken, body = null, cb = cb)
+  override fun reconnect(current: CallSessionBundle, cb: (HttpResult) -> Unit) =
+    post("calls/${current.callId}/reconnect", current.controlToken, body = null, current = current, cb = cb)
 
   override fun decline(callId: String, auth: String, busy: Boolean) =
     postBestEffort(
@@ -62,24 +67,26 @@ internal class CallHttpClient(
 
   // ── request/response ────────────────────────────────────────────────
 
-  private fun post(path: String, token: String, body: JSONObject?, cb: (HttpResult) -> Unit) {
-    client.newCall(request(path, token, body)).enqueue(object : Callback {
+  private fun post(
+    path: String,
+    token: String,
+    body: JSONObject?,
+    current: CallSessionBundle? = null,
+    cb: (HttpResult) -> Unit,
+  ) {
+    val req = runCatching { request(path, token, body) }.getOrElse {
+      // A malformed base URL is a configuration error, not a timeout:
+      // retrying cannot fix it.
+      cb(HttpResult.Failed("bad_url")); return
+    }
+    client.newCall(req).enqueue(object : Callback {
       override fun onFailure(call: Call, e: IOException) = cb(HttpResult.Timeout)
 
       override fun onResponse(call: Call, response: Response) {
-        response.use {
-          val payload = it.body?.string()
-          cb(
-            when (it.code) {
-              in 200..299 -> runCatching { HttpResult.Ok(parseBundle(payload)) }
-                .getOrElse { HttpResult.Timeout }
-              410 -> HttpResult.Gone
-              401, 403 -> HttpResult.AuthFailed(reasonOf(payload, it.code))
-              408, 429, in 500..599 -> HttpResult.Timeout
-              else -> HttpResult.AuthFailed("http_${it.code}")
-            },
-          )
-        }
+        val result = runCatching {
+          response.use { classify(it.code, it.body?.string(), current) }
+        }.getOrElse { HttpResult.Timeout } // body read failed mid-stream: transient
+        cb(result)
       }
     })
   }
@@ -87,7 +94,8 @@ internal class CallHttpClient(
   // ── fire-and-forget with bounded retry ──────────────────────────────
 
   private fun postBestEffort(path: String, token: String, body: JSONObject?, attempt: Int = 0) {
-    client.newCall(request(path, token, body)).enqueue(object : Callback {
+    val req = runCatching { request(path, token, body) }.getOrNull() ?: return
+    client.newCall(req).enqueue(object : Callback {
       override fun onFailure(call: Call, e: IOException) {
         if (attempt < MAX_BEST_EFFORT_RETRIES) postBestEffort(path, token, body, attempt + 1)
       }
@@ -108,44 +116,87 @@ internal class CallHttpClient(
 
   private fun request(path: String, token: String, body: JSONObject?): Request =
     Request.Builder()
-      .url("$baseUrl/v1/$path")
+      .url("${baseUrl().trimEnd('/')}/v1/$path")
       .header("Authorization", "Bearer $token")
       .header("Accept", "application/json")
       .post((body?.toString() ?: "{}").toRequestBody(JSON))
       .build()
 
-  private fun parseBundle(payload: String?): CallSessionBundle {
-    val root = JSONObject(requireNotNull(payload) { "empty success body" })
-    val call = root.getJSONObject("call")
-    val livekit = root.getJSONObject("livekit")
-    return CallSessionBundle(
-      callId = call.getString("id"),
-      conversationId = call.getString("conversation_id"),
-      conversationName = call.optStringOrNull("conversation_name"),
-      media = call.optString("media", "audio"),
-      created = root.optBoolean("created", true),
-      livekitUrl = livekit.getString("url"),
-      livekitToken = livekit.getString("token"),
-      controlToken = root.getString("control_token"),
-    )
-  }
-
-  private fun reasonOf(payload: String?, code: Int): String =
-    payload?.let { runCatching { JSONObject(it).optStringOrNull("error") }.getOrNull() }
-      ?: "http_$code"
-
-  private fun JSONObject.optStringOrNull(key: String): String? =
-    if (isNull(key)) null else optString(key, "").ifEmpty { null }
-
-  private companion object {
+  internal companion object {
     const val MAX_BEST_EFFORT_RETRIES = 3
     val JSON = "application/json; charset=utf-8".toMediaType()
 
     fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
       // A call action must not hang the ring surface. Short, deliberate
-      // ceilings; the runtime retries answer/place once on top of these.
-      .callTimeout(java.time.Duration.ofSeconds(12))
+      // ceilings; the runtime retries answer/place once on top of these,
+      // and both attempts fit inside its 20 s CONNECTING watchdog.
+      .callTimeout(java.time.Duration.ofSeconds(9))
       .connectTimeout(java.time.Duration.ofSeconds(6))
       .build()
+
+    /**
+     * Status + body → [HttpResult] (CONTRACT.md §4). Pure, so it is unit
+     * tested without a network.
+     *
+     * - 2xx that will not parse is [HttpResult.Failed], NOT a timeout:
+     *   retrying an identical request returns the identical body, and
+     *   treating it as transient left the UI stuck in connecting.
+     * - 404/410: the call (or this device's place in it) is gone.
+     * - 401/403: auth refused — `failed`, never `finished`.
+     * - 503: no SFU capacity / maintenance — terminal for this attempt.
+     */
+    fun classify(code: Int, payload: String?, current: CallSessionBundle? = null): HttpResult =
+      when (code) {
+        in 200..299 -> runCatching { HttpResult.Ok(parseBundle(payload, current)) }
+          .getOrElse { HttpResult.Failed("bad_body") }
+        404, 410 -> HttpResult.Gone
+        401, 403 -> HttpResult.AuthFailed(errorCode(payload) ?: "http_$code")
+        503 -> HttpResult.Failed(errorCode(payload) ?: "http_503")
+        408, 429, in 500..599 -> HttpResult.Timeout
+        else -> HttpResult.Failed(errorCode(payload) ?: "http_$code")
+      }
+
+    /**
+     * One parser for answer, join, place AND reconnect: the server now
+     * returns the full bundle on reconnect too. An older server's
+     * reconnect answered only `{livekit:{url,token}}` (maybe a fresh
+     * `control_token`); with [current] given, that is applied onto the
+     * existing bundle instead of failing.
+     */
+    fun parseBundle(payload: String?, current: CallSessionBundle? = null): CallSessionBundle {
+      val root = JSONObject(requireNotNull(payload) { "empty success body" })
+      val livekit = root.getJSONObject("livekit")
+      val call = root.optJSONObject("call")
+      if (call == null) {
+        requireNotNull(current) { "bundle without call" }
+        return current.copy(
+          livekitUrl = livekit.optStringOrNull("url") ?: current.livekitUrl,
+          livekitToken = livekit.getString("token"),
+          controlToken = root.optStringOrNull("control_token") ?: current.controlToken,
+        )
+      }
+      return CallSessionBundle(
+        callId = call.getString("id"),
+        conversationId = call.getString("conversation_id"),
+        conversationName = call.optStringOrNull("conversation_name") ?: current?.conversationName,
+        media = call.optStringOrNull("media") ?: current?.media ?: "audio",
+        created = root.optBoolean("created", true),
+        livekitUrl = livekit.getString("url"),
+        livekitToken = livekit.getString("token"),
+        controlToken = root.optStringOrNull("control_token")
+          ?: requireNotNull(current?.controlToken) { "bundle without control_token" },
+      )
+    }
+
+    /** The server's envelope is `{"error":{"code":"…"}}`; tolerate a bare string too. */
+    fun errorCode(payload: String?): String? = payload?.let {
+      runCatching {
+        val root = JSONObject(it)
+        root.optJSONObject("error")?.optStringOrNull("code") ?: root.optStringOrNull("error")
+      }.getOrNull()
+    }
+
+    private fun JSONObject.optStringOrNull(key: String): String? =
+      if (!has(key) || isNull(key)) null else (opt(key) as? String)?.ifEmpty { null }
   }
 }

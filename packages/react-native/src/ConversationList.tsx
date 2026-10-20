@@ -1,5 +1,5 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { useConversations, useMe, useUser } from '@poolse/react';
+import { formatCallLogPreview, useConversations, useMe, useUser } from '@poolse/react';
 import { type ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -52,6 +52,7 @@ export function ConversationList({
   const auto = useConversations();
   const { me } = useMe();
   const meExternalId = me?.external_id ?? null;
+  const meId = me?.id ?? null;
   const isControlled = controlled !== undefined;
   const conversations = isControlled ? controlled : auto.conversations;
   const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
@@ -105,6 +106,7 @@ export function ConversationList({
             conv={item}
             selected={selected}
             meExternalId={meExternalId}
+            meId={meId}
             unread={counts?.[item.id] ?? 0}
             {...(labelFor ? { labelFor } : {})}
             {...(avatarFor ? { avatarFor } : {})}
@@ -120,6 +122,7 @@ function ConversationRow({
   conv,
   selected,
   meExternalId,
+  meId = null,
   unread,
   labelFor,
   avatarFor,
@@ -128,6 +131,7 @@ function ConversationRow({
   conv: Conversation;
   selected: boolean;
   meExternalId: string | null;
+  meId?: string | null;
   unread: number;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
@@ -181,7 +185,7 @@ function ConversationRow({
         </Text>
         {conv.last_message_preview ? (
           <Text style={[styles.preview, { color: theme.colors.ink3 }]} numberOfLines={1}>
-            {conv.last_message_preview}
+            {formatCallLogPreview(conv.last_message_preview, meId) ?? conv.last_message_preview}
           </Text>
         ) : conv.last_message_at ? (
           <Text style={[styles.preview, { color: theme.colors.ink3 }]} numberOfLines={1}>

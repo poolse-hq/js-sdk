@@ -8,7 +8,11 @@
 // so a host can render against this unconditionally.
 import { requireOptionalNativeModule } from 'expo-modules-core';
 
-/** A call's complete state. `null` means idle — no call. */
+/**
+ * A call's complete state. `null` means idle — no call. After a call
+ * ends the snapshot stays `phase: 'ended'` (with `reason`) for ~2.5 s,
+ * then becomes `null`.
+ */
 export interface Snapshot {
   cv: 1;
   callId: string;
@@ -26,6 +30,7 @@ export interface Snapshot {
     | 'cancelled'
     | 'connection_lost'
     | 'failed';
+  /** REMOTE participants only; `userId` is the LiveKit identity. */
   participants: Array<{
     userId: string;
     externalId: string;
@@ -64,6 +69,11 @@ interface PoolseCallsNative {
   setMuted(muted: boolean): void;
   setCamera(on: boolean): void;
   switchCamera(): void;
+  setSpeaker(on: boolean): void;
+  onRingEnded(callId: string, reason: string): void;
+  onCallFinished(callId: string): void;
+  canUseFullScreenIntent(): boolean;
+  openFullScreenIntentSettings(): void;
   addListener(event: 'onCallState', cb: (payload: NativeSnapshot) => void): { remove(): void };
 }
 
@@ -77,7 +87,7 @@ export async function configure(apiBaseUrl: string, options?: ConfigureOptions):
   await native?.configure(apiBaseUrl, options ?? null);
 }
 
-/** The current snapshot — safe to read at any moment, including cold answer. */
+/** The current snapshot — safe to read at any moment, including cold answer and before configure. */
 export function getCallState(): Snapshot | null {
   return native?.getCallState().snapshot ?? null;
 }
@@ -109,3 +119,24 @@ export const hangUp = (): void => native?.hangUp();
 export const setMuted = (muted: boolean): void => native?.setMuted(muted);
 export const setCamera = (on: boolean): void => native?.setCamera(on);
 export const switchCamera = (): void => native?.switchCamera();
+/** Route call audio to the loudspeaker (`true`) or back to earpiece / headset (`false`). */
+export const setSpeaker = (on: boolean): void => native?.setSpeaker(on);
+
+/**
+ * Socket forwarding for an open app: a `call:ring_ended` seen on the
+ * socket. Idempotent with the push path — the core dedupes.
+ */
+export const onRingEnded = (callId: string, reason: string): void =>
+  native?.onRingEnded(callId, reason);
+
+/** Socket forwarding: `call:finished`. Idempotent with the `finished` push. */
+export const onCallFinished = (callId: string): void => native?.onCallFinished(callId);
+
+/**
+ * Android 14+: whether the app may show the full-screen ring over the
+ * lock screen. `true` on older Android and where the module is absent.
+ */
+export const canUseFullScreenIntent = (): boolean => native?.canUseFullScreenIntent() ?? true;
+
+/** Open the system screen where the user grants full-screen intents (falls back to notification settings). */
+export const openFullScreenIntentSettings = (): void => native?.openFullScreenIntentSettings();

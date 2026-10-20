@@ -50,7 +50,12 @@ sealed interface Event {
   ) : Event
 
   data class RingEnded(val callId: String, val reason: String) : Event
-  data class CallFinished(val callId: String) : Event
+  /**
+   * The server finished the call. [reason] is the push's own reason
+   * (`finished`, `declined_all`, `no_answer`, `cancelled`); it only
+   * colours the caller's ended screen when the call never got answered.
+   */
+  data class CallFinished(val callId: String, val reason: String? = null) : Event
 
   data object UserAnswer : Event
   data object UserDecline : Event
@@ -62,10 +67,18 @@ sealed interface Event {
   data class HttpOk(val created: Boolean = true) : Event
   data object HttpGone : Event
   data object HttpTimeout : Event
+  /**
+   * Terminal refusal that is NOT "the call is over": 401/403 (grant
+   * spent, wrong device), 503, or an unparseable 2xx. Ends as `failed`,
+   * never as `finished`, so the UI does not claim the other side hung up.
+   */
+  data class HttpFailed(val code: String = "failed") : Event
 
   data object MediaConnected : Event
   data object MediaFailed : Event
   data object MediaLost : Event
+  /** The SFU is recovering the session on its own (ICE restart, resume). Show it; do not rejoin. */
+  data object MediaReconnecting : Event
   data object MediaRecovered : Event
   data object RemoteJoined : Event
 
@@ -74,6 +87,8 @@ sealed interface Event {
 
   data object RingDeadline : Event
   data object ReconnectBudgetElapsed : Event
+  /** CONNECTING watchdog: neither the server nor the SFU got us in. */
+  data object ConnectTimeout : Event
   data object LingerElapsed : Event
 }
 
@@ -115,16 +130,26 @@ object CallMachine {
 
     is Event.CallFinished ->
       if (e.callId == s.callId) when (s.phase) {
-        Phase.ACTIVE, Phase.RECONNECTING, Phase.RINGING_OUT -> Transition(
-          s.copy(phase = Phase.ENDED, reason = EndReason.FINISHED),
-          buildList {
-            if (s.phase == Phase.RINGING_OUT) add(Effect.RingbackStop)
-            add(Effect.MediaLeave); add(Effect.CallSessionStop)
-          },
+        // The finish push can overtake (or replace) ring_ended: a ring
+        // for a finished call is over either way.
+        Phase.RINGING_IN -> Transition(MachineState.IDLE, listOf(Effect.RingtoneStop, Effect.DismissRing))
+        // Caller still ringing out: nobody ever joined, so the push's
+        // reason (no_answer / declined_all / cancelled) is the truth the
+        // ended screen should show. The server already finished the call
+        // — no hangup to send.
+        Phase.RINGING_OUT -> Transition(
+          s.copy(phase = Phase.ENDED, reason = ringOutcome(e.reason)),
+          listOf(Effect.RingbackStop, Effect.MediaLeave, Effect.CallSessionStop),
         )
+        Phase.ACTIVE, Phase.RECONNECTING -> Transition(
+          s.copy(phase = Phase.ENDED, reason = EndReason.FINISHED),
+          listOf(Effect.MediaLeave, Effect.CallSessionStop),
+        )
+        // CONNECTING may already have joined media (HTTP_OK came back):
+        // leave it, or the room outlives the call.
         Phase.CONNECTING -> Transition(
           s.copy(phase = Phase.ENDED, reason = EndReason.FINISHED),
-          listOf(Effect.CallSessionStop),
+          listOf(Effect.MediaLeave, Effect.CallSessionStop),
         )
         else -> noop(s)
       } else noop(s)
@@ -199,8 +224,9 @@ object CallMachine {
       else -> noop(s)
     }
 
-    Event.HttpTimeout ->
-      if (s.phase == Phase.CONNECTING && s.httpAttempts < 2) Transition(
+    Event.HttpTimeout -> when {
+      s.phase != Phase.CONNECTING -> noop(s)
+      s.httpAttempts < 2 -> Transition(
         s.copy(httpAttempts = s.httpAttempts + 1),
         listOf(
           when (s.direction) {
@@ -209,24 +235,73 @@ object CallMachine {
             else -> Effect.HttpAnswer
           },
         ),
-      ) else noop(s) // out of retries: media join (or its absence) decides
+      )
+      // Out of retries. A timeout only ever answers the CONNECTING
+      // request, so there is no bundle and media can never join:
+      // waiting on it was the "stuck in connecting forever" bug.
+      else -> Transition(
+        s.copy(phase = Phase.ENDED, reason = EndReason.FAILED),
+        listOf(Effect.HttpHangup, Effect.CallSessionStop),
+      )
+    }
+
+    is Event.HttpFailed -> when (s.phase) {
+      // HTTP_HANGUP still runs: with no bundle it resolves the ring
+      // grant, so an incoming caller is not left ringing a dead answer.
+      Phase.CONNECTING -> Transition(
+        s.copy(phase = Phase.ENDED, reason = EndReason.FAILED),
+        listOf(Effect.HttpHangup, Effect.CallSessionStop),
+      )
+      // Reconnect refused for auth: the control token is dead, so a
+      // hangup with it would be refused too — just leave.
+      Phase.RECONNECTING -> Transition(
+        s.copy(phase = Phase.ENDED, reason = EndReason.FAILED),
+        listOf(Effect.MediaLeave, Effect.CallSessionStop),
+      )
+      else -> noop(s)
+    }
+
+    Event.ConnectTimeout ->
+      if (s.phase == Phase.CONNECTING) Transition(
+        s.copy(phase = Phase.ENDED, reason = EndReason.FAILED),
+        listOf(Effect.MediaLeave, Effect.HttpHangup, Effect.CallSessionStop),
+      ) else noop(s)
 
     Event.MediaConnected -> when (s.phase) {
       Phase.CONNECTING -> Transition(s.copy(phase = Phase.ACTIVE), emptyList())
+      // A rejoin after /reconnect lands as a fresh connect.
+      Phase.RECONNECTING -> Transition(s.copy(phase = Phase.ACTIVE), emptyList())
       else -> noop(s) // ringing_out keeps ringing until a remote joins
     }
 
-    Event.MediaFailed ->
-      if (s.phase == Phase.CONNECTING) Transition(
+    Event.MediaFailed -> when (s.phase) {
+      Phase.CONNECTING -> Transition(
         s.copy(phase = Phase.ENDED, reason = EndReason.FAILED),
         listOf(Effect.HttpHangup, Effect.CallSessionStop),
-      ) else noop(s)
+      )
+      // The caller's own media never came up: the callees would answer
+      // into an empty room. Give up and tell the server.
+      Phase.RINGING_OUT -> Transition(
+        s.copy(phase = Phase.ENDED, reason = EndReason.FAILED),
+        listOf(Effect.RingbackStop, Effect.MediaLeave, Effect.HttpHangup, Effect.CallSessionStop),
+      )
+      else -> noop(s) // reconnecting: the budget timer is the backstop
+    }
 
-    Event.MediaLost ->
-      if (s.phase == Phase.ACTIVE) Transition(
-        s.copy(phase = Phase.RECONNECTING),
-        listOf(Effect.HttpReconnect),
-      ) else noop(s)
+    // Lost = the SFU gave up (unexpected disconnect). Ask the server for
+    // a fresh token and rejoin — also from RECONNECTING, where the SFU's
+    // own recovery just failed.
+    Event.MediaLost -> when (s.phase) {
+      Phase.ACTIVE -> Transition(s.copy(phase = Phase.RECONNECTING), listOf(Effect.HttpReconnect))
+      Phase.RECONNECTING -> Transition(s, listOf(Effect.HttpReconnect))
+      else -> noop(s)
+    }
+
+    // The SFU is resuming the same session itself: only reflect it.
+    // Tearing the room down here fought LiveKit's own recovery.
+    Event.MediaReconnecting ->
+      if (s.phase == Phase.ACTIVE) Transition(s.copy(phase = Phase.RECONNECTING), emptyList())
+      else noop(s)
 
     Event.MediaRecovered ->
       if (s.phase == Phase.RECONNECTING) Transition(s.copy(phase = Phase.ACTIVE), emptyList())
@@ -245,6 +320,7 @@ object CallMachine {
           reason = when (e.outcome) {
             "busy_all" -> EndReason.BUSY_ALL
             "no_answer" -> EndReason.NO_ANSWER
+            "cancelled" -> EndReason.CANCELLED
             else -> EndReason.DECLINED_ALL
           },
         ),
@@ -286,6 +362,15 @@ object CallMachine {
     // Busy with another call, in any phase: auto-decline the newcomer,
     // whose banner still offers Join later. (Contract §7, scenario s9.)
     else -> Transition(s, listOf(Effect.HttpDeclineBusy(e.callId)))
+  }
+
+  /** A finish push's reason, read as the caller's unanswered outcome. */
+  private fun ringOutcome(reason: String?): EndReason = when (reason) {
+    "no_answer", "timeout" -> EndReason.NO_ANSWER
+    "declined_all", "declined" -> EndReason.DECLINED_ALL
+    "busy_all" -> EndReason.BUSY_ALL
+    "cancelled" -> EndReason.CANCELLED
+    else -> EndReason.FINISHED
   }
 
   private fun noop(s: MachineState) = Transition(s, emptyList())

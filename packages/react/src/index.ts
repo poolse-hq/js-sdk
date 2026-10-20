@@ -53,6 +53,25 @@ export type {
 } from '@poolse/sdk';
 export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from '@poolse/sdk';
 
+// Call-log system messages — shared parser + display helpers.
+export {
+  parseCallLog,
+  parseCallLogBody,
+  isCallLogMessage,
+  isMessageVisibleTo,
+  describeCallLog,
+  callLogDisplayFor,
+  formatCallDuration,
+  formatCallLogPreview,
+} from '@poolse/sdk';
+export type {
+  CallLog,
+  CallLogEntry,
+  CallMissedEntry,
+  CallLogMedia,
+  CallLogDisplay,
+} from '@poolse/sdk';
+
 // ── Voice + calling ──────────────────────────────────────────────
 export { useCallRoom, type UseCallRoom, type UseCallRoomOptions } from './use-call-room.js';
 export { useVoiceRoom, type UseVoiceRoom } from './use-voice-room.js';

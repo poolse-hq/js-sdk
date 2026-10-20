@@ -17,16 +17,24 @@ class RuntimeTest {
   private class FakeHttp : HttpPort {
     val log = mutableListOf<String>()
     var lastCb: ((HttpResult) -> Unit)? = null
+    val cbs = mutableListOf<(HttpResult) -> Unit>()
     var lastReconnectCb: ((HttpResult) -> Unit)? = null
+    /** When set, request/response doors answer synchronously, inside the effect. */
+    var immediate: HttpResult? = null
+
+    private fun take(cb: (HttpResult) -> Unit) {
+      lastCb = cb; cbs += cb
+      immediate?.let(cb)
+    }
 
     override fun answer(callId: String, grant: String, cb: (HttpResult) -> Unit) {
-      log += "answer:$callId:$grant"; lastCb = cb
+      log += "answer:$callId:$grant"; take(cb)
     }
     override fun join(callId: String, sessionToken: String, cb: (HttpResult) -> Unit) {
-      log += "join:$callId:$sessionToken"; lastCb = cb
+      log += "join:$callId:$sessionToken"; take(cb)
     }
     override fun place(conversationId: String, media: String, sessionToken: String, cb: (HttpResult) -> Unit) {
-      log += "place:$conversationId:$media:$sessionToken"; lastCb = cb
+      log += "place:$conversationId:$media:$sessionToken"; take(cb)
     }
     override fun decline(callId: String, auth: String, busy: Boolean) {
       log += "decline:$callId:$auth:busy=$busy"
@@ -34,8 +42,8 @@ class RuntimeTest {
     override fun hangup(callId: String, controlToken: String) {
       log += "hangup:$callId:$controlToken"
     }
-    override fun reconnect(callId: String, controlToken: String, cb: (HttpResult) -> Unit) {
-      log += "reconnect:$callId:$controlToken"; lastReconnectCb = cb
+    override fun reconnect(current: CallSessionBundle, cb: (HttpResult) -> Unit) {
+      log += "reconnect:${current.callId}:${current.controlToken}"; lastReconnectCb = cb
     }
   }
 
@@ -46,6 +54,7 @@ class RuntimeTest {
     override fun setMuted(muted: Boolean) { log += "muted:$muted" }
     override fun setCamera(on: Boolean) { log += "camera:$on" }
     override fun switchCamera() { log += "switch" }
+    override fun setSpeaker(on: Boolean) { log += "speaker:$on" }
   }
 
   private class FakeSurface : RingSurfacePort {
@@ -78,7 +87,8 @@ class RuntimeTest {
 
   private class FakeSink : SnapshotSink {
     val phases = mutableListOf<Phase>()
-    override fun emit(state: MachineState) { phases += state.phase }
+    val states = mutableListOf<MachineState>()
+    override fun emit(state: MachineState) { phases += state.phase; states += state }
   }
 
   private class Rig {
@@ -152,7 +162,8 @@ class RuntimeTest {
   @Test
   fun `a stale ring never surfaces`() {
     val r = Rig()
-    r.runtime.onRing(ring(deadlineIn = -1))
+    // Past the deadline by more than the 10 s clock slack.
+    r.runtime.onRing(ring(deadlineIn = -10_001))
     assertTrue(r.surface.log.isEmpty())
     assertEquals(Phase.IDLE, r.runtime.currentState().phase)
   }
@@ -256,5 +267,245 @@ class RuntimeTest {
     assertEquals("hangup:c1:ctl-c1", r.http.log.last())
     assertEquals(EndReason.LEFT, r.runtime.currentState().reason)
     assertEquals("leave", r.media.log.last())
+  }
+
+  // ── fixes: reconnect, stale bundles, failures, finish, dedupe ───────
+
+  private fun Rig.activeCall(callId: String = "c1") {
+    runtime.onRing(ring(callId))
+    runtime.answer()
+    http.lastCb!!(HttpResult.Ok(bundle(callId)))
+    runtime.onMediaConnected()
+    assertEquals(Phase.ACTIVE, runtime.currentState().phase)
+  }
+
+  private fun Rig.ringingOut(): String {
+    runtime.place("conv-1", "audio", "sess")
+    http.lastCb!!(HttpResult.Ok(bundle("out-1")))
+    assertEquals(Phase.RINGING_OUT, runtime.currentState().phase)
+    return "out-1"
+  }
+
+  @Test
+  fun `a ring just past its deadline still shows within the clock slack`() {
+    val r = Rig()
+    r.runtime.onRing(ring(deadlineIn = -5_000))
+    assertEquals(Phase.RINGING_IN, r.runtime.currentState().phase)
+    assertEquals(CallCoreRuntime.CLOCK_SLACK_MS, r.timers.scheduled["ring_deadline"]!!.first)
+  }
+
+  @Test
+  fun `reconnect applies the fresh bundle and rejoins, media up returns to active`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.onMediaLost()
+    assertEquals(Phase.RECONNECTING, r.runtime.currentState().phase)
+
+    val fresh = bundle().copy(livekitToken = "lk-fresh", controlToken = "ctl-fresh")
+    r.http.lastReconnectCb!!(HttpResult.Ok(fresh))
+    assertEquals("join:c1:lk-fresh", r.media.log.last())
+
+    r.runtime.onMediaConnected()
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+    assertNull(r.timers.scheduled["reconnect_budget"])
+
+    // The fresh control token is the one used from now on.
+    r.runtime.hangUp()
+    assertEquals("hangup:c1:ctl-fresh", r.http.log.last())
+  }
+
+  @Test
+  fun `SFU self-recovery shows reconnecting without asking the server`() {
+    val r = Rig()
+    r.activeCall()
+    val before = r.http.log.size
+    r.runtime.onMediaReconnecting()
+    assertEquals(Phase.RECONNECTING, r.runtime.currentState().phase)
+    assertEquals(before, r.http.log.size, "no /reconnect while LiveKit recovers itself")
+    assertTrue(r.media.log.last() != "leave")
+    r.runtime.onMediaRecovered()
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+  }
+
+  @Test
+  fun `hanging up while connecting hangs up the late bundle and never keeps it`() {
+    val r = Rig()
+    r.runtime.onRing(ring())
+    r.runtime.answer()
+    r.runtime.hangUp()
+    assertEquals(Phase.ENDED, r.runtime.currentState().phase)
+
+    // The answer's 2xx lands after the user already left.
+    r.http.lastCb!!(HttpResult.Ok(bundle()))
+    assertEquals("hangup:c1:ctl-c1", r.http.log.last())
+    assertTrue(r.media.log.none { it.startsWith("join") }, "no media for a call we left")
+
+    // The next call starts clean: its own bundle, not the stale one.
+    r.runtime.onRing(ring("c2"))
+    r.runtime.answer()
+    r.http.lastCb!!(HttpResult.Ok(bundle("c2")))
+    assertEquals("join:c2:lk-c2", r.media.log.last())
+  }
+
+  @Test
+  fun `a previous call's late place response cannot be adopted by the next call`() {
+    val r = Rig()
+    r.runtime.place("conv-a", "audio", "sess")
+    val first = r.http.lastCb!!
+    r.runtime.hangUp()
+    r.runtime.place("conv-b", "audio", "sess")
+    assertEquals(Phase.CONNECTING, r.runtime.currentState().phase)
+
+    first(HttpResult.Ok(bundle("a")))
+    assertEquals("hangup:a:ctl-a", r.http.log.last())
+    assertEquals(Phase.CONNECTING, r.runtime.currentState().phase)
+    assertEquals("pending:conv-b", r.runtime.currentState().callId)
+    assertTrue(r.media.log.none { it.startsWith("join") })
+  }
+
+  @Test
+  fun `the retry's twin 2xx is ignored, not joined twice or hung up`() {
+    val r = Rig()
+    r.runtime.onRing(ring())
+    r.runtime.answer()
+    val first = r.http.cbs[0]
+    first(HttpResult.Timeout)
+    val second = r.http.cbs[1]
+    second(HttpResult.Ok(bundle()))
+    first(HttpResult.Ok(bundle()))
+    assertEquals(1, r.media.log.count { it.startsWith("join") })
+    assertTrue(r.http.log.none { it.startsWith("hangup") })
+  }
+
+  @Test
+  fun `media failure while ringing out fails the call and cleans up`() {
+    val r = Rig()
+    r.ringingOut()
+    r.runtime.onMediaFailed()
+    val s = r.runtime.currentState()
+    assertEquals(Phase.ENDED, s.phase)
+    assertEquals(EndReason.FAILED, s.reason)
+    assertEquals("ringback-", r.surface.log.last())
+    assertEquals("leave", r.media.log.last())
+    assertEquals("hangup:out-1:ctl-out-1", r.http.log.last())
+    assertEquals("stop", r.session.log.last())
+  }
+
+  @Test
+  fun `finished push ends ringing-out with the push's reason and stops ringback`() {
+    val r = Rig()
+    val id = r.ringingOut()
+    r.runtime.onCallFinished(id, "no_answer")
+    val s = r.runtime.currentState()
+    assertEquals(Phase.ENDED, s.phase)
+    assertEquals(EndReason.NO_ANSWER, s.reason)
+    assertEquals("ringback-", r.surface.log.last())
+    assertEquals("leave", r.media.log.last())
+    assertTrue(r.http.log.none { it.startsWith("hangup") }, "server already finished it")
+  }
+
+  @Test
+  fun `finished push ends an active call as finished`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.onCallFinished("c1", "finished")
+    assertEquals(EndReason.FINISHED, r.runtime.currentState().reason)
+    assertEquals("stop", r.session.log.last())
+  }
+
+  @Test
+  fun `auth refusal fails, not finishes`() {
+    val r = Rig()
+    r.runtime.onRing(ring())
+    r.runtime.answer()
+    r.http.lastCb!!(HttpResult.AuthFailed("grant_spent"))
+    assertEquals(EndReason.FAILED, r.runtime.currentState().reason)
+    assertEquals("stop", r.session.log.last())
+  }
+
+  @Test
+  fun `a second timeout ends connecting as failed`() {
+    val r = Rig()
+    r.runtime.place("conv-1", "audio", "sess")
+    r.http.lastCb!!(HttpResult.Timeout)
+    assertEquals(Phase.CONNECTING, r.runtime.currentState().phase)
+    r.http.lastCb!!(HttpResult.Timeout)
+    assertEquals(Phase.ENDED, r.runtime.currentState().phase)
+    assertEquals(EndReason.FAILED, r.runtime.currentState().reason)
+    assertEquals("stop", r.session.log.last())
+  }
+
+  @Test
+  fun `the connecting watchdog fails a call that never got in`() {
+    val r = Rig()
+    r.runtime.place("conv-1", "audio", "sess")
+    r.timers.fire("connect_watchdog")
+    assertEquals(EndReason.FAILED, r.runtime.currentState().reason)
+  }
+
+  @Test
+  fun `a resolved call never rings again`() {
+    val r = Rig()
+    r.runtime.onRing(ring("c1"))
+    r.runtime.decline()
+    r.surface.log.clear()
+    r.runtime.onRing(ring("c1"))
+    assertTrue(r.surface.log.isEmpty())
+    assertEquals(Phase.IDLE, r.runtime.currentState().phase)
+
+    // ring_ended before the ring itself (push reordering)
+    r.runtime.onRingEnded("c9", "cancelled")
+    r.runtime.onRing(ring("c9"))
+    assertTrue(r.surface.log.isEmpty())
+  }
+
+  @Test
+  fun `a duplicate ring of the call we are in is not busy-declined`() {
+    val r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c1"))
+    assertTrue(r.http.log.none { it.startsWith("decline") })
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+  }
+
+  @Test
+  fun `the resolved LRU is bounded`() {
+    val r = Rig()
+    for (i in 0..CallCoreRuntime.RESOLVED_LRU) r.runtime.onRingEnded("x$i", "cancelled")
+    assertTrue(!r.runtime.isResolved("x0"), "eldest evicted")
+    assertTrue(r.runtime.isResolved("x${CallCoreRuntime.RESOLVED_LRU}"))
+  }
+
+  @Test
+  fun `a synchronous port result is queued, not re-entered, and snapshots stay ordered`() {
+    val r = Rig()
+    r.http.immediate = HttpResult.Ok(bundle("out-1"))
+    r.runtime.place("conv-1", "audio", "sess")
+    assertEquals(Phase.RINGING_OUT, r.runtime.currentState().phase)
+    assertEquals(listOf(Phase.CONNECTING, Phase.RINGING_OUT), r.sink.phases)
+    assertEquals("start:pending:conv-1:audio", r.session.log.first())
+  }
+
+  @Test
+  fun `ended lingers with its reason then clears to idle`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.hangUp()
+    assertEquals(Phase.ENDED, r.sink.states.last().phase)
+    assertEquals(EndReason.LEFT, r.sink.states.last().reason)
+    assertEquals(CallCoreRuntime.ENDED_LINGER_MS, r.timers.scheduled["linger"]!!.first)
+    r.timers.fire("linger")
+    assertEquals(Phase.IDLE, r.sink.phases.last())
+  }
+
+  @Test
+  fun `a stale timer from a previous call cannot touch the next`() {
+    val r = Rig()
+    r.runtime.place("conv-a", "audio", "sess")
+    val (_, staleFire) = r.timers.scheduled["connect_watchdog"]!!
+    r.runtime.hangUp()
+    r.runtime.place("conv-b", "audio", "sess")
+    staleFire()
+    assertEquals(Phase.CONNECTING, r.runtime.currentState().phase)
   }
 }

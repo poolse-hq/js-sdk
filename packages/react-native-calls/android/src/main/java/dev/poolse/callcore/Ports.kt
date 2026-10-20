@@ -19,8 +19,13 @@ interface HttpPort {
   fun decline(callId: String, auth: String, busy: Boolean)
   /** POST /calls/:id/hangup with the call-control token; fire-and-forget with retry. */
   fun hangup(callId: String, controlToken: String)
-  /** POST /calls/:id/reconnect with the call-control token. */
-  fun reconnect(callId: String, controlToken: String, cb: (HttpResult) -> Unit)
+  /**
+   * POST /calls/:id/reconnect with the call-control token. The server
+   * answers with the FULL bundle (same shape as answer/join); [current]
+   * is passed so an older server's `{livekit:{url,token}}` refresh can
+   * still be applied onto it.
+   */
+  fun reconnect(current: CallSessionBundle, cb: (HttpResult) -> Unit)
 }
 
 sealed interface HttpResult {
@@ -32,6 +37,11 @@ sealed interface HttpResult {
   data object Timeout : HttpResult
   /** 401/403 — grant spent, expired, or wrong device. Terminal. */
   data class AuthFailed(val code: String) : HttpResult
+  /**
+   * Terminal but not auth: 503 (no SFU capacity), another 4xx, or a 2xx
+   * whose body would not parse. Retrying would only repeat it.
+   */
+  data class Failed(val code: String) : HttpResult
 }
 
 data class CallSessionBundle(
@@ -52,6 +62,11 @@ interface MediaPort {
   fun setMuted(muted: Boolean)
   fun setCamera(on: Boolean)
   fun switchCamera()
+  /**
+   * Route call audio to the loudspeaker (`true`) or back to the private
+   * route — earpiece, or a connected headset/Bluetooth device (`false`).
+   */
+  fun setSpeaker(on: Boolean)
 }
 
 /** The ring UX: CallStyle notification + full-screen activity + tones. */

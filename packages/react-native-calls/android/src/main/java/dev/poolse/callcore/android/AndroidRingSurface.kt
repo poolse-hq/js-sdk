@@ -10,6 +10,7 @@ import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
@@ -26,7 +27,10 @@ import dev.poolse.callcore.RingSurfacePort
  * on the loudspeaker and the ringtone in the earpiece. Both players use
  * explicit [AudioAttributes]: ringtone on the ringtone stream (loud,
  * speaker), ringback on voice-communication (quiet, follows the call
- * route).
+ * route). The ringback waits for [setCommunicationReady]: before the
+ * SFU's audio handler has switched the device into communication mode,
+ * a voice-communication stream still routes to the loudspeaker — the
+ * "ringback blares from the speaker" bug.
  *
  * Tap actions resolve to broadcasts handled by [CallActionReceiver],
  * which forwards into the single native entry point so that notification
@@ -35,11 +39,25 @@ import dev.poolse.callcore.RingSurfacePort
  */
 internal class AndroidRingSurface(
   private val context: Context,
-  private val config: RingSurfaceConfig,
+  /** Read per use, so a re-configure (icon, ringback) applies at once. */
+  private val configOf: () -> RingSurfaceConfig,
 ) : RingSurfacePort {
+
+  private val config get() = configOf()
 
   private var ringtone: Ringtone? = null
   private var ringback: MediaPlayer? = null
+  private var ringbackWanted = false
+  private var communicationReady = false
+
+  /**
+   * The call's audio path is (or is no longer) in communication mode.
+   * A ringback requested earlier starts now, through the call route.
+   */
+  fun setCommunicationReady(ready: Boolean) {
+    communicationReady = ready
+    if (ready && ringbackWanted && ringback == null) playRingback()
+  }
 
   override fun show(ring: RingContext) {
     ensureChannel()
@@ -93,6 +111,9 @@ internal class AndroidRingSurface(
       .setOngoing(true)
       .setAutoCancel(false)
       .setFullScreenIntent(fullScreen, true)
+      // Tapping the heads-up (not a button) opens the ring screen too;
+      // without this the tap did nothing.
+      .setContentIntent(fullScreen)
       .setStyle(
         NotificationCompat.CallStyle.forIncomingCall(
           caller,
@@ -102,13 +123,23 @@ internal class AndroidRingSurface(
       )
       .build()
 
-    runCatching {
+    try {
       NotificationManagerCompat.from(context).notify(ring.callId.notificationId(), notification)
+    } catch (e: SecurityException) {
+      // POST_NOTIFICATIONS denied: the ringtone still plays, but there is
+      // no surface. Loud in the log — this is a support question.
+      Log.e(TAG, "ring notification refused (POST_NOTIFICATIONS?)", e)
     }
   }
 
   override fun dismiss(callId: String) {
-    NotificationManagerCompat.from(context).cancel(callId.notificationId())
+    runCatching { NotificationManagerCompat.from(context).cancel(callId.notificationId()) }
+    // The full-screen activity is its own window: tell it to close.
+    runCatching {
+      context.sendBroadcast(
+        Intent(ACTION_RING_CLOSED).setPackage(context.packageName).putExtra(EXTRA_CALL_ID, callId),
+      )
+    }
   }
 
   override fun ringtoneStart() {
@@ -133,6 +164,11 @@ internal class AndroidRingSurface(
 
   override fun ringbackStart() {
     ringbackStop()
+    ringbackWanted = true
+    if (communicationReady) playRingback()
+  }
+
+  private fun playRingback() {
     val resId = config.ringbackRawRes
     if (resId == 0) return
     runCatching {
@@ -152,6 +188,7 @@ internal class AndroidRingSurface(
   }
 
   override fun ringbackStop() {
+    ringbackWanted = false
     runCatching {
       ringback?.stop()
       ringback?.release()
@@ -184,6 +221,10 @@ internal class AndroidRingSurface(
     const val ACTION_OPEN = "OPEN"
     const val EXTRA_RING = "poolse_ring"
     const val EXTRA_AUTO_ANSWER = "poolse_auto_answer"
+    /** Package-local broadcast: the ring for [EXTRA_CALL_ID] is over. */
+    const val ACTION_RING_CLOSED = "dev.poolse.callcore.RING_CLOSED"
+    const val EXTRA_CALL_ID = "poolse_call_id"
+    private const val TAG = "PoolseRingSurface"
 
     /** Stable per-call notification id, so teardown targets the right one. */
     fun String.notificationId(): Int = hashCode()

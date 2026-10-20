@@ -10,7 +10,14 @@
 // directly. ConversationView is just the canonical wiring.
 
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import { useMembers, useMessages, useMe, useRealtimeStatus, useTyping } from '@poolse/react';
+import {
+  isMessageVisibleTo,
+  useMembers,
+  useMessages,
+  useMe,
+  useRealtimeStatus,
+  useTyping,
+} from '@poolse/react';
 import React, { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePoolseFonts } from './fonts.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
@@ -316,6 +323,16 @@ export function ConversationView({
     setNewCountWhileAway(0);
   };
 
+  // Rendered feed: drops call-log markers addressed to someone else
+  // (a `call_missed` for another callee) BEFORE grouping + day
+  // separators run, so a hidden row never splits a bubble cluster or
+  // spawns an orphan date pill.
+  const meIdForFeed = me?.id ?? null;
+  const visibleMessages = useMemo(
+    () => messages.filter((m) => isMessageVisibleTo(m, meIdForFeed)),
+    [messages, meIdForFeed],
+  );
+
   // Compute the highest message sequence that ANY other member has read.
   // We treat any message with `sequence <= maxReadByOthers` as "read",
   // higher as "sent" (delivered but not yet read).
@@ -501,13 +518,13 @@ export function ConversationView({
           ) : messages.length === 0 ? (
             <div className="poolse-conversation__empty">{emptyState ?? 'No messages yet.'}</div>
           ) : (
-            messages.map((msg, idx) => {
+            visibleMessages.map((msg, idx) => {
               if (renderMessage) {
                 return <Fragment key={msg.id}>{renderMessage(msg, me?.id ?? null)}</Fragment>;
               }
-              const prev: Message | null = idx > 0 ? (messages[idx - 1] ?? null) : null;
+              const prev: Message | null = idx > 0 ? (visibleMessages[idx - 1] ?? null) : null;
               const next: Message | null =
-                idx < messages.length - 1 ? (messages[idx + 1] ?? null) : null;
+                idx < visibleMessages.length - 1 ? (visibleMessages[idx + 1] ?? null) : null;
               const groupPosition = grouping
                 ? computeGroupPosition(msg, prev, next, groupingWindowMs)
                 : 'standalone';

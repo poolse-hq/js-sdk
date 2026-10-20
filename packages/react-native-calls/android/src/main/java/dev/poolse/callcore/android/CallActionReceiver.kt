@@ -19,10 +19,11 @@ import dev.poolse.callcore.android.AndroidRingSurface.Companion.EXTRA_RING
 class CallActionReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     val ring = intent.getBundleExtra(EXTRA_RING)?.toRingContext() ?: return
+    val core = CallCore.getOrNull(context) ?: return
     when (intent.action) {
-      "$ACTION_PREFIX.$ACTION_ANSWER" -> CallCore.get(context).onUserAnswer(ring)
-      "$ACTION_PREFIX.$ACTION_DECLINE" -> CallCore.get(context).onUserDecline(ring)
-      "$ACTION_PREFIX.$ACTION_OPEN" -> CallCore.get(context).onUserOpen(ring)
+      "$ACTION_PREFIX.$ACTION_ANSWER" -> core.onUserAnswer(ring)
+      "$ACTION_PREFIX.$ACTION_DECLINE" -> core.onUserDecline(ring)
+      "$ACTION_PREFIX.$ACTION_OPEN" -> core.onUserOpen(ring)
     }
   }
 }

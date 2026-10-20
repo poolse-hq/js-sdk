@@ -2,7 +2,7 @@
 // ConversationView so they're testable in isolation and reusable
 // if a customer rolls their own message-list layout.
 
-import type { Message } from '@poolse/sdk';
+import { isCallLogMessage, type Message } from '@poolse/sdk';
 
 /**
  * Where this message sits inside a same-sender, same-day, in-window
@@ -32,6 +32,10 @@ export function computeGroupPosition(
 
 export function sameGroup(a: Message | null, b: Message | null, windowMs: number): boolean {
   if (!a || !b) return false;
+  // Call-log rows are centered separator-like lines, never part of a
+  // bubble cluster — and they must not glue the bubbles around them
+  // together either.
+  if (isCallLogMessage(a) || isCallLogMessage(b)) return false;
   if (a.sender_id !== b.sender_id) return false;
   if (!sameDay(a.inserted_at, b.inserted_at)) return false;
   const ta = new Date(a.inserted_at).getTime();

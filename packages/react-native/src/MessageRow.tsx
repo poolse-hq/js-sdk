@@ -9,12 +9,13 @@ import { useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 
 import { Avatar } from './primitives/Avatar.js';
+import { CallLogRow } from './CallLogRow.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { ReactionStrip } from './Reactions.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
-import { useReactions, useUser } from '@poolse/react';
+import { callLogDisplayFor, useReactions, useUser } from '@poolse/react';
 
 // Swipe-to-reply triggers at this much horizontal pull. iOS / WhatsApp
 // use 50–60px; the lower bound feels lighter for one-handed thumb use.
@@ -66,7 +67,20 @@ export interface MessageRowProps {
   avatarFor?: (externalId: string) => string | null;
 }
 
-export function MessageRow({
+export function MessageRow(props: MessageRowProps) {
+  // Call-log system messages render as a centered compact line with
+  // no bubble / swipe / long-press / reactions. `undefined` = not a
+  // call log; `null` = a call log hidden for this viewer (someone
+  // else's missed-call marker). Split into its own component so the
+  // bubble row's hooks never run conditionally.
+  const callLog = callLogDisplayFor(props.msg, props.meId);
+  if (callLog !== undefined) {
+    return callLog ? <CallLogRow msg={props.msg} meId={props.meId} /> : null;
+  }
+  return <BubbleMessageRow {...props} />;
+}
+
+function BubbleMessageRow({
   msg,
   meId,
   reactions = true,

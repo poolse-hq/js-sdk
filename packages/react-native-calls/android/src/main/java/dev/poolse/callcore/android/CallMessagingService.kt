@@ -12,7 +12,9 @@ import dev.poolse.callcore.RingContext
  * messaging service (declared via metadata), so chat notifications and
  * everything else keep working unchanged.
  *
- * Contract: data-only messages with `type: "call"` (CONTRACT.md §5).
+ * Contract: data-only messages — rings with `type: "call"`, control
+ * pushes (`ring_ended`, `finished`) with `type: "call_event"`
+ * (CONTRACT.md §5).
  */
 class CallMessagingService : FirebaseMessagingService() {
 
@@ -22,18 +24,42 @@ class CallMessagingService : FirebaseMessagingService() {
     forwardToHost { it.onNewToken(token) }
   }
 
+  override fun onDeletedMessages() {
+    // FCM dropped queued messages; the host's own sync logic needs to know.
+    forwardToHost { it.onDeletedMessages() }
+  }
+
   override fun onMessageReceived(message: RemoteMessage) {
     val data = message.data
-    if (data["type"] != "call") {
+    // Rings ride type=call; control pushes (ring_ended, finished) ride
+    // type=call_event so old JS Android builds — which ring on ANY
+    // type=call — ignore them. Everything else belongs to the host.
+    val type = data["type"]
+    if (type != "call" && type != "call_event") {
       forwardToHost { it.onMessageReceived(message) }
       return
     }
 
-    when (data["event"]) {
-      "ring" -> data.toRingContext()?.let { CallCore.get(this).onRing(it) }
+    // Never configured on this install: nothing can answer a call, and
+    // throwing here would crash the messaging process.
+    val core = CallCore.getOrNull(this) ?: return
+    // A type=call push without an event is a legacy-shaped ring.
+    val event = data["event"]?.ifEmpty { null } ?: if (type == "call") "ring" else return
+    when (event) {
+      // ring_ended reasons: cancelled | answered_elsewhere | declined |
+      // timeout | finished. The machine only lets them end a RINGING_IN,
+      // so an answered_elsewhere echo of THIS device's own answer
+      // (optional device_id) can never end a call we already answered.
+      "ring" -> data.toRingContext()?.let(core::onRing)
       "ring_ended" -> {
         val callId = data["call_id"] ?: return
-        CallCore.get(this).onRingEnded(callId, data["reason"] ?: "finished")
+        core.onRingEnded(callId, data["reason"] ?: "finished")
+      }
+      // The call is over for everyone (CONTRACT.md §5.3). Ends an active
+      // or ringing-out call, and tears down any ring surface still up.
+      "finished" -> {
+        val callId = data["call_id"] ?: return
+        core.onCallFinished(callId, data["reason"]?.ifEmpty { null })
       }
     }
   }
@@ -57,15 +83,17 @@ class CallMessagingService : FirebaseMessagingService() {
    * Forward to the host app's declared FirebaseMessagingService so its
    * own (non-call) pushes still arrive. The host names its class in the
    * manifest: `<meta-data android:name="dev.poolse.callcore.delegate"
-   * android:value="com.app.MyMessagingService"/>`.
+   * android:value="com.app.MyMessagingService"/>` — on `<application>`
+   * (where config plugins put it), or on this service.
+   *
+   * Reading only the SERVICE's meta-data missed the application-level
+   * entry, so every chat push was silently dropped.
    */
   private fun forwardToHost(block: (FirebaseMessagingService) -> Unit) {
-    val name = runCatching {
-      packageManager.getServiceInfo(
-        android.content.ComponentName(this, CallMessagingService::class.java),
-        android.content.pm.PackageManager.GET_META_DATA,
-      ).metaData?.getString(DELEGATE_META)
-    }.getOrNull() ?: return
+    val name = delegateName() ?: run {
+      android.util.Log.w(TAG, "no $DELEGATE_META meta-data: non-call push dropped")
+      return
+    }
 
     runCatching {
       val delegate = Class.forName(name).getDeclaredConstructor().newInstance()
@@ -76,11 +104,29 @@ class CallMessagingService : FirebaseMessagingService() {
         // never crash the call path.
         delegate.attachForDelegation(this)
         block(delegate)
+      } else {
+        android.util.Log.w(TAG, "$name is not a FirebaseMessagingService")
       }
-    }
+    }.onFailure { android.util.Log.e(TAG, "delegate $name failed", it) }
+  }
+
+  private fun delegateName(): String? {
+    val pm = packageManager
+    val fromApp = runCatching {
+      pm.getApplicationInfo(packageName, android.content.pm.PackageManager.GET_META_DATA)
+        .metaData?.getString(DELEGATE_META)
+    }.getOrNull()
+    if (!fromApp.isNullOrEmpty()) return fromApp
+    return runCatching {
+      pm.getServiceInfo(
+        android.content.ComponentName(this, CallMessagingService::class.java),
+        android.content.pm.PackageManager.GET_META_DATA,
+      ).metaData?.getString(DELEGATE_META)
+    }.getOrNull()?.ifEmpty { null }
   }
 
   private companion object {
+    const val TAG = "PoolseCallFcm"
     const val DELEGATE_META = "dev.poolse.callcore.delegate"
   }
 }
