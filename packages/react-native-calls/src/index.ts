@@ -52,8 +52,21 @@ export interface Snapshot {
 export interface ConfigureOptions {
   /** Drawable resource NAME for the call notification's small icon. */
   smallIcon?: string;
-  /** Raw resource NAME of the ringback tone (Android). */
+  /** Ringback tone: raw resource NAME (Android); main-bundle sound name, mp3/caf/wav (iOS). */
   ringback?: string;
+  /**
+   * iOS: the APNs environment of this build's `aps-environment`
+   * entitlement. Echoed back with the VoIP token so the server pushes to
+   * the right gateway. Ignored on Android.
+   */
+  apnsEnvironment?: 'production' | 'sandbox';
+}
+
+/** The iOS PushKit (VoIP) token and the APNs environment it belongs to. */
+export interface VoipToken {
+  /** Hex-encoded PushKit token. */
+  token: string;
+  environment: 'production' | 'sandbox' | string;
 }
 
 export interface PlaceOptions {
@@ -80,7 +93,9 @@ interface PoolseCallsNative {
   onCallFinished(callId: string, reason: string | null): void;
   canUseFullScreenIntent(): boolean;
   openFullScreenIntentSettings(): void;
+  getVoipToken?(): VoipToken | null;
   addListener(event: 'onCallState', cb: (payload: NativeSnapshot) => void): { remove(): void };
+  addListener(event: 'onVoipToken', cb: (payload: VoipToken) => void): { remove(): void };
 }
 
 const native = requireOptionalNativeModule<PoolseCallsNative>('PoolseCalls');
@@ -152,6 +167,23 @@ export const canUseFullScreenIntent = (): boolean => native?.canUseFullScreenInt
 
 /** Open the system screen where the user grants full-screen intents (falls back to notification settings). */
 export const openFullScreenIntentSettings = (): void => native?.openFullScreenIntentSettings();
+
+// ── VoIP push (iOS) ───────────────────────────────────────────────────
+
+/**
+ * iOS: the current PushKit VoIP token, registered natively at launch.
+ * `null` until iOS issues one, and always on Android (FCM carries rings).
+ */
+export function getVoipToken(): VoipToken | null {
+  return native?.getVoipToken?.() ?? null;
+}
+
+/** iOS: fires whenever PushKit issues (or rotates) the VoIP token. No-op on Android. */
+export function onVoipToken(cb: (token: VoipToken) => void): Unsubscribe {
+  if (!native || !native.getVoipToken) return () => undefined;
+  const sub = native.addListener('onVoipToken', cb);
+  return () => sub.remove();
+}
 
 // ── video ─────────────────────────────────────────────────────────────
 

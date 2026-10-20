@@ -1,6 +1,11 @@
 {
-  "platforms": ["android"],
+  "platforms": ["android", "ios"],
   "android": {
     "modules": ["expo.modules.poolsecalls.PoolseCallsModule"]
+  },
+  "ios": {
+    "podspecPath": "ios/PoolseCalls.podspec",
+    "modules": ["PoolseCallsModule"],
+    "appDelegateSubscribers": ["PoolseCallsAppDelegateSubscriber"]
   }
 }
