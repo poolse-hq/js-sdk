@@ -5,7 +5,6 @@ import {
   Animated,
   KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -18,6 +17,8 @@ import { MessageComposer } from './MessageComposer.js';
 import { MessageList } from './MessageList.js';
 import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
+import { useSafeInsets } from './internal/safeArea.js';
 import { UploadProvider } from './internal/uploadContext.js';
 import { useDismissableSheet } from './internal/useDismissableSheet.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
@@ -32,7 +33,7 @@ export interface ThreadViewProps {
 }
 
 // Sheet covers the bottom 88% of the screen. The remaining 12% is the
-// pull-down gutter (also the keyboardVerticalOffset for iOS).
+// pull-down gutter (also the KeyboardAvoidingView's vertical offset).
 const SHEET_HEIGHT_FRACTION = 0.88;
 
 /**
@@ -42,10 +43,13 @@ const SHEET_HEIGHT_FRACTION = 0.88;
  * upload queue) and the reply rows support reactions, swipe-to-reply,
  * long-press actions, edit, delete — same surface as ConversationView.
  *
- * Keyboard handling: inside a Modal the OS doesn't auto-resize the
- * sheet's children, so the composer needs its own KeyboardAvoidingView
- * with `keyboardVerticalOffset` set to the distance between the screen
- * top and the sheet top (the gutter above the sheet).
+ * Keyboard handling: the modal is translucent (edge-to-edge) on both
+ * platforms, so nothing resizes it for the keyboard — Android's
+ * `adjustResize` doesn't reach an edge-to-edge window. The composer
+ * needs its own `padding` KeyboardAvoidingView with
+ * `keyboardVerticalOffset` = the distance from the screen top to the
+ * sheet top (the gutter), since KAV measures its frame relative to
+ * its parent (the sheet), not the screen.
  */
 export function ThreadView({
   visible,
@@ -61,7 +65,10 @@ export function ThreadView({
       transparent
       animationType="slide"
       onRequestClose={onClose}
-      statusBarTranslucent
+      // Edge-to-edge on Android like the host app, so the modal covers
+      // the whole screen and the keyboard overlap is the same maths as
+      // on iOS. The composer pads itself for the nav bar.
+      {...EDGE_TO_EDGE_MODAL}
     >
       {/* Each open of the thread gets its own UploadProvider so the
           composer's queue is isolated from the parent ConversationView's
@@ -103,8 +110,18 @@ function ThreadSheet({
     loadMore,
     hasMore,
   } = useThread(conversationId, rootMessage.id);
-  const { height: screenHeight } = useWindowDimensions();
-  const sheetHeight = Math.round(screenHeight * SHEET_HEIGHT_FRACTION);
+  const insets = useSafeInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  // Measured modal height — on some Android builds the window
+  // dimensions exclude the nav bar while the translucent modal draws
+  // under it, which would skew the keyboard offset by that much.
+  const [rootHeight, setRootHeight] = useState(0);
+  const screenHeight = rootHeight || windowHeight;
+  // Never let the sheet's header slide under the status bar.
+  const sheetHeight = Math.min(
+    Math.round(screenHeight * SHEET_HEIGHT_FRACTION),
+    screenHeight - insets.top - 8,
+  );
   const gutter = screenHeight - sheetHeight;
   const { translateY, panHandlers } = useDismissableSheet({ onClose, sheetHeight });
 
@@ -163,7 +180,10 @@ function ThreadSheet({
   );
 
   return (
-    <View style={styles.modalRoot}>
+    <View
+      style={styles.modalRoot}
+      onLayout={(e) => setRootHeight(Math.round(e.nativeEvent.layout.height))}
+    >
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close thread" />
 
       <Animated.View
@@ -174,6 +194,8 @@ function ThreadSheet({
             backgroundColor: theme.colors.paper,
             borderTopLeftRadius: theme.radii.xl,
             borderTopRightRadius: theme.radii.xl,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
             transform: [{ translateY }],
           },
           theme.shadows.lg,
@@ -207,15 +229,15 @@ function ThreadSheet({
           </View>
         </View>
 
-        {/* KAV scope: just the scrolling area + composer. Keyboard pushes
-            the composer up by the keyboard height minus the gutter
-            (since the gutter is already "free" space above the sheet
-            top). On Android we use `height` behavior — works inside a
-            Modal because the modal window itself responds to adjustResize. */}
+        {/* KAV scope: just the scrolling area + composer. `padding` on
+            both platforms: the modal is full-screen and never resized,
+            so the overlap is exactly the keyboard's height over the
+            sheet bottom. The composer drops its nav-bar inset while the
+            keyboard is up, so there's no gap above the keyboard. */}
         <KeyboardAvoidingView
           style={styles.kavBody}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? gutter : 0}
+          behavior="padding"
+          keyboardVerticalOffset={gutter}
         >
           <View style={[styles.rootPreview, { backgroundColor: theme.colors.surface2 }]}>
             {rootRow}

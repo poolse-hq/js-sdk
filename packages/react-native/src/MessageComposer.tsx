@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AttachmentUploadInput, Message, Uuid } from '@poolse/sdk';
 import { useUser } from '@poolse/react';
 
@@ -7,6 +7,7 @@ import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
 import { useSharedUpload } from './internal/uploadContext.js';
 import { useSafeInsets } from './internal/safeArea.js';
+import { useKeyboardOpen } from './internal/useKeyboardOpen.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface MessageComposerProps {
@@ -90,24 +91,9 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const inputRef = useRef<TextInput>(null);
     const [value, setValue] = useState('');
     const [sending, setSending] = useState(false);
-    const [keyboardOpen, setKeyboardOpen] = useState(false);
+    const keyboardOpen = useKeyboardOpen();
     const upload = useSharedUpload();
     const insets = useSafeInsets();
-
-    useEffect(() => {
-      const show = Keyboard.addListener(
-        Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-        () => setKeyboardOpen(true),
-      );
-      const hide = Keyboard.addListener(
-        Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-        () => setKeyboardOpen(false),
-      );
-      return () => {
-        show.remove();
-        hide.remove();
-      };
-    }, []);
 
     useImperativeHandle(
       ref,

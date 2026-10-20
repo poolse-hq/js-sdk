@@ -1,9 +1,11 @@
 import type { Attachment } from '@poolse/sdk';
 import { useAttachmentUrl } from '@poolse/react';
 import { useState } from 'react';
-import { Dimensions, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
+import { useSafeInsets } from './internal/safeArea.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 export interface ImageMosaicProps {
@@ -184,6 +186,9 @@ export function ImageMosaic({
         transparent
         animationType="fade"
         onRequestClose={() => setViewerIndex(null)}
+        // Full-bleed black viewer on Android too (no app chrome peeking
+        // through above/below); the close button pads for the insets.
+        {...EDGE_TO_EDGE_MODAL}
       >
         {viewerIndex !== null ? (
           <FullScreenViewer
@@ -241,7 +246,8 @@ function FullScreenViewer({
   onClose: () => void;
 }) {
   const { url } = useAttachmentUrl(attachment.id);
-  const { width, height } = Dimensions.get('window');
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeInsets();
   return (
     <Pressable style={styles.viewer} onPress={onClose}>
       {url ? (
@@ -256,7 +262,8 @@ function FullScreenViewer({
       <Pressable
         onPress={onClose}
         hitSlop={12}
-        style={styles.closeBtn}
+        // Keep the close button out from under the status bar / notch.
+        style={[styles.closeBtn, { top: insets.top + 12, right: insets.right + 16 }]}
         accessibilityLabel="Close viewer"
       >
         <PoolseIcon name="close" size={20} color="#ffffff" />
@@ -317,8 +324,6 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     position: 'absolute',
-    top: 48,
-    right: 16,
     padding: 8,
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 20,

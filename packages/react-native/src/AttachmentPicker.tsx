@@ -17,6 +17,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
+import { useSafeInsets } from './internal/safeArea.js';
 import { useSharedUpload, useUploadPreview } from './internal/uploadContext.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
@@ -60,6 +62,7 @@ export function AttachmentPicker({
   camera = true,
 }: AttachmentPickerProps) {
   const theme = usePoolseTheme();
+  const insets = useSafeInsets();
   // Shared queue (via UploadProvider) so the composer sees these
   // uploads and can include them in the next send. Falls back to a
   // local queue when the picker is mounted outside ConversationView.
@@ -88,7 +91,15 @@ export function AttachmentPicker({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      // Edge-to-edge on Android like the host app, so the sheet's
+      // bottom padding below is what actually clears the nav bar.
+      {...EDGE_TO_EDGE_MODAL}
+    >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <View
           style={[
@@ -97,6 +108,10 @@ export function AttachmentPicker({
               backgroundColor: theme.colors.surface,
               borderTopLeftRadius: theme.radii.lg,
               borderTopRightRadius: theme.radii.lg,
+              // Cancel must sit above the nav bar / home indicator.
+              paddingBottom: 24 + insets.bottom,
+              paddingLeft: insets.left,
+              paddingRight: insets.right,
             },
             theme.shadows.lg,
           ]}

@@ -13,6 +13,8 @@ import {
 import { Avatar } from './primitives/Avatar.js';
 import { MemberList } from './MemberList.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
+import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
+import { useSafeInsets } from './internal/safeArea.js';
 import { useDismissableSheet } from './internal/useDismissableSheet.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
@@ -50,6 +52,7 @@ export function GroupDetailsSheet({
   const theme = usePoolseTheme();
   const { conversation } = useConversation(conversationId);
   const { members } = useMembers(conversationId);
+  const insets = useSafeInsets();
   const { height: screenHeight } = useWindowDimensions();
   const { translateY, panHandlers } = useDismissableSheet({
     onClose,
@@ -65,7 +68,9 @@ export function GroupDetailsSheet({
       transparent
       animationType="slide"
       onRequestClose={onClose}
-      statusBarTranslucent
+      // Edge-to-edge on Android like the host app; the sheet pads its
+      // bottom by the nav-bar inset so the last member row clears it.
+      {...EDGE_TO_EDGE_MODAL}
     >
       <View style={styles.modalRoot}>
         <Pressable
@@ -81,6 +86,11 @@ export function GroupDetailsSheet({
               backgroundColor: theme.colors.paper,
               borderTopLeftRadius: theme.radii.xl,
               borderTopRightRadius: theme.radii.xl,
+              // Header stays below the status bar even on short screens.
+              maxHeight: screenHeight - insets.top - 8,
+              paddingBottom: insets.bottom,
+              paddingLeft: insets.left,
+              paddingRight: insets.right,
               transform: [{ translateY }],
             },
             theme.shadows.lg,

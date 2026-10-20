@@ -3,6 +3,7 @@ import {
   Animated,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   StyleSheet,
@@ -14,7 +15,10 @@ import {
 
 import { Avatar } from '../primitives/Avatar.js';
 import { PoolseIcon } from '../primitives/PoolseIcon.js';
+import { EDGE_TO_EDGE_MODAL } from './edgeToEdge.js';
+import { useSafeInsets } from './safeArea.js';
 import { useDismissableSheet } from './useDismissableSheet.js';
+import { useKeyboardOpen } from './useKeyboardOpen.js';
 import { usePoolseTheme } from '../theme/PoolseTheme.js';
 
 export interface InboxUser {
@@ -68,7 +72,16 @@ export function UserPickerSheet({
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [groupName, setGroupName] = useState('');
-  const { height: screenHeight } = useWindowDimensions();
+  const insets = useSafeInsets();
+  const keyboardOpen = useKeyboardOpen();
+  const { height: windowHeight } = useWindowDimensions();
+  // Measured modal height — on some Android builds the window
+  // dimensions exclude the nav bar while the translucent modal draws
+  // under it, which would skew the keyboard offset by that much.
+  const [rootHeight, setRootHeight] = useState(0);
+  const screenHeight = rootHeight || windowHeight;
+  // 85%, but never so tall the header slides under the status bar.
+  const sheetHeight = Math.min(Math.round(screenHeight * 0.85), screenHeight - insets.top - 8);
   const { translateY, panHandlers } = useDismissableSheet({
     onClose: () => {
       // Reset selection state on dismiss so it doesn't survive
@@ -78,7 +91,7 @@ export function UserPickerSheet({
       setGroupName('');
       onClose();
     },
-    sheetHeight: screenHeight * 0.85,
+    sheetHeight,
   });
 
   const excludeSet = useMemo(() => new Set(excludeIds ?? []), [excludeIds]);
@@ -131,9 +144,14 @@ export function UserPickerSheet({
       transparent
       animationType="slide"
       onRequestClose={handleClose}
-      statusBarTranslucent
+      // Edge-to-edge on Android like the host app, so the inset and
+      // keyboard maths below hold on every device.
+      {...EDGE_TO_EDGE_MODAL}
     >
-      <View style={styles.modalRoot}>
+      <View
+        style={styles.modalRoot}
+        onLayout={(e) => setRootHeight(Math.round(e.nativeEvent.layout.height))}
+      >
         <Pressable style={styles.backdrop} onPress={handleClose} />
 
         <Animated.View
@@ -143,123 +161,142 @@ export function UserPickerSheet({
               backgroundColor: theme.colors.paper,
               borderTopLeftRadius: theme.radii.xl,
               borderTopRightRadius: theme.radii.xl,
+              height: sheetHeight,
+              // Last row clears the nav bar — unless the keyboard is
+              // covering it, where the inset would just be a gap.
+              paddingBottom: keyboardOpen ? 0 : insets.bottom,
+              paddingLeft: insets.left,
+              paddingRight: insets.right,
               transform: [{ translateY }],
             },
             theme.shadows.lg,
           ]}
         >
-          <View {...panHandlers} style={styles.dragHandle}>
-            <View style={[styles.dragPill, { backgroundColor: theme.colors.ink3 }]} />
-          </View>
+          {/* The group-name / search inputs open the keyboard over a
+              translucent, never-resized modal. A `padding` KAV (both
+              platforms) shrinks the list to end above the keyboard;
+              the offset is the gutter above the sheet because KAV
+              measures its frame relative to the sheet, not the screen. */}
+          <KeyboardAvoidingView
+            style={styles.kav}
+            behavior="padding"
+            keyboardVerticalOffset={screenHeight - sheetHeight}
+          >
+            <View {...panHandlers} style={styles.dragHandle}>
+              <View style={[styles.dragPill, { backgroundColor: theme.colors.ink3 }]} />
+            </View>
 
-          <View style={styles.header}>
-            <Pressable
-              onPress={handleClose}
-              hitSlop={16}
-              style={[styles.closeBtn, { backgroundColor: theme.colors.surface2 }]}
-              accessibilityLabel="Close picker"
-            >
-              <PoolseIcon name="close" size={18} color={theme.colors.ink} />
-            </Pressable>
-            <Text
-              style={[
-                styles.title,
-                { color: theme.colors.ink, fontFamily: theme.type.fontDisplay },
-              ]}
-              numberOfLines={1}
-            >
-              {heading}
-            </Text>
-            {isGroup ? (
+            <View style={styles.header}>
               <Pressable
-                onPress={handleCreate}
-                disabled={!canCreate}
-                hitSlop={6}
+                onPress={handleClose}
+                hitSlop={16}
+                style={[styles.closeBtn, { backgroundColor: theme.colors.surface2 }]}
+                accessibilityLabel="Close picker"
+              >
+                <PoolseIcon name="close" size={18} color={theme.colors.ink} />
+              </Pressable>
+              <Text
                 style={[
-                  styles.createBtn,
+                  styles.title,
+                  { color: theme.colors.ink, fontFamily: theme.type.fontDisplay },
+                ]}
+                numberOfLines={1}
+              >
+                {heading}
+              </Text>
+              {isGroup ? (
+                <Pressable
+                  onPress={handleCreate}
+                  disabled={!canCreate}
+                  hitSlop={6}
+                  style={[
+                    styles.createBtn,
+                    {
+                      backgroundColor: canCreate ? theme.colors.brand : theme.colors.surface2,
+                      opacity: canCreate ? 1 : 0.6,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: canCreate ? theme.colors.onBrand : theme.colors.ink3,
+                      fontWeight: '700',
+                      fontSize: 13,
+                    }}
+                  >
+                    Create{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            {isGroup ? (
+              <TextInput
+                placeholder="Group name"
+                placeholderTextColor={theme.colors.ink3}
+                value={groupName}
+                onChangeText={setGroupName}
+                style={[
+                  styles.groupNameInput,
                   {
-                    backgroundColor: canCreate ? theme.colors.brand : theme.colors.surface2,
-                    opacity: canCreate ? 1 : 0.6,
+                    color: theme.colors.ink,
+                    backgroundColor: theme.colors.surface2,
+                    borderRadius: theme.radii.md,
+                    fontFamily: theme.type.fontBody,
+                    fontSize: theme.type.bodySize,
                   },
                 ]}
-              >
-                <Text
-                  style={{
-                    color: canCreate ? theme.colors.onBrand : theme.colors.ink3,
-                    fontWeight: '700',
-                    fontSize: 13,
-                  }}
-                >
-                  Create{selectedIds.length > 0 ? ` (${selectedIds.length})` : ''}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-
-          {isGroup ? (
-            <TextInput
-              placeholder="Group name"
-              placeholderTextColor={theme.colors.ink3}
-              value={groupName}
-              onChangeText={setGroupName}
-              style={[
-                styles.groupNameInput,
-                {
-                  color: theme.colors.ink,
-                  backgroundColor: theme.colors.surface2,
-                  borderRadius: theme.radii.md,
-                  fontFamily: theme.type.fontBody,
-                  fontSize: theme.type.bodySize,
-                },
-              ]}
-            />
-          ) : null}
-
-          {showSearch ? (
-            <TextInput
-              placeholder="Search…"
-              placeholderTextColor={theme.colors.ink3}
-              value={query}
-              onChangeText={setQuery}
-              style={[
-                styles.searchInput,
-                {
-                  color: theme.colors.ink,
-                  backgroundColor: theme.colors.surface2,
-                  borderRadius: theme.radii.md,
-                  fontFamily: theme.type.fontBody,
-                  fontSize: 14,
-                },
-              ]}
-            />
-          ) : null}
-
-          <FlatList
-            data={filtered}
-            keyExtractor={(u) => u.externalId}
-            ListEmptyComponent={
-              <View style={styles.empty}>
-                <Text style={[styles.emptyText, { color: theme.colors.ink3 }]}>
-                  {query ? 'No matches.' : 'No users to show.'}
-                </Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <UserRow
-                user={item}
-                selected={selectedIds.includes(item.externalId)}
-                isGroup={isGroup}
-                onPress={() => {
-                  if (isGroup) toggle(item.externalId);
-                  else {
-                    onPickDirect?.(item.externalId);
-                    reset();
-                    onClose();
-                  }
-                }}
               />
-            )}
-          />
+            ) : null}
+
+            {showSearch ? (
+              <TextInput
+                placeholder="Search…"
+                placeholderTextColor={theme.colors.ink3}
+                value={query}
+                onChangeText={setQuery}
+                style={[
+                  styles.searchInput,
+                  {
+                    color: theme.colors.ink,
+                    backgroundColor: theme.colors.surface2,
+                    borderRadius: theme.radii.md,
+                    fontFamily: theme.type.fontBody,
+                    fontSize: 14,
+                  },
+                ]}
+              />
+            ) : null}
+
+            <FlatList
+              data={filtered}
+              keyExtractor={(u) => u.externalId}
+              // First tap selects a row even with the keyboard up.
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <View style={styles.empty}>
+                  <Text style={[styles.emptyText, { color: theme.colors.ink3 }]}>
+                    {query ? 'No matches.' : 'No users to show.'}
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <UserRow
+                  user={item}
+                  selected={selectedIds.includes(item.externalId)}
+                  isGroup={isGroup}
+                  onPress={() => {
+                    if (isGroup) toggle(item.externalId);
+                    else {
+                      onPickDirect?.(item.externalId);
+                      reset();
+                      onClose();
+                    }
+                  }}
+                />
+              )}
+            />
+          </KeyboardAvoidingView>
         </Animated.View>
       </View>
     </Modal>
@@ -333,8 +370,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
-    height: '85%',
     overflow: 'hidden',
+  },
+  kav: {
+    flex: 1,
   },
   dragHandle: {
     alignItems: 'center',

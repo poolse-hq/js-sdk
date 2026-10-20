@@ -1,6 +1,8 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon, type IconName } from './primitives/PoolseIcon.js';
+import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
+import { useSafeInsets } from './internal/safeArea.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 const DEFAULT_REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
@@ -44,6 +46,7 @@ export function MessageActions({
   onCopy,
 }: MessageActionsProps) {
   const theme = usePoolseTheme();
+  const insets = useSafeInsets();
   const items: Array<{ label: string; icon: IconName; onPress: () => void; danger?: boolean }> = [];
   if (onReply) items.push({ label: 'Reply', icon: 'reply', onPress: onReply });
   if (onQuote) items.push({ label: 'Quote reply', icon: 'reply', onPress: onQuote });
@@ -57,7 +60,15 @@ export function MessageActions({
   const showEmojiRow = !!onPickReaction && emojis.length > 0;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      // Edge-to-edge on Android like the host app, so the sheet's
+      // bottom padding below is what actually clears the nav bar.
+      {...EDGE_TO_EDGE_MODAL}
+    >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <View
           style={[
@@ -66,6 +77,10 @@ export function MessageActions({
               backgroundColor: theme.colors.surface,
               borderTopLeftRadius: theme.radii.lg,
               borderTopRightRadius: theme.radii.lg,
+              // Last action row must sit above the nav bar / home indicator.
+              paddingBottom: 24 + insets.bottom,
+              paddingLeft: insets.left,
+              paddingRight: insets.right,
             },
             theme.shadows.lg,
           ]}

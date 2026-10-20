@@ -1,6 +1,8 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon, type IconName } from '../primitives/PoolseIcon.js';
+import { EDGE_TO_EDGE_MODAL } from '../internal/edgeToEdge.js';
+import { useSafeInsets } from '../internal/safeArea.js';
 import { callColors } from './callTheme.js';
 import type { AudioRoute, AudioRouteKind } from './livekit-rn.js';
 
@@ -36,12 +38,28 @@ export function AudioRouteSheet({
   onSelect,
   onClose,
 }: AudioRouteSheetProps) {
+  // Rendered under CallScreen's own SafeAreaProvider, so these are the
+  // real device insets.
+  const insets = useSafeInsets();
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      // Edge-to-edge on Android so the padding below is what clears
+      // the nav bar.
+      {...EDGE_TO_EDGE_MODAL}
+    >
       {/* Tapping away closes it, which is what a sheet like this owes
           anyone who opened it by accident mid-call. */}
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button">
-        <Pressable style={styles.sheet} onPress={() => {}}>
+        <Pressable
+          // The old fixed 34 was an iPhone home-indicator guess; a
+          // 3-button Android nav bar is taller, so use the real inset.
+          style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + 16) }]}
+          onPress={() => {}}
+        >
           <View style={styles.grabber} />
           <Text style={styles.title}>Audio output</Text>
 
@@ -85,7 +103,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     paddingHorizontal: 12,
     paddingTop: 10,
-    paddingBottom: 34,
     gap: 2,
   },
   grabber: {

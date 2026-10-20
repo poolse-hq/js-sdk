@@ -2,6 +2,8 @@ import type { Uuid } from '@poolse/sdk';
 import { useReactions } from '@poolse/react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
+import { useSafeInsets } from './internal/safeArea.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
 const DEFAULT_EMOJIS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
@@ -82,9 +84,21 @@ export function ReactionPicker({
   emojis = DEFAULT_EMOJIS,
 }: ReactionPickerProps) {
   const theme = usePoolseTheme();
+  const insets = useSafeInsets();
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      // Edge-to-edge on Android like the host app; the backdrop pads
+      // by the insets so the picker centres in the visible area.
+      {...EDGE_TO_EDGE_MODAL}
+    >
+      <Pressable
+        style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+        onPress={onClose}
+      >
         <View
           style={[
             styles.sheet,
