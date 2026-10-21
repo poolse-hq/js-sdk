@@ -10,16 +10,26 @@ export type DevicePlatform = 'ios' | 'android';
  */
 export type DeviceEnvironment = 'production' | 'sandbox';
 
+/**
+ * iOS only — which of a phone's two tokens this is. `voip`: the PushKit
+ * token, which only ever carries an incoming call. `alert`: the regular
+ * APNs token, for notifications such as a missed call. Register both.
+ * Android's one FCM token carries everything; leave `kind` out there.
+ */
+export type DeviceKind = 'voip' | 'alert';
+
 export interface RegisterDeviceRequest {
   /**
-   * On iOS this MUST be the **PushKit VoIP token**, not the regular
-   * APNs token. Apple issues them separately and a VoIP push aimed at a
-   * normal token is discarded without an error.
+   * On iOS, the PushKit VoIP token (`kind: 'voip'`, the default) or the
+   * regular APNs token (`kind: 'alert'`). Apple issues them separately
+   * and a push aimed at the wrong one is discarded without an error.
    */
   token: string;
   platform: DevicePlatform;
   /** Defaults to `production` server-side. */
   environment?: DeviceEnvironment;
+  /** iOS: defaults to `voip`. */
+  kind?: DeviceKind;
 }
 
 /** A registered device, minus the token itself. */
@@ -29,6 +39,7 @@ export interface Device {
   user_id: string;
   platform: DevicePlatform;
   environment: DeviceEnvironment;
+  kind: DeviceKind;
   last_registered_at: string | null;
   inserted_at: string;
   updated_at: string;

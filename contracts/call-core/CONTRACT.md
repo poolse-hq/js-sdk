@@ -42,25 +42,28 @@ Clients treat all three tokens as **opaque strings** presented in
 `Authorization: Bearer <token>`. Claims below bind the server implementation.
 
 ### 3.1 Ring grant — answering with zero stored credentials
+
 Carried in every ring push. Single-use, device-bound, ring-scoped.
 
-| claim | value |
-| --- | --- |
-| `scope` | `"call:respond"` |
-| `sub` | callee poolse user id |
-| `call_id`, `conversation_id` | the call |
-| `device_id` | the device registration this push targeted |
-| `jti` | single-use id; spending it twice fails `grant_spent` |
-| `exp` | `ring_deadline + 30s` |
+| claim                        | value                                                |
+| ---------------------------- | ---------------------------------------------------- |
+| `scope`                      | `"call:respond"`                                     |
+| `sub`                        | callee poolse user id                                |
+| `call_id`, `conversation_id` | the call                                             |
+| `device_id`                  | the device registration this push targeted           |
+| `jti`                        | single-use id; spending it twice fails `grant_spent` |
+| `exp`                        | `ring_deadline + 30s`                                |
 
 Valid on `answer` and `decline` only. Replay from another device fails on
 `device_id`; replay after the ring fails on `exp`.
 
 ### 3.2 Session — placing and late-joining
+
 The normal poolse user session (apps are open for both actions). Valid on
 `place`, `join`, `decline`, and the read endpoints.
 
 ### 3.3 Call-control — living inside the call
+
 Returned in every CallSessionBundle. Scoped `call:control` to
 (`call_id`, `sub`); honored only while the call is `live` (registry check —
 `exp` is a 24 h backstop, not the authority). Valid on `hangup`, `reconnect`,
@@ -72,15 +75,15 @@ Base `{apiUrl}/v1`. All POSTs are idempotent: repeating a spent/duplicate
 request returns the same result or the documented error, never a second side
 effect.
 
-| endpoint | auth | success | errors |
-| --- | --- | --- | --- |
-| `POST /conversations/:id/calls` body `{media}` | session | `201 CallSessionBundle` (`created: true`) — or `200` with the **existing** live call's bundle (`created: false`): simultaneous placement collapses into a join (scenario 16) | `403 not_member` |
-| `GET /conversations/:id/call` | session | `200 CallSummary` | `404 no_live_call` |
-| `POST /calls/:id/answer` | grant | `200 CallSessionBundle` | `410 call_finished` · `401 grant_expired` / `grant_spent` · `403 grant_device_mismatch` |
-| `POST /calls/:id/join` | session | `200 CallSessionBundle` | `410 call_finished` · `403 not_member` |
-| `POST /calls/:id/decline` body `{reason?: "declined"\|"busy"}` | grant or session | `204` (also `204` after the call finished — a late decline is harmless) | `401` invalid grant |
-| `POST /calls/:id/hangup` | control | `204` ("I left" — ends the call only per the §1 finish rule) | `204` even if already finished |
-| `POST /calls/:id/reconnect` | control | `200 CallSessionBundle` (full bundle, same shape as answer/join — one parser; cores still accept the older `{cv, livekit: {url, token}}` and apply it onto the current bundle) | `410 call_finished` · `401` control token invalid |
+| endpoint                                                       | auth             | success                                                                                                                                                                        | errors                                                                                  |
+| -------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `POST /conversations/:id/calls` body `{media}`                 | session          | `201 CallSessionBundle` (`created: true`) — or `200` with the **existing** live call's bundle (`created: false`): simultaneous placement collapses into a join (scenario 16)   | `403 not_member`                                                                        |
+| `GET /conversations/:id/call`                                  | session          | `200 CallSummary`                                                                                                                                                              | `404 no_live_call`                                                                      |
+| `POST /calls/:id/answer`                                       | grant            | `200 CallSessionBundle`                                                                                                                                                        | `410 call_finished` · `401 grant_expired` / `grant_spent` · `403 grant_device_mismatch` |
+| `POST /calls/:id/join`                                         | session          | `200 CallSessionBundle`                                                                                                                                                        | `410 call_finished` · `403 not_member`                                                  |
+| `POST /calls/:id/decline` body `{reason?: "declined"\|"busy"}` | grant or session | `204` (also `204` after the call finished — a late decline is harmless)                                                                                                        | `401` invalid grant                                                                     |
+| `POST /calls/:id/hangup`                                       | control          | `204` ("I left" — ends the call only per the §1 finish rule)                                                                                                                   | `204` even if already finished                                                          |
+| `POST /calls/:id/reconnect`                                    | control          | `200 CallSessionBundle` (full bundle, same shape as answer/join — one parser; cores still accept the older `{cv, livekit: {url, token}}` and apply it onto the current bundle) | `410 call_finished` · `401` control token invalid                                       |
 
 Error bodies use the envelope `{"error": {"code": "grant_spent", …}}`.
 Clients map: `404`/`410` → gone (`ended(finished)`); `401`/`403`/`503`, other
@@ -92,10 +95,12 @@ Clients map: `404`/`410` → gone (`ended(finished)`); `401`/`403`/`503`, other
 ```jsonc
 {
   "cv": 1,
-  "created": true,                  // place only
-  "call": { /* CallSummary */ },
+  "created": true, // place only
+  "call": {
+    /* CallSummary */
+  },
   "livekit": { "url": "wss://…", "token": "…" },
-  "control_token": "…"
+  "control_token": "…",
 }
 ```
 
@@ -105,18 +110,20 @@ Clients map: `404`/`410` → gone (`ended(finished)`); `401`/`403`/`503`, other
 {
   "id": "uuid",
   "conversation_id": "uuid",
-  "conversation_name": "Fix the boiler",     // null for unnamed
+  "conversation_name": "Fix the boiler", // null for unnamed
   "media": "audio",
-  "state": "live",                            // live | finished
+  "state": "live", // live | finished
   "started_by": { "user_id": "uuid", "external_id": "acc_1", "display_name": "Elena" },
   "started_at": "2026-10-15T09:00:00Z",
   "ended_at": null,
-  "participants": [                           // LiveKit-counted, media-level
-    { "user_id": "uuid", "external_id": "acc_1" }
+  "participants": [
+    // LiveKit-counted, media-level
+    { "user_id": "uuid", "external_id": "acc_1" },
   ],
-  "ring_states": {                            // per CALLEE user (caller absent)
-    "<user_id>": "ringing"                    // ringing|answered|declined|busy|missed|cancelled
-  }
+  "ring_states": {
+    // per CALLEE user (caller absent)
+    "<user_id>": "ringing", // ringing|answered|declined|busy|missed|cancelled
+  },
 }
 ```
 
@@ -129,14 +136,19 @@ string. Two shapes only.
 
 ```jsonc
 {
-  "cv": "1", "type": "call", "event": "ring",
-  "call_id": "…", "conversation_id": "…",
-  "conversation_name": "Fix the boiler",      // "" when unnamed
-  "media": "audio",                            // audio | video
-  "caller_user_id": "…", "caller_external_id": "…", "caller_name": "Elena",
+  "cv": "1",
+  "type": "call",
+  "event": "ring",
+  "call_id": "…",
+  "conversation_id": "…",
+  "conversation_name": "Fix the boiler", // "" when unnamed
+  "media": "audio", // audio | video
+  "caller_user_id": "…",
+  "caller_external_id": "…",
+  "caller_name": "Elena",
   "grant": "…",
-  "ring_deadline": "1760518800000",            // epoch ms; surface stops itself here
-  "sent_at": "1760518755000"
+  "ring_deadline": "1760518800000", // epoch ms; surface stops itself here
+  "sent_at": "1760518755000",
 }
 ```
 
@@ -149,11 +161,14 @@ surfaced — or is dismissed instantly if it already was.
 
 ```jsonc
 {
-  "cv": "1", "type": "call_event", "event": "ring_ended",   // type=call_event: old JS builds ring on any type=call
-  "call_id": "…", "conversation_id": "…",
-  "reason": "cancelled",   // cancelled | answered_elsewhere | declined | timeout | finished
-  "device_id": "…",        // optional: the device that answered/declined
-  "sent_at": "…"
+  "cv": "1",
+  "type": "call_event",
+  "event": "ring_ended", // type=call_event: old JS builds ring on any type=call
+  "call_id": "…",
+  "conversation_id": "…",
+  "reason": "cancelled", // cancelled | answered_elsewhere | declined | timeout | finished
+  "device_id": "…", // optional: the device that answered/declined
+  "sent_at": "…",
 }
 ```
 
@@ -168,9 +183,12 @@ a ring (backward compatibility).
 
 ```jsonc
 {
-  "cv": "1", "type": "call_event", "event": "finished",
-  "call_id": "…", "conversation_id": "…",
-  "reason": "finished"     // finished | declined_all | no_answer | cancelled
+  "cv": "1",
+  "type": "call_event",
+  "event": "finished",
+  "call_id": "…",
+  "conversation_id": "…",
+  "reason": "finished", // finished | declined_all | no_answer | cancelled
 }
 ```
 
@@ -180,23 +198,74 @@ the reason becomes the ended reason; a core receiving `ring_ended` or
 `finished` ALWAYS tears down any ring surface for that `call_id` (even with no
 matching machine state, e.g. after a process restart).
 
+### 5.4 Missed call
+
+To everyone whose phone rang out (rung, never joined, did not decline;
+busy counts as missed), once the call finishes:
+
+```jsonc
+// Android — FCM data, the native core posts the notification itself
+{
+  "cv": "1", "type": "call_event", "event": "missed",
+  "call_id": "…", "conversation_id": "…", "conversation_name": "…",
+  "caller_user_id": "…", "caller_name": "…", "media": "audio",
+  "title": "Jasir", "body": "Missed voice call",   // finished text
+  "sent_at": 1760000000000
+}
+// iOS — an ALERT push to the token registered with kind "alert"
+// (never the VoIP token: PushKit may only carry a ring)
+{
+  "aps": { "alert": { "title": "Jasir", "body": "Missed voice call" },
+           "sound": "default", "category": "poolse_missed_call",
+           "thread-id": "<conversation_id>" },
+  "type": "call_missed", "call_id": "…", "conversation_id": "…", "media": "audio", …
+}
+```
+
+Tap → open the conversation; the `call_back` action → place a call on it
+with `media`. Android hands both to the app as launch extras, read through
+the bridge (`takeCallAction` / `onCallAction`).
+
 ## 6 · Socket events
 
 For open apps; mirrors of server state, never lifecycle authority. The
 conversation topic carries the first three; `ring_ended` rides the user topic.
 
-| event | payload | notes |
-| --- | --- | --- |
-| `call:started` | `{cv, call: CallSummary}` | banners appear; callee UIs may ring from this when no push arrived yet (dedupe on `call_id`) |
-| `call:participants` | `{cv, call_id, participants: [...]}` | debounced ≤ 4/s; banners and in-call rosters update |
-| `call:ring_ended` | `{cv, call_id, reason}` | same reasons as §5.2 |
-| `call:finished` | `{cv, call_id, ended_at, duration_ms, joined_user_ids}` | banners drop; call log finalizes |
+| event               | payload                                                 | notes                                                                                        |
+| ------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `call:started`      | `{cv, call: CallSummary}`                               | banners appear; callee UIs may ring from this when no push arrived yet (dedupe on `call_id`) |
+| `call:participants` | `{cv, call_id, participants: [...]}`                    | debounced ≤ 4/s; banners and in-call rosters update                                          |
+| `call:ring_ended`   | `{cv, call_id, reason}`                                 | same reasons as §5.2                                                                         |
+| `call:finished`     | `{cv, call_id, ended_at, duration_ms, joined_user_ids}` | banners drop; call log finalizes                                                             |
 
 ### 6.1 Call log
-On `finished`, the server writes a system message to the conversation:
-`kind: "call"`, body metadata `{media, duration_ms, joined_user_ids}` — and a
-per-user `missed` marker for rings that resolved `missed`. UIs render these as
-the call-log bubbles; while the call is live the bubble's action is **Join**.
+
+On `finished`, the server writes ONE system message to the conversation:
+
+```jsonc
+{
+  "kind": "call",
+  "v": 2,
+  "call_id": "…",
+  "media": "audio",
+  "caller_user_id": "…",
+  "started_at": 1760000000000,
+  "ended_at": 1760000192000,
+  "end_reason": "finished", // as call:finished
+  "duration_ms": 192000, // null when nobody answered
+  "joined_user_ids": ["…"], // v1 readers
+  "participants": [{ "user_id": "…", "status": "joined" }],
+} // joined | declined | busy | missed
+```
+
+The caller is not in `participants`. Each client words it for its viewer
+(the SDK's `describeCallLog`): the caller sees "Outgoing call · 4:12" or
+why nobody answered; a participant sees "Incoming call", "Missed call",
+"You declined". v1 history (no `v`) also had a per-user `call_missed`
+marker message, shown only to its user; v2 writes none. The conversation's
+`last_message_preview` holds the whole body, so inbox rows word it too.
+While a call is live, `GET /conversations/:id/call` + the events above
+drive a **Join** banner (`useLiveCall`).
 
 ## 7 · The client state machine
 
@@ -204,6 +273,7 @@ One machine, implemented three times (Kotlin, Swift, JS mirror), verified by
 `vectors.json`. **Lifecycle authority is the server's**; the machine reacts.
 
 ### Phases
+
 `idle · ringing_in · ringing_out · connecting · active · reconnecting ·
 ended(reason)`
 
@@ -213,6 +283,7 @@ least one ring is unresolved with nobody joined yet" — the caller's media
 joins during the ring so the first word is never clipped.
 
 ### Inputs (events)
+
 `PUSH_RING · SOCKET_RING · RING_ENDED(reason) · CALL_FINISHED(reason?) ·
 USER_ANSWER · USER_DECLINE · USER_PLACE · USER_JOIN · USER_HANGUP ·
 HTTP_OK(bundle) · HTTP_GONE · HTTP_TIMEOUT · HTTP_FAILED(code) ·
@@ -221,6 +292,7 @@ MEDIA_RECOVERED · REMOTE_JOINED · ALL_RINGS_RESOLVED(outcome) ·
 RING_DEADLINE · RECONNECT_BUDGET_ELAPSED · CONNECT_TIMEOUT · LINGER_ELAPSED`
 
 ### Abstract effects (each core maps to its platform)
+
 `SHOW_RING · DISMISS_RING · RINGTONE_START/STOP · RINGBACK_START/STOP ·
 HTTP_ANSWER(grant) · HTTP_JOIN · HTTP_DECLINE(reason) · HTTP_HANGUP ·
 HTTP_RECONNECT · MEDIA_JOIN(bundle) · MEDIA_LEAVE ·
@@ -230,7 +302,7 @@ EMIT(snapshot)`
 Every transition implicitly emits a snapshot. The canonical transition table
 IS `vectors.json`; prose highlights only the non-obvious rules:
 
-- **Busy**: any ring input while `phase ≠ idle` for a *different* call →
+- **Busy**: any ring input while `phase ≠ idle` for a _different_ call →
   `HTTP_DECLINE(busy)` for the new call, no phase change (vector S9).
 - **Answer is optimistic**: `USER_ANSWER` → `connecting` + `HTTP_ANSWER`
   immediately; `HTTP_GONE` → `ended(finished)`; `HTTP_FAILED` → `ended(failed)`;
@@ -260,21 +332,39 @@ IS `vectors.json`; prose highlights only the non-obvious rules:
 ```ts
 type Snapshot = {
   cv: 1;
-  callId: string; conversationId: string; conversationName: string | null;
+  callId: string;
+  conversationId: string;
+  conversationName: string | null;
   direction: 'incoming' | 'outgoing' | 'joined';
   media: 'audio' | 'video';
-  phase: 'ringing_in' | 'ringing_out' | 'connecting' | 'active'
-       | 'reconnecting' | 'ended';
-  reason?: 'left' | 'finished' | 'declined_all' | 'busy_all' | 'no_answer'
-         | 'cancelled' | 'connection_lost' | 'failed';
-  startedAt?: number; connectedAt?: number;
-  participants: Array<{ userId: string; externalId: string;
-    speaking: boolean; muted: boolean; cameraOn: boolean }>;
+  phase: 'ringing_in' | 'ringing_out' | 'connecting' | 'active' | 'reconnecting' | 'ended';
+  reason?:
+    | 'left'
+    | 'finished'
+    | 'declined_all'
+    | 'busy_all'
+    | 'no_answer'
+    | 'cancelled'
+    | 'connection_lost'
+    | 'failed';
+  startedAt?: number;
+  connectedAt?: number;
+  participants: Array<{
+    userId: string;
+    externalId: string;
+    speaking: boolean;
+    muted: boolean;
+    cameraOn: boolean;
+  }>;
   audioRoute: 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
-  audioOutputs: Array<{ id: string;
-    kind: 'earpiece' | 'speaker' | 'bluetooth' | 'headset'; name: string }>;
+  audioOutputs: Array<{
+    id: string;
+    kind: 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
+    name: string;
+  }>;
   audioOutputId: string | null;
-  mutedSelf: boolean; cameraOn: boolean;
+  mutedSelf: boolean;
+  cameraOn: boolean;
 } | null; // null = idle
 ```
 
@@ -292,6 +382,7 @@ join(callId, { sessionToken });
 answer(); decline(); hangUp();
 setMuted(b); setSpeaker(b); setAudioOutput(id); setCamera(b); switchCamera();
 onRingEnded(callId, reason); onCallFinished(callId);   // socket forwarding, idempotent with push
+takeCallAction(); onCallAction(cb);                     // Android: missed-call notification taps (§5.4)
 canUseFullScreenIntent(); openFullScreenIntentSettings(); // Android
 ```
 

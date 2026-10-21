@@ -68,6 +68,8 @@ export interface MessageRowProps {
    * identity is implicit from the bubble color/side.
    */
   showAvatar?: boolean;
+  /** Call-log rows: offer "Call back" (see `<CallLogRow onCallBack>`). */
+  onCallBack?: (media: 'audio' | 'video') => void;
 }
 
 export function MessageRow(props: MessageRowProps) {
@@ -78,7 +80,13 @@ export function MessageRow(props: MessageRowProps) {
   // row's hooks never run conditionally.
   const callLog = callLogDisplayFor(props.msg, props.meId);
   if (callLog !== undefined) {
-    return callLog ? <CallLogRow msg={props.msg} meId={props.meId} /> : null;
+    return callLog ? (
+      <CallLogRow
+        msg={props.msg}
+        meId={props.meId}
+        {...(props.onCallBack ? { onCallBack: props.onCallBack } : {})}
+      />
+    ) : null;
   }
   return <BubbleMessageRow {...props} />;
 }

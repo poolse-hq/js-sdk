@@ -384,6 +384,12 @@ class CallCore private constructor(context: Context) {
     /** The live core if one exists — never creates (cheap reads, e.g. getCallState). */
     fun peek(): CallCore? = instance
 
+    /** The configured notification icon (restored from disk on a cold start). */
+    fun smallIcon(context: Context): Int {
+      if (config == null) restoreConfig(context.applicationContext)
+      return config?.smallIcon ?: context.applicationInfo.icon
+    }
+
     internal fun peekConfig(): CallCoreConfig? = config
 
     internal fun requireConfig(): CallCoreConfig =

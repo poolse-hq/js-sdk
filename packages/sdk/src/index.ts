@@ -15,6 +15,8 @@ export {
   ConversationsResource,
 } from './resources/conversations.js';
 export { CallTokensResource } from './resources/call-tokens.js';
+export { LiveCallsResource } from './resources/live-calls.js';
+export type { LiveCall, LiveCallMember } from './resources/live-calls.js';
 export { IceServersResource, type IceServerResponse } from './resources/ice-servers.js';
 export { CallRoom } from './voice/call-room.js';
 export type {
@@ -39,6 +41,7 @@ export { DevicesResource } from './resources/devices.js';
 export type {
   Device,
   DeviceEnvironment,
+  DeviceKind,
   DevicePlatform,
   RegisterDeviceRequest,
 } from './resources/devices.js';
@@ -55,6 +58,9 @@ export {
 // Realtime / WebSocket layer.
 export { PoolseRealtime, ConversationChannel, UserChannel } from './realtime/realtime.js';
 export type {
+  CallFinishedEvent,
+  CallParticipantsEvent,
+  CallStartedEvent,
   ConversationCreatedEvent,
   ConversationUpdatedEvent,
   MemberReadEvent,
@@ -143,6 +149,8 @@ export {
   type CallMissedEntry,
   type CallLogMedia,
   type CallLogDisplay,
+  type CallParticipantStatus,
+  type CallEndReason,
 } from './call-log.js';
 
 // Cross-runtime UUID v4 used internally for idempotency keys, client

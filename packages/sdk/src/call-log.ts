@@ -1,15 +1,24 @@
 // Call-log messages — the server records finished calls as chat
 // messages so they appear inline in the conversation timeline. They
 // arrive as `type: 'system'` (or, in future, `type: 'custom'`) with a
-// JSON body:
+// JSON body. Since server v2, ONE record per call:
 //
-//   {"kind":"call","call_id":"…","media":"audio"|"video",
-//    "duration_ms":12345|null,"joined_user_ids":["uuid",…]}
+//   {"kind":"call","v":2,"call_id":"…","media":"audio"|"video",
+//    "caller_user_id":"uuid","started_at":ms,"ended_at":ms,
+//    "end_reason":"finished"|"declined_all"|"no_answer"|"cancelled",
+//    "duration_ms":12345|null,"joined_user_ids":["uuid",…],
+//    "participants":[{"user_id":"uuid","status":"joined"|"declined"|"busy"|"missed"}]}
+//
+// Every viewer reads it differently — "Outgoing call · 4:12" for the
+// caller, "Missed voice call" for someone who didn't pick up, "You
+// declined" — which `describeCallLog` works out from `caller_user_id`
+// and the viewer's own status.
+//
+// Older history holds the v1 shapes: the same `call` record without
+// `v`/caller/participants, plus a per-callee marker only the named
+// user sees:
 //
 //   {"kind":"call_missed","call_id":"…","user_id":"uuid"}
-//
-// `call_missed` is a per-callee marker: only the named user should
-// see it ("Missed call"); everyone else hides it.
 //
 // The helpers here are pure + framework-agnostic so every UI package
 // (web, React Native, or a customer's own) parses the payload the
@@ -20,6 +29,12 @@ import type { Message, Uuid } from './types.js';
 
 export type CallLogMedia = 'audio' | 'video';
 
+/** What became of one person a call involved (the caller excluded). */
+export type CallParticipantStatus = 'joined' | 'declined' | 'busy' | 'missed';
+
+/** Why a call ended, as the server recorded it. */
+export type CallEndReason = 'finished' | 'declined_all' | 'no_answer' | 'cancelled';
+
 /** A completed (answered or unanswered) call. */
 export interface CallLogEntry {
   kind: 'call';
@@ -28,6 +43,16 @@ export interface CallLogEntry {
   /** Talk time in ms; `null` when nobody answered. */
   durationMs: number | null;
   joinedUserIds: Uuid[];
+  /** `2` for the one-record-per-call shape; `1` for older history. */
+  version: 1 | 2;
+  /** Who placed the call. `null` on v1 records. */
+  callerUserId: Uuid | null;
+  /** Everyone else the call involved, with their outcome. Empty on v1. */
+  participants: Array<{ userId: Uuid; status: CallParticipantStatus }>;
+  endReason: CallEndReason | null;
+  /** Epoch ms; `null` on v1 records. */
+  startedAt: number | null;
+  endedAt: number | null;
 }
 
 /** Per-callee "you missed this call" marker. */
@@ -69,12 +94,27 @@ export function parseCallLogBody(body: string | null | undefined): CallLog | nul
     const joined = Array.isArray(obj.joined_user_ids)
       ? obj.joined_user_ids.filter((u): u is string => typeof u === 'string')
       : [];
+    const participants = Array.isArray(obj.participants)
+      ? obj.participants.flatMap((p) => {
+          if (!p || typeof p !== 'object') return [];
+          const { user_id: userId, status } = p as Record<string, unknown>;
+          if (typeof userId !== 'string' || !isParticipantStatus(status)) return [];
+          return [{ userId, status }];
+        })
+      : [];
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
     return {
       kind: 'call',
       callId,
       media: media ?? 'audio',
       durationMs,
       joinedUserIds: joined,
+      version: obj.v === 2 ? 2 : 1,
+      callerUserId: typeof obj.caller_user_id === 'string' ? obj.caller_user_id : null,
+      participants,
+      endReason: isEndReason(obj.end_reason) ? obj.end_reason : null,
+      startedAt: num(obj.started_at),
+      endedAt: num(obj.ended_at),
     };
   }
   if (obj.kind === 'call_missed') {
@@ -82,6 +122,14 @@ export function parseCallLogBody(body: string | null | undefined): CallLog | nul
     return { kind: 'call_missed', callId, userId: obj.user_id, media };
   }
   return null;
+}
+
+function isParticipantStatus(v: unknown): v is CallParticipantStatus {
+  return v === 'joined' || v === 'declined' || v === 'busy' || v === 'missed';
+}
+
+function isEndReason(v: unknown): v is CallEndReason {
+  return v === 'finished' || v === 'declined_all' || v === 'no_answer' || v === 'cancelled';
 }
 
 /**
@@ -118,35 +166,114 @@ export function formatCallDuration(ms: number): string {
 /** Render-ready description of a call log for one viewer. */
 export interface CallLogDisplay {
   media: CallLogMedia;
-  /** "Voice call" / "Video call" / "Missed call". */
+  /** "Outgoing voice call", "Missed video call", "Group voice call"… */
   title: string;
-  /** "3:12" when answered, "No answer" when not, null for missed markers. */
+  /** "3:12" when answered; "No answer", "Declined", "You declined"…; null when the title says it all. */
   detail: string | null;
-  /** True for the viewer's own missed-call marker — render in the error tone. */
+  /** The viewer missed this call — render in the error tone. */
   missed: boolean;
   /** Short one-line form for list previews ("Video call · 3:12"). */
   summary: string;
+  /** `outgoing` when the viewer placed the call, `incoming` when someone called them, else null. */
+  direction: 'outgoing' | 'incoming' | null;
+  /**
+   * Worth offering "Call back": the viewer missed or declined it, or
+   * placed it and nobody picked up.
+   */
+  callBack: boolean;
 }
 
 /**
  * Turn a call log into display copy for `currentUserId`. Returns null
- * when the entry should be hidden for this viewer (a `call_missed`
+ * when the entry should be hidden for this viewer (a v1 `call_missed`
  * marker addressed to someone else).
  */
 export function describeCallLog(log: CallLog, currentUserId: string | null): CallLogDisplay | null {
   if (log.kind === 'call_missed') {
     if (currentUserId === null || log.userId !== currentUserId) return null;
     const media = log.media ?? 'audio';
-    return { media, title: 'Missed call', detail: null, missed: true, summary: 'Missed call' };
+    return display(media, 'Missed call', null, {
+      missed: true,
+      direction: 'incoming',
+      callBack: true,
+    });
   }
-  const title = log.media === 'video' ? 'Video call' : 'Voice call';
-  const detail = log.durationMs !== null ? formatCallDuration(log.durationMs) : 'No answer';
+
+  const kind = log.media === 'video' ? 'video' : 'voice';
+  const duration = log.durationMs !== null ? formatCallDuration(log.durationMs) : null;
+  const group = log.participants.length > 1;
+  const me = currentUserId;
+
+  // v1 history, or a record this viewer is not in (joined the
+  // conversation later): the neutral wording every viewer used to get.
+  const mine = me !== null ? log.participants.find((p) => p.userId === me) : undefined;
+  const isCaller = me !== null && log.callerUserId === me;
+  if (log.version === 1 || (!isCaller && !mine)) {
+    const title = group
+      ? `Group ${kind} call`
+      : log.media === 'video'
+        ? 'Video call'
+        : 'Voice call';
+    return display(log.media, title, duration ?? 'No answer', { direction: null, callBack: false });
+  }
+
+  if (isCaller) {
+    const title = `Outgoing ${kind} call`;
+    if (duration)
+      return display(log.media, title, duration, { direction: 'outgoing', callBack: false });
+    const allBusy =
+      log.participants.length > 0 && log.participants.every((p) => p.status === 'busy');
+    const detail =
+      log.endReason === 'cancelled'
+        ? 'Cancelled'
+        : log.endReason === 'declined_all'
+          ? allBusy
+            ? 'Busy'
+            : 'Declined'
+          : 'No answer';
+    return display(log.media, title, detail, { direction: 'outgoing', callBack: true });
+  }
+
+  switch (mine!.status) {
+    case 'joined':
+      return display(log.media, group ? `Group ${kind} call` : `Incoming ${kind} call`, duration, {
+        direction: 'incoming',
+        callBack: false,
+      });
+    case 'declined':
+      return display(log.media, `Incoming ${kind} call`, 'You declined', {
+        direction: 'incoming',
+        callBack: true,
+      });
+    case 'busy':
+      return display(log.media, `Missed ${kind} call`, 'You were on another call', {
+        missed: true,
+        direction: 'incoming',
+        callBack: true,
+      });
+    case 'missed':
+      return display(log.media, group ? `Missed group ${kind} call` : `Missed ${kind} call`, null, {
+        missed: true,
+        direction: 'incoming',
+        callBack: true,
+      });
+  }
+}
+
+function display(
+  media: CallLogMedia,
+  title: string,
+  detail: string | null,
+  extra: { missed?: boolean; direction: CallLogDisplay['direction']; callBack: boolean },
+): CallLogDisplay {
   return {
-    media: log.media,
+    media,
     title,
     detail,
-    missed: false,
-    summary: `${title} · ${detail}`,
+    missed: extra.missed ?? false,
+    summary: detail ? `${title} · ${detail}` : title,
+    direction: extra.direction,
+    callBack: extra.callBack,
   };
 }
 

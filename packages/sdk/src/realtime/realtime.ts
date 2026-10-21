@@ -23,6 +23,9 @@ import { VoiceRoom } from '../voice/voice-room.js';
 import type { VoiceRoomOptions } from '../voice/types.js';
 import type { TokenCache } from '../token-cache.js';
 import type {
+  CallFinishedEvent,
+  CallParticipantsEvent,
+  CallStartedEvent,
   ConversationCreatedEvent,
   ConversationUpdatedEvent,
   MemberReadEvent,
@@ -359,6 +362,21 @@ export class ConversationChannel {
    */
   onMemberRead(fn: (evt: MemberReadEvent) => void): Unsubscribe {
     return this.subscribe('member:read', fn as (p: unknown) => void);
+  }
+
+  /** A call went live on this conversation (`call:started`). */
+  onCallStarted(fn: (evt: CallStartedEvent) => void): Unsubscribe {
+    return this.subscribe('call:started', fn as (p: unknown) => void);
+  }
+
+  /** Someone joined or left the live call (`call:participants`): user ids in the room now. */
+  onCallParticipants(fn: (evt: CallParticipantsEvent) => void): Unsubscribe {
+    return this.subscribe('call:participants', fn as (p: unknown) => void);
+  }
+
+  /** The call is over for everyone (`call:finished`). */
+  onCallFinished(fn: (evt: CallFinishedEvent) => void): Unsubscribe {
+    return this.subscribe('call:finished', fn as (p: unknown) => void);
   }
 
   onPresenceState(fn: (state: PresenceSnapshot) => void): Unsubscribe {

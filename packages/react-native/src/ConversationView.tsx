@@ -1,4 +1,4 @@
-import type { Message, Uuid } from '@poolse/sdk';
+import type { LiveCall, Message, Uuid } from '@poolse/sdk';
 import {
   computeGroupPosition,
   formatDayLabel,
@@ -8,6 +8,7 @@ import {
   useMembers,
   useMessages,
   useRealtimeStatus,
+  useLiveCall,
   useTyping,
 } from '@poolse/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
@@ -23,6 +24,7 @@ import {
 import { AttachmentPicker } from './AttachmentPicker.js';
 import { ChatHeader } from './ChatHeader.js';
 import { DaySeparator } from './DaySeparator.js';
+import { LiveCallBanner } from './LiveCallBanner.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageList, type MessageListItem } from './MessageList.js';
@@ -103,6 +105,23 @@ export interface ConversationViewProps {
    * consumers pass it manually.
    */
   keyboardOffset?: number;
+  /**
+   * Offer "Call back" on call-log rows the viewer missed or declined,
+   * or placed with no answer. Receives the call's media; place the call
+   * on this conversation.
+   */
+  onCallBack?: (media: 'audio' | 'video') => void;
+  /**
+   * Show a "Call in progress · Join" banner while a call runs on this
+   * conversation that the viewer is not on. Called with the live call
+   * when they tap Join.
+   */
+  onJoinCall?: (call: LiveCall) => void;
+  /**
+   * The call this device is already on, if any — its banner is hidden
+   * (the viewer is in the room, or ringing out as its caller).
+   */
+  currentCallId?: string | null;
 }
 
 export function ConversationView({
@@ -128,6 +147,9 @@ export function ConversationView({
   onMarkedRead,
   onSent,
   keyboardOffset = 0,
+  onCallBack,
+  onJoinCall,
+  currentCallId = null,
 }: ConversationViewProps) {
   const theme = usePoolseTheme();
   const { me } = useMe();
@@ -287,10 +309,12 @@ export function ConversationView({
           maxBodyLength={maxBodyLength}
           groupPosition={groupPosition}
           markdown={markdown}
+          {...(onCallBack ? { onCallBack } : {})}
         />
       );
     },
     [
+      onCallBack,
       renderMessage,
       meId,
       readReceipts,
@@ -415,6 +439,14 @@ export function ConversationView({
         keyboardVerticalOffset={keyboardOffset}
       >
         {headerNode}
+        {onJoinCall ? (
+          <JoinBanner
+            conversationId={conversationId}
+            meId={meId}
+            currentCallId={currentCallId}
+            onJoin={onJoinCall}
+          />
+        ) : null}
         <View style={styles.listWrap}>
           <MessageList
             messages={visibleMessages}
@@ -462,6 +494,26 @@ export function ConversationView({
       </KeyboardAvoidingView>
     </UploadProvider>
   );
+}
+
+// Its own component so the live-call subscription exists only for hosts
+// that asked for the banner.
+function JoinBanner({
+  conversationId,
+  meId,
+  currentCallId,
+  onJoin,
+}: {
+  conversationId: string;
+  meId: string | null;
+  currentCallId: string | null;
+  onJoin: (call: LiveCall) => void;
+}) {
+  const { call, participantIds } = useLiveCall(conversationId);
+  if (!call || call.id === currentCallId) return null;
+  // Already in the room on another device: nothing to join.
+  if (meId !== null && participantIds.includes(meId)) return null;
+  return <LiveCallBanner call={call} inCall={participantIds.length} onJoin={onJoin} />;
 }
 
 function readStateForMessage(

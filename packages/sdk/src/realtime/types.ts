@@ -43,6 +43,30 @@ export interface MemberReadEvent {
   last_read_at: string;
 }
 
+/** `call:started` — a call went live on the conversation. */
+export interface CallStartedEvent {
+  cv: number;
+  call: import('../resources/live-calls.js').LiveCall;
+}
+
+/** `call:participants` — who is in the live call's room right now (user ids). */
+export interface CallParticipantsEvent {
+  cv: number;
+  call_id: string;
+  participants: Uuid[];
+}
+
+/** `call:finished` — the call is over for everyone. */
+export interface CallFinishedEvent {
+  cv: number;
+  call_id: string;
+  ended_at?: string;
+  duration_ms?: number;
+  joined_user_ids?: Uuid[];
+  /** `finished` | `declined_all` | `no_answer` | `cancelled`. */
+  reason?: string;
+}
+
 /** Per-user mention push on the `user:<id>` channel. */
 export interface MentionEvent {
   message_id: Uuid;

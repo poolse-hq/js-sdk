@@ -13,8 +13,8 @@ import dev.poolse.callcore.RingContext
  * everything else keep working unchanged.
  *
  * Contract: data-only messages — rings with `type: "call"`, control
- * pushes (`ring_ended`, `finished`) with `type: "call_event"`
- * (CONTRACT.md §5).
+ * pushes (`ring_ended`, `finished`) and the missed-call notification
+ * (`missed`) with `type: "call_event"` (CONTRACT.md §5).
  */
 class CallMessagingService : FirebaseMessagingService() {
 
@@ -43,6 +43,11 @@ class CallMessagingService : FirebaseMessagingService() {
     // Never configured on this install: nothing can answer a call, and
     // throwing here would crash the messaging process.
     val core = CallCore.getOrNull(this) ?: return
+    if (data["event"] == "missed") {
+      // A notification, not call state: the call is already over.
+      MissedCallNotification.show(this, data, CallCore.smallIcon(this))
+      return
+    }
     // A type=call push without an event is a legacy-shaped ring.
     val event = data["event"]?.ifEmpty { null } ?: if (type == "call") "ring" else return
     when (event) {

@@ -1,6 +1,6 @@
 import type { Message } from '@poolse/sdk';
 import { callLogDisplayFor } from '@poolse/react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
@@ -8,8 +8,13 @@ import { usePoolseTheme } from './theme/PoolseTheme.js';
 export interface CallLogRowProps {
   /** The call-log message. Rows that aren't call logs render nothing. */
   msg: Pick<Message, 'type' | 'body' | 'inserted_at'> & { deleted_at?: string | null };
-  /** Current user's id — decides whether a missed-call marker is shown. */
+  /** Current user's id — decides how the call is worded for them. */
   meId: string | null;
+  /**
+   * Offer "Call back" on calls the viewer missed or declined, or placed
+   * with no answer. Receives the call's media. Omit to show no action.
+   */
+  onCallBack?: (media: 'audio' | 'video') => void;
 }
 
 /**
@@ -21,7 +26,7 @@ export interface CallLogRowProps {
  *
  * `<MessageRow>` renders this automatically for call-log messages.
  */
-export function CallLogRow({ msg, meId }: CallLogRowProps) {
+export function CallLogRow({ msg, meId, onCallBack }: CallLogRowProps) {
   const theme = usePoolseTheme();
   const display = callLogDisplayFor(msg, meId);
   if (!display) return null;
@@ -58,6 +63,24 @@ export function CallLogRow({ msg, meId }: CallLogRowProps) {
         {display.detail ? <Text style={metaStyle}>· {display.detail}</Text> : null}
         {time ? <Text style={metaStyle}>· {time}</Text> : null}
       </View>
+      {display.callBack && onCallBack ? (
+        <Pressable
+          onPress={() => onCallBack(display.media)}
+          accessibilityRole="button"
+          accessibilityLabel={display.media === 'video' ? 'Video call back' : 'Call back'}
+          hitSlop={8}
+          style={({ pressed }) => [styles.callBack, pressed && styles.callBackPressed]}
+        >
+          <Text
+            style={[
+              styles.callBackText,
+              { color: theme.colors.brand, fontFamily: theme.type.fontBody },
+            ]}
+          >
+            Call back
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -74,7 +97,11 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginVertical: 6,
     paddingHorizontal: 16,
+    gap: 4,
   },
+  callBack: { paddingHorizontal: 10, paddingVertical: 2 },
+  callBackPressed: { opacity: 0.6 },
+  callBackText: { fontSize: 12, fontWeight: '600' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

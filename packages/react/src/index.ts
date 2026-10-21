@@ -70,9 +70,15 @@ export type {
   CallMissedEntry,
   CallLogMedia,
   CallLogDisplay,
+  CallParticipantStatus,
+  CallEndReason,
+  LiveCall,
+  LiveCallMember,
+  DeviceKind,
 } from '@poolse/sdk';
 
 // ── Voice + calling ──────────────────────────────────────────────
 export { useCallRoom, type UseCallRoom, type UseCallRoomOptions } from './use-call-room.js';
 export { useVoiceRoom, type UseVoiceRoom } from './use-voice-room.js';
 export { useCalls, type UseCalls, type CallPhase } from './use-calls.js';
+export { useLiveCall, type UseLiveCall } from './use-live-call.js';

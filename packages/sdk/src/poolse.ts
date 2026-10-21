@@ -11,6 +11,7 @@ import { MeResource } from './resources/me.js';
 import { MessagesResource } from './resources/messages.js';
 import { UsersResource } from './resources/users.js';
 import { CallTokensResource } from './resources/call-tokens.js';
+import { LiveCallsResource } from './resources/live-calls.js';
 import { CallRoom } from './voice/call-room.js';
 import type { CallRoomOptions } from './voice/livekit-types.js';
 import { IceServersResource } from './resources/ice-servers.js';
@@ -63,6 +64,8 @@ export class Poolse {
   public readonly iceServers: IceServersResource;
   /** SFU credentials for a call's media — see `CallTokensResource`. */
   public readonly callTokens: CallTokensResource;
+  /** Whether a call is running on a conversation — for a Join banner. */
+  public readonly liveCalls: LiveCallsResource;
 
   private readonly resolved: ResolvedConfig;
   private readonly tokenCache: TokenCache;
@@ -89,6 +92,7 @@ export class Poolse {
     this.users = new UsersResource(cachedConfig);
     this.iceServers = new IceServersResource(this.rest);
     this.callTokens = new CallTokensResource(this.rest);
+    this.liveCalls = new LiveCallsResource(this.rest);
 
     this.realtime = new PoolseRealtime(cachedConfig, this.tokenCache, {
       ...(this.resolved.wsUrl !== undefined ? { wsUrl: this.resolved.wsUrl } : {}),

@@ -13,17 +13,36 @@ import { PoolseIcon } from './PoolseIcon.js';
 export interface CallLogRowProps {
   /** The call-log message. Rows that aren't call logs render nothing. */
   msg: Pick<Message, 'type' | 'body' | 'inserted_at'> & { deleted_at?: string | null };
-  /** Current user's id — decides whether a missed-call marker is shown. */
+  /** Current user's id — decides how the call is worded for them. */
   meId: string | null;
+  /**
+   * Offer "Call back" on calls the viewer missed or declined, or placed
+   * with no answer. Receives the call's media. Omit to show no action.
+   */
+  onCallBack?: (media: 'audio' | 'video') => void;
 }
 
-export function CallLogRow({ msg, meId }: CallLogRowProps) {
+export function CallLogRow({ msg, meId, onCallBack }: CallLogRowProps) {
   const display = callLogDisplayFor(msg, meId);
   if (!display) return null;
-  return <CallLogLine display={display} insertedAt={msg.inserted_at} />;
+  return (
+    <CallLogLine
+      display={display}
+      insertedAt={msg.inserted_at}
+      {...(onCallBack ? { onCallBack } : {})}
+    />
+  );
 }
 
-function CallLogLine({ display, insertedAt }: { display: CallLogDisplay; insertedAt: string }) {
+function CallLogLine({
+  display,
+  insertedAt,
+  onCallBack,
+}: {
+  display: CallLogDisplay;
+  insertedAt: string;
+  onCallBack?: (media: 'audio' | 'video') => void;
+}) {
   const time = formatTime(insertedAt);
   const icon = display.media === 'video' ? 'video' : 'phone';
   const label = [display.title, display.detail, time].filter(Boolean).join(', ');
@@ -39,6 +58,15 @@ function CallLogLine({ display, insertedAt }: { display: CallLogDisplay; inserte
         {display.detail && <span className="poolse-call-log__detail">{display.detail}</span>}
         {time && <span className="poolse-call-log__time">{time}</span>}
       </span>
+      {display.callBack && onCallBack && (
+        <button
+          type="button"
+          className="poolse-call-log__call-back"
+          onClick={() => onCallBack(display.media)}
+        >
+          Call back
+        </button>
+      )}
     </div>
   );
 }

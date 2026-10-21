@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import dev.poolse.callcore.android.CallCore
+import dev.poolse.callcore.android.MissedCallNotification
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -30,7 +31,7 @@ class PoolseCallsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("PoolseCalls")
 
-    Events("onCallState")
+    Events("onCallState", "onCallAction")
 
     // <CallVideoView>: renders a participant's (or our own) camera.
     View(PoolseCallVideoView::class) {
@@ -93,6 +94,14 @@ class PoolseCallsModule : Module() {
       core()?.onCallFinished(callId, reason?.ifEmpty { null })
     }
 
+    // A missed-call notification's tap / Call back. Cold start: the
+    // launch intent still carries it — the host reads it once on mount.
+    // Running app: the tap arrives as a new intent.
+    Function("takeCallAction") { appContext.currentActivity?.intent?.let(::consumeCallAction) }
+    OnNewIntent { intent ->
+      consumeCallAction(intent)?.let { sendEvent("onCallAction", it) }
+    }
+
     // Android 14+: full-screen intents need a user grant for non-dialer apps.
     Function("canUseFullScreenIntent") {
       val ctx = context ?: return@Function true
@@ -129,6 +138,31 @@ class PoolseCallsModule : Module() {
   private val context: Context? get() = appContext.reactContext
 
   private fun core(): CallCore? = context?.let(CallCore::getOrNull)
+
+  /**
+   * The call action an intent carries, removed from it so a later read
+   * (rotation, re-mount) cannot replay it. Acting on it from the app
+   * clears its notification too: action buttons do not auto-cancel.
+   */
+  private fun consumeCallAction(intent: Intent): Map<String, Any?>? {
+    val action = intent.getStringExtra(MissedCallNotification.EXTRA_ACTION) ?: return null
+    val conversationId = intent.getStringExtra(MissedCallNotification.EXTRA_CONVERSATION_ID) ?: return null
+    val callId = intent.getStringExtra(MissedCallNotification.EXTRA_CALL_ID)
+    val media = intent.getStringExtra(MissedCallNotification.EXTRA_MEDIA) ?: "audio"
+    for (key in listOf(
+      MissedCallNotification.EXTRA_ACTION,
+      MissedCallNotification.EXTRA_CONVERSATION_ID,
+      MissedCallNotification.EXTRA_CALL_ID,
+      MissedCallNotification.EXTRA_MEDIA,
+    )) intent.removeExtra(key)
+    if (callId != null) context?.let { MissedCallNotification.cancel(it, callId) }
+    return mapOf(
+      "type" to action,
+      "conversationId" to conversationId,
+      "callId" to callId,
+      "media" to media,
+    )
+  }
 
   private companion object {
     const val TAG = "PoolseCalls"

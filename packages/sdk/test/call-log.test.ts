@@ -34,6 +34,12 @@ describe('parseCallLog', () => {
       media: 'audio',
       durationMs: 192_000,
       joinedUserIds: [ME, OTHER],
+      version: 1,
+      callerUserId: null,
+      participants: [],
+      endReason: null,
+      startedAt: null,
+      endedAt: null,
     });
   });
 
@@ -112,6 +118,8 @@ describe('describeCallLog', () => {
       detail: '3:12',
       missed: false,
       summary: 'Voice call · 3:12',
+      direction: null,
+      callBack: false,
     });
     expect(describeCallLog(parseCallLogBody(callBody({ media: 'video' }))!, null)?.title).toBe(
       'Video call',
@@ -153,5 +161,139 @@ describe('visibility + previews', () => {
     expect(formatCallLogPreview(callBody(), ME)).toBe('Voice call · 3:12');
     expect(formatCallLogPreview(missedBody(ME), ME)).toBe('Missed call');
     expect(formatCallLogPreview(missedBody(OTHER), ME)).toBe('Call');
+  });
+});
+
+const THIRD = '33333333-3333-4333-8333-333333333333';
+
+const v2 = (over: Record<string, unknown> = {}) =>
+  JSON.stringify({
+    kind: 'call',
+    v: 2,
+    call_id: 'c2',
+    media: 'audio',
+    caller_user_id: OTHER,
+    started_at: 1_000,
+    ended_at: 200_000,
+    end_reason: 'finished',
+    duration_ms: 192_000,
+    joined_user_ids: [OTHER, ME],
+    participants: [{ user_id: ME, status: 'joined' }],
+    ...over,
+  });
+
+const describeV2 = (over: Record<string, unknown>, viewer: string | null) =>
+  describeCallLog(parseCallLogBody(v2(over))!, viewer);
+
+describe('v2 call records — one per call, worded per viewer', () => {
+  it('parses caller, participants, reason and times', () => {
+    expect(parseCallLogBody(v2())).toMatchObject({
+      version: 2,
+      callerUserId: OTHER,
+      participants: [{ userId: ME, status: 'joined' }],
+      endReason: 'finished',
+      startedAt: 1_000,
+      endedAt: 200_000,
+    });
+  });
+
+  it('drops malformed participants instead of failing the record', () => {
+    const log = parseCallLogBody(
+      v2({
+        participants: [{ user_id: ME, status: 'joined' }, { user_id: 7 }, { status: 'x' }, null],
+      }),
+    );
+    expect(log?.kind === 'call' && log.participants).toEqual([{ userId: ME, status: 'joined' }]);
+  });
+
+  it('the caller sees an outgoing call, with its duration once answered', () => {
+    expect(describeV2({}, OTHER)).toMatchObject({
+      title: 'Outgoing voice call',
+      detail: '3:12',
+      direction: 'outgoing',
+      callBack: false,
+    });
+  });
+
+  it('an unanswered caller sees why, and is offered a call back', () => {
+    const unanswered = { duration_ms: null, participants: [{ user_id: ME, status: 'missed' }] };
+    expect(describeV2({ ...unanswered, end_reason: 'no_answer' }, OTHER)).toMatchObject({
+      detail: 'No answer',
+      callBack: true,
+    });
+    expect(describeV2({ ...unanswered, end_reason: 'cancelled' }, OTHER)?.detail).toBe('Cancelled');
+    expect(
+      describeV2(
+        {
+          ...unanswered,
+          end_reason: 'declined_all',
+          participants: [{ user_id: ME, status: 'declined' }],
+        },
+        OTHER,
+      )?.detail,
+    ).toBe('Declined');
+    expect(
+      describeV2(
+        {
+          ...unanswered,
+          end_reason: 'declined_all',
+          participants: [{ user_id: ME, status: 'busy' }],
+        },
+        OTHER,
+      )?.detail,
+    ).toBe('Busy');
+  });
+
+  it('someone who answered sees an incoming call with its duration', () => {
+    expect(describeV2({}, ME)).toMatchObject({
+      title: 'Incoming voice call',
+      detail: '3:12',
+      direction: 'incoming',
+      missed: false,
+    });
+  });
+
+  it('someone who missed it sees a missed call in the error tone', () => {
+    const d = describeV2(
+      { media: 'video', duration_ms: null, participants: [{ user_id: ME, status: 'missed' }] },
+      ME,
+    );
+    expect(d).toMatchObject({ title: 'Missed video call', missed: true, callBack: true });
+    expect(d?.summary).toBe('Missed video call');
+  });
+
+  it('a decline and a busy refusal read as such', () => {
+    expect(describeV2({ participants: [{ user_id: ME, status: 'declined' }] }, ME)).toMatchObject({
+      detail: 'You declined',
+      missed: false,
+      callBack: true,
+    });
+    expect(describeV2({ participants: [{ user_id: ME, status: 'busy' }] }, ME)).toMatchObject({
+      title: 'Missed voice call',
+      detail: 'You were on another call',
+      missed: true,
+    });
+  });
+
+  it('group calls say so', () => {
+    const group = {
+      participants: [
+        { user_id: ME, status: 'missed' },
+        { user_id: THIRD, status: 'joined' },
+      ],
+    };
+    expect(describeV2(group, ME)?.title).toBe('Missed group voice call');
+    expect(describeV2(group, THIRD)?.title).toBe('Group voice call');
+  });
+
+  it('a member the call never involved gets the neutral wording', () => {
+    expect(describeV2({}, THIRD)).toMatchObject({ title: 'Voice call', direction: null });
+    expect(describeV2({}, null)?.title).toBe('Voice call');
+  });
+
+  it('previews word the record for the viewer', () => {
+    const missed = v2({ duration_ms: null, participants: [{ user_id: ME, status: 'missed' }] });
+    expect(formatCallLogPreview(missed, ME)).toBe('Missed voice call');
+    expect(formatCallLogPreview(missed, OTHER)).toBe('Outgoing voice call · No answer');
   });
 });

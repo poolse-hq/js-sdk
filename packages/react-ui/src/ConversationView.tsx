@@ -9,18 +9,20 @@
 // MessageActions + ReactionStrip + AttachmentPreview + ThreadView —
 // directly. ConversationView is just the canonical wiring.
 
-import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
+import type { LiveCall, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import {
   isMessageVisibleTo,
   useMembers,
   useMessages,
   useMe,
+  useLiveCall,
   useRealtimeStatus,
   useTyping,
 } from '@poolse/react';
 import React, { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePoolseFonts } from './fonts.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
+import { LiveCallBanner } from './LiveCallBanner.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
 import { MessageRow } from './MessageRow.js';
@@ -141,6 +143,20 @@ export interface ConversationViewProps {
    * a single handler can switch between rooms.
    */
   onMarkedRead?: (conversationId: string) => void;
+  /**
+   * Offer "Call back" on call-log rows the viewer missed or declined,
+   * or placed with no answer. Receives the call's media; place the call
+   * on this conversation.
+   */
+  onCallBack?: (media: 'audio' | 'video') => void;
+  /**
+   * Show a "Call in progress · Join" banner while a call runs on this
+   * conversation that the viewer is not on. Called with the live call
+   * when they click Join.
+   */
+  onJoinCall?: (call: LiveCall) => void;
+  /** The call this client is already on, if any — its banner is hidden. */
+  currentCallId?: string | null;
 }
 
 const TRUE = true;
@@ -166,6 +182,9 @@ export function ConversationView({
   senderLabels = 'auto',
   avatars = 'auto',
   onMarkedRead,
+  onCallBack,
+  onJoinCall,
+  currentCallId = null,
 }: ConversationViewProps) {
   usePoolseFonts(loadFonts);
 
@@ -487,6 +506,14 @@ export function ConversationView({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
+        {onJoinCall && (
+          <JoinBanner
+            conversationId={conversationId}
+            meId={me?.id ?? null}
+            currentCallId={currentCallId}
+            onJoin={onJoinCall}
+          />
+        )}
         {status !== 'connected' && status !== 'idle' && (
           <div
             className="poolse-conversation__status"
@@ -605,6 +632,7 @@ export function ConversationView({
                     onOpenThread={() => setThreadRootId(msg.id)}
                     onQuote={() => setReplyingTo(msg)}
                     onQuotedClick={scrollToOriginal}
+                    {...(onCallBack ? { onCallBack } : {})}
                   />
                 </Fragment>
               );
@@ -668,3 +696,23 @@ export function ConversationView({
 
 // Grouping helpers live in `./grouping.ts` so they're testable in
 // isolation. Re-imported above where they're used.
+
+// Its own component so the live-call subscription exists only for hosts
+// that asked for the banner.
+function JoinBanner({
+  conversationId,
+  meId,
+  currentCallId,
+  onJoin,
+}: {
+  conversationId: string;
+  meId: string | null;
+  currentCallId: string | null;
+  onJoin: (call: LiveCall) => void;
+}) {
+  const { call, participantIds } = useLiveCall(conversationId);
+  if (!call || call.id === currentCallId) return null;
+  // Already in the room on another device: nothing to join.
+  if (meId !== null && participantIds.includes(meId)) return null;
+  return <LiveCallBanner call={call} inCall={participantIds.length} onJoin={onJoin} />;
+}

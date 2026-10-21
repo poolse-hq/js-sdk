@@ -100,6 +100,18 @@ export interface PlaceOptions {
   sessionToken: string;
 }
 
+/**
+ * What the user tapped on a missed-call notification: the notification
+ * itself (`open` the conversation) or its Call back button (`call_back`
+ * — place a call on the conversation with `media`).
+ */
+export interface CallAction {
+  type: 'open' | 'call_back';
+  conversationId: string;
+  callId: string | null;
+  media: 'audio' | 'video';
+}
+
 type NativeSnapshot = { snapshot: Snapshot | null };
 
 interface PoolseCallsNative {
@@ -120,8 +132,10 @@ interface PoolseCallsNative {
   canUseFullScreenIntent(): boolean;
   openFullScreenIntentSettings(): void;
   getVoipToken?(): VoipToken | null;
+  takeCallAction?(): CallAction | null;
   addListener(event: 'onCallState', cb: (payload: NativeSnapshot) => void): { remove(): void };
   addListener(event: 'onVoipToken', cb: (payload: VoipToken) => void): { remove(): void };
+  addListener(event: 'onCallAction', cb: (payload: CallAction) => void): { remove(): void };
 }
 
 const native = requireOptionalNativeModule<PoolseCallsNative>('PoolseCalls');
@@ -205,6 +219,30 @@ export const canUseFullScreenIntent = (): boolean => native?.canUseFullScreenInt
 
 /** Open the system screen where the user grants full-screen intents (falls back to notification settings). */
 export const openFullScreenIntentSettings = (): void => native?.openFullScreenIntentSettings();
+
+// ── missed-call notifications (Android) ─────────────────────────────────
+
+/**
+ * Android: the missed-call notification action the app was LAUNCHED
+ * with, once — read it on mount. `null` when the app opened any other
+ * way. The native core posts that notification itself from the push,
+ * so it works with the app closed.
+ *
+ * iOS shows missed calls as an ordinary alert push (to the token you
+ * register with `kind: 'alert'`); read its taps with your notification
+ * library — its `type` is `call_missed`, the category
+ * `poolse_missed_call`, the Call back action `call_back`.
+ */
+export function takeCallAction(): CallAction | null {
+  return native?.takeCallAction?.() ?? null;
+}
+
+/** Android: a missed-call notification tapped while the app is running. */
+export function onCallAction(cb: (action: CallAction) => void): Unsubscribe {
+  if (!native || !native.takeCallAction) return () => undefined;
+  const sub = native.addListener('onCallAction', cb);
+  return () => sub.remove();
+}
 
 // ── VoIP push (iOS) ───────────────────────────────────────────────────
 
