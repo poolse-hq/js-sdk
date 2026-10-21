@@ -36,6 +36,12 @@ public enum Event: Equatable {
   /// CONNECTING watchdog.
   case connectTimeout
   case lingerElapsed
+  /// Call waiting: leave the current call and answer the waiting one.
+  case userAnswerWaiting
+  /// Call waiting: turn the waiting call away — its caller hears busy.
+  case userDeclineWaiting
+  /// The waiting call's ring deadline passed.
+  case waitingDeadline
 }
 
 /// Abstract effects — each adapter maps them to its platform.
@@ -44,6 +50,10 @@ public enum Effect: Equatable {
   case httpAnswer, httpJoin, httpPlace, httpDecline
   case httpDeclineBusy(callId: String)
   case httpHangup, httpReconnect, mediaJoin, mediaLeave, callSessionStart, callSessionStop
+  case showWaiting, dismissWaiting
+  /// The waiting call becomes the current one: retire the old call's
+  /// grant/bundle/generation and take the waiting ring's.
+  case promoteWaiting
 
   public var wire: String {
     switch self {
@@ -64,6 +74,9 @@ public enum Effect: Equatable {
     case .mediaLeave: return "MEDIA_LEAVE"
     case .callSessionStart: return "CALL_SESSION_START"
     case .callSessionStop: return "CALL_SESSION_STOP"
+    case .showWaiting: return "SHOW_WAITING"
+    case .dismissWaiting: return "DISMISS_WAITING"
+    case .promoteWaiting: return "PROMOTE_WAITING"
     }
   }
 }
@@ -91,7 +104,80 @@ private extension MachineState {
 
 public enum CallMachine {
 
+  /// Phases that can hold a call waiting beside them: this device is on
+  /// (or placing, or joining) a call. A second ring while one is ringING
+  /// in is still busy — two rings at once is not a choice anyone can make.
+  private static func canHoldWaiting(_ s: MachineState) -> Bool {
+    switch s.phase {
+    case .ringingOut, .connecting, .active, .reconnecting: return true
+    default: return false
+    }
+  }
+
+  /// The ring surface effects the end-and-answer composite skips: the
+  /// waiting call goes straight from waiting to connecting, never ringing.
+  private static let ringSurfaceEffects: [Effect] = [.showRing, .ringtoneStart, .ringtoneStop, .dismissRing]
+
   public static func transition(_ s: MachineState, _ e: Event) -> Transition {
+    guard let w = s.waiting else {
+      switch e {
+      case let .ring(callId, conversationId, media, stale)
+        where !stale && canHoldWaiting(s) && callId != s.callId:
+        var next = s
+        next.waiting = WaitingCall(callId: callId, conversationId: conversationId, media: media)
+        return Transition(next, [.showWaiting])
+      case .userAnswerWaiting, .userDeclineWaiting, .waitingDeadline:
+        return noop(s)
+      default:
+        return single(s, e)
+      }
+    }
+
+    var cleared = s
+    cleared.waiting = nil
+    switch e {
+    case let .ring(callId, _, _, stale):
+      if callId == w.callId || stale { return noop(s) }
+      if callId == s.callId { return carry(single(cleared, e), w) }
+      return Transition(s, [.httpDeclineBusy(callId: callId)])
+
+    case let .ringEnded(callId, _) where callId == w.callId:
+      return Transition(cleared, [.dismissWaiting])
+    case let .callFinished(callId, _) where callId == w.callId:
+      return Transition(cleared, [.dismissWaiting])
+    case .waitingDeadline:
+      return Transition(cleared, [.dismissWaiting])
+    case .userDeclineWaiting:
+      return Transition(cleared, [.httpDeclineBusy(callId: w.callId), .dismissWaiting])
+
+    case .userAnswerWaiting:
+      // Leaving rings the waiting call (below); answering it at once
+      // makes that ring a no-op the surface never sees.
+      let left = transition(s, .userHangup)
+      guard left.state.phase == .ringingIn, left.state.callId == w.callId else { return noop(s) }
+      let answered = single(left.state, .userAnswer)
+      let effects = (left.effects + answered.effects).filter { !ringSurfaceEffects.contains($0) }
+      return Transition(answered.state, effects)
+
+    default:
+      let t = single(cleared, e)
+      guard t.state.phase == .ended || t.state.phase == .idle else { return carry(t, w) }
+      // The current call is over while another rings beside it: that
+      // ring is now simply THE ring (no ended screen in between).
+      let ringing = MachineState(phase: .ringingIn, callId: w.callId, conversationId: w.conversationId,
+                                 direction: .incoming, media: w.media)
+      return Transition(ringing, t.effects + [.promoteWaiting, .showRing, .ringtoneStart])
+    }
+  }
+
+  private static func carry(_ t: Transition, _ w: WaitingCall) -> Transition {
+    var state = t.state
+    state.waiting = w
+    return Transition(state, t.effects)
+  }
+
+  /// The one-call machine: everything that is not about a waiting call.
+  private static func single(_ s: MachineState, _ e: Event) -> Transition {
     switch e {
 
     case let .ring(callId, conversationId, media, stale):
@@ -271,6 +357,9 @@ public enum CallMachine {
 
     case .lingerElapsed:
       return s.phase == .ended ? Transition(.IDLE, []) : noop(s)
+
+    case .userAnswerWaiting, .userDeclineWaiting, .waitingDeadline:
+      return noop(s) // handled by `transition`, which owns the waiting slot
     }
   }
 
@@ -285,7 +374,8 @@ public enum CallMachine {
                                      direction: .incoming, media: media),
                         [.showRing, .ringtoneStart])
     }
-    // Busy with another call: auto-decline the newcomer.
+    // Busy ringing another call (a call in progress holds it waiting
+    // instead — see `transition`): auto-decline the newcomer.
     return Transition(s, [.httpDeclineBusy(callId: callId)])
   }
 

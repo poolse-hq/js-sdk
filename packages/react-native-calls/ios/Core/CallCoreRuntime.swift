@@ -31,6 +31,7 @@ public final class CallCoreRuntime {
   private static let T_RECONNECT = "reconnect_budget"
   private static let T_CONNECT = "connect_watchdog"
   private static let T_RING_OUT = "ring_out_backstop"
+  private static let T_WAITING = "waiting_deadline"
 
   private let http: HttpPort
   private let media: MediaPort
@@ -45,6 +46,9 @@ public final class CallCoreRuntime {
   private var ring: RingContext?
   /// Grants of rings auto-declined busy, kept until the decline fires.
   private var busyRings: [String: RingContext] = [:]
+  /// The ring of the call waiting beside the current one (its grant
+  /// answers or busy-declines it).
+  private var waitingRingCtx: RingContext?
   /// The session bundle of the current call, once the server accepted.
   private var bundle: CallSessionBundle?
   /// The session token place/join were called with, for one retry.
@@ -101,6 +105,9 @@ public final class CallCoreRuntime {
   /// `room` or `call`, once the server's bundle says; nil before. Runtime thread only.
   public var callKind: String? { bundle?.kind }
 
+  /// The call waiting beside the current one, with its caller's names. Runtime thread only.
+  public var waitingRing: RingContext? { state.waiting == nil ? nil : waitingRingCtx }
+
   /// True if `callId` was already resolved here — its ring must never surface again.
   public func isResolved(_ callId: String) -> Bool { resolved.contains(callId) }
 
@@ -144,6 +151,22 @@ public final class CallCoreRuntime {
   public func answer() { post { [self] in dispatch(.userAnswer) } }
   public func decline() { post { [self] in dispatch(.userDecline) } }
   public func hangUp() { post { [self] in dispatch(.userHangup) } }
+  /// Call waiting: end this call and answer the one waiting. With
+  /// `callId`, only if that is still the call waiting (a stale tap on a
+  /// surface for an earlier one must not answer a different call).
+  public func answerWaiting(callId: String? = nil) {
+    post { [self] in
+      if let id = callId, state.waiting?.callId != id { return }
+      dispatch(.userAnswerWaiting)
+    }
+  }
+  /// Call waiting: turn the waiting call away (its caller hears busy).
+  public func declineWaiting(callId: String? = nil) {
+    post { [self] in
+      if let id = callId, state.waiting?.callId != id { return }
+      dispatch(.userDeclineWaiting)
+    }
+  }
 
   public func place(conversationId: String, media: String, sessionToken: String) {
     post { [self] in
@@ -196,23 +219,30 @@ public final class CallCoreRuntime {
       gen += 1
       markResolved(before.callId)
     }
-    for effect in t.effects { execute(effect, ringCtx: ringCtx) }
+    for effect in t.effects { execute(effect, ringCtx: ringCtx, before: before) }
     // Retire the ring grant / bundle only after EVERY effect had its chance.
     if isTerminal(next.phase) {
       ring = nil
       bundle = nil
       sessionToken = nil
     }
+    // A waiting call that went away without becoming the current one
+    // (declined, cancelled, timed out) is resolved: its ring never again.
+    if let w = before.waiting, next.waiting?.callId != w.callId, next.callId != w.callId {
+      markResolved(w.callId)
+    }
+    if next.waiting == nil { waitingRingCtx = nil }
     runTimers(before, next)
     if next != before || !t.effects.isEmpty { sink.emit(state: next) }
   }
 
-  private func execute(_ effect: Effect, ringCtx: RingContext?) {
+  private func execute(_ effect: Effect, ringCtx: RingContext?, before: MachineState) {
     let g = gen
     switch effect {
     case .showRing:
-      ring = ringCtx
-      if let r = ringCtx { surface.show(ring: r) }
+      // A promoted waiting call rings with the ring already on file.
+      if let r = ringCtx { ring = r }
+      if let r = ring { surface.show(ring: r) }
     case .dismissRing:
       // The grant is NOT retired here: HTTP_DECLINE may follow in this list.
       if let r = ring ?? ringCtx { surface.dismiss(callId: r.callId) }
@@ -248,7 +278,8 @@ public final class CallCoreRuntime {
     case .httpDecline:
       if let r = ring { http.decline(callId: r.callId, auth: r.grant, busy: false) }
     case let .httpDeclineBusy(callId):
-      if let r = busyRings[callId] { http.decline(callId: r.callId, auth: r.grant, busy: true) }
+      let waitingMatch = waitingRingCtx?.callId == callId ? waitingRingCtx : nil
+      if let r = busyRings[callId] ?? waitingMatch { http.decline(callId: r.callId, auth: r.grant, busy: true) }
       markResolved(callId)
     case .httpHangup:
       if let b = bundle {
@@ -281,6 +312,22 @@ public final class CallCoreRuntime {
       bundle = nil
       ring = nil
       sessionToken = nil
+
+    case .showWaiting:
+      waitingRingCtx = ringCtx
+      if let r = ringCtx { surface.showWaiting(ring: r) }
+    case .dismissWaiting:
+      // The grant is NOT retired here: HTTP_DECLINE_BUSY may precede or follow.
+      if let id = before.waiting?.callId { surface.dismissWaiting(callId: id) }
+    case .promoteWaiting:
+      // The old call is over: nothing it started may land on this one.
+      markResolved(before.callId)
+      gen += 1
+      bundle = nil
+      sessionToken = nil
+      ring = waitingRingCtx
+      waitingRingCtx = nil
+      if let id = before.waiting?.callId { surface.promoteWaiting(callId: id) }
     }
   }
 
@@ -341,7 +388,10 @@ public final class CallCoreRuntime {
   }
 
   private func runTimers(_ before: MachineState, _ after: MachineState) {
-    if before.phase == after.phase { return }
+    runWaitingTimer(before, after)
+    // A different call in the same phase (end-and-answer while connecting)
+    // needs its own timers: the old ones belong to a retired generation.
+    if before.phase == after.phase && before.callId == after.callId { return }
     switch before.phase {
     case .ringingIn: timers.cancel(key: CallCoreRuntime.T_DEADLINE)
     case .ended: timers.cancel(key: CallCoreRuntime.T_LINGER)
@@ -365,6 +415,23 @@ public final class CallCoreRuntime {
     case .ringingOut:
       schedule(CallCoreRuntime.T_RING_OUT, CallCoreRuntime.RING_OUT_BACKSTOP_MS, .allRingsResolved(outcome: "no_answer"))
     default: break
+    }
+  }
+
+  private func runWaitingTimer(_ before: MachineState, _ after: MachineState) {
+    let was = before.waiting?.callId
+    let now = after.waiting?.callId
+    if was == now { return }
+    if was != nil { timers.cancel(key: CallCoreRuntime.T_WAITING) }
+    guard let id = now, let deadline = waitingRingCtx?.ringDeadlineEpochMs else { return }
+    let delay = max(deadline - timers.nowMs(), CallCoreRuntime.CLOCK_SLACK_MS)
+    // Keyed to the waiting call, not the generation: the current call may
+    // move on (connect, reconnect) while this one keeps waiting.
+    timers.schedule(key: CallCoreRuntime.T_WAITING, delayMs: delay) { [weak self] in
+      self?.post {
+        guard let self = self, self.state.waiting?.callId == id else { return }
+        self.dispatch(.waitingDeadline)
+      }
     }
   }
 }

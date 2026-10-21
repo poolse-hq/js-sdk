@@ -83,6 +83,8 @@ class PoolseCallsModule : Module() {
     Function("answer") { core()?.answer() }
     Function("decline") { core()?.decline() }
     Function("hangUp") { core()?.hangUp() }
+    Function("answerWaiting") { callId: String? -> core()?.answerWaiting(callId) }
+    Function("declineWaiting") { callId: String? -> core()?.declineWaiting(callId) }
     Function("setMuted") { muted: Boolean -> core()?.setMuted(muted) }
     Function("setCamera") { on: Boolean -> core()?.setCamera(on) }
     Function("switchCamera") { core()?.switchCamera() }

@@ -61,11 +61,28 @@ export interface Snapshot {
   mutedSelf: boolean;
   /** True only while the local camera track is actually published and enabled. */
   cameraOn: boolean;
+  /**
+   * A second call ringing while this one is in progress (call waiting).
+   * Offer `answerWaiting` ("End & answer" — this call ends) and
+   * `declineWaiting` (its caller hears busy). If this call ends first,
+   * the waiting one simply becomes the ringing call. null when none;
+   * absent before 0.10.0.
+   */
+  waiting?: WaitingCall | null;
   /** Facing of the published local camera; absent when the camera is off. */
   cameraFacing?: 'front' | 'back';
 }
 
 export type AudioOutputKind = 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
+
+/** The call waiting beside the current one. */
+export interface WaitingCall {
+  callId: string;
+  conversationId: string | null;
+  conversationName: string | null;
+  callerName: string | null;
+  media: 'audio' | 'video';
+}
 
 /** One place call audio can play. */
 export interface AudioOutput {
@@ -128,6 +145,8 @@ interface PoolseCallsNative {
   answer(): void;
   decline(): void;
   hangUp(): void;
+  answerWaiting?(callId: string | null): void;
+  declineWaiting?(callId: string | null): void;
   setMuted(muted: boolean): void;
   setCamera(on: boolean): void;
   switchCamera(): void;
@@ -239,6 +258,16 @@ export async function startRoom(
 export const answer = (): void => native?.answer();
 export const decline = (): void => native?.decline();
 export const hangUp = (): void => native?.hangUp();
+
+/**
+ * Call waiting: end the current call and answer `snapshot.waiting`.
+ * Pass its `callId`: a tap on a card for a call that is no longer the
+ * one waiting is then ignored instead of answering a different call.
+ */
+export const answerWaiting = (callId?: string): void => native?.answerWaiting?.(callId ?? null);
+
+/** Call waiting: turn `snapshot.waiting` away — its caller hears busy. */
+export const declineWaiting = (callId?: string): void => native?.declineWaiting?.(callId ?? null);
 export const setMuted = (muted: boolean): void => native?.setMuted(muted);
 export const setCamera = (on: boolean): void => native?.setCamera(on);
 export const switchCamera = (): void => native?.switchCamera();

@@ -24,6 +24,8 @@ internal fun MachineState.toSnapshot(
   mutedSelf: Boolean = false,
   cameraOn: Boolean = false,
   cameraFacing: String? = null,
+  /** The waiting call's ring (names); the machine's [MachineState.waiting] says whether there is one. */
+  waitingRing: dev.poolse.callcore.RingContext? = null,
 ): Map<String, Any?>? {
   if (phase == Phase.IDLE) return null
   return buildMap {
@@ -33,6 +35,19 @@ internal fun MachineState.toSnapshot(
     put("audioOutputId", audioOutputId)
     // Optional in the contract: present only while a camera is published.
     if (cameraFacing != null) put("cameraFacing", cameraFacing)
+    // The call waiting beside this one: null when none.
+    put(
+      "waiting",
+      waiting?.let { w ->
+        mapOf(
+          "callId" to w.callId,
+          "conversationId" to (waitingRing?.conversationId ?: w.conversationId),
+          "conversationName" to waitingRing?.conversationName,
+          "callerName" to waitingRing?.callerName,
+          "media" to w.media,
+        )
+      },
+    )
   }
 }
 

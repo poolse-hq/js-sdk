@@ -66,6 +66,8 @@ public class PoolseCallsModule: Module {
     Function("answer") { onCore { $0.answer() } }
     Function("decline") { onCore { $0.decline() } }
     Function("hangUp") { onCore { $0.hangUp() } }
+    Function("answerWaiting") { (callId: String?) in onCore { $0.answerWaiting(callId: callId) } }
+    Function("declineWaiting") { (callId: String?) in onCore { $0.declineWaiting(callId: callId) } }
     Function("setMuted") { (muted: Bool) in onCore { $0.setMuted(muted) } }
     Function("setCamera") { (on: Bool) in onCore { $0.setCamera(on) } }
     Function("switchCamera") { onCore { $0.switchCamera() } }

@@ -94,6 +94,20 @@ public protocol RingSurfacePort: AnyObject {
   func ringtoneStop()
   func ringbackStart()
   func ringbackStop()
+  /// A call waiting beside the current one: its own quiet surface (iOS:
+  /// CallKit's call-waiting UI; Android: a heads-up with a waiting tone).
+  func showWaiting(ring: RingContext)
+  /// The waiting call is over (declined, cancelled, timed out).
+  func dismissWaiting(callId: String)
+  /// The waiting call becomes THE ring (SHOW_RING follows): drop its
+  /// waiting surface without resolving it.
+  func promoteWaiting(callId: String)
+}
+
+public extension RingSurfacePort {
+  func showWaiting(ring: RingContext) {}
+  func dismissWaiting(callId: String) {}
+  func promoteWaiting(callId: String) {}
 }
 
 public struct RingContext: Equatable {
@@ -177,6 +191,20 @@ public enum EndReason: String {
   public var wire: String { rawValue.lowercased() }
 }
 
+/// A second call ringing while this device is on one (CONTRACT.md §7,
+/// call waiting): shown beside the current call, never instead of it.
+public struct WaitingCall: Equatable {
+  public var callId: String
+  public var conversationId: String?
+  public var media: String
+
+  public init(callId: String, conversationId: String?, media: String) {
+    self.callId = callId
+    self.conversationId = conversationId
+    self.media = media
+  }
+}
+
 /// Everything the machine knows. Immutable value; transitions return a new one.
 public struct MachineState: Equatable {
   public var phase: Phase
@@ -187,10 +215,12 @@ public struct MachineState: Equatable {
   public var reason: EndReason?
   /// HTTP attempts made for the current connecting request (retry budget = 2).
   public var httpAttempts: Int
+  /// A second call ringing beside this one, if any.
+  public var waiting: WaitingCall?
 
   public init(phase: Phase = .idle, callId: String? = nil, conversationId: String? = nil,
               direction: Direction? = nil, media: String = "audio", reason: EndReason? = nil,
-              httpAttempts: Int = 0) {
+              httpAttempts: Int = 0, waiting: WaitingCall? = nil) {
     self.phase = phase
     self.callId = callId
     self.conversationId = conversationId
@@ -198,6 +228,7 @@ public struct MachineState: Equatable {
     self.media = media
     self.reason = reason
     self.httpAttempts = httpAttempts
+    self.waiting = waiting
   }
 
   public static var IDLE: MachineState { MachineState() }

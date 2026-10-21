@@ -233,6 +233,24 @@ final class CallCore {
     }
   }
 
+  /// Call waiting: end this call, answer the waiting one. CallKit follows
+  /// from the resulting state (reconcileCallKit ends the old call, then
+  /// answers the new one).
+  func answerWaiting(callId: String? = nil) {
+    onMain { [self] in
+      localEnd = true
+      runtime.answerWaiting(callId: callId)
+    }
+  }
+
+  /// Call waiting: turn the waiting call away (its caller hears busy).
+  func declineWaiting(callId: String? = nil) {
+    onMain { [self] in runtime.declineWaiting(callId: callId) }
+  }
+
+  /// True while `callId` is the call waiting beside the current one. Main thread.
+  func isWaiting(_ callId: String) -> Bool { runtime.currentState().waiting?.callId == callId }
+
   func place(conversationId: String, media: String, sessionToken: String) {
     onMain { [self] in
       localEnd = false
@@ -300,6 +318,9 @@ final class CallCore {
         if let old = extrasCallId, let new = state.callId { callKit.rename(from: old, to: new) }
         extrasCallId = state.callId
       } else {
+        // A different call (a waiting one promoted): nothing of the last
+        // carries over — not even "the user ended it here".
+        if extrasCallId != nil { localEnd = false }
         resetExtras(state.callId, state.media)
       }
     }
@@ -320,7 +341,8 @@ final class CallCore {
       audioOutputId: audioOutputId,
       mutedSelf: mutedSelf,
       cameraOn: cameraOn,
-      cameraFacing: cameraFacing
+      cameraFacing: cameraFacing,
+      waiting: runtime.waitingRing
     )
     snapshotLock.lock(); lastSnapshot = snap; snapshotLock.unlock()
     reconcileCallKit(state)
@@ -345,24 +367,26 @@ final class CallCore {
   /// CallKit follows the FINAL state of each dispatch.
   private func reconcileCallKit(_ state: MachineState) {
     let terminal = state.phase == .idle || state.phase == .ended
-    for t in callKit.liveCalls {
-      let isCurrent = !terminal && t.callId == state.callId
-      if isCurrent {
-        switch state.phase {
-        case .connecting, .active, .reconnecting, .ringingOut:
-          // Answered from the app's own UI: tell CallKit (audio follows).
-          if !t.outgoing && !t.answered && state.direction == .incoming { callKit.requestAnswer(callId: t.callId) }
-          if t.outgoing && state.phase == .active { callKit.reportConnected(callId: t.callId) }
-          callKit.updateTitle(callId: t.callId, title: conversationName, video: state.media == "video")
-        default:
-          break
-        }
-        continue
-      }
+    // The call waiting beside this one stays on CallKit's call-waiting UI.
+    let live = callKit.liveCalls.filter { terminal || $0.callId != state.waiting?.callId }
+    // Ends first: answering the next call (end-and-answer) while CallKit
+    // still holds the last one would ask it for two calls at once.
+    for t in live where terminal || t.callId != state.callId {
       // Not the call the machine is in (ended, busy-declined, superseded).
       // Terminal: whatever CallKit still shows is the call that just ended.
       let reason = endReason(for: t, state: state, current: terminal || t.callId == state.callId)
       callKit.end(t, reason: reason)
+    }
+    for t in live where !terminal && t.callId == state.callId {
+      switch state.phase {
+      case .connecting, .active, .reconnecting, .ringingOut:
+        // Answered from the app's own UI: tell CallKit (audio follows).
+        if !t.outgoing && !t.answered && state.direction == .incoming { callKit.requestAnswer(callId: t.callId) }
+        if t.outgoing && state.phase == .active { callKit.reportConnected(callId: t.callId) }
+        callKit.updateTitle(callId: t.callId, title: conversationName, video: state.media == "video")
+      default:
+        break
+      }
     }
     if terminal {
       localEnd = false
@@ -419,6 +443,13 @@ final class CallCore {
     callKit.reportIncoming(ring: ring)
   }
 
+  /// CallKit shows a second incoming call over a live one as call
+  /// waiting (End & Accept / Decline). Usually already reported by the
+  /// push path; idempotent.
+  fileprivate func showWaiting(_ ring: RingContext) {
+    callKit.reportIncoming(ring: ring)
+  }
+
   fileprivate var ringbackPlayer: Ringback { ringback }
 
   // MediaEvents → runtime
@@ -451,12 +482,24 @@ final class CallCore {
 extension CallCore: CallKitActions {
   func callKitAnswer(callId: String) {
     let s = runtime.currentState()
+    // End & Accept may answer the waiting call before ending the current
+    // one: answering it ends the current call itself.
+    if s.waiting?.callId == callId {
+      localEnd = true
+      runtime.answerWaiting(callId: callId)
+      return
+    }
     guard s.callId == callId, s.phase == .ringingIn else { return }
     runtime.answer()
   }
 
   func callKitEnd(callId: String) {
     let s = runtime.currentState()
+    // Decline on CallKit's call-waiting UI.
+    if s.waiting?.callId == callId {
+      runtime.declineWaiting(callId: callId)
+      return
+    }
     guard s.callId == callId || (s.callId?.hasPrefix("pending:") == true) else { return }
     localEnd = true
     if s.phase == .ringingIn { runtime.decline() } else { runtime.hangUp() }
@@ -494,6 +537,11 @@ private final class SurfaceAdapter: RingSurfacePort, CallSessionPort {
 
   func show(ring: RingContext) { core?.showRing(ring) }
   func dismiss(callId: String) {}
+  func showWaiting(ring: RingContext) { core?.showWaiting(ring) }
+  // Dismissal is reconciled from the final state; promotion keeps the
+  // CallKit call, which SHOW_RING then finds already reported.
+  func dismissWaiting(callId: String) {}
+  func promoteWaiting(callId: String) {}
   func ringtoneStart() {}
   func ringtoneStop() {}
   func ringbackStart() { core?.ringbackPlayer.start() }

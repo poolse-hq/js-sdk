@@ -188,7 +188,7 @@ a ring (backward compatibility).
   "event": "finished",
   "call_id": "…",
   "conversation_id": "…",
-  "reason": "finished", // finished | declined_all | no_answer | cancelled
+  "reason": "finished", // finished | declined_all | busy_all (every callee on another call) | no_answer | cancelled
 }
 ```
 
@@ -346,6 +346,7 @@ joins during the ring so the first word is never clipped.
 ### Inputs (events)
 
 `PUSH_RING · SOCKET_RING · RING_ENDED(reason) · CALL_FINISHED(reason?) ·
+USER_ANSWER_WAITING · USER_DECLINE_WAITING · WAITING_DEADLINE ·
 USER_ANSWER · USER_DECLINE · USER_PLACE · USER_JOIN · USER_HANGUP ·
 HTTP_OK(bundle) · HTTP_GONE · HTTP_TIMEOUT · HTTP_FAILED(code) ·
 MEDIA_CONNECTED · MEDIA_FAILED · MEDIA_LOST · MEDIA_RECONNECTING ·
@@ -358,13 +359,28 @@ RING_DEADLINE · RECONNECT_BUDGET_ELAPSED · CONNECT_TIMEOUT · LINGER_ELAPSED`
 HTTP_ANSWER(grant) · HTTP_JOIN · HTTP_DECLINE(reason) · HTTP_HANGUP ·
 HTTP_RECONNECT · MEDIA_JOIN(bundle) · MEDIA_LEAVE ·
 CALL_SESSION_START/STOP (Android FGS / iOS CallKit session) ·
+SHOW_WAITING · DISMISS_WAITING · PROMOTE_WAITING ·
 EMIT(snapshot)`
 
 Every transition implicitly emits a snapshot. The canonical transition table
 IS `vectors.json`; prose highlights only the non-obvious rules:
 
-- **Busy**: any ring input while `phase ≠ idle` for a _different_ call →
+- **Busy**: a ring for a _different_ call while `ringing_in` →
   `HTTP_DECLINE(busy)` for the new call, no phase change (vector S9).
+- **Call waiting**: a ring for a different call while on one (`ringing_out`,
+  `connecting`, `active`, `reconnecting`) does not busy it — it **waits**
+  beside the current call (`state.waiting`, `SHOW_WAITING`), at most one:
+  a third is busy. The waiting call ends by `USER_DECLINE_WAITING`
+  (`HTTP_DECLINE(busy)` + `DISMISS_WAITING` — its caller hears busy), its
+  own `RING_ENDED`/`CALL_FINISHED`, or `WAITING_DEADLINE` (missed), each
+  leaving the current call untouched. `USER_ANSWER_WAITING` ("End &
+  answer") leaves the current call (the `USER_HANGUP` effects) and answers
+  the waiting one in one step: `PROMOTE_WAITING`, `HTTP_ANSWER(its grant)`,
+  `CALL_SESSION_START`, never ringing. When the current call ends any
+  other way, the waiting one is **promoted** to the ring: `PROMOTE_WAITING`
+  then `SHOW_RING`/`RINGTONE_START`, `ringing_in` (no ended screen).
+  `PROMOTE_WAITING` retires the old call: its grant, bundle and generation
+  — a late answer/timer of the old call can never land on the new one.
 - **Answer is optimistic**: `USER_ANSWER` → `connecting` + `HTTP_ANSWER`
   immediately; `HTTP_GONE` → `ended(finished)`; `HTTP_FAILED` → `ended(failed)`;
   HTTP timeout retries once, a second timeout → `ended(failed)` (with no bundle
@@ -397,6 +413,11 @@ type Snapshot = {
   conversationId: string;
   conversationName: string | null;
   kind: 'call' | 'room';      // from the bundle's call.kind; 'call' until the server answers
+  waiting: {                  // call waiting (§7); null when none
+    callId: string; conversationId: string | null;
+    conversationName: string | null; callerName: string | null;
+    media: 'audio' | 'video';
+  } | null;
   direction: 'incoming' | 'outgoing' | 'joined';
   media: 'audio' | 'video';
   phase: 'ringing_in' | 'ringing_out' | 'connecting' | 'active' | 'reconnecting' | 'ended';

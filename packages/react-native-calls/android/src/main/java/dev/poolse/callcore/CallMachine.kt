@@ -24,6 +24,16 @@ enum class EndReason {
   val wire: String get() = name.lowercase()
 }
 
+/**
+ * A second call ringing while this device is on one (CONTRACT.md §7,
+ * call waiting): shown beside the current call, never instead of it.
+ */
+data class WaitingCall(
+  val callId: String,
+  val conversationId: String?,
+  val media: String,
+)
+
 /** Everything the machine knows. Immutable; transitions return a new one. */
 data class MachineState(
   val phase: Phase = Phase.IDLE,
@@ -34,6 +44,8 @@ data class MachineState(
   val reason: EndReason? = null,
   /** HTTP attempts made for the current connecting request (retry budget = 2). */
   val httpAttempts: Int = 0,
+  /** A second call ringing beside this one, if any. */
+  val waiting: WaitingCall? = null,
 ) {
   companion object { val IDLE = MachineState() }
 }
@@ -90,6 +102,13 @@ sealed interface Event {
   /** CONNECTING watchdog: neither the server nor the SFU got us in. */
   data object ConnectTimeout : Event
   data object LingerElapsed : Event
+
+  /** Call waiting: leave the current call and answer the waiting one. */
+  data object UserAnswerWaiting : Event
+  /** Call waiting: turn the waiting call away — its caller hears busy. */
+  data object UserDeclineWaiting : Event
+  /** The waiting call's ring deadline passed. */
+  data object WaitingDeadline : Event
 }
 
 /** Abstract effects — each adapter maps them to its platform. */
@@ -113,13 +132,95 @@ sealed interface Effect {
   data object MediaLeave : Effect { override val wire = "MEDIA_LEAVE" }
   data object CallSessionStart : Effect { override val wire = "CALL_SESSION_START" }
   data object CallSessionStop : Effect { override val wire = "CALL_SESSION_STOP" }
+  data object ShowWaiting : Effect { override val wire = "SHOW_WAITING" }
+  data object DismissWaiting : Effect { override val wire = "DISMISS_WAITING" }
+  /**
+   * The waiting call becomes the current one: retire the old call's
+   * grant/bundle/generation and take the waiting ring's.
+   */
+  data object PromoteWaiting : Effect { override val wire = "PROMOTE_WAITING" }
 }
 
 data class Transition(val state: MachineState, val effects: List<Effect>)
 
 object CallMachine {
 
-  fun transition(s: MachineState, e: Event): Transition = when (e) {
+  /**
+   * Phases that can hold a call waiting beside them: this device is on
+   * (or placing, or joining) a call. A second ring while one is ringING
+   * in is still busy — two rings at once is not a choice anyone can make.
+   */
+  private fun canHoldWaiting(s: MachineState) = when (s.phase) {
+    Phase.RINGING_OUT, Phase.CONNECTING, Phase.ACTIVE, Phase.RECONNECTING -> true
+    else -> false
+  }
+
+  /**
+   * The ring surface effects the end-and-answer composite skips: the
+   * waiting call goes straight from waiting to connecting, never ringing.
+   */
+  private val ringSurfaceEffects =
+    setOf<Effect>(Effect.ShowRing, Effect.RingtoneStart, Effect.RingtoneStop, Effect.DismissRing)
+
+  fun transition(s: MachineState, e: Event): Transition {
+    val w = s.waiting
+    if (w == null) {
+      return when {
+        e is Event.Ring && !e.stale && canHoldWaiting(s) && e.callId != s.callId -> Transition(
+          s.copy(waiting = WaitingCall(e.callId, e.conversationId, e.media)),
+          listOf(Effect.ShowWaiting),
+        )
+        e == Event.UserAnswerWaiting || e == Event.UserDeclineWaiting || e == Event.WaitingDeadline -> noop(s)
+        else -> single(s, e)
+      }
+    }
+
+    val cleared = s.copy(waiting = null)
+    return when {
+      e is Event.Ring -> when (e.callId) {
+        w.callId -> noop(s)
+        s.callId -> carry(single(cleared, e), w)
+        else -> if (e.stale) noop(s) else Transition(s, listOf(Effect.HttpDeclineBusy(e.callId)))
+      }
+      e is Event.RingEnded && e.callId == w.callId -> Transition(cleared, listOf(Effect.DismissWaiting))
+      e is Event.CallFinished && e.callId == w.callId -> Transition(cleared, listOf(Effect.DismissWaiting))
+      e == Event.WaitingDeadline -> Transition(cleared, listOf(Effect.DismissWaiting))
+      e == Event.UserDeclineWaiting ->
+        Transition(cleared, listOf(Effect.HttpDeclineBusy(w.callId), Effect.DismissWaiting))
+      e == Event.UserAnswerWaiting -> {
+        // Leaving rings the waiting call (below); answering it at once
+        // makes that ring a no-op the surface never sees.
+        val left = transition(s, Event.UserHangup)
+        if (left.state.phase != Phase.RINGING_IN || left.state.callId != w.callId) {
+          noop(s)
+        } else {
+          val answered = single(left.state, Event.UserAnswer)
+          Transition(answered.state, (left.effects + answered.effects).filterNot { it in ringSurfaceEffects })
+        }
+      }
+      else -> {
+        val t = single(cleared, e)
+        if (t.state.phase != Phase.ENDED && t.state.phase != Phase.IDLE) {
+          carry(t, w)
+        } else {
+          // The current call is over while another rings beside it: that
+          // ring is now simply THE ring (no ended screen in between).
+          Transition(
+            MachineState(
+              phase = Phase.RINGING_IN, callId = w.callId, conversationId = w.conversationId,
+              direction = Direction.INCOMING, media = w.media,
+            ),
+            t.effects + listOf(Effect.PromoteWaiting, Effect.ShowRing, Effect.RingtoneStart),
+          )
+        }
+      }
+    }
+  }
+
+  private fun carry(t: Transition, w: WaitingCall) = Transition(t.state.copy(waiting = w), t.effects)
+
+  /** The one-call machine: everything that is not about a waiting call. */
+  private fun single(s: MachineState, e: Event): Transition = when (e) {
 
     is Event.Ring -> ring(s, e)
 
@@ -351,6 +452,9 @@ object CallMachine {
 
     Event.LingerElapsed ->
       if (s.phase == Phase.ENDED) Transition(MachineState.IDLE, emptyList()) else noop(s)
+
+    // Handled by `transition`, which owns the waiting slot.
+    Event.UserAnswerWaiting, Event.UserDeclineWaiting, Event.WaitingDeadline -> noop(s)
   }
 
   private fun ring(s: MachineState, e: Event.Ring): Transition = when {
@@ -369,8 +473,9 @@ object CallMachine {
       listOf(Effect.ShowRing, Effect.RingtoneStart),
     )
 
-    // Busy with another call, in any phase: auto-decline the newcomer,
-    // whose banner still offers Join later. (Contract §7, scenario s9.)
+    // Busy ringing another call (a call in progress holds it waiting
+    // instead — see `transition`): auto-decline the newcomer, whose
+    // banner still offers Join later. (Contract §7, scenario s9.)
     else -> Transition(s, listOf(Effect.HttpDeclineBusy(e.callId)))
   }
 

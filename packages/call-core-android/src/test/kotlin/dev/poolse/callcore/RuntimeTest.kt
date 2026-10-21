@@ -2,6 +2,8 @@ package dev.poolse.callcore
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -65,6 +67,9 @@ class RuntimeTest {
     override fun ringtoneStop() { log += "ringtone-" }
     override fun ringbackStart() { log += "ringback+" }
     override fun ringbackStop() { log += "ringback-" }
+    override fun showWaiting(ring: RingContext) { log += "waiting:${ring.callId}" }
+    override fun dismissWaiting(callId: String) { log += "unwait:$callId" }
+    override fun promoteWaiting(callId: String) { log += "promote:$callId" }
   }
 
   private class FakeSession : CallSessionPort {
@@ -533,5 +538,137 @@ class RuntimeTest {
     assertEquals(EndReason.DECLINED_ALL, r.runtime.currentState().reason)
     assertEquals(EndReason.DECLINED_ALL, r.sink.states.last().reason)
     assertTrue(r.timers.scheduled.containsKey("linger"), "linger untouched")
+  }
+
+  // ── call waiting ────────────────────────────────────────────────────
+
+  @Test
+  fun `a second ring during a call waits with its own grant`() {
+    val r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    val s = r.runtime.currentState()
+    assertEquals(Phase.ACTIVE, s.phase)
+    assertEquals("c1", s.callId)
+    assertEquals("c2", s.waiting?.callId)
+    assertEquals("waiting:c2", r.surface.log.last())
+    assertEquals("Elena", r.runtime.waitingRing?.callerName)
+    assertNotNull(r.timers.scheduled["waiting_deadline"])
+    assertFalse(r.http.log.any { it.startsWith("decline:c2") }, "a waiting call is not turned away")
+    assertEquals("c2", r.sink.states.last().waiting?.callId, "the snapshot carries it")
+  }
+
+  @Test
+  fun `end and answer retires the old call and answers with the waiting grant`() {
+    val r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    r.runtime.answerWaiting()
+
+    assertTrue("hangup:c1:ctl-c1" in r.http.log)
+    assertEquals("answer:c2:grant-c2", r.http.log.last())
+    assertEquals("leave", r.media.log.last())
+    assertEquals(listOf("stop", "start:c2:audio"), r.session.log.takeLast(2))
+    assertEquals("promote:c2", r.surface.log.last())
+    assertFalse("show:c2" in r.surface.log, "never rings: it goes straight to connecting")
+    val s = r.runtime.currentState()
+    assertEquals(Phase.CONNECTING, s.phase)
+    assertEquals("c2", s.callId)
+    assertEquals(Direction.INCOMING, s.direction)
+    assertNull(s.waiting)
+    assertNull(r.timers.scheduled["waiting_deadline"])
+    assertNotNull(r.timers.scheduled["connect_watchdog"])
+
+    // A late duplicate ring of the old call is dropped (resolved).
+    r.runtime.onRing(ring("c1"))
+    assertEquals("c2", r.runtime.currentState().callId)
+
+    r.http.lastCb!!(HttpResult.Ok(bundle("c2")))
+    assertEquals("join:c2:lk-c2", r.media.log.last())
+    r.runtime.onMediaConnected()
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+    assertEquals("c2", r.runtime.currentState().callId)
+  }
+
+  @Test
+  fun `end and answer while connecting ignores the old answer and gets its own watchdog`() {
+    val r = Rig()
+    r.runtime.onRing(ring("c1"))
+    r.runtime.answer()
+    val oldAnswer = r.http.lastCb!!
+    r.runtime.onRing(ring("c2"))
+    assertEquals("c2", r.runtime.currentState().waiting?.callId)
+    r.runtime.answerWaiting()
+    // No bundle yet for c1: leaving it resolves its ring instead.
+    assertTrue("decline:c1:grant-c1:busy=false" in r.http.log)
+    assertEquals("answer:c2:grant-c2", r.http.log.last())
+
+    // c1's answer lands late: left at once, and nothing of it is kept.
+    oldAnswer(HttpResult.Ok(bundle("c1")))
+    assertEquals("hangup:c1:ctl-c1", r.http.log.last())
+    assertEquals("c2", r.runtime.currentState().callId)
+    assertEquals(Phase.CONNECTING, r.runtime.currentState().phase)
+
+    // The watchdog running now is c2's, and it is live.
+    r.timers.fire("connect_watchdog")
+    assertEquals(Phase.ENDED, r.runtime.currentState().phase)
+  }
+
+  @Test
+  fun `declining the waiting call busies it and it never returns`() {
+    val r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    r.runtime.declineWaiting()
+    assertEquals("decline:c2:grant-c2:busy=true", r.http.log.last())
+    assertEquals("unwait:c2", r.surface.log.last())
+    assertNull(r.runtime.currentState().waiting)
+    assertNull(r.runtime.waitingRing)
+    assertNull(r.timers.scheduled["waiting_deadline"])
+    r.runtime.onRing(ring("c2")) // redelivered push
+    assertNull(r.runtime.currentState().waiting)
+    assertEquals("c1", r.runtime.currentState().callId)
+  }
+
+  @Test
+  fun `hanging up rings the waiting call which answers with its grant`() {
+    val r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    r.runtime.hangUp()
+    assertTrue("hangup:c1:ctl-c1" in r.http.log)
+    assertEquals(Phase.RINGING_IN, r.runtime.currentState().phase)
+    assertEquals("c2", r.runtime.currentState().callId)
+    assertEquals(listOf("promote:c2", "show:c2", "ringtone+"), r.surface.log.takeLast(3))
+    assertNotNull(r.timers.scheduled["ring_deadline"])
+    assertNull(r.timers.scheduled["waiting_deadline"])
+    r.runtime.answer()
+    assertEquals("answer:c2:grant-c2", r.http.log.last())
+  }
+
+  @Test
+  fun `the waiting deadline clears it as missed`() {
+    val r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    r.timers.fire("waiting_deadline")
+    assertNull(r.runtime.currentState().waiting)
+    assertEquals("unwait:c2", r.surface.log.last())
+    assertFalse(r.http.log.any { it.startsWith("decline:c2") }, "a missed call is the server's to record")
+    r.runtime.onRing(ring("c2"))
+    assertNull(r.runtime.currentState().waiting)
+  }
+
+  @Test
+  fun `the waiting call outlives the current call connecting`() {
+    val r = Rig()
+    r.runtime.place("conv-1", "audio", "sess")
+    r.runtime.onRing(ring("c2"))
+    assertEquals("c2", r.runtime.currentState().waiting?.callId)
+    r.http.lastCb!!(HttpResult.Ok(bundle("out-1")))
+    assertEquals(Phase.RINGING_OUT, r.runtime.currentState().phase)
+    assertEquals("c2", r.runtime.currentState().waiting?.callId)
+    r.timers.fire("waiting_deadline")
+    assertNull(r.runtime.currentState().waiting, "the deadline still fires after the generation moved")
   }
 }

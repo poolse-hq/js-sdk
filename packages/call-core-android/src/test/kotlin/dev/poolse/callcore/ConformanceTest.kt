@@ -49,6 +49,7 @@ class ConformanceTest {
       direction = g["direction"]?.asString?.let { Direction.valueOf(it.uppercase()) },
       httpAttempts = g["httpAttempts"]?.asInt ?: 1,
       reason = g["reason"]?.asString?.let { w -> EndReason.entries.first { it.wire == w } },
+      waiting = g["waitingCallId"]?.takeIf { !it.isJsonNull }?.asString?.let { WaitingCall(it, null, "audio") },
     )
   }
 
@@ -82,6 +83,9 @@ class ConformanceTest {
       "RECONNECT_BUDGET_ELAPSED" -> Event.ReconnectBudgetElapsed
       "LINGER_ELAPSED" -> Event.LingerElapsed
       "CONNECT_TIMEOUT" -> Event.ConnectTimeout
+      "USER_ANSWER_WAITING" -> Event.UserAnswerWaiting
+      "USER_DECLINE_WAITING" -> Event.UserDeclineWaiting
+      "WAITING_DEADLINE" -> Event.WaitingDeadline
       else -> fail("unknown event type: $type")
     }
   }
@@ -106,6 +110,13 @@ class ConformanceTest {
     expect["direction"]?.asString?.let { want ->
       if (actual.state.direction?.name?.lowercase() != want) {
         problems += "direction: expected $want, got ${actual.state.direction}"
+      }
+    }
+
+    if (expect.has("waitingCallId")) {
+      val want = expect["waitingCallId"].takeIf { !it.isJsonNull }?.asString // null: none waiting
+      if (actual.state.waiting?.callId != want) {
+        problems += "waitingCallId: expected $want, got ${actual.state.waiting?.callId}"
       }
     }
 

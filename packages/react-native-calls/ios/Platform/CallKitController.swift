@@ -124,7 +124,13 @@ final class CallKitController: NSObject, CXProviderDelegate {
       DispatchQueue.main.async {
         t.ended = true
         self?.calls.removeValue(forKey: t.uuid)
-        CallCore.peek()?.onRingEnded(callId: ring.callId, reason: "cancelled")
+        // A refused call-waiting report: the caller would ring on into
+        // a void — turn it away as busy instead.
+        if let core = CallCore.peek(), core.isWaiting(ring.callId) {
+          core.declineWaiting(callId: ring.callId)
+        } else {
+          CallCore.peek()?.onRingEnded(callId: ring.callId, reason: "cancelled")
+        }
       }
     }
   }

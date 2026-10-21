@@ -142,6 +142,10 @@ class CallCore private constructor(context: Context) {
   fun answer() = runtime.answer()
   fun decline() = runtime.decline()
   fun hangUp() = runtime.hangUp()
+  /** Call waiting: end this call, answer the waiting one ([callId]: only if still that one). */
+  fun answerWaiting(callId: String? = null) = runtime.answerWaiting(callId)
+  /** Call waiting: turn the waiting call away — its caller hears busy. */
+  fun declineWaiting(callId: String? = null) = runtime.declineWaiting(callId)
   fun place(conversationId: String, media: String, sessionToken: String) =
     runtime.place(conversationId, media, sessionToken)
   fun join(callId: String, conversationId: String?, sessionToken: String) =
@@ -235,6 +239,7 @@ class CallCore private constructor(context: Context) {
       mutedSelf = mutedSelf,
       cameraOn = cameraOn,
       cameraFacing = cameraFacing,
+      waitingRing = runtime.waitingRing,
     )
     lastSnapshot = snap
     reconcileAndroid(state)

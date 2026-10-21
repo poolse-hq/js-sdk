@@ -73,7 +73,8 @@ public extension MachineState {
                   audioOutputId: String? = nil,
                   mutedSelf: Bool = false,
                   cameraOn: Bool = false,
-                  cameraFacing: String? = nil) -> [String: Any]? {
+                  cameraFacing: String? = nil,
+                  waiting: RingContext? = nil) -> [String: Any]? {
     if phase == .idle { return nil }
     var out: [String: Any] = [
       "cv": 1,
@@ -91,6 +92,18 @@ public extension MachineState {
       "mutedSelf": mutedSelf,
       "cameraOn": cameraOn,
     ]
+    // The call waiting beside this one: null when none.
+    if let w = self.waiting {
+      out["waiting"] = [
+        "callId": w.callId,
+        "conversationId": (waiting?.conversationId ?? w.conversationId).map { $0 as Any } ?? NSNull(),
+        "conversationName": waiting?.conversationName.map { $0 as Any } ?? NSNull(),
+        "callerName": waiting?.callerName.map { $0 as Any } ?? NSNull(),
+        "media": w.media,
+      ] as [String: Any]
+    } else {
+      out["waiting"] = NSNull()
+    }
     if let reason = reason { out["reason"] = reason.wire }
     // Optional in the contract: present only while a camera is published.
     if let cameraFacing = cameraFacing { out["cameraFacing"] = cameraFacing }

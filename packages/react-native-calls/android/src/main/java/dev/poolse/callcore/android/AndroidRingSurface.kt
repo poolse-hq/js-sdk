@@ -6,7 +6,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
+import android.media.ToneGenerator
+import android.os.Handler
+import android.os.Looper
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
@@ -49,6 +53,18 @@ internal class AndroidRingSurface(
   private var ringback: MediaPlayer? = null
   private var ringbackWanted = false
   private var communicationReady = false
+
+  /** The call waiting beside the current one, while its surface is up. */
+  private var waitingCallId: String? = null
+  private var waitingTone: ToneGenerator? = null
+  private val main = Handler(Looper.getMainLooper())
+  private val waitingBeep = object : Runnable {
+    override fun run() {
+      if (waitingCallId == null) return
+      runCatching { waitingTone?.startTone(ToneGenerator.TONE_SUP_CALL_WAITING, WAITING_BEEP_MS) }
+      main.postDelayed(this, WAITING_BEEP_EVERY_MS)
+    }
+  }
 
   /**
    * The call's audio path is (or is no longer) in communication mode.
@@ -134,7 +150,106 @@ internal class AndroidRingSurface(
     }
   }
 
+  /**
+   * A call waiting beside the one in progress: a quiet heads-up — not
+   * the full-screen ring, which would cover the call — with Decline and
+   * End & answer, and the call-waiting beep through the call's own
+   * audio route (the ringtone would blare over the conversation).
+   */
+  override fun showWaiting(ring: RingContext) {
+    ensureWaitingChannel()
+    val extras = ring.toBundle()
+
+    fun actionPending(action: String, requestOffset: Int): PendingIntent {
+      val intent = Intent(context, CallActionReceiver::class.java)
+        .setAction("$ACTION_PREFIX.$action")
+        .putExtra(EXTRA_RING, extras)
+      return PendingIntent.getBroadcast(
+        context,
+        ring.callId.hashCode() + requestOffset,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+    }
+
+    val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
+      PendingIntent.getActivity(
+        context,
+        ring.callId.hashCode() + 5,
+        it.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+    }
+
+    val who = ring.conversationName ?: ring.callerName ?: "Someone"
+    val what = if (ring.media == "video") "video call" else "call"
+    val notification = NotificationCompat.Builder(context, WAITING_CHANNEL_ID)
+      .setSmallIcon(config.smallIcon)
+      .setCategory(NotificationCompat.CATEGORY_CALL)
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setContentTitle("$who — incoming $what")
+      .setContentText("You're on a call. Answering ends it.")
+      .setOngoing(true)
+      .setAutoCancel(false)
+      .setOnlyAlertOnce(true)
+      .apply { if (open != null) setContentIntent(open) }
+      .addAction(0, "Decline", actionPending(ACTION_WAITING_DECLINE, 3))
+      .addAction(0, "End & answer", actionPending(ACTION_WAITING_ANSWER, 4))
+      .build()
+
+    waitingCallId = ring.callId
+    try {
+      NotificationManagerCompat.from(context).notify(ring.callId.notificationId(), notification)
+    } catch (e: SecurityException) {
+      Log.e(TAG, "call-waiting notification refused (POST_NOTIFICATIONS?)", e)
+    }
+    startWaitingBeep()
+  }
+
+  override fun dismissWaiting(callId: String) {
+    if (waitingCallId != callId) return
+    stopWaitingBeep()
+    runCatching { NotificationManagerCompat.from(context).cancel(callId.notificationId()) }
+  }
+
+  /** SHOW_RING follows, reposting under the same id as the full ring. */
+  override fun promoteWaiting(callId: String) = dismissWaiting(callId)
+
+  private fun startWaitingBeep() {
+    main.removeCallbacks(waitingBeep)
+    if (waitingTone == null) {
+      waitingTone = runCatching { ToneGenerator(AudioManager.STREAM_VOICE_CALL, WAITING_BEEP_VOLUME) }.getOrNull()
+    }
+    main.post(waitingBeep)
+  }
+
+  private fun stopWaitingBeep() {
+    waitingCallId = null
+    main.removeCallbacks(waitingBeep)
+    runCatching { waitingTone?.stopTone(); waitingTone?.release() }
+    waitingTone = null
+  }
+
+  private fun ensureWaitingChannel() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val manager = context.getSystemService(NotificationManager::class.java)
+    if (manager.getNotificationChannel(WAITING_CHANNEL_ID) != null) return
+    // Silent: the beep is ours, through the call route. A channel sound
+    // would play on the notification stream over the conversation.
+    manager.createNotificationChannel(
+      NotificationChannel(WAITING_CHANNEL_ID, "Calls while on a call", NotificationManager.IMPORTANCE_HIGH).apply {
+        setSound(null, null)
+        enableVibration(false)
+        lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+      },
+    )
+  }
+
   override fun dismiss(callId: String) {
+    // Every teardown for a call (ring_ended, finished) also ends its
+    // waiting surface, even after a restart lost the in-memory state.
+    if (waitingCallId == callId) stopWaitingBeep()
     if (shownRing?.first == callId) shownRing = null
     runCatching { NotificationManagerCompat.from(context).cancel(callId.notificationId()) }
     // The full-screen activity is its own window: tell it to close.
@@ -222,6 +337,12 @@ internal class AndroidRingSurface(
     const val ACTION_ANSWER = "ANSWER"
     const val ACTION_DECLINE = "DECLINE"
     const val ACTION_OPEN = "OPEN"
+    const val ACTION_WAITING_ANSWER = "WAITING_ANSWER"
+    const val ACTION_WAITING_DECLINE = "WAITING_DECLINE"
+    const val WAITING_CHANNEL_ID = "poolse_call_waiting"
+    private const val WAITING_BEEP_MS = 400
+    private const val WAITING_BEEP_EVERY_MS = 3_000L
+    private const val WAITING_BEEP_VOLUME = 70
     const val EXTRA_RING = "poolse_ring"
     const val EXTRA_AUTO_ANSWER = "poolse_auto_answer"
     /** Package-local broadcast: the ring for [EXTRA_CALL_ID] is over. */

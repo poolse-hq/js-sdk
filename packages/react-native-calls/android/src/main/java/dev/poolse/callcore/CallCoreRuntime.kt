@@ -43,6 +43,9 @@ class CallCoreRuntime(
   /** Grants of rings auto-declined busy, kept until the decline fires. */
   private val busyRings = mutableMapOf<String, RingContext>()
 
+  /** The ring of the call waiting beside the current one (its grant answers or busy-declines it). */
+  private var waitingRingCtx: RingContext? = null
+
   /** The session bundle of the current call, once the server accepted. */
   private var bundle: CallSessionBundle? = null
 
@@ -110,6 +113,7 @@ class CallCoreRuntime(
     private const val T_RECONNECT = "reconnect_budget"
     private const val T_CONNECT = "connect_watchdog"
     private const val T_RING_OUT = "ring_out_backstop"
+    private const val T_WAITING = "waiting_deadline"
   }
 
   // ── inputs from adapters ────────────────────────────────────────────
@@ -121,6 +125,9 @@ class CallCoreRuntime(
 
   /** `room` or `call`, once the server's bundle says; null before. Runtime thread only. */
   val callKind: String? get() = bundle?.kind
+
+  /** The call waiting beside the current one, with its caller's names. Runtime thread only. */
+  val waitingRing: RingContext? get() = if (state.waiting == null) null else waitingRingCtx
 
   /** True if [callId] was already resolved here — its ring must never surface again. */
   fun isResolved(callId: String): Boolean = synchronized(resolved) { resolved.containsKey(callId) }
@@ -168,6 +175,18 @@ class CallCoreRuntime(
   fun answer() = post { dispatch(Event.UserAnswer) }
   fun decline() = post { dispatch(Event.UserDecline) }
   fun hangUp() = post { dispatch(Event.UserHangup) }
+  /**
+   * Call waiting: end this call and answer the one waiting. With
+   * [callId], only if that is still the call waiting (a stale tap on a
+   * surface for an earlier one must not answer a different call).
+   */
+  fun answerWaiting(callId: String? = null) = post {
+    if (callId == null || state.waiting?.callId == callId) dispatch(Event.UserAnswerWaiting)
+  }
+  /** Call waiting: turn the waiting call away (its caller hears busy). */
+  fun declineWaiting(callId: String? = null) = post {
+    if (callId == null || state.waiting?.callId == callId) dispatch(Event.UserDeclineWaiting)
+  }
 
   fun place(conversationId: String, media: String, sessionToken: String) = post {
     if (state.phase != Phase.IDLE && state.phase != Phase.ENDED) return@post
@@ -216,23 +235,30 @@ class CallCoreRuntime(
       gen++
       markResolved(before.callId)
     }
-    for (effect in effects) execute(effect, ringCtx)
+    for (effect in effects) execute(effect, ringCtx, before)
     // Retire the ring grant only after EVERY effect has had its chance
     // to use it. CONNECTING keeps it (answer + the no-bundle hangup
     // fallback still need it); CallSessionStop clears it with the rest.
     if (isTerminal(next.phase)) ring = null
     // A bundle never outlives its call — whatever ended it.
     if (isTerminal(next.phase)) { bundle = null; sessionToken = null }
+    // A waiting call that went away without becoming the current one
+    // (declined, cancelled, timed out) is resolved: its ring never again.
+    before.waiting?.let { w ->
+      if (next.waiting?.callId != w.callId && next.callId != w.callId) markResolved(w.callId)
+    }
+    if (next.waiting == null) waitingRingCtx = null
     runTimers(before, next)
     if (next != before || effects.isNotEmpty()) sink.emit(next)
   }
 
-  private fun execute(effect: Effect, ringCtx: RingContext?) {
+  private fun execute(effect: Effect, ringCtx: RingContext?, before: MachineState) {
     val g = gen
     when (effect) {
       Effect.ShowRing -> {
-        ring = ringCtx
-        ringCtx?.let(surface::show)
+        // A promoted waiting call rings with the ring already on file.
+        if (ringCtx != null) ring = ringCtx
+        ring?.let(surface::show)
       }
       Effect.DismissRing -> {
         (ring ?: ringCtx)?.let { surface.dismiss(it.callId) }
@@ -269,7 +295,8 @@ class CallCoreRuntime(
         ring?.let { http.decline(it.callId, it.grant, busy = false) }
       }
       is Effect.HttpDeclineBusy -> {
-        busyRings[effect.callId]?.let { http.decline(it.callId, it.grant, busy = true) }
+        val waitingMatch = waitingRingCtx?.takeIf { it.callId == effect.callId }
+        (busyRings[effect.callId] ?: waitingMatch)?.let { http.decline(it.callId, it.grant, busy = true) }
         markResolved(effect.callId)
       }
       Effect.HttpHangup -> {
@@ -299,6 +326,23 @@ class CallCoreRuntime(
         bundle = null
         ring = null
         sessionToken = null
+      }
+
+      Effect.ShowWaiting -> {
+        waitingRingCtx = ringCtx
+        ringCtx?.let(surface::showWaiting)
+      }
+      // The grant is NOT retired here: HTTP_DECLINE_BUSY may precede or follow.
+      Effect.DismissWaiting -> before.waiting?.let { surface.dismissWaiting(it.callId) }
+      Effect.PromoteWaiting -> {
+        // The old call is over: nothing it started may land on this one.
+        markResolved(before.callId)
+        gen++
+        bundle = null
+        sessionToken = null
+        ring = waitingRingCtx
+        waitingRingCtx = null
+        before.waiting?.let { surface.promoteWaiting(it.callId) }
       }
     }
   }
@@ -369,7 +413,10 @@ class CallCoreRuntime(
   }
 
   private fun runTimers(before: MachineState, after: MachineState) {
-    if (before.phase == after.phase) return
+    runWaitingTimer(before, after)
+    // A different call in the same phase (end-and-answer while connecting)
+    // needs its own timers: the old ones belong to a retired generation.
+    if (before.phase == after.phase && before.callId == after.callId) return
     when (before.phase) {
       Phase.RINGING_IN -> timers.cancel(T_DEADLINE)
       Phase.ENDED -> timers.cancel(T_LINGER)
@@ -392,5 +439,18 @@ class CallCoreRuntime(
       Phase.RINGING_OUT -> schedule(T_RING_OUT, RING_OUT_BACKSTOP_MS, Event.AllRingsResolved("no_answer"))
       else -> Unit
     }
+  }
+
+  private fun runWaitingTimer(before: MachineState, after: MachineState) {
+    val was = before.waiting?.callId
+    val now = after.waiting?.callId
+    if (was == now) return
+    if (was != null) timers.cancel(T_WAITING)
+    val deadline = waitingRingCtx?.ringDeadlineEpochMs
+    if (now == null || deadline == null) return
+    val delay = (deadline - timers.nowMs()).coerceAtLeast(CLOCK_SLACK_MS)
+    // Keyed to the waiting call, not the generation: the current call may
+    // move on (connect, reconnect) while this one keeps waiting.
+    timers.schedule(T_WAITING, delay) { post { if (state.waiting?.callId == now) dispatch(Event.WaitingDeadline) } }
   }
 }

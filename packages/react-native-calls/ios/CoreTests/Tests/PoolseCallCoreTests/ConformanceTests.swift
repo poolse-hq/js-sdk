@@ -45,7 +45,8 @@ final class ConformanceTests: XCTestCase {
       callId: (g["callId"] as? String) ?? "c1",
       direction: (g["direction"] as? String).map { Direction(rawValue: $0.uppercased())! },
       reason: (g["reason"] as? String).map { w in EndReason.allCasesList.first { $0.wire == w }! },
-      httpAttempts: (g["httpAttempts"] as? Int) ?? 1
+      httpAttempts: (g["httpAttempts"] as? Int) ?? 1,
+      waiting: (g["waitingCallId"] as? String).map { WaitingCall(callId: $0, conversationId: nil, media: "audio") }
     )
   }
 
@@ -79,6 +80,9 @@ final class ConformanceTests: XCTestCase {
     case "RECONNECT_BUDGET_ELAPSED": return .reconnectBudgetElapsed
     case "LINGER_ELAPSED": return .lingerElapsed
     case "CONNECT_TIMEOUT": return .connectTimeout
+    case "USER_ANSWER_WAITING": return .userAnswerWaiting
+    case "USER_DECLINE_WAITING": return .userDeclineWaiting
+    case "WAITING_DEADLINE": return .waitingDeadline
     default: throw UnknownEvent(type: type)
     }
   }
@@ -95,6 +99,12 @@ final class ConformanceTests: XCTestCase {
     }
     if let want = expect["direction"] as? String, actual.state.direction?.wire != want {
       problems.append("direction: expected \(want), got \(String(describing: actual.state.direction))")
+    }
+    if expect.keys.contains("waitingCallId") {
+      let want = expect["waitingCallId"] as? String // NSNull → nil: none waiting
+      if actual.state.waiting?.callId != want {
+        problems.append("waitingCallId: expected \(String(describing: want)), got \(String(describing: actual.state.waiting?.callId))")
+      }
     }
     let wantEffects = expect["effects"] as! [String]
     let gotEffects = actual.effects.map { $0.wire }

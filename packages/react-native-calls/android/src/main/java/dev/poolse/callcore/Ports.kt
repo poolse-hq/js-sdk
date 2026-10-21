@@ -86,6 +86,18 @@ interface RingSurfacePort {
   fun ringtoneStop()
   fun ringbackStart()
   fun ringbackStop()
+  /**
+   * A call waiting beside the current one: its own quiet surface (a
+   * heads-up with a waiting tone; iOS: CallKit's call-waiting UI).
+   */
+  fun showWaiting(ring: RingContext) {}
+  /** The waiting call is over (declined, cancelled, timed out). */
+  fun dismissWaiting(callId: String) {}
+  /**
+   * The waiting call becomes THE ring (SHOW_RING follows): drop its
+   * waiting surface without resolving it.
+   */
+  fun promoteWaiting(callId: String) {}
 }
 
 data class RingContext(

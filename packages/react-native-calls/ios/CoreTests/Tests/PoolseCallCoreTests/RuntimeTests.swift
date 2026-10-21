@@ -46,6 +46,9 @@ final class FakeSurface: RingSurfacePort {
   func ringtoneStop() { log.append("ringtone-") }
   func ringbackStart() { log.append("ringback+") }
   func ringbackStop() { log.append("ringback-") }
+  func showWaiting(ring: RingContext) { log.append("waiting:\(ring.callId)") }
+  func dismissWaiting(callId: String) { log.append("unwait:\(callId)") }
+  func promoteWaiting(callId: String) { log.append("promote:\(callId)") }
 }
 
 final class FakeSession: CallSessionPort {
@@ -132,6 +135,131 @@ final class RuntimeTests: XCTestCase {
     XCTAssertEqual(r.http.log.last, "decline:c2:grant-c2:busy=true")
     XCTAssertEqual(r.runtime.currentState().phase, .ringingIn)
     XCTAssertEqual(r.runtime.currentState().callId, "c1")
+  }
+
+  // MARK: call waiting
+
+  func testSecondRingDuringACallWaitsWithItsOwnGrant() {
+    let r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    let s = r.runtime.currentState()
+    XCTAssertEqual(s.phase, .active)
+    XCTAssertEqual(s.callId, "c1")
+    XCTAssertEqual(s.waiting?.callId, "c2")
+    XCTAssertEqual(r.surface.log.last, "waiting:c2")
+    XCTAssertEqual(r.runtime.waitingRing?.callerName, "Elena")
+    XCTAssertNotNil(r.timers.scheduled["waiting_deadline"])
+    XCTAssertFalse(r.http.log.contains { $0.hasPrefix("decline:c2") }, "a waiting call is not turned away")
+    XCTAssertEqual(r.sink.states.last?.waiting?.callId, "c2", "the snapshot carries it")
+  }
+
+  func testEndAndAnswerRetiresTheOldCallAndAnswersWithTheWaitingGrant() {
+    let r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    r.runtime.answerWaiting()
+
+    XCTAssertTrue(r.http.log.contains("hangup:c1:ctl-c1"))
+    XCTAssertEqual(r.http.log.last, "answer:c2:grant-c2")
+    XCTAssertEqual(r.media.log.last, "leave")
+    XCTAssertEqual(Array(r.session.log.suffix(2)), ["stop", "start:c2:audio"])
+    XCTAssertEqual(r.surface.log.last, "promote:c2")
+    XCTAssertFalse(r.surface.log.contains("show:c2"), "never rings: it goes straight to connecting")
+    let s = r.runtime.currentState()
+    XCTAssertEqual(s.phase, .connecting)
+    XCTAssertEqual(s.callId, "c2")
+    XCTAssertEqual(s.direction, .incoming)
+    XCTAssertNil(s.waiting)
+    XCTAssertNil(r.timers.scheduled["waiting_deadline"])
+    XCTAssertNotNil(r.timers.scheduled["connect_watchdog"])
+
+    // A late duplicate ring of the old call is dropped (resolved).
+    r.runtime.onRing(ring("c1"))
+    XCTAssertEqual(r.runtime.currentState().callId, "c2")
+
+    r.http.lastCb!(.ok(bundle("c2")))
+    XCTAssertEqual(r.media.log.last, "join:c2:lk-c2")
+    r.runtime.onMediaConnected()
+    XCTAssertEqual(r.runtime.currentState().phase, .active)
+    XCTAssertEqual(r.runtime.currentState().callId, "c2")
+  }
+
+  func testEndAndAnswerWhileConnectingIgnoresTheOldAnswerAndGetsItsOwnWatchdog() {
+    let r = Rig()
+    r.runtime.onRing(ring("c1"))
+    r.runtime.answer()
+    let oldAnswer = r.http.lastCb!
+    r.runtime.onRing(ring("c2"))
+    XCTAssertEqual(r.runtime.currentState().waiting?.callId, "c2")
+    r.runtime.answerWaiting()
+    // No bundle yet for c1: leaving it resolves its ring instead.
+    XCTAssertTrue(r.http.log.contains("decline:c1:grant-c1:busy=false"))
+    XCTAssertEqual(r.http.log.last, "answer:c2:grant-c2")
+
+    // c1's answer lands late: left at once, and nothing of it is kept.
+    oldAnswer(.ok(bundle("c1")))
+    XCTAssertEqual(r.http.log.last, "hangup:c1:ctl-c1")
+    XCTAssertEqual(r.runtime.currentState().callId, "c2")
+    XCTAssertEqual(r.runtime.currentState().phase, .connecting)
+
+    // The watchdog running now is c2's, and it is live.
+    r.timers.fire("connect_watchdog")
+    XCTAssertEqual(r.runtime.currentState().phase, .ended)
+  }
+
+  func testDecliningTheWaitingCallBusiesItAndItNeverReturns() {
+    let r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    r.runtime.declineWaiting()
+    XCTAssertEqual(r.http.log.last, "decline:c2:grant-c2:busy=true")
+    XCTAssertEqual(r.surface.log.last, "unwait:c2")
+    XCTAssertNil(r.runtime.currentState().waiting)
+    XCTAssertNil(r.runtime.waitingRing)
+    XCTAssertNil(r.timers.scheduled["waiting_deadline"])
+    r.runtime.onRing(ring("c2")) // redelivered push
+    XCTAssertNil(r.runtime.currentState().waiting)
+    XCTAssertEqual(r.runtime.currentState().callId, "c1")
+  }
+
+  func testHangingUpRingsTheWaitingCallWhichAnswersWithItsGrant() {
+    let r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    r.runtime.hangUp()
+    XCTAssertTrue(r.http.log.contains("hangup:c1:ctl-c1"))
+    XCTAssertEqual(r.runtime.currentState().phase, .ringingIn)
+    XCTAssertEqual(r.runtime.currentState().callId, "c2")
+    XCTAssertEqual(Array(r.surface.log.suffix(3)), ["promote:c2", "show:c2", "ringtone+"])
+    XCTAssertNotNil(r.timers.scheduled["ring_deadline"])
+    XCTAssertNil(r.timers.scheduled["waiting_deadline"])
+    r.runtime.answer()
+    XCTAssertEqual(r.http.log.last, "answer:c2:grant-c2")
+  }
+
+  func testTheWaitingDeadlineClearsItAsMissed() {
+    let r = Rig()
+    r.activeCall("c1")
+    r.runtime.onRing(ring("c2"))
+    r.timers.fire("waiting_deadline")
+    XCTAssertNil(r.runtime.currentState().waiting)
+    XCTAssertEqual(r.surface.log.last, "unwait:c2")
+    XCTAssertFalse(r.http.log.contains { $0.hasPrefix("decline:c2") }, "a missed call is the server's to record")
+    r.runtime.onRing(ring("c2"))
+    XCTAssertNil(r.runtime.currentState().waiting)
+  }
+
+  func testTheWaitingCallOutlivesTheCurrentCallConnecting() {
+    let r = Rig()
+    r.runtime.place(conversationId: "conv-1", media: "audio", sessionToken: "sess")
+    r.runtime.onRing(ring("c2"))
+    XCTAssertEqual(r.runtime.currentState().waiting?.callId, "c2")
+    r.http.lastCb!(.ok(bundle("out-1")))
+    XCTAssertEqual(r.runtime.currentState().phase, .ringingOut)
+    XCTAssertEqual(r.runtime.currentState().waiting?.callId, "c2")
+    r.timers.fire("waiting_deadline")
+    XCTAssertNil(r.runtime.currentState().waiting, "the deadline still fires after the generation moved")
   }
 
   func testRingDeadlineDismisses() {

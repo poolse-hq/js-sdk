@@ -1,6 +1,6 @@
 {
   "cv": 1,
-  "notes": "Conformance vectors for the call state machine (CONTRACT.md §7). Every implementation (Kotlin core, Swift core, JS mirror) runs all vectors. given.phase + event → expect.phase + expect.effects (ordered, EMIT(snapshot) implicit on every transition). callId defaults to \"c1\"; \"c2\" is a different call.",
+  "notes": "Conformance vectors for the call state machine (CONTRACT.md §7). Every implementation (Kotlin core, Swift core, JS mirror) runs all vectors. given.phase + event → expect.phase + expect.effects (ordered, EMIT(snapshot) implicit on every transition). callId defaults to \"c1\"; \"c2\" is a different call. waitingCallId (given/expect): the call waiting beside the current one; expect null = none, absent = not checked.",
   "constants": {
     "FINISH_GRACE_MS": 30000,
     "ENDED_LINGER_MS": 2500,
@@ -100,10 +100,133 @@
       "event": { "type": "PUSH_RING", "callId": "c2" },
       "expect": { "phase": "ringing_in", "effects": ["HTTP_DECLINE_BUSY:c2"] } },
 
-    { "name": "ring while on an active call auto-busies the newcomer", "scenario": "s9",
+    { "name": "ring while on an active call waits beside it", "scenario": "s9",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "PUSH_RING", "callId": "c2" },
-      "expect": { "phase": "active", "effects": ["HTTP_DECLINE_BUSY:c2"] } },
+      "expect": { "phase": "active", "callId": "c1", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] } },
+
+    { "name": "ring while ringing out waits", "scenario": "s9",
+      "given": { "phase": "ringing_out", "callId": "c1" },
+      "event": { "type": "SOCKET_RING", "callId": "c2" },
+      "expect": { "phase": "ringing_out", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] } },
+
+    { "name": "ring while connecting waits", "scenario": "s9",
+      "given": { "phase": "connecting", "callId": "c1" },
+      "event": { "type": "PUSH_RING", "callId": "c2" },
+      "expect": { "phase": "connecting", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] } },
+
+    { "name": "ring while reconnecting waits", "scenario": "s9",
+      "given": { "phase": "reconnecting", "callId": "c1" },
+      "event": { "type": "PUSH_RING", "callId": "c2" },
+      "expect": { "phase": "reconnecting", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] } },
+
+    { "name": "a stale ring never waits", "scenario": "s14",
+      "given": { "phase": "active", "callId": "c1" },
+      "event": { "type": "PUSH_RING", "callId": "c2", "stale": true },
+      "expect": { "phase": "active", "waitingCallId": null, "effects": [] } },
+
+    { "name": "the waiting ring's push+socket twin is one waiting call", "scenario": "s13",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "SOCKET_RING", "callId": "c2" },
+      "expect": { "phase": "active", "waitingCallId": "c2", "effects": [] } },
+
+    { "name": "a third call while one waits is busy", "scenario": "s9",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "PUSH_RING", "callId": "c3" },
+      "expect": { "phase": "active", "waitingCallId": "c2", "effects": ["HTTP_DECLINE_BUSY:c3"] } },
+
+    { "name": "declining the waiting call tells its caller busy", "scenario": "s9",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "USER_DECLINE_WAITING" },
+      "expect": { "phase": "active", "callId": "c1", "waitingCallId": null,
+        "effects": ["HTTP_DECLINE_BUSY:c2", "DISMISS_WAITING"] } },
+
+    { "name": "the waiting caller giving up clears it", "scenario": "s10",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "RING_ENDED", "callId": "c2", "reason": "cancelled" },
+      "expect": { "phase": "active", "callId": "c1", "waitingCallId": null, "effects": ["DISMISS_WAITING"] } },
+
+    { "name": "the waiting call finishing clears it", "scenario": "s10",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "CALL_FINISHED", "callId": "c2", "reason": "cancelled" },
+      "expect": { "phase": "active", "callId": "c1", "waitingCallId": null, "effects": ["DISMISS_WAITING"] } },
+
+    { "name": "the waiting ring's deadline clears it (missed)", "scenario": "s5",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "WAITING_DEADLINE" },
+      "expect": { "phase": "active", "callId": "c1", "waitingCallId": null, "effects": ["DISMISS_WAITING"] } },
+
+    { "name": "end and answer leaves the call and answers the waiting one", "scenario": "s9",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "USER_ANSWER_WAITING" },
+      "expect": { "phase": "connecting", "callId": "c2", "direction": "incoming", "waitingCallId": null,
+        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
+                    "HTTP_ANSWER", "CALL_SESSION_START"] } },
+
+    { "name": "end and answer while ringing out cancels the outgoing call", "scenario": "s9",
+      "given": { "phase": "ringing_out", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "USER_ANSWER_WAITING" },
+      "expect": { "phase": "connecting", "callId": "c2", "direction": "incoming", "waitingCallId": null,
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
+                    "HTTP_ANSWER", "CALL_SESSION_START"] } },
+
+    { "name": "end and answer while connecting abandons the attempt", "scenario": "s9",
+      "given": { "phase": "connecting", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "USER_ANSWER_WAITING" },
+      "expect": { "phase": "connecting", "callId": "c2", "direction": "incoming", "waitingCallId": null,
+        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
+                    "HTTP_ANSWER", "CALL_SESSION_START"] } },
+
+    { "name": "hanging up with a call waiting rings it", "scenario": "s9",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "USER_HANGUP" },
+      "expect": { "phase": "ringing_in", "callId": "c2", "direction": "incoming", "waitingCallId": null,
+        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
+                    "SHOW_RING", "RINGTONE_START"] } },
+
+    { "name": "the current call finishing rings the waiting one", "scenario": "s9",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "CALL_FINISHED", "callId": "c1" },
+      "expect": { "phase": "ringing_in", "callId": "c2", "waitingCallId": null,
+        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP", "PROMOTE_WAITING", "SHOW_RING", "RINGTONE_START"] } },
+
+    { "name": "an outgoing call nobody answered rings the waiting one", "scenario": "s9",
+      "given": { "phase": "ringing_out", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "ALL_RINGS_RESOLVED", "outcome": "no_answer" },
+      "expect": { "phase": "ringing_in", "callId": "c2", "waitingCallId": null,
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
+                    "SHOW_RING", "RINGTONE_START"] } },
+
+    { "name": "a failed connect rings the waiting one", "scenario": "s12",
+      "given": { "phase": "connecting", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "MEDIA_FAILED" },
+      "expect": { "phase": "ringing_in", "callId": "c2", "waitingCallId": null,
+        "effects": ["HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING", "SHOW_RING", "RINGTONE_START"] } },
+
+    { "name": "the call carries on with a call waiting", "scenario": "s11",
+      "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "MEDIA_LOST" },
+      "expect": { "phase": "reconnecting", "callId": "c1", "waitingCallId": "c2", "effects": ["HTTP_RECONNECT"] } },
+
+    { "name": "the call connecting keeps the waiting one", "scenario": "s1",
+      "given": { "phase": "connecting", "callId": "c1", "waitingCallId": "c2" },
+      "event": { "type": "MEDIA_CONNECTED" },
+      "expect": { "phase": "active", "callId": "c1", "waitingCallId": "c2", "effects": [] } },
+
+    { "name": "waiting commands with nothing waiting do nothing", "scenario": "s14",
+      "given": { "phase": "active", "callId": "c1" },
+      "event": { "type": "USER_ANSWER_WAITING" },
+      "expect": { "phase": "active", "callId": "c1", "effects": [] } },
+
+    { "name": "declining nothing waiting does nothing", "scenario": "s14",
+      "given": { "phase": "active", "callId": "c1" },
+      "event": { "type": "USER_DECLINE_WAITING" },
+      "expect": { "phase": "active", "callId": "c1", "effects": [] } },
+
+    { "name": "a stray waiting deadline does nothing", "scenario": "s14",
+      "given": { "phase": "active", "callId": "c1" },
+      "event": { "type": "WAITING_DEADLINE" },
+      "expect": { "phase": "active", "callId": "c1", "effects": [] } },
 
     { "name": "place a call", "scenario": "s1",
       "given": { "phase": "idle" },

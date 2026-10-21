@@ -51,6 +51,26 @@ A room plays on the speaker unless a headset or Bluetooth device is in,
 and turning the camera on (`setCamera(true)`) is all it takes to go from
 voice to video.
 
+### Call waiting
+
+A call that rings while one is in progress (or while you sit in a room)
+waits beside it instead of being refused: `snapshot.waiting` carries it
+(`callId`, names, media), and the native side shows its own surface —
+CallKit's call-waiting screen on iOS, a heads-up with Decline / End &
+answer and the call-waiting beep on Android.
+
+```ts
+if (s.waiting) {
+  calls.answerWaiting(s.waiting.callId);  // ends this call, answers that one
+  calls.declineWaiting(s.waiting.callId); // its caller hears "Busy"
+}
+```
+
+Pass the `callId`: a tap that lands after the waiting call changed is
+then ignored rather than acting on a different one. If the current call
+ends on its own, the waiting call simply becomes the ringing call; left
+alone it times out as missed. A third call while one waits is busy.
+
 ### Chat notifications
 
 poolse sends message notifications itself, with the push credentials you
