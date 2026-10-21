@@ -86,6 +86,25 @@ final class CallKitController: NSObject, CXProviderDelegate {
   /// or the runtime's SHOW_RING after the push path) is re-reported with
   /// the SAME UUID: CallKit rejects it as a duplicate and nothing changes,
   /// which still satisfies PushKit's "report a call for every push".
+  /// Put the shared session in the call's category BEFORE CallKit activates
+  /// it — at ring time, in the answer action, in the start action (Apple's
+  /// CallKit sample does the same). Setting the category does not activate
+  /// anything. Without it the session is still the default
+  /// SoloAmbientSound when CallKit activates it, and with the phone locked
+  /// and the app in the background iOS REFUSES that activation (seen in a
+  /// device log as an activate "early exit due to failure", -16980): no
+  /// didActivate, so no audio at all on a call answered with the app closed.
+  static func prepareSessionForCall(video: Bool) {
+    let s = AVAudioSession.sharedInstance()
+    let mode: AVAudioSession.Mode = video ? .videoChat : .voiceChat
+    guard s.category != .playAndRecord || s.mode != mode else { return }
+    do {
+      try s.setCategory(.playAndRecord, mode: mode, options: [.allowBluetooth, .allowBluetoothA2DP])
+    } catch {
+      NSLog("[PoolseCalls] pre-activation category failed: %@", "\(error)")
+    }
+  }
+
   func reportIncoming(ring: RingContext) {
     let hasVideo = ring.media == "video"
     let title = ring.conversationName ?? ring.callerName
@@ -95,6 +114,7 @@ final class CallKitController: NSObject, CXProviderDelegate {
     }
     let t = Tracked(uuid: UUID(), callId: ring.callId, outgoing: false, hasVideo: hasVideo, title: title)
     calls[t.uuid] = t
+    Self.prepareSessionForCall(video: hasVideo)
     provider.reportNewIncomingCall(with: t.uuid, update: update(title: title, handle: ring.conversationId, video: hasVideo)) { [weak self] error in
       guard let error = error else { return }
       NSLog("[PoolseCalls] CallKit refused incoming call %@: %@", ring.callId, error.localizedDescription)
@@ -228,6 +248,8 @@ final class CallKitController: NSObject, CXProviderDelegate {
     guard let t = calls[action.callUUID], !t.ended else { action.fail(); return }
     let fromUs = t.answered
     t.answered = true
+    // Before fulfil: CallKit activates the session right after.
+    Self.prepareSessionForCall(video: t.hasVideo)
     if !fromUs {
       guard let actions = actions else { action.fail(); return }
       actions.callKitAnswer(callId: t.callId)
@@ -245,7 +267,8 @@ final class CallKitController: NSObject, CXProviderDelegate {
   }
 
   func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
-    guard calls[action.callUUID] != nil else { action.fail(); return }
+    guard let t = calls[action.callUUID] else { action.fail(); return }
+    Self.prepareSessionForCall(video: t.hasVideo)
     provider.reportOutgoingCall(with: action.callUUID, startedConnectingAt: nil)
     action.fulfill()
   }

@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import Foundation
 #if canImport(LiveKitClient)
 import LiveKitClient // CocoaPods module name
@@ -29,9 +30,14 @@ protocol MediaEvents: AnyObject {
 /// Step-by-step trace of the audio path, in the device log as
 /// "[PoolseCalls] trace …" — the order of activation, engine availability,
 /// connect and publish is what cold-answer audio failures hinge on.
+///
+/// os_log with a PUBLIC argument: NSLog's text is redacted to "<private>"
+/// on release builds, which made the first device trace unreadable.
 func pcTrace(_ message: @autoclosure () -> String) {
-  NSLog("[PoolseCalls] trace %@", message())
+  os_log("[PoolseCalls] trace %{public}@", log: pcLog, type: .default, message())
 }
+
+let pcLog = OSLog(subsystem: "dev.poolse.callcore", category: "calls")
 
 func pcSessionDescription(_ s: AVAudioSession = .sharedInstance()) -> String {
   let outs = s.currentRoute.outputs.map { $0.portType.rawValue }.joined(separator: ",")
@@ -72,6 +78,9 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private var audioActive = false
   /// The room whose audio engine has been kicked (once per room).
   private var audioKicked: ObjectIdentifier?
+  /// Asks CallKit to (re)try activating the audio session — set by
+  /// CallCore. Used when a room is live but activation never arrived.
+  var requestAudioActivation: (() -> Void)?
 
   init(events: MediaEvents) {
     self.events = events
@@ -113,6 +122,29 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     if media != self.media && room == nil { self.media = media }
     reassertAudio(session)
     kickAudioIfReady()
+  }
+
+  /// Connected with a live mic but CallKit never activated the session
+  /// (iOS refused the activation): nudge CallKit to retry — a transaction
+  /// on the call makes it attempt activation again (in the device log a
+  /// mute toggle did exactly that, and audio came up). Three tries, then
+  /// activate the session ourselves as a last resort.
+  private func ensureAudioActivated(_ r: Room, attempt: Int) {
+    guard room === r, !audioActive else { return }
+    let delays: [Double] = [1.2, 2.5, 4.0]
+    guard attempt <= delays.count else { return }
+    if attempt == delays.count {
+      pcTrace("audio never activated by CallKit; activating ourselves")
+      activateAudioWithoutCallKit(media: media)
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + delays[attempt]) { [weak self] in
+      guard let self = self, self.room === r, !self.audioActive else { return }
+      pcTrace("audio not active \(attempt + 1)x after connect; nudging CallKit")
+      CallKitController.prepareSessionForCall(video: self.media == "video")
+      self.requestAudioActivation?()
+      self.ensureAudioActivated(r, attempt: attempt + 1)
+    }
   }
 
   /// Once per call, the first moment the session is active AND the mic is
@@ -258,6 +290,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       await MainActor.run {
         self.reassertAudio()
         self.kickAudioIfReady()
+        self.ensureAudioActivated(r, attempt: 0)
       }
       let camera = await MainActor.run { self.cameraWanted ?? wantsVideo }
       if camera { await self.enableCamera(r, true) }

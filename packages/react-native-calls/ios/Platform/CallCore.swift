@@ -171,6 +171,12 @@ final class CallCore {
     // LiveKit's audio stays off until CallKit activates the session —
     // configured now, at launch, before any activation can happen.
     mediaPort.prepareAudio()
+    // A no-op mute transaction (same state) makes CallKit retry a failed
+    // audio-session activation.
+    mediaPort.requestAudioActivation = { [weak self] in
+      guard let self = self, let callId = self.runtime.currentState().callId else { return }
+      self.callKit.requestMute(callId: callId, muted: self.mutedSelf)
+    }
   }
 
   // MARK: - native entry points
