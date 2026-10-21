@@ -70,6 +70,7 @@ public class PoolseCallsModule: Module {
     Function("setCamera") { (on: Bool) in onCore { $0.setCamera(on) } }
     Function("switchCamera") { onCore { $0.switchCamera() } }
     Function("setSpeaker") { (on: Bool) in onCore { $0.setSpeaker(on) } }
+    Function("setAudioOutput") { (id: String) in onCore { $0.setAudioOutput(id) } }
 
     // Socket forwarding (open app): idempotent with the push path.
     Function("onRingEnded") { (callId: String, reason: String) in

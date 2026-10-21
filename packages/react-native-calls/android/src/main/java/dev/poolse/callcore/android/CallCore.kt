@@ -69,6 +69,8 @@ class CallCore private constructor(context: Context) {
   private var cameraOn = false
   private var cameraFacing: String? = null
   private var audioRoute: String? = null
+  private var audioOutputs: List<AudioOutput> = emptyList()
+  private var audioOutputId: String? = null
 
   /** Last snapshot emitted; read by the bridge's getCallState from any thread. */
   @Volatile private var lastSnapshot: Map<String, Any?>? = null
@@ -170,6 +172,12 @@ class CallCore private constructor(context: Context) {
     runtime.reemit()
   }
 
+  /**
+   * Play through one output from the snapshot's `audioOutputs`. Not
+   * optimistic: the adapter reports the route once the OS has moved it.
+   */
+  fun setAudioOutput(id: String) = runtime.setAudioOutput(id)
+
   fun allRingsResolved(outcome: String) = runtime.allRingsResolved(outcome)
 
   fun state(): MachineState = runtime.currentState()
@@ -216,6 +224,8 @@ class CallCore private constructor(context: Context) {
         )
       },
       audioRoute = audioRoute ?: if (state.media == "video") "speaker" else "earpiece",
+      audioOutputs = audioOutputs.map { mapOf("id" to it.id, "kind" to it.kind, "name" to it.name) },
+      audioOutputId = audioOutputId,
       mutedSelf = mutedSelf,
       cameraOn = cameraOn,
       cameraFacing = cameraFacing,
@@ -235,6 +245,8 @@ class CallCore private constructor(context: Context) {
     cameraOn = false
     cameraFacing = null
     audioRoute = null
+    audioOutputs = emptyList()
+    audioOutputId = null
   }
 
   /**
@@ -298,6 +310,10 @@ class CallCore private constructor(context: Context) {
     }
     override fun onLocalCamera(on: Boolean, facing: String?) {
       runtime.post { cameraOn = on; cameraFacing = facing }
+      runtime.reemit()
+    }
+    override fun onAudioOutputs(outputs: List<AudioOutput>, selectedId: String?) {
+      runtime.post { audioOutputs = outputs; audioOutputId = selectedId }
       runtime.reemit()
     }
   }
@@ -466,7 +482,19 @@ interface MediaEvents {
   fun onAudioRoute(route: String)
   /** The local camera track is (not) published + enabled; [facing] `front` | `back`. */
   fun onLocalCamera(on: Boolean, facing: String?) {}
+  /** Every output call audio can play through right now, and the one it does. */
+  fun onAudioOutputs(outputs: List<AudioOutput>, selectedId: String?) {}
 }
+
+/** One place call audio can play — a snapshot `audioOutputs[]` entry. */
+data class AudioOutput(
+  /** Passed back to `setAudioOutput`; stable while the device stays connected. */
+  val id: String,
+  /** `earpiece` | `speaker` | `bluetooth` | `headset`. */
+  val kind: String,
+  /** What the device calls itself ("Galaxy Buds2"), or a plain default for built-ins. */
+  val name: String,
+)
 
 data class MediaParticipant(
   /** The SFU identity — the poolse user id. */

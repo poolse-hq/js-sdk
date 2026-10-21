@@ -17,6 +17,11 @@ await calls.configure('https://api.poolse.dev', { smallIcon: 'ic_call', ringback
 const stop = calls.onCallState((s) => render(s));   // s: Snapshot | null
 await calls.place(conversationId, { media: 'audio', sessionToken });
 calls.answer(); calls.decline(); calls.hangUp();
+
+// Audio output: s.audioOutputs lists the phone, the speaker and every
+// connected headset/Bluetooth device by name; s.audioOutputId is the live one.
+calls.setAudioOutput(s.audioOutputs[0].id);
+calls.setSpeaker(true); // the one-tap toggle, still there
 ```
 
 ## Layout

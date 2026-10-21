@@ -194,6 +194,7 @@ class CallCoreRuntime(
   fun setCamera(on: Boolean) = post { media.setCamera(on) }
   fun switchCamera() = post { media.switchCamera() }
   fun setSpeaker(on: Boolean) = post { media.setSpeaker(on) }
+  fun setAudioOutput(id: String) = post { media.setAudioOutput(id) }
 
   /** Re-emit the current state (the bridge's roster/route changed). */
   fun reemit() = post { if (state.phase != Phase.IDLE) sink.emit(state) }

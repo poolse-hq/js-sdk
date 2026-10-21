@@ -271,6 +271,9 @@ type Snapshot = {
   participants: Array<{ userId: string; externalId: string;
     speaking: boolean; muted: boolean; cameraOn: boolean }>;
   audioRoute: 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
+  audioOutputs: Array<{ id: string;
+    kind: 'earpiece' | 'speaker' | 'bluetooth' | 'headset'; name: string }>;
+  audioOutputId: string | null;
   mutedSelf: boolean; cameraOn: boolean;
 } | null; // null = idle
 ```
@@ -287,10 +290,20 @@ getCallState(): Snapshot;
 place(conversationId, { media, sessionToken });
 join(callId, { sessionToken });
 answer(); decline(); hangUp();
-setMuted(b); setSpeaker(b); setCamera(b); switchCamera();
+setMuted(b); setSpeaker(b); setAudioOutput(id); setCamera(b); switchCamera();
 onRingEnded(callId, reason); onCallFinished(callId);   // socket forwarding, idempotent with push
 canUseFullScreenIntent(); openFullScreenIntentSettings(); // Android
 ```
+
+Audio output rules, identical on both platforms. Without a choice: a
+connected headset or Bluetooth device, else the speaker for `video` or
+the earpiece for `audio`. `setAudioOutput(id)` (an `audioOutputs` id)
+holds for the call until that device disconnects, or a NEW headset /
+Bluetooth device connects, which takes over and clears the choice.
+`setSpeaker(true)` = the speaker; `setSpeaker(false)` = the best private
+route (Bluetooth → wired → earpiece). Ids: `speaker`, `earpiece`,
+`wired`, then `bluetooth` (Android) or `port:<uid>` (iOS) — opaque to
+the UI.
 
 `participants` are REMOTE only (`userId` = LiveKit identity). `getCallState()`
 and `onCallState` are safe before `configure` (idle / no-op). On end the

@@ -143,6 +143,8 @@ final class CallCore {
   private var cameraOn = false
   private var cameraFacing: String?
   private var audioRoute: String?
+  private var audioOutputs: [AudioOutput] = []
+  private var audioOutputId: String?
 
   /// ring_ended reasons seen per call — the CallKit end reason.
   private var ringEndReasons: [String: String] = [:]
@@ -270,6 +272,9 @@ final class CallCore {
     }
   }
 
+  /// Not optimistic: the adapter reports the route once iOS has moved it.
+  func setAudioOutput(_ id: String) { runtime.setAudioOutput(id) }
+
   /// A video slot for the native view. Main thread.
   func createVideoSurface() -> LiveKitVideoSurface { mediaPort.createVideoSurface() }
 
@@ -307,6 +312,8 @@ final class CallCore {
       conversationName: conversationName,
       participants: roster,
       audioRoute: audioRoute ?? (state.media == "video" ? "speaker" : "earpiece"),
+      audioOutputs: audioOutputs,
+      audioOutputId: audioOutputId,
       mutedSelf: mutedSelf,
       cameraOn: cameraOn,
       cameraFacing: cameraFacing
@@ -326,6 +333,8 @@ final class CallCore {
     cameraOn = false
     cameraFacing = nil
     audioRoute = nil
+    audioOutputs = []
+    audioOutputId = nil
   }
 
   /// CallKit follows the FINAL state of each dispatch.
@@ -422,6 +431,10 @@ final class CallCore {
     runtime.post { [weak self] in self?.audioRoute = r }
     runtime.reemit()
   }
+  fileprivate func outputs(_ list: [AudioOutput], selected: String?) {
+    runtime.post { [weak self] in self?.audioOutputs = list; self?.audioOutputId = selected }
+    runtime.reemit()
+  }
   fileprivate func localCamera(on: Bool, facing: String?) {
     runtime.post { [weak self] in self?.cameraOn = on; self?.cameraFacing = facing }
     runtime.reemit()
@@ -497,6 +510,7 @@ private final class EventsAdapter: MediaEvents {
   func onParticipants(_ participants: [SnapshotParticipant]) { core?.participants(participants) }
   func onAudioRoute(_ route: String) { core?.route(route) }
   func onLocalCamera(on: Bool, facing: String?) { core?.localCamera(on: on, facing: facing) }
+  func onAudioOutputs(_ outputs: [AudioOutput], selectedId: String?) { core?.outputs(outputs, selected: selectedId) }
 }
 
 /// Host-facing entry points.

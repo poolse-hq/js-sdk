@@ -71,6 +71,13 @@ public protocol MediaPort: AnyObject {
   func switchCamera()
   /// Loudspeaker (`true`) or back to the private route (`false`).
   func setSpeaker(_ on: Bool)
+  /// Play through one specific output — an id from `Snapshot.audioOutputs`.
+  func setAudioOutput(_ id: String)
+}
+
+public extension MediaPort {
+  /// Engines without device selection fall back to the speaker toggle.
+  func setAudioOutput(_ id: String) { setSpeaker(id == "speaker") }
 }
 
 // MARK: - Ring surface

@@ -41,12 +41,37 @@ export interface Snapshot {
     /** True only with a published, subscribed, unmuted camera track (show video, not avatar). */
     cameraOn: boolean;
   }>;
-  audioRoute: 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
+  /** The kind of output playing now — the short answer to "where is the audio". */
+  audioRoute: AudioOutputKind;
+  /**
+   * Every output the call can play through right now: always the phone
+   * (earpiece, or wired headphones in its place) and the speaker, plus
+   * each connected Bluetooth / USB device by its own name. Empty until
+   * the call's audio is up. Pass an `id` to `setAudioOutput`.
+   */
+  audioOutputs: AudioOutput[];
+  /** The `audioOutputs` entry playing now; null before audio is up. */
+  audioOutputId: string | null;
   mutedSelf: boolean;
   /** True only while the local camera track is actually published and enabled. */
   cameraOn: boolean;
   /** Facing of the published local camera; absent when the camera is off. */
   cameraFacing?: 'front' | 'back';
+}
+
+export type AudioOutputKind = 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
+
+/** One place call audio can play. */
+export interface AudioOutput {
+  /** Opaque; stable while the device stays connected. */
+  id: string;
+  kind: AudioOutputKind;
+  /**
+   * The device's own name for Bluetooth/USB ("AirPods Pro"); a plain
+   * English default for built-ins ("iPhone"/"Phone", "Speaker",
+   * "Headphones") — relabel those by `kind` to localise.
+   */
+  name: string;
 }
 
 export interface ConfigureOptions {
@@ -89,6 +114,7 @@ interface PoolseCallsNative {
   setCamera(on: boolean): void;
   switchCamera(): void;
   setSpeaker(on: boolean): void;
+  setAudioOutput?(id: string): void;
   onRingEnded(callId: string, reason: string): void;
   onCallFinished(callId: string, reason: string | null): void;
   canUseFullScreenIntent(): boolean;
@@ -142,6 +168,18 @@ export const setCamera = (on: boolean): void => native?.setCamera(on);
 export const switchCamera = (): void => native?.switchCamera();
 /** Route call audio to the loudspeaker (`true`) or back to earpiece / headset (`false`). */
 export const setSpeaker = (on: boolean): void => native?.setSpeaker(on);
+
+/**
+ * Play call audio through one of `snapshot.audioOutputs`. The choice
+ * holds for the rest of the call, until that device disconnects or a new
+ * headset / Bluetooth device connects (which takes over, as in the
+ * phone's own dialer). Without a choice a connected headset wins, then
+ * the earpiece for voice calls or the speaker for video.
+ */
+export function setAudioOutput(id: string): void {
+  if (native?.setAudioOutput) native.setAudioOutput(id);
+  else native?.setSpeaker(id === 'speaker'); // an older native build
+}
 
 /**
  * Socket forwarding for an open app: a `call:ring_ended` seen on the

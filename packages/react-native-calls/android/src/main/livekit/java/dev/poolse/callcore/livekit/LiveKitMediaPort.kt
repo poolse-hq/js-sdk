@@ -8,6 +8,7 @@ import androidx.core.content.ContextCompat
 import com.twilio.audioswitch.AudioDevice
 import dev.poolse.callcore.CallSessionBundle
 import dev.poolse.callcore.MediaPort
+import dev.poolse.callcore.android.AudioOutput
 import dev.poolse.callcore.android.CallVideoSource
 import dev.poolse.callcore.android.CallVideoSurface
 import dev.poolse.callcore.android.MediaEvents
@@ -61,8 +62,15 @@ class LiveKitMediaPort(
   private var eventJob: Job? = null
   private var media: String = "audio"
 
-  /** Speaker forced by the user; null = the media-type default. */
-  private var speakerWanted: Boolean? = null
+  /**
+   * The user's output choice for the CURRENT call: an output id
+   * (`speaker`, `earpiece`, `wired`, `bluetooth`) or [PRIVATE] — the
+   * best private route. null = automatic (see [resolve]).
+   */
+  private var outputWanted: String? = null
+
+  /** The current room's last device list; a newcomer in it takes the call. */
+  private var knownDevices: List<AudioDevice>? = null
 
   /**
    * The user's mute / camera choices for the CURRENT call. They survive
@@ -149,7 +157,7 @@ class LiveKitMediaPort(
   private fun resetWanted() {
     mutedWanted = false
     cameraWanted = null
-    speakerWanted = null
+    outputWanted = null
   }
 
   /** Drop the current room only (a rejoin replaces it). */
@@ -256,7 +264,13 @@ class LiveKitMediaPort(
   }
 
   override fun setSpeaker(on: Boolean) {
-    speakerWanted = on
+    outputWanted = if (on) SPEAKER else PRIVATE
+    val handler = room?.audioHandler as? AudioSwitchHandler ?: return
+    applyRoute(handler)
+  }
+
+  override fun setAudioOutput(id: String) {
+    outputWanted = id
     val handler = room?.audioHandler as? AudioSwitchHandler ?: return
     applyRoute(handler)
   }
@@ -264,12 +278,13 @@ class LiveKitMediaPort(
   // ── audio routing ───────────────────────────────────────────────────
 
   /**
-   * A voice call is held to the ear: earpiece by default (a connected
-   * headset or Bluetooth device first); video defaults to the speaker.
-   * Set before connect — the handler starts during connect.
+   * Seed AudioSwitch's own order (it starts during connect, before any
+   * choice is applied): a connected headset or Bluetooth device first,
+   * then the earpiece for voice or the speaker for video.
    */
   private fun configureAudio(r: Room, video: Boolean) {
     val handler = r.audioHandler as? AudioSwitchHandler ?: return
+    knownDevices = null
     handler.preferredDeviceList = if (video) {
       listOf(
         AudioDevice.BluetoothHeadset::class.java,
@@ -285,31 +300,78 @@ class LiveKitMediaPort(
         AudioDevice.Speakerphone::class.java,
       )
     }
-    handler.audioDeviceChangeListener = { devices, selected ->
-      // A user's speaker choice survives device-list changes, except
-      // that plugging in a headset always wins (as the dialer does).
-      val wanted = speakerWanted
-      if (wanted != null && selected != null && room?.audioHandler === handler) {
-        val external = selected is AudioDevice.BluetoothHeadset || selected is AudioDevice.WiredHeadset
-        val isSpeaker = selected is AudioDevice.Speakerphone
-        if (!external && isSpeaker != wanted) devices.pick(wanted)?.let(handler::selectDevice)
-      }
-      events.onAudioRoute(routeOf(handler.selectedAudioDevice ?: selected))
+    handler.audioDeviceChangeListener = listener@{ devices, selected ->
+      if (room?.audioHandler !== handler) return@listener
+      // Putting on a headset or connecting Bluetooth mid-call moves the
+      // call to it, whatever was picked before — as the dialer does. The
+      // first list of a room is not "new": a choice made while
+      // connecting must survive it.
+      val known = knownDevices
+      if (known != null && devices.any { it.isExternal() && it !in known }) outputWanted = null
+      knownDevices = devices
+      val target = resolve(devices)
+      if (target != null && target != selected) handler.selectDevice(target)
+      report(handler, devices, handler.selectedAudioDevice ?: selected)
     }
   }
 
   private fun applyRoute(handler: AudioSwitchHandler) {
-    val want = speakerWanted ?: (media == "video")
-    handler.availableAudioDevices.pick(want)?.let(handler::selectDevice)
-    events.onAudioRoute(routeOf(handler.selectedAudioDevice))
+    val devices = handler.availableAudioDevices
+    resolve(devices)?.let { if (it != handler.selectedAudioDevice) handler.selectDevice(it) }
+    report(handler, devices, handler.selectedAudioDevice)
   }
 
-  /** Speaker, or the best private route: Bluetooth → wired → earpiece. */
-  private fun List<AudioDevice>.pick(speaker: Boolean): AudioDevice? =
-    if (speaker) firstOrNull { it is AudioDevice.Speakerphone }
-    else firstOrNull { it is AudioDevice.BluetoothHeadset }
-      ?: firstOrNull { it is AudioDevice.WiredHeadset }
-      ?: firstOrNull { it is AudioDevice.Earpiece }
+  /**
+   * Where the call should play. A chosen device while it is connected
+   * (it is forgotten once it goes); otherwise a connected headset or
+   * Bluetooth device, then the speaker for video or the earpiece for
+   * voice — never the speaker over earbuds the user put on.
+   */
+  private fun resolve(devices: List<AudioDevice>): AudioDevice? {
+    val wanted = outputWanted
+    if (wanted != null && wanted != PRIVATE) {
+      devices.firstOrNull { idOf(it) == wanted }?.let { return it }
+      outputWanted = null
+    }
+    val external = devices.firstOrNull { it is AudioDevice.BluetoothHeadset }
+      ?: devices.firstOrNull { it is AudioDevice.WiredHeadset }
+    val earpiece = devices.firstOrNull { it is AudioDevice.Earpiece }
+    val speaker = devices.firstOrNull { it is AudioDevice.Speakerphone }
+    return when {
+      external != null -> external
+      outputWanted == PRIVATE -> earpiece ?: speaker
+      media == "video" -> speaker ?: earpiece
+      else -> earpiece ?: speaker
+    }
+  }
+
+  private fun report(handler: AudioSwitchHandler, devices: List<AudioDevice>, selected: AudioDevice?) {
+    if (room?.audioHandler !== handler) return
+    events.onAudioRoute(routeOf(selected))
+    events.onAudioOutputs(
+      devices.map { AudioOutput(id = idOf(it), kind = routeOf(it), name = nameOf(it)) },
+      selected?.let(::idOf),
+    )
+  }
+
+  private fun AudioDevice.isExternal() =
+    this is AudioDevice.BluetoothHeadset || this is AudioDevice.WiredHeadset
+
+  private fun idOf(d: AudioDevice): String = when (d) {
+    is AudioDevice.Speakerphone -> SPEAKER
+    is AudioDevice.Earpiece -> "earpiece"
+    is AudioDevice.WiredHeadset -> "wired"
+    // AudioSwitch carries one Bluetooth device: the active headset.
+    is AudioDevice.BluetoothHeadset -> "bluetooth"
+  }
+
+  /** The Bluetooth device's own name; plain defaults for the rest. */
+  private fun nameOf(d: AudioDevice): String = when (d) {
+    is AudioDevice.Speakerphone -> "Speaker"
+    is AudioDevice.Earpiece -> "Phone"
+    is AudioDevice.WiredHeadset -> "Headphones"
+    is AudioDevice.BluetoothHeadset -> d.name.ifBlank { "Bluetooth" }
+  }
 
   private fun routeOf(d: AudioDevice?): String = when (d) {
     is AudioDevice.Speakerphone -> "speaker"
@@ -326,7 +388,7 @@ class LiveKitMediaPort(
       if (this.room !== room) return@collect
       when (event) {
         is RoomEvent.Connected -> {
-          (room.audioHandler as? AudioSwitchHandler)?.let { if (speakerWanted != null) applyRoute(it) }
+          (room.audioHandler as? AudioSwitchHandler)?.let(::applyRoute)
           events.onConnected()
           // Somebody may already be in (a late join, or a callee who
           // answered before our media came up): they will not "connect".
@@ -403,6 +465,8 @@ class LiveKitMediaPort(
   companion object {
     private const val TAG = "PoolseLiveKit"
     private const val SWITCH_SETTLE_MS = 600L
+    private const val SPEAKER = "speaker"
+    private const val PRIVATE = "private"
 
     /** Pass as `mediaFactory` in CallCoreConfig. */
     val factory: (Context, MediaEvents) -> MediaPort = { ctx, ev -> LiveKitMediaPort(ctx, ev) }

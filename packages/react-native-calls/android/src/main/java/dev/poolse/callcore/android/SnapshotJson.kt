@@ -18,6 +18,8 @@ internal fun MachineState.toSnapshot(
   conversationName: String? = null,
   participants: List<Map<String, Any>> = emptyList(),
   audioRoute: String = "earpiece",
+  audioOutputs: List<Map<String, Any>> = emptyList(),
+  audioOutputId: String? = null,
   mutedSelf: Boolean = false,
   cameraOn: Boolean = false,
   cameraFacing: String? = null,
@@ -25,6 +27,8 @@ internal fun MachineState.toSnapshot(
   if (phase == Phase.IDLE) return null
   return buildMap {
     putAll(snapshotCore(conversationName, participants, audioRoute, mutedSelf, cameraOn))
+    put("audioOutputs", audioOutputs)
+    put("audioOutputId", audioOutputId)
     // Optional in the contract: present only while a camera is published.
     if (cameraFacing != null) put("cameraFacing", cameraFacing)
   }

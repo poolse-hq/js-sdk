@@ -85,6 +85,7 @@ class PoolseCallsModule : Module() {
     Function("setCamera") { on: Boolean -> core()?.setCamera(on) }
     Function("switchCamera") { core()?.switchCamera() }
     Function("setSpeaker") { on: Boolean -> core()?.setSpeaker(on) }
+    Function("setAudioOutput") { id: String -> core()?.setAudioOutput(id) }
 
     // Socket forwarding (open app): idempotent with the FCM path.
     Function("onRingEnded") { callId: String, reason: String -> core()?.onRingEnded(callId, reason) }

@@ -67,6 +67,13 @@ interface MediaPort {
    * route — earpiece, or a connected headset/Bluetooth device (`false`).
    */
   fun setSpeaker(on: Boolean)
+
+  /**
+   * Play through one specific output — an id from the snapshot's
+   * `audioOutputs`. Engines without device selection fall back to the
+   * speaker toggle.
+   */
+  fun setAudioOutput(id: String) = setSpeaker(id == "speaker")
 }
 
 /** The ring UX: CallStyle notification + full-screen activity + tones. */

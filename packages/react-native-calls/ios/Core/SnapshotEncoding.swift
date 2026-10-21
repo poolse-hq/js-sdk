@@ -23,6 +23,24 @@ public struct SnapshotParticipant: Equatable {
   }
 }
 
+/// One place call audio can play, as a JS `Snapshot.audioOutputs[]` entry.
+public struct AudioOutput: Equatable {
+  /// Stable for the device's lifetime in this call; passed back to `setAudioOutput`.
+  public var id: String
+  /// `earpiece` | `speaker` | `bluetooth` | `headset`.
+  public var kind: String
+  /// What the device calls itself ("AirPods Pro"), or a plain default for built-ins.
+  public var name: String
+
+  public init(id: String, kind: String, name: String) {
+    self.id = id
+    self.kind = kind
+    self.name = name
+  }
+
+  public var dictionary: [String: Any] { ["id": id, "kind": kind, "name": name] }
+}
+
 public extension Phase {
   var wire: String {
     switch self {
@@ -50,6 +68,8 @@ public extension MachineState {
   func toSnapshot(conversationName: String? = nil,
                   participants: [SnapshotParticipant] = [],
                   audioRoute: String = "earpiece",
+                  audioOutputs: [AudioOutput] = [],
+                  audioOutputId: String? = nil,
                   mutedSelf: Bool = false,
                   cameraOn: Bool = false,
                   cameraFacing: String? = nil) -> [String: Any]? {
@@ -64,6 +84,8 @@ public extension MachineState {
       "phase": phase.wire,
       "participants": participants.map { $0.dictionary },
       "audioRoute": audioRoute,
+      "audioOutputs": audioOutputs.map { $0.dictionary },
+      "audioOutputId": audioOutputId.map { $0 as Any } ?? NSNull(),
       "mutedSelf": mutedSelf,
       "cameraOn": cameraOn,
     ]

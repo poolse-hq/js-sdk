@@ -23,6 +23,8 @@ protocol MediaEvents: AnyObject {
   func onParticipants(_ participants: [SnapshotParticipant])
   /// `earpiece` | `speaker` | `bluetooth` | `headset`.
   func onAudioRoute(_ route: String)
+  /// Every output call audio can play through right now, and the one it does.
+  func onAudioOutputs(_ outputs: [AudioOutput], selectedId: String?)
   /// The local camera track is (not) published + enabled; facing `front` | `back`.
   func onLocalCamera(on: Bool, facing: String?)
 }
@@ -66,8 +68,19 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private var media = "audio"
   private var connectedRoom: ObjectIdentifier?
 
-  /// Speaker forced by the user; nil = the media-type default.
-  private var speakerWanted: Bool?
+  /// Where the user asked the audio to go, for the CURRENT call.
+  enum OutputChoice: Equatable {
+    case speaker
+    /// The best private route: Bluetooth, then wired, then the earpiece.
+    case privateRoute
+    /// The phone itself: earpiece (or wired headphones, which replace it).
+    case builtIn
+    /// One external input/output pair, by AVAudioSessionPortDescription uid.
+    case port(String)
+  }
+
+  /// The user's output choice; nil = automatic (see `resolvedChoice`).
+  private var outputWanted: OutputChoice?
   /// The user's choices for the CURRENT call; survive a rejoin.
   private var mutedWanted = false
   private var cameraWanted: Bool?
@@ -154,7 +167,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   func reassertAudio(_ session: AVAudioSession = .sharedInstance()) {
     guard audioActive else { return }
     pcTrace("reassertAudio before: \(pcSessionDescription(session))")
-    let mode: AVAudioSession.Mode = media == "video" && speakerWanted != false ? .videoChat : .voiceChat
+    let mode: AVAudioSession.Mode = media == "video" && resolvedChoice(session) == .speaker ? .videoChat : .voiceChat
     if session.category != .playAndRecord || session.mode != mode {
       do {
         try session.setCategory(.playAndRecord, mode: mode,
@@ -259,7 +272,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private func markConnected(_ r: Room) {
     guard room === r, connectedRoom != ObjectIdentifier(r) else { return }
     connectedRoom = ObjectIdentifier(r)
-    if speakerWanted != nil { applyRoute() }
+    if outputWanted != nil { applyRoute() }
     events?.onConnected()
     if !r.remoteParticipants.isEmpty { events?.onRemoteJoined() }
     emit(r)
@@ -293,7 +306,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private func resetWanted() {
     mutedWanted = false
     cameraWanted = nil
-    speakerWanted = nil
+    outputWanted = nil
   }
 
   private func detach() {
@@ -341,25 +354,72 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   }
 
   func setSpeaker(_ on: Bool) {
-    speakerWanted = on
+    outputWanted = on ? .speaker : .privateRoute
+    applyRoute()
+  }
+
+  /// An id from the snapshot's `audioOutputs`: `speaker`, `earpiece`,
+  /// `wired`, or `port:<uid>`. An id that is no longer connected is ignored.
+  func setAudioOutput(_ id: String) {
+    switch id {
+    case "speaker": outputWanted = .speaker
+    case "earpiece", "wired": outputWanted = .builtIn
+    default:
+      guard id.hasPrefix("port:") else { return }
+      let uid = String(id.dropFirst("port:".count))
+      // An output with no matching input (an A2DP-only speaker) cannot be
+      // chosen through the session; the system's own route wins there.
+      outputWanted = selectablePort(uid) != nil ? .port(uid) : .privateRoute
+    }
     applyRoute()
   }
 
   // MARK: - audio routing
 
-  /// A voice call is held to the ear (earpiece, or a headset/Bluetooth
-  /// route first); video defaults to the loudspeaker.
+  private static let externalInputs: Set<AVAudioSession.Port> =
+    [.bluetoothHFP, .bluetoothLE, .carAudio, .usbAudio, .headsetMic]
+  private static let externalOutputs: Set<AVAudioSession.Port> =
+    [.bluetoothHFP, .bluetoothA2DP, .bluetoothLE, .carAudio, .usbAudio, .headphones, .airPlay, .lineOut, .HDMI]
+
+  private func selectablePort(_ uid: String, _ s: AVAudioSession = .sharedInstance()) -> AVAudioSessionPortDescription? {
+    s.availableInputs?.first { $0.uid == uid && Self.externalInputs.contains($0.portType) }
+  }
+
+  /// A headset, Bluetooth device or car is connected — something the
+  /// user put on or plugged in, which should carry the call by default.
+  private func externalConnected(_ s: AVAudioSession) -> Bool {
+    (s.availableInputs ?? []).contains { Self.externalInputs.contains($0.portType) && $0.portType != .usbAudio }
+      || s.currentRoute.outputs.contains { Self.externalOutputs.contains($0.portType) }
+  }
+
+  /// What the call should do now. Automatic: a voice call is held to the
+  /// ear and a video call uses the loudspeaker — unless a headset or
+  /// Bluetooth device is connected, which wins either way (FaceTime does
+  /// the same; forcing the speaker over AirPods was a bug).
+  private func resolvedChoice(_ s: AVAudioSession = .sharedInstance()) -> OutputChoice {
+    if let wanted = outputWanted { return wanted }
+    return media == "video" && !externalConnected(s) ? .speaker : .privateRoute
+  }
+
   private func applyRoute() {
     guard audioActive else { return }
     let s = AVAudioSession.sharedInstance()
-    let want = speakerWanted ?? (media == "video")
+    if case .port(let uid) = outputWanted, selectablePort(uid, s) == nil { outputWanted = nil }
+    let choice = resolvedChoice(s)
     do {
-      if want {
+      switch choice {
+      case .speaker:
         try s.overrideOutputAudioPort(.speaker)
-      } else {
-        // .videoChat forces the speaker; the private route needs .voiceChat.
-        if s.mode == .videoChat { try s.setMode(.voiceChat) }
-        try s.overrideOutputAudioPort(.none)
+      case .privateRoute:
+        try leaveSpeaker(s)
+        if s.preferredInput != nil { try s.setPreferredInput(nil) }
+      case .builtIn:
+        try leaveSpeaker(s)
+        let mic = s.availableInputs?.first { $0.portType == .builtInMic }
+        if let mic = mic, s.preferredInput?.uid != mic.uid { try s.setPreferredInput(mic) }
+      case .port(let uid):
+        try leaveSpeaker(s)
+        if let port = selectablePort(uid, s), s.preferredInput?.uid != uid { try s.setPreferredInput(port) }
       }
     } catch {
       NSLog("[PoolseCalls] audio route failed: %@", "\(error)")
@@ -367,21 +427,77 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     reportRoute()
   }
 
-  private func currentRoute() -> String {
-    let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
-    guard let port = outputs.first?.portType else { return media == "video" ? "speaker" : "earpiece" }
+  /// .videoChat forces the speaker; every private route needs .voiceChat.
+  private func leaveSpeaker(_ s: AVAudioSession) throws {
+    if s.mode == .videoChat { try s.setMode(.voiceChat) }
+    try s.overrideOutputAudioPort(.none)
+  }
+
+  private func kind(of port: AVAudioSession.Port) -> String {
     switch port {
     case .builtInSpeaker: return "speaker"
     case .builtInReceiver: return "earpiece"
     case .bluetoothHFP, .bluetoothA2DP, .bluetoothLE, .carAudio, .airPlay: return "bluetooth"
-    case .headphones, .usbAudio, .lineOut, .HDMI: return "headset"
     default: return "headset"
     }
+  }
+
+  private func currentRoute() -> String {
+    guard let port = AVAudioSession.sharedInstance().currentRoute.outputs.first?.portType else {
+      return media == "video" ? "speaker" : "earpiece"
+    }
+    return kind(of: port)
+  }
+
+  /// Every output the user can pick, and the one playing now.
+  ///
+  /// iOS lists inputs, not outputs: a headset or Bluetooth device is
+  /// selectable through its microphone (its input and output share the
+  /// uid), while the earpiece and speaker are always there on a phone.
+  /// Wired headphones replace the earpiece rather than sitting beside it.
+  private func outputs() -> ([AudioOutput], String?) {
+    let s = AVAudioSession.sharedInstance()
+    let inputs = s.availableInputs ?? []
+    let current = s.currentRoute.outputs.first
+    var list: [AudioOutput] = []
+
+    let wiredOut = s.currentRoute.outputs.first { $0.portType == .headphones }
+    if inputs.contains(where: { $0.portType == .headsetMic }) || wiredOut != nil {
+      list.append(AudioOutput(id: "wired", kind: "headset", name: "Headphones"))
+    } else if UIDevice.current.userInterfaceIdiom == .phone {
+      list.append(AudioOutput(id: "earpiece", kind: "earpiece", name: UIDevice.current.model))
+    }
+    list.append(AudioOutput(id: "speaker", kind: "speaker", name: "Speaker"))
+    for p in inputs where Self.externalInputs.contains(p.portType) && p.portType != .headsetMic {
+      list.append(AudioOutput(id: "port:\(p.uid)", kind: p.portType == .usbAudio ? "headset" : "bluetooth", name: p.portName))
+    }
+    // Playing through something with no microphone (an A2DP speaker,
+    // AirPlay): show it so the selection is truthful, even though only
+    // the system picker can choose it.
+    if let c = current, Self.externalOutputs.contains(c.portType), c.portType != .headphones,
+       !list.contains(where: { $0.id == "port:\(c.uid)" || $0.name == c.portName }) {
+      list.append(AudioOutput(id: "port:\(c.uid)", kind: kind(of: c.portType), name: c.portName))
+    }
+
+    let selected: String? = current.map { c in
+      switch c.portType {
+      case .builtInSpeaker: return "speaker"
+      case .builtInReceiver: return "earpiece"
+      case .headphones: return "wired"
+      default:
+        return list.first { $0.id == "port:\(c.uid)" }?.id
+          ?? list.first { $0.name == c.portName }?.id
+          ?? "port:\(c.uid)"
+      }
+    }
+    return (list, selected)
   }
 
   private func reportRoute() {
     guard joinedCallId != nil || audioActive else { return }
     events?.onAudioRoute(currentRoute())
+    let (list, selected) = outputs()
+    events?.onAudioOutputs(list, selectedId: selected)
   }
 
   /// An interruption (another app's audio, Siri) ended: the session may
@@ -409,14 +525,27 @@ final class LiveKitMediaPort: NSObject, MediaPort {
         self.reassertAudio()
         return
       }
-      // A user's speaker choice survives route changes, except that a
-      // newly connected headset/Bluetooth device always wins.
-      let route = self.currentRoute()
-      if let wanted = self.speakerWanted, route == "speaker" || route == "earpiece", (route == "speaker") != wanted {
+      switch reason {
+      case .newDeviceAvailable:
+        // Putting on a headset or AirPods mid-call moves the call to it,
+        // whatever was picked before — as the Phone app does.
+        self.outputWanted = nil
         self.applyRoute()
-        return
+      case .oldDeviceUnavailable:
+        // A device went away. If it was the chosen one, applyRoute drops
+        // the choice and falls back to automatic — speaker for video,
+        // earpiece for voice; any other choice stands.
+        self.applyRoute()
+      default:
+        // The override is cleared by any route change: put the speaker
+        // back (or take it away) if that is not what the call wants.
+        let onSpeaker = self.currentRoute() == "speaker"
+        if (self.resolvedChoice() == .speaker) != onSpeaker && reason != .override {
+          self.applyRoute()
+        } else {
+          self.reportRoute()
+        }
       }
-      self.reportRoute()
     }
   }
 

@@ -173,6 +173,7 @@ public final class CallCoreRuntime {
   public func setCamera(_ on: Bool) { post { [self] in media.setCamera(on) } }
   public func switchCamera() { post { [self] in media.switchCamera() } }
   public func setSpeaker(_ on: Bool) { post { [self] in media.setSpeaker(on) } }
+  public func setAudioOutput(_ id: String) { post { [self] in media.setAudioOutput(id) } }
 
   /// Re-emit the current state (the bridge's roster/route changed).
   public func reemit() { post { [self] in if state.phase != .idle { sink.emit(state: state) } } }
