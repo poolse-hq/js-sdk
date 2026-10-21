@@ -531,5 +531,6 @@ public final class PoolseCallsSetup: NSObject {
     _ = CallKitController.shared
     _ = CallCore.getOrNull()
     VoipPush.shared.register()
+    MessageNotifications.shared.install()
   }
 }

@@ -26,6 +26,10 @@
       android:name="dev.poolse.callcore.android.CallActionReceiver"
       android:exported="false" />
 
+    <receiver
+      android:name="dev.poolse.callcore.android.MessageActionReceiver"
+      android:exported="false" />
+
     <service
       android:name="dev.poolse.callcore.android.CallForegroundService"
       android:exported="false"

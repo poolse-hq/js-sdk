@@ -35,6 +35,17 @@ class CallMessagingService : FirebaseMessagingService() {
     // type=call_event so old JS Android builds — which ring on ANY
     // type=call — ignore them. Everything else belongs to the host.
     val type = data["type"]
+    if (type == "message") {
+      // Chat notifications (§5.5): posted here so they appear with the
+      // app killed, grouped per conversation.
+      if (CallCore.getOrNull(this) == null) return
+      val conversationId = data["conversation_id"] ?: return
+      when (data["event"]) {
+        "new" -> MessageNotifications.onNew(this, data, CallCore.smallIcon(this))
+        "read" -> MessageNotifications.clear(this, conversationId)
+      }
+      return
+    }
     if (type != "call" && type != "call_event") {
       forwardToHost { it.onMessageReceived(message) }
       return

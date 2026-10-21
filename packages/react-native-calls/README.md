@@ -14,9 +14,11 @@ can render against it unconditionally.
 import * as calls from '@poolse/react-native-calls';
 
 await calls.configure('https://api.poolse.dev', { smallIcon: 'ic_call', ringback: 'ringback' });
-const stop = calls.onCallState((s) => render(s));   // s: Snapshot | null
+const stop = calls.onCallState((s) => render(s)); // s: Snapshot | null
 await calls.place(conversationId, { media: 'audio', sessionToken });
-calls.answer(); calls.decline(); calls.hangUp();
+calls.answer();
+calls.decline();
+calls.hangUp();
 
 // Audio output: s.audioOutputs lists the phone, the speaker and every
 // connected headset/Bluetooth device by name; s.audioOutputId is the live one.
@@ -24,7 +26,38 @@ calls.setAudioOutput(s.audioOutputs[0].id);
 calls.setSpeaker(true); // the one-tap toggle, still there
 ```
 
+### Chat notifications
+
+poolse sends message notifications itself, with the push credentials you
+set up for calls. Register the devices (Android: the FCM token; iOS: the
+regular APNs token with `kind: 'alert'`, beside the VoIP one), and the
+core does the rest — one notification per conversation with every
+message a line in it, Reply and Mark as read straight from the
+notification (no app, no session), cleared when the chat is read on
+another device. Requires `expo-notifications` (a peer dependency).
+
+```ts
+calls.setActiveConversation(conversationId); // on screen: don't notify it
+calls.setActiveConversation(null); // left it, or app backgrounded
+
+// iOS, in your expo-notifications handler:
+Notifications.setNotificationHandler({
+  handleNotification: async (n) => {
+    const show = calls.shouldPresentMessage(n.request.content.data);
+    return {
+      shouldShowBanner: show,
+      shouldShowList: show,
+      shouldPlaySound: show,
+      shouldSetBadge: true,
+    };
+  },
+});
+// A tap opens the app: calls.conversationOfNotification(data) (iOS), or
+// takeCallAction()/onCallAction() with type 'open' (Android).
+```
+
 ## Layout
+
 - `src/` — the TypeScript API (this is what apps import).
 - `android/src/main/java/dev/poolse/callcore/` — the pure state machine
   and ports (contract cv 1).

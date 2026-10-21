@@ -133,6 +133,7 @@ interface PoolseCallsNative {
   openFullScreenIntentSettings(): void;
   getVoipToken?(): VoipToken | null;
   takeCallAction?(): CallAction | null;
+  setActiveConversation?(conversationId: string | null): void;
   addListener(event: 'onCallState', cb: (payload: NativeSnapshot) => void): { remove(): void };
   addListener(event: 'onVoipToken', cb: (payload: VoipToken) => void): { remove(): void };
   addListener(event: 'onCallAction', cb: (payload: CallAction) => void): { remove(): void };
@@ -242,6 +243,47 @@ export function onCallAction(cb: (action: CallAction) => void): Unsubscribe {
   if (!native || !native.takeCallAction) return () => undefined;
   const sub = native.addListener('onCallAction', cb);
   return () => sub.remove();
+}
+
+// ── chat notifications ─────────────────────────────────────────────────
+
+let activeConversation: string | null = null;
+
+/**
+ * Tell the core which conversation is on screen (`null` when none, and
+ * when the app goes to the background). Its messages are not notified —
+ * the user is reading them — and opening it clears the notifications
+ * already shown for it.
+ */
+export function setActiveConversation(conversationId: string | null): void {
+  activeConversation = conversationId;
+  native?.setActiveConversation?.(conversationId);
+}
+
+/**
+ * For the app's notification handler (expo-notifications'
+ * `setNotificationHandler`): `false` for a chat notification of the
+ * conversation on screen, which must not pop over the chat itself.
+ * Android never asks — the core skips those natively.
+ */
+export function shouldPresentMessage(data: Record<string, unknown> | undefined | null): boolean {
+  if (!data || data['type'] !== 'message') return true;
+  return data['conversation_id'] !== activeConversation;
+}
+
+/**
+ * The conversation a tapped notification belongs to — a chat message
+ * (`type: 'message'`) or a missed call (`call_missed`) — from its data.
+ * iOS hands the tap to your notification library; Android delivers it
+ * through `takeCallAction` / `onCallAction` (type `open`).
+ */
+export function conversationOfNotification(
+  data: Record<string, unknown> | undefined | null,
+): string | null {
+  if (!data) return null;
+  const type = data['type'];
+  if (type !== 'message' && type !== 'call_missed') return null;
+  return typeof data['conversation_id'] === 'string' ? data['conversation_id'] : null;
 }
 
 // ── VoIP push (iOS) ───────────────────────────────────────────────────

@@ -53,12 +53,16 @@ Pod::Spec.new do |s|
   # nanopb headers use <pb.h> angled includes that do not resolve when
   # CocoaPods builds the pod as a static library (Expo's default).
   s.dependency 'LiveKitClient', '= 2.15.1'
+  # Chat notifications plug into expo-notifications' notification-center
+  # delegate fan-out (MessageNotifications.swift) instead of replacing the
+  # delegate, which would break the app's own notifications.
+  s.dependency 'EXNotifications'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'SWIFT_COMPILATION_MODE' => 'wholemodule',
   }
 
-  s.frameworks = 'CallKit', 'PushKit', 'AVFoundation', 'UIKit'
+  s.frameworks = 'CallKit', 'PushKit', 'AVFoundation', 'UIKit', 'UserNotifications'
   s.source_files = 'Core/**/*.swift', 'Platform/**/*.swift', 'Module/**/*.swift'
 end

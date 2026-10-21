@@ -72,6 +72,13 @@ public class PoolseCallsModule: Module {
     Function("setSpeaker") { (on: Bool) in onCore { $0.setSpeaker(on) } }
     Function("setAudioOutput") { (id: String) in onCore { $0.setAudioOutput(id) } }
 
+    // The chat on screen: opening it clears what was already shown for it.
+    // (Suppressing new ones while it is open happens in the app's
+    // notification handler — see shouldPresentMessage in src/index.ts.)
+    Function("setActiveConversation") { (conversationId: String?) in
+      if let conversationId = conversationId { MessageNotifications.clear(conversationId: conversationId) }
+    }
+
     // Socket forwarding (open app): idempotent with the push path.
     Function("onRingEnded") { (callId: String, reason: String) in
       onCore { $0.onRingEnded(callId: callId, reason: reason) }

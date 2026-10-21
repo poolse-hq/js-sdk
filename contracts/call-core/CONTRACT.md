@@ -226,6 +226,44 @@ Tap → open the conversation; the `call_back` action → place a call on it
 with `media`. Android hands both to the app as launch extras, read through
 the bridge (`takeCallAction` / `onCallAction`).
 
+### 5.5 Chat messages
+
+poolse notifies every member but the sender of a new **text** message
+(muted members only when mentioned), on their `alert` devices (Android: all;
+iOS: the regular APNs token), with the tenant's call push credentials.
+
+```jsonc
+// Android — FCM data; the native core posts it (MessagingStyle, one per conversation)
+{
+  "cv": "1", "type": "message", "event": "new",
+  "message_id": "…", "conversation_id": "…", "conversation_name": "Fix the boiler",
+  "group": "1", "sender_user_id": "…", "sender_external_id": "…", "sender_name": "Ana",
+  "text": "on my way", "mentioned": "0", "sent_at": 1760000000000,
+  "unread_total": 3, "reply_grant": "<jwt>"
+}
+// iOS — alert push, the same keys beside aps
+{ "aps": { "alert": { "title": "Fix the boiler", "body": "Ana: on my way" },
+           "thread-id": "<conversation_id>", "category": "poolse_message",
+           "badge": 3, "sound": "default", "mutable-content": 1, "summary-arg": "Ana" }, … }
+```
+
+Read sync — when a member's read cursor passes unread messages, their
+devices get `{"type": "message", "event": "read", "conversation_id", "unread_total"}`
+(Android data; iOS background push with `"type": "message_read"`) and drop
+that conversation's notifications.
+
+The **reply grant** (`aud: "message-reply"`, one user + device + conversation,
+3 days) authorizes, as `Authorization: Bearer <grant>`:
+
+| endpoint                       | body          |                                                                          |
+| ------------------------------ | ------------- | ------------------------------------------------------------------------ |
+| `POST /v1/notifications/reply` | `{body, id?}` | posts as the user, then marks read; same `id` again → the original (200) |
+| `POST /v1/notifications/read`  | —             | marks the conversation read to its newest message                        |
+
+Hosts tell the core which conversation is on screen
+(`setActiveConversation`): Android skips its notifications natively, iOS
+apps ask `shouldPresentMessage(data)` in their notification handler.
+
 ## 6 · Socket events
 
 For open apps; mirrors of server state, never lifecycle authority. The
@@ -383,6 +421,7 @@ answer(); decline(); hangUp();
 setMuted(b); setSpeaker(b); setAudioOutput(id); setCamera(b); switchCamera();
 onRingEnded(callId, reason); onCallFinished(callId);   // socket forwarding, idempotent with push
 takeCallAction(); onCallAction(cb);                     // Android: missed-call notification taps (§5.4)
+setActiveConversation(id | null); shouldPresentMessage(data); conversationOfNotification(data); // §5.5
 canUseFullScreenIntent(); openFullScreenIntentSettings(); // Android
 ```
 

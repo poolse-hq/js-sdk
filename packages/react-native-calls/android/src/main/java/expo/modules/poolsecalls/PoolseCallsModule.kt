@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import dev.poolse.callcore.android.CallCore
+import dev.poolse.callcore.android.MessageNotifications
 import dev.poolse.callcore.android.MissedCallNotification
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -100,6 +101,13 @@ class PoolseCallsModule : Module() {
     Function("takeCallAction") { appContext.currentActivity?.intent?.let(::consumeCallAction) }
     OnNewIntent { intent ->
       consumeCallAction(intent)?.let { sendEvent("onCallAction", it) }
+    }
+
+    // The chat on screen: its messages are not notified, and opening it
+    // clears what was already shown for it.
+    Function("setActiveConversation") { conversationId: String? ->
+      MessageNotifications.activeConversationId = conversationId
+      if (conversationId != null) context?.let { MessageNotifications.clear(it, conversationId) }
     }
 
     // Android 14+: full-screen intents need a user grant for non-dialer apps.
