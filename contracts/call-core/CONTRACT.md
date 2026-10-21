@@ -270,6 +270,23 @@ Hosts tell the core which conversation is on screen
 (`setActiveConversation`): Android skips its notifications natively, iOS
 apps ask `shouldPresentMessage(data)` in their notification handler.
 
+### 5.6 Rooms (calls that ring nobody)
+
+`POST /v1/conversations/:id/room {media}` starts the conversation's room —
+201 with the §4.1 bundle — or joins what is live there (200): another room,
+or a ringing call. A room is the web's Meet-style model: anyone in the
+conversation drops in while the chat carries on.
+
+- Summary `kind: "room"` (calls: `"call"`). No pushes, no ring states.
+- Live and joinable from the start; leaving (`hangup`) never ends it for
+  the others; it finishes once it has been **empty** for the grace — one
+  person waiting alone keeps it.
+- Presence comes from the LiveKit webhook only (REST start/join do not mark
+  anyone present), so a starter who never connects cannot hold it open.
+- Phones join it like any live call (`join`, from the Join banner).
+- The call record carries `call_kind: "room"`; clients word it "Video room ·
+  45:12 · 3 joined" — nobody missed a room.
+
 ## 6 · Socket events
 
 For open apps; mirrors of server state, never lifecycle authority. The

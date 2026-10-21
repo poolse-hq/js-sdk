@@ -36,6 +36,13 @@ export interface RequestOptions {
   maxRetries?: number;
   /** AbortSignal for caller-driven cancellation. */
   signal?: AbortSignal;
+  /**
+   * Authorize with this token instead of the user's session — for the
+   * endpoints a call-scoped token authorizes (a call's control token).
+   * A 401 then surfaces at once: refreshing the session cannot fix a
+   * token the caller supplied.
+   */
+  bearer?: string;
 }
 
 const NON_BODY_METHODS: ReadonlySet<HttpMethod> = new Set(['GET', 'DELETE']);
@@ -62,7 +69,12 @@ export class RestClient {
     // failed attempt either returns (giving up) or waits per the backoff.
     for (;;) {
       const body = opts.body === undefined ? undefined : JSON.stringify(opts.body);
-      const headers = await this.buildHeaders(opts.method, idempotencyKey, body !== undefined);
+      const headers = await this.buildHeaders(
+        opts.method,
+        idempotencyKey,
+        body !== undefined,
+        opts.bearer,
+      );
 
       let response: Response;
       try {
@@ -99,7 +111,7 @@ export class RestClient {
       // retry budget (auth refresh isn't a "transient" failure in the
       // same sense as 5xx/network).
       if (response.status === 401) {
-        if (!triedAuthRefresh) {
+        if (!triedAuthRefresh && opts.bearer === undefined) {
           this.tokenCache.invalidate();
           triedAuthRefresh = true;
           continue;
@@ -152,12 +164,13 @@ export class RestClient {
     method: HttpMethod,
     idempotencyKey: string | null,
     hasBody: boolean,
+    bearer?: string,
   ): Promise<Record<string, string>> {
     const headers: Record<string, string> = { Accept: 'application/json' };
 
     if (hasBody) headers['Content-Type'] = 'application/json';
 
-    const token = await this.config.getToken();
+    const token = bearer ?? (await this.config.getToken());
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     if (!IDEMPOTENT_METHODS.has(method) && idempotencyKey) {

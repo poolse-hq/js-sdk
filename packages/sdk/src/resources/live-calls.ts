@@ -17,6 +17,8 @@ export interface LiveCall {
   conversation_id: string;
   conversation_name: string | null;
   media: 'audio' | 'video';
+  /** `room` rang nobody (a drop-in meeting); `call` rang the members. Absent on older servers: call. */
+  kind?: 'call' | 'room';
   state: 'live' | 'finished';
   started_by: LiveCallMember;
   started_at: string | null;

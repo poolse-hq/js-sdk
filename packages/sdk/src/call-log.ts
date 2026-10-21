@@ -45,6 +45,8 @@ export interface CallLogEntry {
   joinedUserIds: Uuid[];
   /** `2` for the one-record-per-call shape; `1` for older history. */
   version: 1 | 2;
+  /** `room`: a drop-in meeting that rang nobody; `call`: rang the members. */
+  callKind: 'call' | 'room';
   /** Who placed the call. `null` on v1 records. */
   callerUserId: Uuid | null;
   /** Everyone else the call involved, with their outcome. Empty on v1. */
@@ -110,6 +112,7 @@ export function parseCallLogBody(body: string | null | undefined): CallLog | nul
       durationMs,
       joinedUserIds: joined,
       version: obj.v === 2 ? 2 : 1,
+      callKind: obj.call_kind === 'room' ? 'room' : 'call',
       callerUserId: typeof obj.caller_user_id === 'string' ? obj.caller_user_id : null,
       participants,
       endReason: isEndReason(obj.end_reason) ? obj.end_reason : null,
@@ -203,6 +206,18 @@ export function describeCallLog(log: CallLog, currentUserId: string | null): Cal
   const duration = log.durationMs !== null ? formatCallDuration(log.durationMs) : null;
   const group = log.participants.length > 1;
   const me = currentUserId;
+
+  // A room rang nobody: there is no caller, callee or "missed" — just
+  // how long it ran and how many dropped in.
+  if (log.callKind === 'room') {
+    const n = new Set([...log.joinedUserIds, ...log.participants.map((p) => p.userId)]).size;
+    const title = log.media === 'video' ? 'Video room' : 'Voice room';
+    const people = n > 0 ? `${n} joined` : null;
+    return display(log.media, title, [duration, people].filter(Boolean).join(' · ') || null, {
+      direction: null,
+      callBack: false,
+    });
+  }
 
   // v1 history, or a record this viewer is not in (joined the
   // conversation later): the neutral wording every viewer used to get.

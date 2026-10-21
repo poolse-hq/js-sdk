@@ -175,7 +175,10 @@ function CallVideoTile({
             style={{ background: userColor(participant.userId) }}
             aria-hidden="true"
           >
-            {initialsOf(name)}
+            {/* Your own tile is captioned "You", but its initials are yours. */}
+            {initialsOf(
+              participant.isSelf ? (participant.name ?? label(participant.userId)) : name,
+            )}
           </span>
         </div>
       )}

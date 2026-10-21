@@ -14,8 +14,20 @@ export interface LiveCallBannerProps {
 }
 
 export function LiveCallBanner({ call, inCall, onJoin }: LiveCallBannerProps) {
-  const what = call.media === 'video' ? 'Video call in progress' : 'Voice call in progress';
-  const who = inCall > 0 ? `${inCall} on the call` : 'Ringing';
+  const what =
+    call.kind === 'room'
+      ? call.media === 'video'
+        ? 'Video room'
+        : 'Voice room'
+      : call.media === 'video'
+        ? 'Video call in progress'
+        : 'Voice call in progress';
+  const who =
+    inCall > 0
+      ? `${inCall} ${call.kind === 'room' ? 'in the room' : 'on the call'}`
+      : call.kind === 'room'
+        ? 'Starting'
+        : 'Ringing';
   return (
     <div className="poolse-live-call" role="status" aria-label={`${what}, ${who}`}>
       <PoolseIcon

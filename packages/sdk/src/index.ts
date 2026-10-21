@@ -17,6 +17,7 @@ export {
 export { CallTokensResource } from './resources/call-tokens.js';
 export { LiveCallsResource } from './resources/live-calls.js';
 export type { LiveCall, LiveCallMember } from './resources/live-calls.js';
+export { RoomsResource, type RoomSession } from './resources/rooms.js';
 export { IceServersResource, type IceServerResponse } from './resources/ice-servers.js';
 export { CallRoom } from './voice/call-room.js';
 export type {

@@ -35,6 +35,7 @@ describe('parseCallLog', () => {
       durationMs: 192_000,
       joinedUserIds: [ME, OTHER],
       version: 1,
+      callKind: 'call',
       callerUserId: null,
       participants: [],
       endReason: null,
@@ -295,5 +296,24 @@ describe('v2 call records — one per call, worded per viewer', () => {
     const missed = v2({ duration_ms: null, participants: [{ user_id: ME, status: 'missed' }] });
     expect(formatCallLogPreview(missed, ME)).toBe('Missed voice call');
     expect(formatCallLogPreview(missed, OTHER)).toBe('Outgoing voice call · No answer');
+  });
+});
+
+describe('rooms in the history', () => {
+  it('reads as a room with its length and how many joined, for everyone', () => {
+    const room = v2({
+      call_kind: 'room',
+      media: 'video',
+      joined_user_ids: [ME, OTHER, THIRD],
+      participants: [],
+    });
+    for (const viewer of [ME, OTHER, null]) {
+      expect(describeCallLog(parseCallLogBody(room)!, viewer)).toMatchObject({
+        title: 'Video room',
+        detail: '3:12 · 3 joined',
+        missed: false,
+        callBack: false,
+      });
+    }
   });
 });

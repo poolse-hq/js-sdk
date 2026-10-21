@@ -3027,3 +3027,552 @@
   border-top: 1px solid var(--poolse-border);
   padding-top: 8px;
 }
+
+/* ───────────────────── Calls and rooms ─────────────────────
+   The call controls, video grid and device menus used by RoomStage (and
+   the legacy CallProvider). Shipped here so a room is styled out of the
+   box; previously only the showcase app carried these rules. */
+
+/* Round call controls. Engaged controls invert to solid white so the
+   user can tell at a glance which ones are doing something. */
+.callbtn__slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: 76px;
+}
+
+.callbtn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.callbtn:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.callbtn:active {
+  transform: scale(0.94);
+}
+
+.callbtn--large {
+  width: 66px;
+  height: 66px;
+}
+
+.callbtn--active {
+  background: #ffffff;
+  color: #101012;
+}
+
+.callbtn--danger,
+.callbtn--danger:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+.callbtn--accept,
+.callbtn--accept:hover {
+  background: #22c55e;
+  color: #fff;
+}
+
+.callbtn__label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* Call stage — @poolse/react-ui's CallVideoGrid renders these class
+   names and ships no CSS of its own, so the host app owns the look. */
+.callstage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The floating self-preview. Anchored to a corner rather than left
+   wherever the pointer stopped — a tile at a slight angle to the edge
+   reads as dropped rather than placed. */
+.callstage__pip {
+  position: absolute;
+  width: clamp(110px, 13vw, 168px);
+  aspect-ratio: 3 / 4;
+  /* Generous enough to read as a bubble rather than a cropped
+     rectangle. The video is clipped to it, and the tile inside is
+     borderless, so this is the only rounding in play — two radii that
+     disagree leave a hairline seam along the edge. */
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+  touch-action: none;
+  /* Above the header, whose gradient would otherwise wash it out. The
+     stage creates no stacking context of its own, so this competes
+     directly with the header and control bar below. */
+  z-index: 5;
+  transition:
+    top 180ms ease,
+    left 180ms ease,
+    right 180ms ease,
+    bottom 180ms ease;
+}
+
+/* Tucked into the real corners of the viewport.
+   It used to be inset far enough to clear the header and the control
+   bar, which left it floating in the middle of nowhere rather than
+   parked in a corner — and on a connected video call the chrome is
+   hidden most of the time anyway, so it was reserving room for
+   something that was not there. It floats OVER the header instead
+   (see the z-index below), and the bottom corners stop just short of
+   the controls so a dragged tile can never cover the hang-up button. */
+.callstage__pip--c0 {
+  top: 14px;
+  left: 14px;
+}
+.callstage__pip--c1 {
+  top: 14px;
+  right: 14px;
+}
+.callstage__pip--c2 {
+  bottom: 132px;
+  left: 14px;
+}
+.callstage__pip--c3 {
+  bottom: 132px;
+  right: 14px;
+}
+
+.callstage__pip--dragging {
+  cursor: grabbing;
+  /* Follow the pointer exactly while dragging; the easing above is for
+     the snap, and would otherwise make the tile lag the finger. */
+  transition: none;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .callstage__pip {
+    transition: none;
+  }
+}
+
+.callgrid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 84px 16px 150px;
+  align-content: center;
+  overflow-y: auto;
+}
+
+.callgrid[data-count='many'] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.callgrid__tile {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #1c1c20;
+  /* Transparent rather than absent, so a tile does not resize by two
+     pixels the moment somebody starts talking. */
+  border: 2px solid transparent;
+}
+
+.callgrid__tile--bleed {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  border-radius: 0;
+  border-width: 0;
+}
+
+.callgrid__tile--speaking {
+  border-color: #22c55e;
+}
+
+.callgrid__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.callgrid__placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.callgrid__avatar {
+  width: clamp(56px, 26%, 132px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: clamp(20px, 9cqw, 46px);
+  container-type: inline-size;
+}
+
+.callgrid__caption {
+  position: absolute;
+  inset: auto auto 10px 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  max-width: calc(100% - 20px);
+  /* Legible over both a bright video frame and a flat placeholder. */
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.callgrid__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.callgrid__mutedicon {
+  flex: none;
+}
+
+/* Chrome fades on a connected video call rather than disappearing, so
+   the eye can follow it out. Pointer events go with it — invisible
+   controls must not still be clickable. */
+.callsheet__header,
+.callsheet__actions {
+  transition: opacity 220ms ease;
+}
+
+.callsheet__header--hidden,
+.callsheet__actions--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .callsheet__header,
+  .callsheet__actions {
+    transition: none;
+  }
+}
+
+/* A control that also opens a device menu. */
+.callsheet__control {
+  position: relative;
+  display: inline-flex;
+}
+
+.callbtn__wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.callbtn__caret {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #101012;
+  background: rgba(255, 255, 255, 0.32);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.callbtn__caret:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.calldevices {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 240px;
+  max-width: 320px;
+  background: #1c1c20;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  padding: 8px;
+  z-index: 5;
+}
+
+.calldevices__title {
+  margin: 0;
+  padding: 6px 10px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.calldevices__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.calldevices__row:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.calldevices__row--on {
+  color: #22c55e;
+}
+
+.calldevices__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The room — Meet-style: a dark stage with the controls under it. Fills
+   whatever box the host gives it. */
+.poolse-room {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: #101114;
+  color: #fff;
+  border-radius: var(--poolse-radius-lg, 14px);
+  overflow: hidden;
+}
+
+.poolse-room__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px 6px;
+}
+
+.poolse-room__title {
+  font: 600 15px / 1.3 var(--poolse-font-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poolse-room__status {
+  font: 500 12.5px / 1.3 var(--poolse-font-body);
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.poolse-room__stage {
+  position: relative;
+  flex: 1;
+  min-height: 220px;
+  padding: 8px;
+}
+
+.poolse-room__stage > .callgrid,
+.poolse-room__stage > .callstage {
+  position: absolute;
+  inset: 8px;
+}
+
+.poolse-room__stage > .callstage {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1c1c20;
+}
+
+/* In a room the grid fills the stage, Meet-style, instead of the call
+   sheet's portrait tiles: rows share the height, tiles take their cell. */
+.poolse-room .callgrid {
+  padding: 0;
+  height: auto;
+  grid-auto-rows: 1fr;
+  align-content: stretch;
+  overflow: hidden;
+}
+
+.poolse-room .callgrid[data-count='2'],
+.poolse-room .callgrid[data-count='3'],
+.poolse-room .callgrid[data-count='4'] {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.poolse-room .callgrid[data-count='5'],
+.poolse-room .callgrid[data-count='6'] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.poolse-room .callgrid[data-count='many'] {
+  grid-template-columns: repeat(4, 1fr);
+  overflow-y: auto;
+  grid-auto-rows: minmax(140px, 1fr);
+}
+
+.poolse-room .callgrid__tile {
+  aspect-ratio: auto;
+  min-height: 0;
+}
+
+/* Initials sized to the tile, so the small self-view bubble does not
+   overflow its circle. */
+.callgrid__placeholder {
+  container-type: size;
+}
+
+.callgrid__placeholder .callgrid__avatar {
+  width: clamp(40px, 34cqmin, 132px);
+  font-size: clamp(14px, 13cqmin, 46px);
+}
+
+/* The floating self-view stays inside the stage, clear of the controls
+   that sit below it rather than over it. */
+.poolse-room .callstage__pip--c2,
+.poolse-room .callstage__pip--c3 {
+  bottom: 14px;
+}
+
+@media (max-width: 640px) {
+  .poolse-room .callgrid[data-count='5'],
+  .poolse-room .callgrid[data-count='6'],
+  .poolse-room .callgrid[data-count='many'] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.poolse-room__waiting {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font: 500 14px / 1 var(--poolse-font-body);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.poolse-room__error {
+  margin: 0 16px;
+  font: 500 12.5px / 1.4 var(--poolse-font-body);
+  color: #ff8a8a;
+  text-align: center;
+}
+
+.poolse-room__bar {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 12px 12px 16px;
+}
+
+/* The join / start bar — on the page's own theme, above the chat. */
+.poolse-roombar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--poolse-border);
+  background: var(--poolse-surface);
+  font: 500 13.5px / 1.4 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+}
+
+.poolse-roombar--live {
+  background: color-mix(in srgb, var(--poolse-success) 10%, var(--poolse-surface));
+  color: var(--poolse-ink);
+}
+
+.poolse-roombar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--poolse-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--poolse-success) 25%, transparent);
+  flex: none;
+}
+
+.poolse-roombar__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.poolse-roombar__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.poolse-roombar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--poolse-radius-pill, 999px);
+  border: 1px solid var(--poolse-border);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  font: 600 13px / 1 var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-roombar__btn:hover:not(:disabled) {
+  border-color: var(--poolse-ink-3);
+}
+
+.poolse-roombar__btn--primary {
+  background: var(--poolse-brand);
+  border-color: var(--poolse-brand);
+  color: var(--poolse-on-brand, #fff);
+}
+
+.poolse-roombar__btn--primary:hover:not(:disabled) {
+  background: var(--poolse-brand-strong, var(--poolse-brand));
+  border-color: var(--poolse-brand-strong, var(--poolse-brand));
+}
+
+.poolse-roombar__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.poolse-roombar__btn:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 2px;
+}
