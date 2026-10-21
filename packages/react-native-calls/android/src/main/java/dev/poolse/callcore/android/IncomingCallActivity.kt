@@ -93,7 +93,14 @@ class IncomingCallActivity : Activity() {
     // background receiver is not).
     if (intent.getBooleanExtra(AndroidRingSurface.EXTRA_AUTO_ANSWER, false)) {
       ring = next
-      answerAndForward(core, next)
+      answerAndForward { core.onUserAnswer(next, this) }
+      return
+    }
+    // End & answer on a call-waiting heads-up: the same, for the call
+    // waiting beside the current one.
+    if (intent.getBooleanExtra(AndroidRingSurface.EXTRA_WAITING_ANSWER, false)) {
+      ring = next
+      answerAndForward { core.onUserAnswerWaiting(next, this) }
       return
     }
 
@@ -118,12 +125,12 @@ class IncomingCallActivity : Activity() {
    * behind the lock screen. onStop (we got covered) finishes us; a
    * timer is the fallback.
    */
-  private fun answerAndForward(core: CallCore, ring: RingContext) {
+  private fun answerAndForward(answer: () -> Boolean) {
     awaitingForward = true
     pulse?.cancel()
     pulse = null
     setContentView(View(this).apply { setBackgroundColor(Color.parseColor("#0B0B14")) })
-    val launched = core.onUserAnswer(ring, this)
+    val launched = answer()
     if (!launched) { finish(); return }
     main.postDelayed({ if (!isFinishing) finish() }, FORWARD_FALLBACK_MS)
   }
@@ -238,7 +245,7 @@ class IncomingCallActivity : Activity() {
     }
     val accept = actionButton("Answer", "✓", "#22C55E") {
       val core = CallCore.getOrNull(this)
-      if (core == null) finish() else answerAndForward(core, ring)
+      if (core == null) finish() else answerAndForward { core.onUserAnswer(ring, this) }
     }
     buttons.addView(decline, LinearLayout.LayoutParams(wrap(), wrap()).apply { rightMargin = px(52) })
     buttons.addView(accept, LinearLayout.LayoutParams(wrap(), wrap()).apply { leftMargin = px(52) })

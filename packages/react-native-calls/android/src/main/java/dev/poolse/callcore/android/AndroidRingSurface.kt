@@ -181,6 +181,19 @@ internal class AndroidRingSurface(
       )
     }
 
+    // End & answer launches an ACTIVITY, like the ring's Answer: only an
+    // activity started from the tap may bring the app forward (Android
+    // 10+), and the call that connects should be seen.
+    val answerWaiting = PendingIntent.getActivity(
+      context,
+      ring.callId.hashCode() + 4,
+      Intent(context, IncomingCallActivity::class.java)
+        .putExtra(EXTRA_RING, extras)
+        .putExtra(EXTRA_WAITING_ANSWER, true)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
     val who = ring.conversationName ?: ring.callerName ?: "Someone"
     val what = if (ring.media == "video") "video call" else "call"
     val notification = NotificationCompat.Builder(context, WAITING_CHANNEL_ID)
@@ -195,7 +208,10 @@ internal class AndroidRingSurface(
       .setOnlyAlertOnce(true)
       .apply { if (open != null) setContentIntent(open) }
       .addAction(0, "Decline", actionPending(ACTION_WAITING_DECLINE, 3))
-      .addAction(0, "End & answer", actionPending(ACTION_WAITING_ANSWER, 4))
+      .addAction(0, "End & answer", answerWaiting)
+      // Never outlive the ring: if its ring_ended/finished push is lost,
+      // the system takes the heads-up down at the deadline anyway.
+      .setTimeoutAfter((ring.ringDeadlineEpochMs - System.currentTimeMillis()).coerceAtLeast(10_000L))
       .build()
 
     waitingCallId = ring.callId
@@ -345,6 +361,7 @@ internal class AndroidRingSurface(
     private const val WAITING_BEEP_VOLUME = 70
     const val EXTRA_RING = "poolse_ring"
     const val EXTRA_AUTO_ANSWER = "poolse_auto_answer"
+    const val EXTRA_WAITING_ANSWER = "poolse_waiting_answer"
     /** Package-local broadcast: the ring for [EXTRA_CALL_ID] is over. */
     const val ACTION_RING_CLOSED = "dev.poolse.callcore.RING_CLOSED"
     const val EXTRA_CALL_ID = "poolse_call_id"

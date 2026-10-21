@@ -220,14 +220,22 @@ class CallForegroundService : Service() {
 
     override fun start(callId: String, media: String) = onMain {
       desired = Desired(Mode.CALL, callId, media)
-      launch()
+      launchOrSwitch()
     }
 
     override fun stop() = onMain {
       desired = null
-      // Only a started instance with nothing pending may stop now; a
-      // pending start stops itself after startForeground.
-      if (pendingStarts == 0) instance?.stopNow()
+      // Deferred to the end of this main-thread turn: a call handing over
+      // to the next (call waiting: end & answer, or a promoted ring) stops
+      // and starts in one dispatch, and must switch the RUNNING service
+      // in place — a fresh start from the background is refused on
+      // Android 12+ (and loses the microphone type on 14+). A start in
+      // the same turn sets `desired` again and this does nothing.
+      main.post {
+        // Only a started instance with nothing pending may stop now; a
+        // pending start stops itself after startForeground.
+        if (desired == null && pendingStarts == 0) instance?.stopNow()
+      }
     }
 
     /** Ring mode for [callId]; a no-op while a call holds the service. */
@@ -236,7 +244,7 @@ class CallForegroundService : Service() {
       if (d?.mode == Mode.CALL) return@onMain
       if (d?.mode == Mode.RING && d.callId == callId) return@onMain
       desired = Desired(Mode.RING, callId, "audio")
-      launch()
+      launchOrSwitch()
     }
 
     /**
@@ -253,6 +261,12 @@ class CallForegroundService : Service() {
     /** Leave ring mode — never touches a call that took the service over. */
     fun stopRing() = onMain {
       if (desired?.mode == Mode.RING) stop()
+    }
+
+    /** A running, settled instance switches in place; otherwise start one. */
+    private fun launchOrSwitch() {
+      val running = instance
+      if (running != null && pendingStarts == 0) running.reconcile(desired) else launch()
     }
 
     private fun launch() {

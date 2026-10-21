@@ -234,13 +234,10 @@ final class CallCore {
   }
 
   /// Call waiting: end this call, answer the waiting one. CallKit follows
-  /// from the resulting state (reconcileCallKit ends the old call, then
-  /// answers the new one).
+  /// from the resulting state: reconcileCallKit reports the old call
+  /// ended, then answers the new one.
   func answerWaiting(callId: String? = nil) {
-    onMain { [self] in
-      localEnd = true
-      runtime.answerWaiting(callId: callId)
-    }
+    onMain { [self] in runtime.answerWaiting(callId: callId) }
   }
 
   /// Call waiting: turn the waiting call away (its caller hears busy).
@@ -314,8 +311,13 @@ final class CallCore {
       if extrasCallId != nil { mediaPort.leave() }
       resetExtras(nil, nil)
     } else if state.callId != extrasCallId {
-      if extrasCallId?.hasPrefix("pending:") == true {
-        if let old = extrasCallId, let new = state.callId { callKit.rename(from: old, to: new) }
+      // `pending:<conv>` → the server-minted id is the same call — but only
+      // for that conversation's own placed call: a waiting call promoted
+      // over a still-pending one is a different call (renaming would give
+      // CallKit two calls with one id, and the incoming one never answered).
+      if let old = extrasCallId, old.hasPrefix("pending:"), state.direction != .incoming,
+         old == "pending:\(state.conversationId ?? "")" {
+        if let new = state.callId { callKit.rename(from: old, to: new) }
         extrasCallId = state.callId
       } else {
         // A different call (a waiting one promoted): nothing of the last
@@ -485,7 +487,6 @@ extension CallCore: CallKitActions {
     // End & Accept may answer the waiting call before ending the current
     // one: answering it ends the current call itself.
     if s.waiting?.callId == callId {
-      localEnd = true
       runtime.answerWaiting(callId: callId)
       return
     }
@@ -523,6 +524,9 @@ extension CallCore: CallKitActions {
   func callKitReset() {
     let s = runtime.currentState()
     guard s.phase != .idle && s.phase != .ended else { return }
+    // CallKit dropped every call, the waiting one included: turn it away
+    // first, or ending the current call would ring it afresh.
+    if let w = s.waiting { runtime.declineWaiting(callId: w.callId) }
     localEnd = true
     if s.phase == .ringingIn { runtime.decline() } else { runtime.hangUp() }
   }

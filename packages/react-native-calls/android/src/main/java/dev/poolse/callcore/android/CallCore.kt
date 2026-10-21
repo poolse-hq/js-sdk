@@ -122,6 +122,23 @@ class CallCore private constructor(context: Context) {
     return bringAppToFront(ring.callId, from)
   }
 
+  /**
+   * End & answer from the call-waiting heads-up. Only for the call still
+   * waiting (a stale notification is just taken down); brings the app
+   * forward from [from], like [onUserAnswer].
+   */
+  fun onUserAnswerWaiting(ring: RingContext, from: Context? = null): Boolean {
+    if (runtime.currentState().waiting?.callId != ring.callId) {
+      runCatching {
+        androidx.core.app.NotificationManagerCompat.from(appContext)
+          .cancel(with(AndroidRingSurface) { ring.callId.notificationId() })
+      }
+      return false
+    }
+    runtime.answerWaiting(ring.callId)
+    return bringAppToFront(ring.callId, from)
+  }
+
   fun onUserDecline(ring: RingContext) {
     runtime.onRing(ring)
     runtime.decline()
@@ -205,8 +222,10 @@ class CallCore private constructor(context: Context) {
       }
       resetExtras(null, null)
     } else if (state.callId != extrasCallId) {
-      // `pending:<conv>` → the server-minted id is the same call.
-      if (extrasCallId?.startsWith("pending:") == true) extrasCallId = state.callId
+      // `pending:<conv>` → the server-minted id is the same call — but
+      // only for that conversation's own placed call: a waiting call
+      // promoted over a still-pending one is a different call.
+      if (isRenameOfPending(extrasCallId, state)) extrasCallId = state.callId
       else resetExtras(state.callId, state.media)
     }
     if (state.phase != Phase.IDLE && state.media != extrasMedia) {
@@ -245,6 +264,11 @@ class CallCore private constructor(context: Context) {
     reconcileAndroid(state)
     runCatching { listener?.invoke(snap) }.onFailure { Log.w(TAG, "snapshot listener failed", it) }
   }
+
+  private fun isRenameOfPending(previous: String?, state: MachineState): Boolean =
+    previous != null && previous.startsWith("pending:") &&
+      state.direction != dev.poolse.callcore.Direction.INCOMING &&
+      previous == "pending:${state.conversationId}"
 
   private fun resetExtras(callId: String?, media: String?) {
     extrasCallId = callId
