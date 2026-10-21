@@ -36,7 +36,7 @@ export type {
   LiveKitTrack,
   LiveKitTrackReference,
 } from './voice/livekit-types.js';
-export { MeResource } from './resources/me.js';
+export { MeResource, type UpdateMeRequest } from './resources/me.js';
 export { DevicesResource } from './resources/devices.js';
 export type {
   Device,
@@ -89,6 +89,7 @@ export type {
   ErrorEnvelope,
   IsoDateTime,
   Me,
+  ReadReceiptsState,
   MemberRole,
   Membership,
   MembershipCreateRequest,

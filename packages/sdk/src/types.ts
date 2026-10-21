@@ -19,6 +19,24 @@ export interface Me {
   is_blocked: boolean;
   inserted_at: IsoDateTime;
   updated_at: IsoDateTime;
+  /** Where read receipts stand for this user. Absent on older servers (treat as on). */
+  read_receipts?: ReadReceiptsState;
+}
+
+/**
+ * The workspace's read-receipt setting, as it applies to one user.
+ * `visible: false` means the app shows no check marks at all — the
+ * server withholds other members' read state anyway.
+ */
+export interface ReadReceiptsState {
+  /** `on`: everyone sees them; `off`: nobody; `user`: each user decides (reciprocal). */
+  mode: 'on' | 'off' | 'user';
+  /** Whether others see when this user reads. */
+  shared: boolean;
+  /** True only in `user` mode — the app may offer a switch (`me.update`). */
+  can_change: boolean;
+  /** Whether this user sees other people's read state. */
+  visible: boolean;
 }
 
 // ── conversations ────────────────────────────────────────────────────────

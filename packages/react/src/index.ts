@@ -75,6 +75,7 @@ export type {
   LiveCall,
   LiveCallMember,
   DeviceKind,
+  ReadReceiptsState,
 } from '@poolse/sdk';
 
 // ── Voice + calling ──────────────────────────────────────────────
@@ -82,3 +83,10 @@ export { useCallRoom, type UseCallRoom, type UseCallRoomOptions } from './use-ca
 export { useVoiceRoom, type UseVoiceRoom } from './use-voice-room.js';
 export { useCalls, type UseCalls, type CallPhase } from './use-calls.js';
 export { useLiveCall, type UseLiveCall } from './use-live-call.js';
+export {
+  useReadReceipts,
+  receiptsOf,
+  canEditOwnMessage,
+  EDIT_WINDOW_MS,
+  type UseReadReceipts,
+} from './use-read-receipts.js';

@@ -1,8 +1,10 @@
 import type { LiveCall, Message, Uuid } from '@poolse/sdk';
 import {
+  canEditOwnMessage,
   computeGroupPosition,
   formatDayLabel,
   isMessageVisibleTo,
+  receiptsOf,
   sameDay,
   useMe,
   useMembers,
@@ -154,6 +156,12 @@ export function ConversationView({
   const theme = usePoolseTheme();
   const { me } = useMe();
   const meId = me?.id ?? null;
+  // The workspace's read-receipt setting, for this user: hidden means no
+  // check marks anywhere (the server withholds others' read state too).
+  // Marking messages read is unaffected — it drives the user's own
+  // unread counts.
+  const receiptsVisible = receiptsOf(me).visible;
+  const showReadState = readReceipts && receiptsVisible;
 
   const {
     messages,
@@ -275,7 +283,7 @@ export function ConversationView({
         if (custom !== null && custom !== undefined) return custom;
       }
       const readState: 'sent' | 'read' | undefined =
-        readReceipts && meId !== null && msg.sender_id === meId
+        showReadState && meId !== null && msg.sender_id === meId
           ? readStateForMessage(msg, members, meId, sequenceByMessageId)
           : undefined;
       // Edit is only offered for own messages no one else has read
@@ -283,9 +291,17 @@ export function ConversationView({
       // sequence >= this one) WhatsApp-style apps disable editing to
       // prevent conversation rewriting. `readStateForMessage`
       // returns 'sent' in 1:1 chats with no other member, so own
-      // messages in fresh threads stay editable.
+      // messages in fresh threads stay editable. With read receipts
+      // hidden by the workspace it is a 15-minute window instead
+      // (canEditOwnMessage).
       const isSelf = meId !== null && msg.sender_id === meId;
-      const canEdit = isSelf && !msg.deleted_at && (readState ?? 'sent') === 'sent';
+      const canEdit = canEditOwnMessage({
+        isSelf,
+        deleted: !!msg.deleted_at,
+        receiptsVisible,
+        readState,
+        insertedAt: msg.inserted_at,
+      });
       const groupPosition = groupPositionById.get(msg.id) ?? 'standalone';
       return (
         <MessageRow
@@ -318,6 +334,8 @@ export function ConversationView({
       renderMessage,
       meId,
       readReceipts,
+      showReadState,
+      receiptsVisible,
       members,
       reactions,
       attachments,

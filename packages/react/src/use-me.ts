@@ -19,15 +19,20 @@ interface UseMeState {
  */
 export function useMe(): UseMeState {
   const chat = usePoolse();
-  const [state, setState] = useState<UseMeState>({
-    me: null,
-    loading: true,
-    error: null,
+  const [state, setState] = useState<UseMeState>(() => {
+    const known = chat.me.peek();
+    return { me: known, loading: known === null, error: null };
   });
 
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
+
+    // Every screen shares one user: a change made anywhere (say,
+    // read receipts turned off) re-renders all of them.
+    const off = chat.me.onChange((me) => {
+      if (!cancelled) setState({ me, loading: false, error: null });
+    });
 
     chat.me
       .show(controller.signal)
@@ -36,16 +41,17 @@ export function useMe(): UseMeState {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setState({
-            me: null,
+          setState((prev) => ({
+            me: prev.me,
             loading: false,
             error: err instanceof Error ? err : new Error(String(err)),
-          });
+          }));
         }
       });
 
     return () => {
       cancelled = true;
+      off();
       controller.abort();
     };
   }, [chat]);

@@ -11,7 +11,9 @@
 
 import type { LiveCall, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import {
+  canEditOwnMessage,
   isMessageVisibleTo,
+  receiptsOf,
   useMembers,
   useMessages,
   useMe,
@@ -355,8 +357,13 @@ export function ConversationView({
   // Compute the highest message sequence that ANY other member has read.
   // We treat any message with `sequence <= maxReadByOthers` as "read",
   // higher as "sent" (delivered but not yet read).
+  // The workspace's read-receipt setting, for this user: hidden means no
+  // check marks anywhere (the server withholds others' read state too).
+  const receiptsVisible = receiptsOf(me).visible;
+  const showReadState = readReceipts && receiptsVisible;
+
   const maxReadByOthers = useMemo(() => {
-    if (!readReceipts || !me) return null;
+    if (!showReadState || !me) return null;
     let max = 0;
     let any = false;
     for (const m of members) {
@@ -376,7 +383,7 @@ export function ConversationView({
       any = true;
     }
     return any ? max : null;
-  }, [readReceipts, me, members, messages]);
+  }, [showReadState, me, members, messages]);
 
   // Editing + thread-open state — controlled by the ConversationView itself.
   const [editingId, setEditingId] = useState<Uuid | null>(null);
@@ -594,7 +601,7 @@ export function ConversationView({
               // cursor is at or past this message's sequence.
               const isSelf = me !== null && msg.sender_id === me.id;
               const readState =
-                readReceipts && isSelf && maxReadByOthers !== null
+                showReadState && isSelf && maxReadByOthers !== null
                   ? maxReadByOthers >= msg.sequence
                     ? ('read' as const)
                     : ('sent' as const)
@@ -622,7 +629,15 @@ export function ConversationView({
                     {...(readState ? { readState } : {})}
                     {...(labelFor ? { labelFor } : {})}
                     editing={editingId === msg.id}
-                    onStartEdit={() => setEditingId(msg.id)}
+                    {...(canEditOwnMessage({
+                      isSelf,
+                      deleted: !!msg.deleted_at,
+                      receiptsVisible,
+                      readState,
+                      insertedAt: msg.inserted_at,
+                    })
+                      ? { onStartEdit: () => setEditingId(msg.id) }
+                      : {})}
                     onCancelEdit={() => setEditingId(null)}
                     onSaveEdit={async (body: string) => {
                       await edit(msg.id, body);
