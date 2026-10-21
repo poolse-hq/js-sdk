@@ -66,6 +66,9 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private(set) var room: Room?
   private var observer: RoomObserver?
   private var media = "audio"
+  /// Speaker unless a headset is in: a video call, or a room (a drop-in
+  /// room is held like a meeting, not to the ear).
+  private var loud = false
   private var connectedRoom: ObjectIdentifier?
 
   /// Where the user asked the audio to go, for the CURRENT call.
@@ -209,6 +212,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     detach()
     media = bundle.media
     let wantsVideo = bundle.media == "video"
+    loud = wantsVideo || bundle.kind == "room"
 
     // A 1:1/small call: never let the SFU pause a subscribed camera for
     // "not visible" — a view that mounts late would stay black.
@@ -398,7 +402,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   /// the same; forcing the speaker over AirPods was a bug).
   private func resolvedChoice(_ s: AVAudioSession = .sharedInstance()) -> OutputChoice {
     if let wanted = outputWanted { return wanted }
-    return media == "video" && !externalConnected(s) ? .speaker : .privateRoute
+    return loud && !externalConnected(s) ? .speaker : .privateRoute
   }
 
   private func applyRoute() {
@@ -444,7 +448,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
 
   private func currentRoute() -> String {
     guard let port = AVAudioSession.sharedInstance().currentRoute.outputs.first?.portType else {
-      return media == "video" ? "speaker" : "earpiece"
+      return loud ? "speaker" : "earpiece"
     }
     return kind(of: port)
   }

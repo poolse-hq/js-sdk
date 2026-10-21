@@ -98,6 +98,9 @@ public final class CallCoreRuntime {
   /// Best name for the current call: the server's bundle, else the ring's. Runtime thread only.
   public var conversationName: String? { bundle?.conversationName ?? ring?.conversationName }
 
+  /// `room` or `call`, once the server's bundle says; nil before. Runtime thread only.
+  public var callKind: String? { bundle?.kind }
+
   /// True if `callId` was already resolved here — its ring must never surface again.
   public func isResolved(_ callId: String) -> Bool { resolved.contains(callId) }
 

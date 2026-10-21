@@ -119,6 +119,9 @@ class CallCoreRuntime(
   /** Best name for the current call: the server's bundle, else the ring's. Runtime thread only. */
   val conversationName: String? get() = bundle?.conversationName ?: ring?.conversationName
 
+  /** `room` or `call`, once the server's bundle says; null before. Runtime thread only. */
+  val callKind: String? get() = bundle?.kind
+
   /** True if [callId] was already resolved here — its ring must never surface again. */
   fun isResolved(callId: String): Boolean = synchronized(resolved) { resolved.containsKey(callId) }
 

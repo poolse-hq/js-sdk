@@ -65,6 +65,10 @@ class CallCore private constructor(context: Context) {
   private var extrasMedia: String? = null
   private var roster: List<MediaParticipant> = emptyList()
   private var conversationName: String? = null
+  private var callKind: String = "call"
+
+  // Video calls and rooms default to the speaker (the media port agrees).
+  private fun loud(state: MachineState) = state.media == "video" || callKind == "room"
   private var mutedSelf = false
   private var cameraOn = false
   private var cameraFacing: String? = null
@@ -211,9 +215,11 @@ class CallCore private constructor(context: Context) {
       extrasMedia = state.media
     }
     runtime.conversationName?.let { conversationName = it }
+    runtime.callKind?.let { callKind = it }
 
     val snap = state.toSnapshot(
       conversationName = conversationName,
+      kind = callKind,
       participants = roster.map {
         mapOf(
           "userId" to it.identity,
@@ -223,7 +229,7 @@ class CallCore private constructor(context: Context) {
           "cameraOn" to it.cameraOn,
         )
       },
-      audioRoute = audioRoute ?: if (state.media == "video") "speaker" else "earpiece",
+      audioRoute = audioRoute ?: if (loud(state)) "speaker" else "earpiece",
       audioOutputs = audioOutputs.map { mapOf("id" to it.id, "kind" to it.kind, "name" to it.name) },
       audioOutputId = audioOutputId,
       mutedSelf = mutedSelf,
@@ -240,6 +246,7 @@ class CallCore private constructor(context: Context) {
     extrasMedia = media
     roster = emptyList()
     conversationName = null
+    callKind = "call"
     mutedSelf = false
     // Reported by the media adapter once the camera is really published.
     cameraOn = false
@@ -268,7 +275,7 @@ class CallCore private constructor(context: Context) {
     // Screen off at the ear: only for an audio call on the earpiece.
     val inCall = state.phase == Phase.ACTIVE || state.phase == Phase.RECONNECTING ||
       state.phase == Phase.RINGING_OUT || state.phase == Phase.CONNECTING
-    val earpiece = (audioRoute ?: if (state.media == "video") "speaker" else "earpiece") == "earpiece"
+    val earpiece = (audioRoute ?: if (loud(state)) "speaker" else "earpiece") == "earpiece"
     setProximity(inCall && state.media == "audio" && earpiece)
   }
 

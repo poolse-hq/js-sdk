@@ -66,6 +66,7 @@ public extension MachineState {
   /// fields are merged in by the bridge from the media adapter.
   /// `conversationName` nil → NSNull; `reason`/`cameraFacing` omitted when nil.
   func toSnapshot(conversationName: String? = nil,
+                  kind: String = "call",
                   participants: [SnapshotParticipant] = [],
                   audioRoute: String = "earpiece",
                   audioOutputs: [AudioOutput] = [],
@@ -79,6 +80,7 @@ public extension MachineState {
       "callId": callId.map { $0 as Any } ?? NSNull(),
       "conversationId": conversationId.map { $0 as Any } ?? NSNull(),
       "conversationName": conversationName.map { $0 as Any } ?? NSNull(),
+      "kind": kind,
       "direction": (direction ?? .incoming).wire,
       "media": media,
       "phase": phase.wire,

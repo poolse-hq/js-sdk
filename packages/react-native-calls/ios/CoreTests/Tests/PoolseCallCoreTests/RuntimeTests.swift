@@ -463,6 +463,14 @@ final class HttpAndSnapshotTests: XCTestCase {
                                         livekitToken: "lk", controlToken: "ctl"))
   }
 
+  func testRoomKindParsesAndCallIsTheDefault() {
+    let room = #"{"call":{"id":"r1","conversation_id":"v","kind":"room"},"livekit":{"url":"u","token":"t"},"control_token":"x"}"#
+    guard case let .ok(r) = CallHttpClient.classify(code: 201, payload: room) else { return XCTFail() }
+    XCTAssertEqual(r.kind, "room")
+    guard case let .ok(c) = CallHttpClient.classify(code: 200, payload: full) else { return XCTFail() }
+    XCTAssertEqual(c.kind, "call")
+  }
+
   func testCreatedDefaultsTrueAndMediaAudio() {
     let p = #"{"call":{"id":"c1","conversation_id":"v"},"livekit":{"url":"u","token":"t"},"control_token":"x"}"#
     guard case let .ok(b) = CallHttpClient.classify(code: 201, payload: p) else { return XCTFail() }

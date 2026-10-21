@@ -185,6 +185,7 @@ internal class CallHttpClient(
         livekitToken = livekit.getString("token"),
         controlToken = root.optStringOrNull("control_token")
           ?: requireNotNull(current?.controlToken) { "bundle without control_token" },
+        kind = call.optStringOrNull("kind") ?: current?.kind ?: "call",
       )
     }
 

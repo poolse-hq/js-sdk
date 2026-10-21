@@ -139,6 +139,7 @@ final class CallCore {
   private var extrasMedia: String?
   private var roster: [SnapshotParticipant] = []
   private var conversationName: String?
+  private var callKind = "call"
   private var mutedSelf = false
   private var cameraOn = false
   private var cameraFacing: String?
@@ -307,11 +308,14 @@ final class CallCore {
       extrasMedia = state.media
     }
     if let name = runtime.conversationName { conversationName = name }
+    if let kind = runtime.callKind { callKind = kind }
 
     let snap = state.toSnapshot(
       conversationName: conversationName,
+      kind: callKind,
       participants: roster,
-      audioRoute: audioRoute ?? (state.media == "video" ? "speaker" : "earpiece"),
+      // Video calls and rooms default to the speaker (the media port agrees).
+      audioRoute: audioRoute ?? (state.media == "video" || callKind == "room" ? "speaker" : "earpiece"),
       audioOutputs: audioOutputs,
       audioOutputId: audioOutputId,
       mutedSelf: mutedSelf,
@@ -329,6 +333,7 @@ final class CallCore {
     extrasMedia = media
     roster = []
     conversationName = nil
+    callKind = "call"
     mutedSelf = false
     cameraOn = false
     cameraFacing = nil

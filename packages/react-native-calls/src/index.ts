@@ -21,6 +21,12 @@ export interface Snapshot {
   conversationId: string;
   conversationName: string | null;
   direction: 'incoming' | 'outgoing' | 'joined';
+  /**
+   * `room` — rings nobody, joined and left at will (`startRoom`); `call`
+   * otherwise. Known once the server answered: a room being joined reads
+   * `call` while `connecting`. Absent before 0.9.0: treat as `call`.
+   */
+  kind?: 'call' | 'room';
   media: 'audio' | 'video';
   phase: 'ringing_in' | 'ringing_out' | 'connecting' | 'active' | 'reconnecting' | 'ended';
   reason?:

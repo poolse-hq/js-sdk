@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react-native-calls",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Native call core for poolse — Kotlin/Swift calling engine with a thin React Native bridge. Ring, answer and carry audio with the app killed and the phone locked.",
   "license": "MIT",
   "type": "module",

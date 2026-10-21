@@ -16,6 +16,7 @@ import dev.poolse.callcore.Phase
  */
 internal fun MachineState.toSnapshot(
   conversationName: String? = null,
+  kind: String = "call",
   participants: List<Map<String, Any>> = emptyList(),
   audioRoute: String = "earpiece",
   audioOutputs: List<Map<String, Any>> = emptyList(),
@@ -27,6 +28,7 @@ internal fun MachineState.toSnapshot(
   if (phase == Phase.IDLE) return null
   return buildMap {
     putAll(snapshotCore(conversationName, participants, audioRoute, mutedSelf, cameraOn))
+    put("kind", kind)
     put("audioOutputs", audioOutputs)
     put("audioOutputId", audioOutputId)
     // Optional in the contract: present only while a camera is published.

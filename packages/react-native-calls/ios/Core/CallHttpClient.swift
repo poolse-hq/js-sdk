@@ -171,7 +171,8 @@ public final class CallHttpClient: HttpPort {
       created: optBool(root, "created", fallback: true),
       livekitUrl: try getString(livekit, "url"),
       livekitToken: try getString(livekit, "token"),
-      controlToken: controlToken
+      controlToken: controlToken,
+      kind: optString(call, "kind") ?? current?.kind ?? "call"
     )
   }
 

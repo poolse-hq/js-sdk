@@ -396,6 +396,7 @@ type Snapshot = {
   callId: string;
   conversationId: string;
   conversationName: string | null;
+  kind: 'call' | 'room';      // from the bundle's call.kind; 'call' until the server answers
   direction: 'incoming' | 'outgoing' | 'joined';
   media: 'audio' | 'video';
   phase: 'ringing_in' | 'ringing_out' | 'connecting' | 'active' | 'reconnecting' | 'ended';

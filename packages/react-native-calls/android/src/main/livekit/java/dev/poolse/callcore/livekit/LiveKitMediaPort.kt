@@ -61,6 +61,9 @@ class LiveKitMediaPort(
   @Volatile private var room: Room? = null
   private var eventJob: Job? = null
   private var media: String = "audio"
+  // Speaker unless a headset is in: a video call, or a room (a drop-in
+  // room is held like a meeting, not to the ear).
+  private var loud = false
 
   /**
    * The user's output choice for the CURRENT call: an output id
@@ -94,8 +97,9 @@ class LiveKitMediaPort(
     detach()
     media = bundle.media
     val wantsVideo = bundle.media == "video"
+    loud = wantsVideo || bundle.kind == "room"
     val newRoom = LiveKit.create(appContext = context.applicationContext)
-    configureAudio(newRoom, wantsVideo)
+    configureAudio(newRoom, loud)
     // A 1:1/small call: never let the SFU pause a subscribed camera for
     // "not visible" — a track whose view mounts late would stay black.
     // (Renderers are still registered with visibility via addRenderer.)
@@ -340,7 +344,7 @@ class LiveKitMediaPort(
     return when {
       external != null -> external
       outputWanted == PRIVATE -> earpiece ?: speaker
-      media == "video" -> speaker ?: earpiece
+      loud -> speaker ?: earpiece
       else -> earpiece ?: speaker
     }
   }
@@ -378,7 +382,7 @@ class LiveKitMediaPort(
     is AudioDevice.BluetoothHeadset -> "bluetooth"
     is AudioDevice.WiredHeadset -> "headset"
     is AudioDevice.Earpiece -> "earpiece"
-    null -> if (media == "video") "speaker" else "earpiece"
+    null -> if (loud) "speaker" else "earpiece"
   }
 
   // ── room events ─────────────────────────────────────────────────────

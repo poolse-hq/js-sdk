@@ -53,6 +53,8 @@ data class CallSessionBundle(
   val livekitUrl: String,
   val livekitToken: String,
   val controlToken: String,
+  /** `room` (rings nobody, CONTRACT.md §5.6) or `call`. */
+  val kind: String = "call",
 )
 
 /** LiveKit (or any SFU) — media only, no lifecycle opinions. */

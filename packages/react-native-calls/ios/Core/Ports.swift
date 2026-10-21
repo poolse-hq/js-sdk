@@ -46,9 +46,12 @@ public struct CallSessionBundle: Equatable {
   public var livekitUrl: String
   public var livekitToken: String
   public var controlToken: String
+  /// `room` (rings nobody, CONTRACT.md §5.6) or `call`.
+  public var kind: String
 
   public init(callId: String, conversationId: String, conversationName: String?, media: String,
-              created: Bool, livekitUrl: String, livekitToken: String, controlToken: String) {
+              created: Bool, livekitUrl: String, livekitToken: String, controlToken: String,
+              kind: String = "call") {
     self.callId = callId
     self.conversationId = conversationId
     self.conversationName = conversationName
@@ -57,6 +60,7 @@ public struct CallSessionBundle: Equatable {
     self.livekitUrl = livekitUrl
     self.livekitToken = livekitToken
     self.controlToken = controlToken
+    self.kind = kind
   }
 }
 

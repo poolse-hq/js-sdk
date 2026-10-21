@@ -44,6 +44,13 @@ await calls.join(call.id, conversationId, sessionToken);
 calls.hangUp(); // leaves — the room ends once it has been empty a moment
 ```
 
+`snapshot.kind` is `'room'` for a room (`'call'` otherwise), so a host
+can show it differently from a call — Loop shows a bar over the chat
+with mute, camera, audio output and Leave rather than the call screen.
+A room plays on the speaker unless a headset or Bluetooth device is in,
+and turning the camera on (`setCamera(true)`) is all it takes to go from
+voice to video.
+
 ### Chat notifications
 
 poolse sends message notifications itself, with the push credentials you
