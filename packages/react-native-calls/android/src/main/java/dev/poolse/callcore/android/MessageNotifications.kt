@@ -65,6 +65,7 @@ object MessageNotifications {
     val state = load(context, conversationId) ?: Conversation(conversationId)
     state.title = data["conversation_name"]?.ifBlank { null } ?: state.title
     state.group = data["group"] == "1"
+    state.hidden = data["private"] == "1"
     data["reply_grant"]?.ifBlank { null }?.let { state.grant = it }
     val messageId = data["message_id"]
     if (messageId == null || state.lines.none { it.id == messageId }) {
@@ -124,7 +125,6 @@ object MessageNotifications {
     val id = notificationId(state.id)
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(smallIcon)
-      .setStyle(style)
       .setCategory(NotificationCompat.CATEGORY_MESSAGE)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setGroup(GROUP_KEY)
@@ -132,6 +132,16 @@ object MessageNotifications {
       .setOnlyAlertOnce(!alert)
       .setWhen(state.lines.lastOrNull()?.at ?: System.currentTimeMillis())
       .setNumber(state.lines.count { !it.self })
+    if (state.hidden) {
+      // The tenant hides previews: nothing about who or what — the app's
+      // name and a count. The server never sent the text anyway.
+      val unread = state.lines.count { !it.self }
+      builder
+        .setContentTitle(context.applicationInfo.loadLabel(context.packageManager))
+        .setContentText(if (unread <= 1) "New message" else "$unread new messages")
+    } else {
+      builder.setStyle(style)
+    }
     openIntent(context, state.id, id)?.let(builder::setContentIntent)
 
     if (state.grant != null) {
@@ -237,6 +247,7 @@ object MessageNotifications {
     var group: Boolean = false,
     var grant: String? = null,
     val lines: MutableList<Line> = mutableListOf(),
+    var hidden: Boolean = false,
   )
 
   private fun prefs(context: Context) =
@@ -254,6 +265,7 @@ object MessageNotifications {
         title = o.optString("title").ifBlank { null },
         group = o.optBoolean("group"),
         grant = o.optString("grant").ifBlank { null },
+        hidden = o.optBoolean("hidden"),
         lines = MutableList(lines.length()) { i ->
           val l = lines.getJSONObject(i)
           Line(
@@ -286,6 +298,7 @@ object MessageNotifications {
       .put("title", c.title ?: "")
       .put("group", c.group)
       .put("grant", c.grant ?: "")
+      .put("hidden", c.hidden)
       .put("lines", lines)
     prefs(context).edit().putString(key(c.id), o.toString()).apply()
   }

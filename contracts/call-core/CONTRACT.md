@@ -247,6 +247,12 @@ iOS: the regular APNs token), with the tenant's call push credentials.
            "badge": 3, "sound": "default", "mutable-content": 1, "summary-arg": "Ana" }, … }
 ```
 
+The tenant's dashboard settings shape it server-side: chat off sends
+nothing; `preview: "sender"` replaces `text` with "New message";
+`preview: "hidden"` also blanks `sender_name` and `conversation_name` and
+adds `"private": "1"` (Android shows the app name and a count; iOS gets no
+title); `groups: "mentions"` notifies a group's mentioned members only.
+
 Read sync — when a member's read cursor passes unread messages, their
 devices get `{"type": "message", "event": "read", "conversation_id", "unread_total"}`
 (Android data; iOS background push with `"type": "message_read"`) and drop
