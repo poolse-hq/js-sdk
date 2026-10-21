@@ -26,6 +26,24 @@ calls.setAudioOutput(s.audioOutputs[0].id);
 calls.setSpeaker(true); // the one-tap toggle, still there
 ```
 
+### Rooms — voice or video, nobody rings
+
+A room is the conversation's drop-in call: members join when they like
+while the chat carries on, and no phone rings. It runs on the same
+native core as a call — CallKit on iOS, the call service on Android — so
+it keeps going with the phone locked and routes audio like a call.
+
+```ts
+// Start the room (or join whatever is live on the conversation).
+await calls.startRoom(conversationId, { media: 'video', sessionToken });
+
+// Everyone else: useLiveCall(conversationId) from @poolse/react shows it
+// (call.kind === 'room'); LiveCallBanner's Join calls
+await calls.join(call.id, conversationId, sessionToken);
+
+calls.hangUp(); // leaves — the room ends once it has been empty a moment
+```
+
 ### Chat notifications
 
 poolse sends message notifications itself, with the push credentials you

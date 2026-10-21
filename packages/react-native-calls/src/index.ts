@@ -144,8 +144,12 @@ const native = requireOptionalNativeModule<PoolseCallsNative>('PoolseCalls');
 /** True when the native call core is present in this build. */
 export const nativeCallsAvailable = native != null;
 
+// Kept for startRoom, the one command that talks to the server from JS.
+let apiOrigin: string | null = null;
+
 /** Configure once, before any call can arrive. No secrets — just the API origin. */
 export async function configure(apiBaseUrl: string, options?: ConfigureOptions): Promise<void> {
+  apiOrigin = apiBaseUrl.replace(/\/+$/, '');
   await native?.configure(apiBaseUrl, options ?? null);
 }
 
@@ -173,6 +177,57 @@ export function join(
   sessionToken: string,
 ): Promise<void> {
   return native?.join(callId, conversationId, sessionToken) ?? Promise.resolve();
+}
+
+export interface StartRoomResult {
+  /** The room's call id — what the Join banner and `call:*` events carry. */
+  callId: string;
+  /** False when something was live already (a room, or a ringing call) and this joined it. */
+  created: boolean;
+}
+
+/**
+ * Start the conversation's room — a call that rings nobody (CONTRACT.md
+ * §5.6) — or join whatever is live there, then carry it on the native
+ * core like any joined call: CallKit / the call service, so it keeps
+ * going with the phone locked, and the same audio routing as a call.
+ *
+ * Others in the conversation see it through the Join banner and join it
+ * with `join`. Leaving (`hangUp`) never ends it for them; it ends once
+ * it has been empty for a short grace. `media: 'video'` makes it a video
+ * room. Rejects when the server refuses (not a member, no SFU) or
+ * before `configure`.
+ */
+export async function startRoom(
+  conversationId: string,
+  options: PlaceOptions,
+): Promise<StartRoomResult> {
+  if (!native) throw new Error('The native call core is not in this build.');
+  if (!apiOrigin) throw new Error('Call configure() before startRoom().');
+  const res = await fetch(
+    `${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}/room`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${options.sessionToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ media: options.media }),
+    },
+  );
+  const body = (await res.json().catch(() => null)) as {
+    created?: boolean;
+    call?: { id?: string };
+    error?: { message?: string };
+  } | null;
+  const callId = body?.call?.id;
+  if (!res.ok || !callId) {
+    throw new Error(body?.error?.message ?? `Couldn't start the room (${res.status}).`);
+  }
+  // The core joins with its own request: it owns the session from here,
+  // exactly as when the room is joined from the banner.
+  await native.join(callId, conversationId, options.sessionToken);
+  return { callId, created: body?.created === true };
 }
 
 export const answer = (): void => native?.answer();
