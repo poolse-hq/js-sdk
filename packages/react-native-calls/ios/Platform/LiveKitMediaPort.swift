@@ -76,8 +76,6 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private let surfaces = NSHashTable<LiveKitVideoSurface>.weakObjects()
   private var audioPrepared = false
   private var audioActive = false
-  /// The room whose audio engine has been kicked (once per room).
-  private var audioKicked: ObjectIdentifier?
   /// Asks CallKit to (re)try activating the audio session — set by
   /// CallCore. Used when a room is live but activation never arrived.
   var requestAudioActivation: (() -> Void)?
@@ -121,7 +119,6 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     audioActive = true
     if media != self.media && room == nil { self.media = media }
     reassertAudio(session)
-    kickAudioIfReady()
   }
 
   /// Connected with a live mic but CallKit never activated the session
@@ -144,48 +141,6 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       CallKitController.prepareSessionForCall(video: self.media == "video")
       self.requestAudioActivation?()
       self.ensureAudioActivated(r, attempt: attempt + 1)
-    }
-  }
-
-  /// Once per call, the first moment the session is active AND the mic is
-  /// published (in whichever order they happen): make LiveKit's audio
-  /// engine rebuild around the live mic.
-  ///
-  /// On a call answered with the app closed, the process is brand new and
-  /// LiveKit's engine never started for a mic published right after
-  /// CallKit made audio available — no capture, no playback, though the
-  /// session was correct (video, which needs no audio engine, worked). A
-  /// user-side mute → unmute cured it, because toggling the mic makes the
-  /// engine re-evaluate and start. This does the same, automatically: an
-  /// availability cycle first, then a mic off/on. A deliberate mute is
-  /// left alone. The remote hears at most a sub-second blip at connect.
-  private func kickAudioIfReady() {
-    guard audioActive, let r = room, connectedRoom == ObjectIdentifier(r),
-          audioKicked != ObjectIdentifier(r), !mutedWanted else { return }
-    guard r.localParticipant.isMicrophoneEnabled() else { return }
-    audioKicked = ObjectIdentifier(r)
-    pcTrace("kick: cycling engine availability + mic")
-    do {
-      try AudioManager.shared.setEngineAvailability(.none)
-      try AudioManager.shared.setEngineAvailability(.default)
-    } catch {
-      NSLog("[PoolseCalls] engine availability cycle failed: %@", "\(error)")
-    }
-    Task { [weak self] in
-      try? await Task.sleep(nanoseconds: 250_000_000)
-      let still = await MainActor.run { () -> Bool in
-        guard let self = self else { return false }
-        return self.room === r && self.audioActive && !self.mutedWanted
-      }
-      guard still else { return }
-      do {
-        try await r.localParticipant.setMicrophone(enabled: false)
-        try await r.localParticipant.setMicrophone(enabled: true)
-      } catch {
-        NSLog("[PoolseCalls] mic cycle failed: %@", "\(error)")
-      }
-      pcTrace("kick done enabled=\(r.localParticipant.isMicrophoneEnabled()) \(pcSessionDescription())")
-      await MainActor.run { self?.reassertAudio() }
     }
   }
 
@@ -289,7 +244,6 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       // then make sure the engine is actually carrying the mic.
       await MainActor.run {
         self.reassertAudio()
-        self.kickAudioIfReady()
         self.ensureAudioActivated(r, attempt: 0)
       }
       let camera = await MainActor.run { self.cameraWanted ?? wantsVideo }
