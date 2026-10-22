@@ -120,9 +120,10 @@ class CallCoreRuntime(
     private const val T_ALONE = "alone_probe"
     /**
      * Alone in a call: ask the server after a moment (the other side's own
-     * reconnect gets that long), and once more past its 30s drop grace.
+     * reconnect gets that long); still alone this much later, leave — the
+     * last step does not ask, a call with one person in it is over.
      */
-    val ALONE_PROBES_MS = longArrayOf(3_000L, 35_000L)
+    val ALONE_PROBES_MS = longArrayOf(3_000L, 9_000L)
   }
 
   // ── inputs from adapters ────────────────────────────────────────────
@@ -229,6 +230,8 @@ class CallCoreRuntime(
    * push, and the conversation channel that carries the socket event can
    * have been left. So, alone, ask the server (the reconnect endpoint
    * answers 410 for a call that is over) and end here as finished if so.
+   * If the server still calls it live (it never heard the other side
+   * leave), leave anyway shortly after: one person is not a call.
    * Someone back in the room cancels the check.
    */
   fun onRemoteCount(remotes: Int) = post {
@@ -246,7 +249,10 @@ class CallCoreRuntime(
     if (attempt >= ALONE_PROBES_MS.size) return
     val g = gen
     timers.schedule(T_ALONE, ALONE_PROBES_MS[attempt]) {
-      post { if (g == gen && state.callId == callId) probeAlone(callId, attempt) }
+      post {
+        if (g != gen || state.callId != callId) return@post
+        if (attempt == ALONE_PROBES_MS.size - 1) leaveAlone(callId) else probeAlone(callId, attempt)
+      }
     }
   }
 
@@ -263,6 +269,13 @@ class CallCoreRuntime(
         else scheduleAloneProbe(callId, attempt + 1)
       }
     }
+  }
+
+  private fun leaveAlone(callId: String) {
+    if (state.phase != Phase.ACTIVE) return
+    val b = bundle ?: return
+    http.hangup(b.callId, b.controlToken)
+    dispatch(Event.CallFinished(callId, "finished"))
   }
 
   fun setMuted(muted: Boolean) = post { media.setMuted(muted) }

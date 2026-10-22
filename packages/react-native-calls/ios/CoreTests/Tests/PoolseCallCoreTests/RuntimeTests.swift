@@ -336,7 +336,7 @@ final class RuntimeTests: XCTestCase {
     XCTAssertEqual(r.media.log.last, "leave")
   }
 
-  func testAloneButStillLiveAsksOnceMoreThenStops() {
+  func testAloneButStillLiveToTheServerLeavesShortlyAfter() {
     let r = Rig()
     r.activeCall()
     r.runtime.onRemoteCount(1)
@@ -344,11 +344,12 @@ final class RuntimeTests: XCTestCase {
     r.timers.fire("alone_probe")
     r.http.lastReconnectCb!(.ok(bundle("c1")))
     XCTAssertEqual(r.runtime.currentState().phase, .active)
-    XCTAssertEqual(r.timers.scheduled["alone_probe"]?.0, 35_000)
+    XCTAssertEqual(r.timers.scheduled["alone_probe"]?.0, 9_000)
     r.timers.fire("alone_probe")
-    r.http.lastReconnectCb!(.ok(bundle("c1")))
-    XCTAssertNil(r.timers.scheduled["alone_probe"])
-    XCTAssertEqual(r.runtime.currentState().phase, .active)
+    XCTAssertTrue(r.http.log.contains("hangup:c1:ctl-c1"))
+    XCTAssertEqual(r.runtime.currentState().phase, .ended)
+    XCTAssertEqual(r.runtime.currentState().reason, .finished)
+    XCTAssertEqual(r.media.log.last, "leave")
   }
 
   func testSomeoneBackCancelsTheCheckAndNobodyYetNeverStartsIt() {

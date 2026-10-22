@@ -34,8 +34,9 @@ public final class CallCoreRuntime {
   private static let T_WAITING = "waiting_deadline"
   private static let T_ALONE = "alone_probe"
   /// Alone in a call: ask the server after a moment (the other side's own
-  /// reconnect gets that long), and once more past its 30s drop grace.
-  public static let ALONE_PROBES_MS: [Int64] = [3_000, 35_000]
+  /// reconnect gets that long); still alone this much later, leave — the
+  /// last step does not ask, a call with one person in it is over.
+  public static let ALONE_PROBES_MS: [Int64] = [3_000, 9_000]
 
   private let http: HttpPort
   private let media: MediaPort
@@ -208,6 +209,8 @@ public final class CallCoreRuntime {
   /// push, and the conversation channel that carries the socket event can
   /// have been left. So, alone, ask the server (the reconnect endpoint
   /// answers 410 for a call that is over) and end here as finished if so.
+  /// If the server still calls it live (it never heard the other side
+  /// leave), leave anyway shortly after: one person is not a call.
   /// Someone back in the room cancels the check.
   public func onRemoteCount(_ remotes: Int) {
     post { [self] in
@@ -228,7 +231,8 @@ public final class CallCoreRuntime {
     timers.schedule(key: CallCoreRuntime.T_ALONE, delayMs: CallCoreRuntime.ALONE_PROBES_MS[attempt]) { [weak self] in
       self?.post { [weak self] in
         guard let self = self, g == self.gen, self.state.callId == callId else { return }
-        self.probeAlone(callId, attempt: attempt)
+        if attempt == CallCoreRuntime.ALONE_PROBES_MS.count - 1 { self.leaveAlone(callId) }
+        else { self.probeAlone(callId, attempt: attempt) }
       }
     }
   }
@@ -245,6 +249,12 @@ public final class CallCoreRuntime {
         else { self.scheduleAloneProbe(callId, attempt: attempt + 1) }
       }
     }
+  }
+
+  private func leaveAlone(_ callId: String) {
+    guard state.phase == .active, let b = bundle else { return }
+    http.hangup(callId: b.callId, controlToken: b.controlToken)
+    dispatch(.callFinished(callId: callId, reason: "finished"))
   }
 
   public func setMuted(_ muted: Bool) { post { [self] in media.setMuted(muted) } }

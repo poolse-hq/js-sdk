@@ -217,7 +217,7 @@ class RuntimeTest {
   }
 
   @Test
-  fun `alone but still live asks once more then stops`() {
+  fun `alone but still live to the server leaves shortly after`() {
     val r = Rig()
     r.activeCall()
     r.runtime.onRemoteCount(1)
@@ -225,11 +225,12 @@ class RuntimeTest {
     r.timers.fire("alone_probe")
     r.http.lastReconnectCb!!(HttpResult.Ok(bundle("c1")))
     assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
-    assertEquals(35_000L, r.timers.scheduled["alone_probe"]?.first)
+    assertEquals(9_000L, r.timers.scheduled["alone_probe"]?.first)
     r.timers.fire("alone_probe")
-    r.http.lastReconnectCb!!(HttpResult.Ok(bundle("c1")))
-    assertNull(r.timers.scheduled["alone_probe"])
-    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+    assertTrue(r.http.log.contains("hangup:c1:ctl-c1"))
+    assertEquals(Phase.ENDED, r.runtime.currentState().phase)
+    assertEquals(EndReason.FINISHED, r.runtime.currentState().reason)
+    assertEquals("leave", r.media.log.last())
   }
 
   @Test
