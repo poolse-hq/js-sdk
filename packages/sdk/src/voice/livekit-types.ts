@@ -1,8 +1,8 @@
 /**
  * Structural types for `livekit-client`.
  *
- * Declared here rather than imported for the same reason `WebRtcAdapter`
- * exists: the module is passed IN by the app. tsup rewrites a literal
+ * Declared here rather than imported because the module is passed IN by
+ * the app. tsup rewrites a literal
  * `require()` into `__require()`, which Metro cannot follow, so a
  * dependency this package imports for itself is absent from every React
  * Native bundle — development builds included. That failure already cost

@@ -76,11 +76,11 @@ export interface UseCallRoom {
    * Turns true only after somebody else has actually been on the call,
    * so the caller waiting for an answer never trips it. Wire it to your
    * hang-up path — a peer whose app was killed or whose phone lost
-   * signal sends no `call:hangup`, and without this the survivor is
+   * signal never hangs up, and without this the survivor is
    * left on a call screen that will never close on its own.
    *
    *     useEffect(() => {
-   *       if (media.alone) void calls.hangUp();
+   *       if (media.alone) room.leave();
    *     }, [media.alone]);
    */
   alone: boolean;
@@ -89,8 +89,7 @@ export interface UseCallRoom {
    * Whether this deployment has an SFU.
    *
    * `null` until a join has been attempted, then `false` if the API
-   * answered 503. A `false` here is not a failure — it means fall back
-   * to `useVoiceRoom`, which is how every call worked before the SFU.
+   * answered 503: this deployment carries no call media.
    */
   sfuAvailable: boolean | null;
   /** Connect. Resolves `false` when there is no SFU. */
@@ -107,17 +106,16 @@ export interface UseCallRoom {
 /**
  * A call's media, carried by the SFU.
  *
- * Media only. Ringing, accept/decline/hangup and the poolse roster stay
- * with `useCalls` and `useVoiceRoom`; this is what people sound and look
- * like. A call screen normally uses both.
+ * Media only — who is in the room and whether it is live come from
+ * `useRoom` / `useLiveCall`; this is what people sound and look like.
+ * `useRoom` wraps it.
  *
  *     const media = useCallRoom(conversationId, { livekit, video: true });
  *     await media.join();
  *     await media.toggleCamera();
  *
  * Both the camera and the microphone can be turned on and off at any
- * point during the call — that is the SFU's doing, since renegotiating a
- * live connection is exactly what the peer-to-peer mesh cannot do.
+ * point during the call.
  */
 export function useCallRoom(conversationId: string | null, opts: UseCallRoomOptions): UseCallRoom {
   const poolse = usePoolse();

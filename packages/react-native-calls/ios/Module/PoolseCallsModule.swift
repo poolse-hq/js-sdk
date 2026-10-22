@@ -99,6 +99,9 @@ public class PoolseCallsModule: Module {
       if let conversationId = conversationId { MessageNotifications.clear(conversationId: conversationId) }
     }
 
+    // Android-only: CallKit owns the lock screen on iOS.
+    Function("setShowOnLockscreen") { (_: Bool) in }
+
     // Socket forwarding (open app): idempotent with the push path.
     Function("onRingEnded") { (callId: String, reason: String) in
       onCore { $0.onRingEnded(callId: callId, reason: reason) }

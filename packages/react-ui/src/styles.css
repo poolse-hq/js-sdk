@@ -3029,8 +3029,8 @@
 }
 
 /* ───────────────────── Calls and rooms ─────────────────────
-   The call controls, video grid and device menus used by RoomStage (and
-   the legacy CallProvider). Shipped here so a room is styled out of the
+   The call controls, video grid and device menus used by RoomStage.
+   Shipped here so a room is styled out of the
    box; previously only the showcase app carried these rules. */
 
 /* Round call controls. Engaged controls invert to solid white so the

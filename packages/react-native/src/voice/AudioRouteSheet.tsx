@@ -4,7 +4,17 @@ import { PoolseIcon, type IconName } from '../primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from '../internal/edgeToEdge.js';
 import { useSafeInsets } from '../internal/safeArea.js';
 import { callColors } from './callTheme.js';
-import type { AudioRoute, AudioRouteKind } from './livekit-rn.js';
+
+export type AudioRouteKind = 'speaker' | 'earpiece' | 'headset' | 'bluetooth' | 'auto';
+
+/** One place call audio can play — a row in the sheet. */
+export interface AudioRoute {
+  /** Platform id, passed back through `onSelect`. */
+  id: string;
+  kind: AudioRouteKind;
+  /** Human label for the row. */
+  label: string;
+}
 
 export interface AudioRouteSheetProps {
   visible: boolean;
@@ -26,10 +36,9 @@ const ICONS: Record<AudioRouteKind, IconName> = {
 /**
  * Pick where call audio comes out.
  *
- * Only worth showing when there is a real choice — on iOS there are
- * exactly two entries and the system's own picker covers everything
- * else, so `CallScreen` opens that instead. This is the Android
- * surface, where LiveKit enumerates the actual devices.
+ * Only worth showing when there is a real choice — more than the phone
+ * and its speaker (AirPods, a car, a headset beside the speaker). With
+ * just those two, a single speaker toggle is the better control.
  */
 export function AudioRouteSheet({
   visible,
@@ -38,8 +47,7 @@ export function AudioRouteSheet({
   onSelect,
   onClose,
 }: AudioRouteSheetProps) {
-  // Rendered under CallScreen's own SafeAreaProvider, so these are the
-  // real device insets.
+  // The device's real insets — the sheet is a modal over the call.
   const insets = useSafeInsets();
   return (
     <Modal

@@ -182,6 +182,7 @@ interface PoolseCallsNative {
   onCallFinished(callId: string, reason: string | null): void;
   canUseFullScreenIntent(): boolean;
   openFullScreenIntentSettings(): void;
+  setShowOnLockscreen?(enabled: boolean): void;
   getVoipToken?(): VoipToken | null;
   takeCallAction?(): CallAction | null;
   setActiveConversation?(conversationId: string | null): void;
@@ -380,6 +381,21 @@ export const canUseFullScreenIntent = (): boolean => native?.canUseFullScreenInt
 
 /** Open the system screen where the user grants full-screen intents (falls back to notification settings). */
 export const openFullScreenIntentSettings = (): void => native?.openFullScreenIntentSettings();
+
+/**
+ * Android: let the app show over the lock screen while a call rings or
+ * runs — answering must never demand an unlock. Turn it off when the
+ * call ends. The activity re-applies it when the core relaunches it for
+ * a call (`poolse_launch_call`), given the host's MainActivity hook.
+ * No-op on iOS, where CallKit owns the lock screen.
+ */
+export function setShowOnLockscreen(enabled: boolean): void {
+  try {
+    native?.setShowOnLockscreen?.(enabled);
+  } catch {
+    // Never let a window flag take a call down.
+  }
+}
 
 // ── missed-call notifications (Android) ─────────────────────────────────
 

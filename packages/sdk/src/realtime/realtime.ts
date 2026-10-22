@@ -17,10 +17,6 @@ import type { Channel } from 'phoenix';
 
 import type { ResolvedConfig } from '../config.js';
 import { PoolseError } from '../errors.js';
-import { CallsResource } from '../voice/calls.js';
-import type { VoiceIceServer } from '../voice/types.js';
-import { VoiceRoom } from '../voice/voice-room.js';
-import type { VoiceRoomOptions } from '../voice/types.js';
 import type { TokenCache } from '../token-cache.js';
 import type {
   CallFinishedEvent,
@@ -54,26 +50,17 @@ interface RealtimeOptions {
    * swapping http(s) → ws(s).
    */
   wsUrl?: string;
-  /**
-   * Resolves ICE servers for voice rooms. Wired by `Poolse` to
-   * `GET /v1/ice-servers` so TURN reaches every room without the app
-   * plumbing anything.
-   */
-  iceServersProvider?: () => Promise<VoiceIceServer[]>;
 }
 
 export class PoolseRealtime {
   private readonly config: ResolvedConfig;
   private readonly tokenCache: TokenCache;
   private readonly socketPath: string;
-  private readonly iceServersProvider: (() => Promise<VoiceIceServer[]>) | null;
   private readonly wsUrl: string;
 
   private socket: Socket | null = null;
   private readonly conversations = new Map<string, ConversationChannel>();
-  private readonly voiceRooms = new Map<string, VoiceRoom>();
   private userChannel: UserChannel | null = null;
-  private callsResource: CallsResource | null = null;
 
   private status: RealtimeStatus = 'idle';
   private readonly statusListeners = new Set<(s: RealtimeStatus) => void>();
@@ -82,7 +69,6 @@ export class PoolseRealtime {
     this.config = config;
     this.tokenCache = tokenCache;
     this.socketPath = opts.socketPath ?? '/socket';
-    this.iceServersProvider = opts.iceServersProvider ?? null;
     this.wsUrl = opts.wsUrl ?? deriveWsUrl(config.apiUrl);
   }
 
@@ -166,8 +152,6 @@ export class PoolseRealtime {
 
   /** Close the socket and tear down every joined channel. */
   disconnect(): void {
-    for (const room of this.voiceRooms.values()) room.leave();
-    this.voiceRooms.clear();
     this.setStatus('closed');
     this.conversations.forEach((c) => c._destroy());
     this.conversations.clear();
@@ -219,52 +203,6 @@ export class PoolseRealtime {
     this.userChannel = handle;
     handle._join();
     return handle;
-  }
-
-  /**
-   * Voice room for a conversation — the Discord-style surface. Call
-   * `join()` on the returned handle to acquire the mic and connect;
-   * reusing the same id returns the same room rather than opening a
-   * second one.
-   *
-   * Ringing somebody who hasn't joined is a separate concern; see
-   * `poolse.calls`.
-   */
-  voice(conversationId: string, opts: VoiceRoomOptions = {}): VoiceRoom {
-    const existing = this.voiceRooms.get(conversationId);
-    if (existing) return existing;
-
-    this.connect();
-
-    if (!this.socket) {
-      throw new PoolseError('socket not initialised — call connect() first');
-    }
-
-    // The app's own `iceServersProvider` wins if it passed one; ours is
-    // only a default, so a deployment with its own TURN arrangement is
-    // not overridden.
-    const room = new VoiceRoom(conversationId, this.socket, {
-      ...(this.iceServersProvider ? { iceServersProvider: this.iceServersProvider } : {}),
-      ...opts,
-    });
-    this.voiceRooms.set(conversationId, room);
-    return room;
-  }
-
-  /**
-   * Call invitations for a user — the WhatsApp-style surface. Rides the
-   * `user:<id>` topic, the one channel a client is always joined to, so
-   * a ring reaches somebody who hasn't opened a voice room yet.
-   *
-   * Takes the user id explicitly, mirroring `user(userId)`; the SDK
-   * never assumes whose token it is holding.
-   */
-  calls(userId: string): CallsResource {
-    if (this.callsResource) return this.callsResource;
-    // Resolved lazily so constructing the resource doesn't force a
-    // socket connection before the consumer subscribes to anything.
-    this.callsResource = new CallsResource(() => this.user(userId)._channel());
-    return this.callsResource;
   }
 
   /** Drop a conversation handle and leave the channel. */
@@ -459,8 +397,9 @@ export class UserChannel {
   }
 
   /**
-   * The underlying Phoenix channel, for surfaces that push their own
-   * events on this topic (the calls resource does).
+   * The underlying Phoenix channel, for hosts that listen to events the
+   * handle has no method for (a native call host forwards
+   * `call:ring_ended` / `call:finished` to its call core).
    *
    * @internal
    */

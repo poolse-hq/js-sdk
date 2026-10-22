@@ -4,6 +4,21 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [2.29.0] — 2026-10-22
+
+### Removed
+
+- **The legacy JS call path**: `CallScreen`, `useVoipCalls` (PushKit +
+  CallKit via react-native-callkeep / react-native-voip-push-notification),
+  `VoiceRoomBar`, `CallVideoGrid`, `CallParticipantTile`, `LocalVideoPip`,
+  `useCallAudio`, `describeRoute` and the `react-native-webrtc` adapter
+  (`createNativeWebRtcAdapter`, `isNativeWebRtcAvailable`). The optional
+  `react-native-webrtc` peer dependency is gone. Calls run in
+  `@poolse/react-native-calls`; the building blocks for drawing its
+  snapshot stay — `CallControlButton`, `CallAvatar`, `AudioRouteSheet`
+  (now exporting `AudioRoute` / `AudioRouteKind` itself), `callColors`,
+  `useCallDuration`.
+
 ## [2.24.0] — 2026-10-14
 
 ### Fixed

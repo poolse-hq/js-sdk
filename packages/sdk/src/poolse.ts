@@ -15,7 +15,6 @@ import { LiveCallsResource } from './resources/live-calls.js';
 import { RoomsResource } from './resources/rooms.js';
 import { CallRoom } from './voice/call-room.js';
 import type { CallRoomOptions } from './voice/livekit-types.js';
-import { IceServersResource } from './resources/ice-servers.js';
 import { RestClient } from './rest-client.js';
 import { TokenCache } from './token-cache.js';
 
@@ -61,8 +60,6 @@ export class Poolse {
    * `config.wsUrl`.
    */
   public readonly realtime: PoolseRealtime;
-  /** STUN/TURN servers for WebRTC — see `IceServersResource`. */
-  public readonly iceServers: IceServersResource;
   /** SFU credentials for a call's media — see `CallTokensResource`. */
   public readonly callTokens: CallTokensResource;
   /** Whether a call is running on a conversation — for a Join banner. */
@@ -93,7 +90,6 @@ export class Poolse {
     this.messages = new MessagesResource(this.rest);
     this.attachments = new AttachmentsResource(this.rest, cachedConfig.fetch);
     this.users = new UsersResource(cachedConfig);
-    this.iceServers = new IceServersResource(this.rest);
     this.callTokens = new CallTokensResource(this.rest);
     this.liveCalls = new LiveCallsResource(this.rest);
     this.rooms = new RoomsResource(this.rest);
@@ -101,10 +97,6 @@ export class Poolse {
     this.realtime = new PoolseRealtime(cachedConfig, this.tokenCache, {
       ...(this.resolved.wsUrl !== undefined ? { wsUrl: this.resolved.wsUrl } : {}),
       socketPath: this.resolved.socketPath,
-      // Re-fetched on every room join rather than cached here: TURN
-      // credentials expire, and a stale one is rejected silently — the
-      // call connects and carries no media.
-      iceServersProvider: async () => (await this.iceServers.list()).ice_servers,
     });
   }
 

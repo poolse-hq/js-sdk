@@ -18,7 +18,6 @@ export { CallTokensResource } from './resources/call-tokens.js';
 export { LiveCallsResource } from './resources/live-calls.js';
 export type { LiveCall, LiveCallMember } from './resources/live-calls.js';
 export { RoomsResource, type RoomSession } from './resources/rooms.js';
-export { IceServersResource, type IceServerResponse } from './resources/ice-servers.js';
 export { CallRoom } from './voice/call-room.js';
 export type {
   CallConnection,
@@ -107,30 +106,11 @@ export type {
   Uuid,
 } from './types.js';
 
-// ── Voice + calling ──────────────────────────────────────────────────
-export { VoiceRoom } from './voice/voice-room.js';
-export { CallsResource } from './voice/calls.js';
-export { createBrowserWebRtcAdapter, isWebRtcAvailable } from './voice/webrtc-browser.js';
-export type {
-  CallMedia,
-  CallAccepted,
-  CallBusy,
-  CallCancelled,
-  CallEnded,
-  CallDeclined,
-  IncomingCall,
-  OutgoingCall,
-  VoiceCandidate,
-  VoiceDescription,
-  VoiceIceServer,
-  VoiceParticipant,
-  VoicePeerConnection,
-  VoiceRoomOptions,
-  VoiceStatus,
-  VoiceStream,
-  VoiceTrack,
-  WebRtcAdapter,
-} from './voice/types.js';
+// ── Calling ──────────────────────────────────────────────────────────
+// Phones ring and carry calls in the native call core
+// (@poolse/react-native-calls); the web joins rooms (`poolse.rooms`,
+// `CallRoom`). What both share:
+export type { CallMedia } from './voice/types.js';
 
 export { version } from './version.js';
 

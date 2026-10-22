@@ -4,6 +4,14 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.25.0] — 2026-10-22
+
+### Removed
+
+- **`CallProvider` / `useCallInvite`** — the legacy ringing call surface,
+  built on the removed `useCalls`. Rooms are `RoomJoinBar` + `RoomStage`
+  over `useRoom`; `useRoom().join(media, { ring: true })` rings phones.
+
 ## [2.20.0] — 2026-10-13
 
 ### Changed

@@ -126,8 +126,7 @@ export class CallRoom {
    * livekit-client does NOT play remote audio for you on the web — that
    * is what `@livekit/components-react`'s `<RoomAudioRenderer />` exists
    * to do. Without this a call connects, the roster is right, video
-   * flows, and nobody hears anything. The peer-to-peer mesh always did
-   * this (see `webrtc-browser.ts`); the SFU path has to as well.
+   * flows, and nobody hears anything.
    *
    * Empty on React Native, where there is no DOM and LiveKit routes
    * audio through the native audio session instead.

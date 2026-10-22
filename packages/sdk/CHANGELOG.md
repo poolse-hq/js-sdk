@@ -4,6 +4,23 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.26.0] — 2026-10-22
+
+### Removed
+
+- **The legacy JS calling path.** `CallsResource` (`poolse.realtime.calls`,
+  socket-signalled ringing), `VoiceRoom` (`poolse.realtime.voice`, the
+  peer-to-peer room), `createBrowserWebRtcAdapter` / `isWebRtcAvailable`,
+  `IceServersResource` (`poolse.iceServers`) and their types
+  (`IncomingCall`, `OutgoingCall`, `Voice*`, `WebRtcAdapter`, …). The
+  server no longer serves them. Phones call through the native call core
+  (`@poolse/react-native-calls`); the web joins rooms (`poolse.rooms`,
+  `CallRoom`). `CallMedia` stays.
+
+### Fixed
+
+- `version` reports the published version again (it said 2.24.0 in 2.25.0).
+
 ## [2.20.0] — 2026-10-13
 
 ### Changed

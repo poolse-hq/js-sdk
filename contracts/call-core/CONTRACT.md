@@ -518,12 +518,18 @@ becomes `null`.
 
 ## 10 · Migration & compatibility
 
-- Legacy clients (SDK ≤ 2.24) keep today's socket events
-  (`call:incoming/accepted/declined/busy/ended`) and push shape
-  (`event: incoming/ended`, `caller_name`, `has_video`). The server emits
-  **both** families until Stage 5 removes the legacy path.
-- Ring pushes additionally keep `caller_name`, `conversation_name`,
-  `has_video` at top level for the current JS path during Stages 1–4.
+- The legacy JS calling path is retired (SDK 3.0 scope): the socket-signalled
+  calls (`call:invite/accept/decline/busy/hangup/cancel` in,
+  `call:incoming/accepted/declined/busy/ended/cancelled` out), the
+  peer-to-peer `voice:*` room and `GET /v1/ice-servers` are gone from the
+  server, as are `useCalls`, `useVoiceRoom`, `CallScreen`, `useVoipCalls`
+  and `CallProvider` from the SDKs (sdk 2.26, react 2.29, react-ui 2.25,
+  react-native 2.29). Phones call through this contract only; the web joins
+  rooms (§5.6).
+- Ring pushes keep `caller_name` and `conversation_name` at top level (the
+  cores show them), and `has_video` beside `media` — the iOS core falls back
+  to it when `media` is absent. No legacy `type: "call_end"` teardown is
+  sent any more; teardown is `call_event` only (§5).
 - Server deploys are **manual** during this project: every stage's server
   change lands as a reviewed commit plus an explicit "ready to deploy" note.
 

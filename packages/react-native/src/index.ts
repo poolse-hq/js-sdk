@@ -80,52 +80,17 @@ export type {
 // ── Lifecycle ─────────────────────────────────────────────────
 export { useAppStateLifecycle } from './lifecycle/useAppStateLifecycle.js';
 
-// ── Voice + calling ───────────────────────────────────────────
-// Audio needs the optional `react-native-webrtc` peer dependency and a
-// development build. YOUR APP must import that module and pass it in --
-// Metro only bundles what it can see statically, so this package cannot
-// require it on your behalf. Without it these render a disabled state
-// rather than crashing.
-export { VoiceRoomBar, type VoiceRoomBarProps } from './VoiceRoomBar.js';
-export { CallScreen, type CallScreenProps, type RingToneModule } from './CallScreen.js';
-export { CallVideoGrid, type CallVideoGridProps } from './voice/CallVideoGrid.js';
-export {
-  createNativeWebRtcAdapter,
-  isNativeWebRtcAvailable,
-  type NativeWebRtcModule,
-} from './voice/webrtc-native.js';
-
-// Pieces of the call surface, exported so an app can build its own
-// screen without giving up the parts that are fiddly to get right.
+// ── Call building blocks ──────────────────────────────────────
+// Calls themselves run in the native call core (@poolse/react-native-calls),
+// which hands your screen a snapshot to draw. These are the pieces that
+// are fiddly to get right, for building that screen.
 export { CallControlButton, type CallControlButtonProps } from './voice/CallControlButton.js';
-export { CallParticipantTile, type CallParticipantTileProps } from './voice/CallParticipantTile.js';
 export { CallAvatar, type CallAvatarProps } from './voice/CallAvatar.js';
-export { LocalVideoPip, type LocalVideoPipProps } from './voice/LocalVideoPip.js';
-export { AudioRouteSheet, type AudioRouteSheetProps } from './voice/AudioRouteSheet.js';
-export { callColors } from './voice/callTheme.js';
-export { useCallDuration } from './voice/useCallDuration.js';
-
-// Owns the audio session on the SFU path: speaker, earpiece, headset
-// and Bluetooth routing. See the note on `CallScreenProps.onTransportChange`
-// for why the mesh path is InCallManager's job instead.
-export { useCallAudio, type UseCallAudioOptions, type CallAudio } from './voice/useCallAudio.js';
 export {
-  describeRoute,
+  AudioRouteSheet,
+  type AudioRouteSheetProps,
   type AudioRoute,
   type AudioRouteKind,
-  type LiveKitAudioSession,
-  type LiveKitReactNativeModule,
-} from './voice/livekit-rn.js';
-
-// ── VoIP push + CallKit (iOS) ─────────────────────────────────────
-// Rings a backgrounded or closed app. Needs react-native-callkeep and
-// react-native-voip-push-notification, both native and both imported by
-// YOUR app — Metro only bundles what it can see statically.
-export {
-  useVoipCalls,
-  isStalePush,
-  type UseVoipCallsOptions,
-  type VoipIncomingCall,
-  type VoipPushModule,
-  type CallKeepModule,
-} from './voice/useVoipCalls.js';
+} from './voice/AudioRouteSheet.js';
+export { callColors } from './voice/callTheme.js';
+export { useCallDuration } from './voice/useCallDuration.js';

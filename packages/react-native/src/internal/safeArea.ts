@@ -7,8 +7,8 @@
 // hardcoded fallbacks instead: 34pt on iOS (coincidentally right for
 // iPhones, which masked the bug) and 0 on Android, which put the
 // composer underneath the navigation bar on every Android device.
-// The library is a hard peer in practice — CallScreen imports it
-// statically — so this indirection protected nothing.
+// The library is a hard peer in practice, so this indirection
+// protected nothing.
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface EdgeInsets {

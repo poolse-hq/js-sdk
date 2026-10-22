@@ -79,10 +79,8 @@ export type {
   ReadReceiptsState,
 } from '@poolse/sdk';
 
-// ── Voice + calling ──────────────────────────────────────────────
+// ── Calls and rooms ──────────────────────────────────────────────
 export { useCallRoom, type UseCallRoom, type UseCallRoomOptions } from './use-call-room.js';
-export { useVoiceRoom, type UseVoiceRoom } from './use-voice-room.js';
-export { useCalls, type UseCalls, type CallPhase } from './use-calls.js';
 export { useLiveCall, type UseLiveCall } from './use-live-call.js';
 export { useRoom, type UseRoom, type UseRoomOptions } from './use-room.js';
 export {

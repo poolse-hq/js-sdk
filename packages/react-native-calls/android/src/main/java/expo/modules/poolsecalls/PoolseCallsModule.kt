@@ -132,6 +132,11 @@ class PoolseCallsModule : Module() {
       if (conversationId != null) context?.let { MessageNotifications.clear(it, conversationId) }
     }
 
+    // While a call rings or runs the app may sit over the lock screen.
+    Function("setShowOnLockscreen") { enabled: Boolean ->
+      CallLockscreen.set(appContext.currentActivity, enabled)
+    }
+
     // Android 14+: full-screen intents need a user grant for non-dialer apps.
     Function("canUseFullScreenIntent") {
       val ctx = context ?: return@Function true

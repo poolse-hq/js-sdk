@@ -4,6 +4,15 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [2.29.0] — 2026-10-22
+
+### Removed
+
+- **`useCalls` and `useVoiceRoom`** — the legacy socket-ringing calls and
+  the peer-to-peer voice room, both retired on the server. Use `useRoom`
+  (rooms, opt-in ringing) and `useLiveCall` on the web; phones use
+  `@poolse/react-native-calls`.
+
 ## [2.24.0] — 2026-10-14
 
 ### Fixed
