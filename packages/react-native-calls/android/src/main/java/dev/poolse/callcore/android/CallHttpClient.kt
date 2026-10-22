@@ -173,6 +173,7 @@ internal class CallHttpClient(
           livekitUrl = livekit.optStringOrNull("url") ?: current.livekitUrl,
           livekitToken = livekit.getString("token"),
           controlToken = root.optStringOrNull("control_token") ?: current.controlToken,
+          ringing = 0,
         )
       }
       return CallSessionBundle(
@@ -186,6 +187,9 @@ internal class CallHttpClient(
         controlToken = root.optStringOrNull("control_token")
           ?: requireNotNull(current?.controlToken) { "bundle without control_token" },
         kind = call.optStringOrNull("kind") ?: current?.kind ?: "call",
+        ringing = call.optJSONObject("ring_states")?.let { states ->
+          states.keys().asSequence().count { states.optString(it) == "ringing" }
+        } ?: 0,
       )
     }
 

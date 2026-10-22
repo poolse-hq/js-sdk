@@ -46,6 +46,12 @@ export interface Snapshot {
     muted: boolean;
     /** True only with a published, subscribed, unmuted camera track (show video, not avatar). */
     cameraOn: boolean;
+    /**
+     * Their link to the call: `lost` while they have dropped and are
+     * coming back (show "Reconnecting…"), `poor` for a weak signal.
+     * Absent before 0.11.0.
+     */
+    connectionQuality?: ConnectionQuality;
   }>;
   /** The kind of output playing now — the short answer to "where is the audio". */
   audioRoute: AudioOutputKind;
@@ -71,7 +77,23 @@ export interface Snapshot {
   waiting?: WaitingCall | null;
   /** Facing of the published local camera; absent when the camera is off. */
   cameraFacing?: 'front' | 'back';
+  /**
+   * Your own link to the call. `poor` / `lost`: show a "weak connection"
+   * hint; `phase: 'reconnecting'` is the hard version of the same thing.
+   * Absent before 0.11.0.
+   */
+  connectionQuality?: ConnectionQuality;
+  /**
+   * Incoming video is switched off because your connection could not
+   * carry it — the audio keeps going, and video comes back by itself
+   * once the link has been good for a few seconds. Participants read
+   * `cameraOn: false` meanwhile. Absent before 0.11.0.
+   */
+  videoPaused?: boolean;
 }
+
+/** `good` covers good and excellent; `unknown` until the SFU has measured. */
+export type ConnectionQuality = 'good' | 'poor' | 'lost' | 'unknown';
 
 export type AudioOutputKind = 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
 
@@ -152,6 +174,10 @@ interface PoolseCallsNative {
   switchCamera(): void;
   setSpeaker(on: boolean): void;
   setAudioOutput?(id: string): void;
+  callControl?(): Promise<{ callId: string; controlToken: string } | null>;
+  setPictureInPictureEnabled?(on: boolean): void;
+  isInPictureInPicture?(): boolean;
+  pictureInPictureSupported?(): boolean;
   onRingEnded(callId: string, reason: string): void;
   onCallFinished(callId: string, reason: string | null): void;
   canUseFullScreenIntent(): boolean;
@@ -162,6 +188,10 @@ interface PoolseCallsNative {
   addListener(event: 'onCallState', cb: (payload: NativeSnapshot) => void): { remove(): void };
   addListener(event: 'onVoipToken', cb: (payload: VoipToken) => void): { remove(): void };
   addListener(event: 'onCallAction', cb: (payload: CallAction) => void): { remove(): void };
+  addListener(
+    event: 'onPictureInPicture',
+    cb: (payload: { active: boolean }) => void,
+  ): { remove(): void };
 }
 
 const native = requireOptionalNativeModule<PoolseCallsNative>('PoolseCalls');
@@ -253,6 +283,46 @@ export async function startRoom(
   // exactly as when the room is joined from the banner.
   await native.join(callId, conversationId, options.sessionToken);
   return { callId, created: body?.created === true };
+}
+
+/** Who to ring into the call — poolse user ids, your app's own (external) ids, or both. */
+export interface RingIntoCallOptions {
+  userIds?: string[];
+  externalIds?: string[];
+}
+
+/**
+ * Ring more of the conversation's members into the call you are on
+ * ("Add people"). Each is rung as on a fresh call — their phone rings,
+ * CallKit / full-screen — and answering puts them in this call.
+ *
+ * Resolves with the poolse user ids actually rung: anyone already in
+ * the call, still ringing, or not a member of the conversation is
+ * skipped. Rejects with no call in progress, while nobody has answered
+ * yet (the call's own ring is still out), or when the server refuses.
+ */
+export async function ringIntoCall(people: RingIntoCallOptions): Promise<string[]> {
+  if (!native?.callControl) throw new Error('This build cannot ring people into a call.');
+  if (!apiOrigin) throw new Error('Call configure() before ringIntoCall().');
+  const control = await native.callControl();
+  if (!control) throw new Error('There is no call in progress.');
+  const res = await fetch(`${apiOrigin}/v1/calls/${encodeURIComponent(control.callId)}/ring`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${control.controlToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      user_ids: people.userIds ?? [],
+      external_ids: people.externalIds ?? [],
+    }),
+  });
+  const body = (await res.json().catch(() => null)) as {
+    rung_user_ids?: string[];
+    error?: { message?: string };
+  } | null;
+  if (!res.ok) throw new Error(body?.error?.message ?? `Couldn't ring them (${res.status}).`);
+  return body?.rung_user_ids ?? [];
 }
 
 export const answer = (): void => native?.answer();
@@ -393,6 +463,40 @@ export function onVoipToken(cb: (token: VoipToken) => void): Unsubscribe {
   return () => sub.remove();
 }
 
+// ── picture-in-picture ────────────────────────────────────────────────
+
+/**
+ * Arm picture-in-picture: while on, leaving the app keeps the call's
+ * video in a floating window. Turn it on only while a video call shows
+ * someone's picture, and off otherwise.
+ *
+ * iOS (15+) floats the `<CallVideoView pictureInPicture>` that is on
+ * screen — mark the main remote picture. Android (8+) floats the whole
+ * app: draw a compact layout while `isInPictureInPicture()` (see
+ * `onPictureInPicture`). The app needs `android:supportsPictureInPicture`
+ * on its activity.
+ */
+export function setPictureInPictureEnabled(on: boolean): void {
+  native?.setPictureInPictureEnabled?.(on);
+}
+
+/** Whether the floating window is open right now. */
+export function isInPictureInPicture(): boolean {
+  return native?.isInPictureInPicture?.() ?? false;
+}
+
+/** Whether this device can float a call at all. */
+export function pictureInPictureSupported(): boolean {
+  return native?.pictureInPictureSupported?.() ?? false;
+}
+
+/** Fires when the floating window opens (`true`) and closes (`false`). */
+export function onPictureInPicture(cb: (active: boolean) => void): Unsubscribe {
+  if (!native?.setPictureInPictureEnabled) return () => undefined;
+  const sub = native.addListener('onPictureInPicture', (payload) => cb(payload.active));
+  return () => sub.remove();
+}
+
 // ── video ─────────────────────────────────────────────────────────────
 
 export interface CallVideoViewProps extends ViewProps {
@@ -403,6 +507,11 @@ export interface CallVideoViewProps extends ViewProps {
   mirror?: boolean;
   /** default 'cover' */
   fit?: 'cover' | 'contain';
+  /**
+   * iOS: this remote picture is the one picture-in-picture floats when
+   * the app is left (`setPictureInPictureEnabled`). Mark one at a time.
+   */
+  pictureInPicture?: boolean;
 }
 
 type NativeVideoProps = CallVideoViewProps;
@@ -432,7 +541,7 @@ function nativeVideoView(): ComponentType<NativeVideoProps> | null {
 export function CallVideoView(props: CallVideoViewProps): ReactElement | null {
   const Native = nativeVideoView();
   if (!Native) {
-    const { participantId: _p, local: _l, mirror: _m, fit: _f, ...rest } = props;
+    const { participantId: _p, local: _l, mirror: _m, fit: _f, pictureInPicture: _pip, ...rest } = props;
     return createElement(View, rest);
   }
   return createElement(Native, props);

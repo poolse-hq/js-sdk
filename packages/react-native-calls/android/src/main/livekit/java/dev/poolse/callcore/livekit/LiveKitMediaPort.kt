@@ -20,6 +20,7 @@ import io.livekit.android.events.DisconnectReason
 import io.livekit.android.events.RoomEvent
 import io.livekit.android.events.collect
 import io.livekit.android.room.Room
+import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.LocalVideoTrack
@@ -84,6 +85,19 @@ class LiveKitMediaPort(
   private var mutedWanted = false
   private var cameraWanted: Boolean? = null
   private var joinedCallId: String? = null
+
+  /** Our own link to the SFU, as last reported. */
+  private var localQuality = "unknown"
+
+  /**
+   * Incoming video is switched off to keep the audio going (see
+   * [qualityChanged]). Survives a rejoin of the same call, like mute.
+   */
+  private var videoPaused = false
+  private var pauseJob: Job? = null
+  private var resumeJob: Job? = null
+  /** Remote camera publications this port switched off, by sid. */
+  private val pausedSids = mutableSetOf<String>()
 
   /** Live `<CallVideoView>` slots; rebound whenever what they show may have changed. */
   private val surfaces = linkedSetOf<LiveKitVideoSurface>()
@@ -162,12 +176,25 @@ class LiveKitMediaPort(
     mutedWanted = false
     cameraWanted = null
     outputWanted = null
+    pauseJob?.cancel()
+    resumeJob?.cancel()
+    pauseJob = null
+    resumeJob = null
+    videoPaused = false
+    localQuality = "unknown"
+    reportNetwork()
   }
 
   /** Drop the current room only (a rejoin replaces it). */
   private fun detach() {
     eventJob?.cancel()
     eventJob = null
+    // Their timers belong to that room; the next one starts its own.
+    pauseJob?.cancel()
+    resumeJob?.cancel()
+    pauseJob = null
+    resumeJob = null
+    pausedSids.clear()
     val r = room ?: return
     room = null
     // Unbind every view from this room's tracks BEFORE its EGL is released.
@@ -246,6 +273,8 @@ class LiveKitMediaPort(
   }
 
   private fun remoteCamera(p: Participant): VideoTrack? {
+    // Paused: no picture to draw — the avatar shows, with the reason.
+    if (videoPaused) return null
     val pub = p.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication ?: return null
     if (!pub.subscribed || pub.muted) return null
     return pub.track as? VideoTrack
@@ -422,9 +451,14 @@ class LiveKitMediaPort(
         is RoomEvent.TrackPublished,
         is RoomEvent.TrackUnpublished,
         is RoomEvent.LocalTrackSubscribed -> {
+          if (videoPaused) applyVideoPause(room)
           emit(room)
           reportLocalCamera(room)
           refreshVideo()
+        }
+        is RoomEvent.ConnectionQualityChanged -> {
+          qualityChanged(room)
+          emit(room)
         }
         is RoomEvent.ActiveSpeakersChanged,
         is RoomEvent.ParticipantMetadataChanged,
@@ -447,6 +481,7 @@ class LiveKitMediaPort(
           // Video, not avatar, only when there is a frame to draw:
           // published, subscribed and unmuted.
           cameraOn = remoteCamera(it) != null,
+          connectionQuality = wire(it.connectionQuality),
           externalId = externalIdOf(it) ?: identity,
         )
       },
@@ -454,6 +489,76 @@ class LiveKitMediaPort(
   }
 
   /** The host's own user id, if the server put it in attributes/metadata. */
+  // ── connection quality ──────────────────────────────────────────────
+
+  /**
+   * Our link went weak or came back. Weak for a while on a call with
+   * video coming in: switch that video off so the audio keeps going —
+   * the way FaceTime falls back — and bring it back once the link has
+   * been good for a while. Brief dips change nothing.
+   */
+  private fun qualityChanged(r: Room) {
+    if (room !== r) return
+    val q = wire(r.localParticipant.connectionQuality)
+    if (q == "poor" || q == "lost") {
+      resumeJob?.cancel()
+      resumeJob = null
+      if (!videoPaused && pauseJob == null && hasRemoteVideo(r)) {
+        pauseJob = scope.launch {
+          delay(PAUSE_VIDEO_AFTER_MS)
+          pauseJob = null
+          if (room === r) setVideoPaused(r, true)
+        }
+      }
+    } else if (q == "good") {
+      pauseJob?.cancel()
+      pauseJob = null
+      if (videoPaused && resumeJob == null) {
+        resumeJob = scope.launch {
+          delay(RESUME_VIDEO_AFTER_MS)
+          resumeJob = null
+          if (room === r) setVideoPaused(r, false)
+        }
+      }
+    }
+    if (q != localQuality) {
+      localQuality = q
+      reportNetwork()
+    }
+  }
+
+  private fun hasRemoteVideo(r: Room) =
+    r.remoteParticipants.values.any { it.getTrackPublication(Track.Source.CAMERA) != null }
+
+  private fun setVideoPaused(r: Room, paused: Boolean) {
+    Log.i(TAG, "incoming video ${if (paused) "paused" else "resumed"} quality=$localQuality")
+    videoPaused = paused
+    applyVideoPause(r)
+    refreshVideo()
+    emit(r)
+    reportNetwork()
+  }
+
+  /**
+   * Every remote camera on or off to match [videoPaused] — including one
+   * published after the pause began. Each publication is switched once:
+   * this runs on every track event, and re-sending the setting each time
+   * would only feed more events.
+   */
+  private fun applyVideoPause(r: Room) {
+    val pubs = r.remoteParticipants.values.mapNotNull {
+      it.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication
+    }
+    if (videoPaused) {
+      for (pub in pubs) if (pausedSids.add(pub.sid)) runCatching { pub.setEnabled(false) }
+    } else {
+      for (pub in pubs) if (pausedSids.remove(pub.sid)) runCatching { pub.setEnabled(true) }
+      pausedSids.clear()
+    }
+  }
+
+  private fun reportNetwork() = events.onNetwork(localQuality, videoPaused)
+
   private fun externalIdOf(p: Participant): String? =
     runCatching { p.attributes["external_id"] }.getOrNull()?.ifEmpty { null }
       ?: p.metadata?.let { m ->
@@ -471,6 +576,17 @@ class LiveKitMediaPort(
     private const val SWITCH_SETTLE_MS = 600L
     private const val SPEAKER = "speaker"
     private const val PRIVATE = "private"
+
+    /** Weak this long before incoming video is paused; good this long before it is back. */
+    private const val PAUSE_VIDEO_AFTER_MS = 6_000L
+    private const val RESUME_VIDEO_AFTER_MS = 10_000L
+
+    fun wire(q: ConnectionQuality): String = when (q) {
+      ConnectionQuality.EXCELLENT, ConnectionQuality.GOOD -> "good"
+      ConnectionQuality.POOR -> "poor"
+      ConnectionQuality.LOST -> "lost"
+      else -> "unknown"
+    }
 
     /** Pass as `mediaFactory` in CallCoreConfig. */
     val factory: (Context, MediaEvents) -> MediaPort = { ctx, ev -> LiveKitMediaPort(ctx, ev) }

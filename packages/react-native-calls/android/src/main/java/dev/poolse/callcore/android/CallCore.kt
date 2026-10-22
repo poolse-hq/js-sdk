@@ -75,6 +75,8 @@ class CallCore private constructor(context: Context) {
   private var audioRoute: String? = null
   private var audioOutputs: List<AudioOutput> = emptyList()
   private var audioOutputId: String? = null
+  private var connectionQuality = "unknown"
+  private var videoPaused = false
 
   /** Last snapshot emitted; read by the bridge's getCallState from any thread. */
   @Volatile private var lastSnapshot: Map<String, Any?>? = null
@@ -203,6 +205,9 @@ class CallCore private constructor(context: Context) {
    */
   fun setAudioOutput(id: String) = runtime.setAudioOutput(id)
 
+  /** The current call's id and control token. Any thread. */
+  val control: Pair<String, String>? get() = runtime.control
+
   fun allRingsResolved(outcome: String) = runtime.allRingsResolved(outcome)
 
   fun state(): MachineState = runtime.currentState()
@@ -250,6 +255,7 @@ class CallCore private constructor(context: Context) {
           "speaking" to it.speaking,
           "muted" to it.muted,
           "cameraOn" to it.cameraOn,
+          "connectionQuality" to it.connectionQuality,
         )
       },
       audioRoute = audioRoute ?: if (loud(state)) "speaker" else "earpiece",
@@ -259,6 +265,8 @@ class CallCore private constructor(context: Context) {
       cameraOn = cameraOn,
       cameraFacing = cameraFacing,
       waitingRing = runtime.waitingRing,
+      connectionQuality = connectionQuality,
+      videoPaused = videoPaused,
     )
     lastSnapshot = snap
     reconcileAndroid(state)
@@ -283,6 +291,8 @@ class CallCore private constructor(context: Context) {
     audioRoute = null
     audioOutputs = emptyList()
     audioOutputId = null
+    connectionQuality = "unknown"
+    videoPaused = false
   }
 
   /**
@@ -351,6 +361,10 @@ class CallCore private constructor(context: Context) {
     }
     override fun onAudioOutputs(outputs: List<AudioOutput>, selectedId: String?) {
       runtime.post { audioOutputs = outputs; audioOutputId = selectedId }
+      runtime.reemit()
+    }
+    override fun onNetwork(quality: String, videoPaused: Boolean) {
+      runtime.post { connectionQuality = quality; this@CallCore.videoPaused = videoPaused }
       runtime.reemit()
     }
   }
@@ -533,6 +547,11 @@ interface MediaEvents {
   fun onLocalCamera(on: Boolean, facing: String?) {}
   /** Every output call audio can play through right now, and the one it does. */
   fun onAudioOutputs(outputs: List<AudioOutput>, selectedId: String?) {}
+  /**
+   * Our own link to the SFU (`good` | `poor` | `lost` | `unknown`), and
+   * whether incoming video is paused to keep the audio going.
+   */
+  fun onNetwork(quality: String, videoPaused: Boolean) {}
 }
 
 /** One place call audio can play — a snapshot `audioOutputs[]` entry. */
@@ -554,4 +573,6 @@ data class MediaParticipant(
   val cameraOn: Boolean = false,
   /** The host app's own id for the user, when the SFU carries it; else the identity. */
   val externalId: String = identity,
+  /** Their link to the SFU: `good` | `poor` | `lost` (dropped, coming back) | `unknown`. */
+  val connectionQuality: String = "unknown",
 )

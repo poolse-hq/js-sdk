@@ -26,11 +26,17 @@ internal fun MachineState.toSnapshot(
   cameraFacing: String? = null,
   /** The waiting call's ring (names); the machine's [MachineState.waiting] says whether there is one. */
   waitingRing: dev.poolse.callcore.RingContext? = null,
+  /** Our own link to the SFU: `good` | `poor` | `lost` | `unknown`. */
+  connectionQuality: String = "unknown",
+  /** Incoming video switched off to keep the audio going. */
+  videoPaused: Boolean = false,
 ): Map<String, Any?>? {
   if (phase == Phase.IDLE) return null
   return buildMap {
     putAll(snapshotCore(conversationName, participants, audioRoute, mutedSelf, cameraOn))
     put("kind", kind)
+    put("connectionQuality", connectionQuality)
+    put("videoPaused", videoPaused)
     put("audioOutputs", audioOutputs)
     put("audioOutputId", audioOutputId)
     // Optional in the contract: present only while a camera is published.

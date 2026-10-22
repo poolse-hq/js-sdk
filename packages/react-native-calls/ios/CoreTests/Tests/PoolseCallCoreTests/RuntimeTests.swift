@@ -346,10 +346,51 @@ final class RuntimeTests: XCTestCase {
     XCTAssertEqual(r.runtime.currentState().phase, .active)
     XCTAssertEqual(r.timers.scheduled["alone_probe"]?.0, 9_000)
     r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!(.timeout) // no answer from the server: leave all the same
     XCTAssertTrue(r.http.log.contains("hangup:c1:ctl-c1"))
     XCTAssertEqual(r.runtime.currentState().phase, .ended)
     XCTAssertEqual(r.runtime.currentState().reason, .finished)
     XCTAssertEqual(r.media.log.last, "leave")
+  }
+
+  func testAloneWhileSomeoneIsRungInWaitsForThem() {
+    let r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    var ringing = bundle("c1")
+    ringing.ringing = 1
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!(.ok(ringing))
+    XCTAssertEqual(r.timers.scheduled["alone_probe"]?.0, 5_000)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!(.ok(ringing))
+    XCTAssertEqual(r.runtime.currentState().phase, .active)
+    XCTAssertFalse(r.http.log.contains("hangup:c1:ctl-c1"))
+    // Rang out: back to leaving shortly after.
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!(.ok(bundle("c1")))
+    XCTAssertEqual(r.timers.scheduled["alone_probe"]?.0, 9_000)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!(.ok(bundle("c1")))
+    XCTAssertEqual(r.runtime.currentState().phase, .ended)
+  }
+
+  func testABundleCountsWhoIsStillRinging() throws {
+    let body = """
+    {"cv":1,"created":false,"control_token":"ctl","livekit":{"url":"wss://sfu","token":"lk"},
+     "call":{"id":"c1","conversation_id":"conv","kind":"call",
+             "ring_states":{"a":"answered","b":"ringing","c":"missed","d":"ringing"}}}
+    """
+    XCTAssertEqual(try CallHttpClient.parseBundle(body).ringing, 2)
+  }
+
+  func testControlIsTheCurrentCallsToken() {
+    let r = Rig()
+    XCTAssertNil(r.runtime.control)
+    r.activeCall()
+    XCTAssertEqual(r.runtime.control?.callId, "c1")
+    XCTAssertEqual(r.runtime.control?.controlToken, "ctl-c1")
   }
 
   func testSomeoneBackCancelsTheCheckAndNobodyYetNeverStartsIt() {

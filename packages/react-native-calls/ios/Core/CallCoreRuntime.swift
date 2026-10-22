@@ -34,9 +34,12 @@ public final class CallCoreRuntime {
   private static let T_WAITING = "waiting_deadline"
   private static let T_ALONE = "alone_probe"
   /// Alone in a call: ask the server after a moment (the other side's own
-  /// reconnect gets that long); still alone this much later, leave — the
-  /// last step does not ask, a call with one person in it is over.
+  /// reconnect gets that long); still alone this much later, leave — a
+  /// call with one person in it is over, whatever the server thinks.
   public static let ALONE_PROBES_MS: [Int64] = [3_000, 9_000]
+  /// …unless someone is being rung into it: ask again this often until
+  /// they pick up or it rings out.
+  public static let ALONE_RINGING_RECHECK_MS: Int64 = 5_000
 
   private let http: HttpPort
   private let media: MediaPort
@@ -111,6 +114,12 @@ public final class CallCoreRuntime {
 
   /// `room` or `call`, once the server's bundle says; nil before. Runtime thread only.
   public var callKind: String? { bundle?.kind }
+
+  /// The current call's id and control token — what authorizes acting on
+  /// the call itself (ringing more people in). Nil with no session yet.
+  public var control: (callId: String, controlToken: String)? {
+    bundle.map { ($0.callId, $0.controlToken) }
+  }
 
   /// The call waiting beside the current one, with its caller's names. Runtime thread only.
   public var waitingRing: RingContext? { state.waiting == nil ? nil : waitingRingCtx }
@@ -210,7 +219,8 @@ public final class CallCoreRuntime {
   /// have been left. So, alone, ask the server (the reconnect endpoint
   /// answers 410 for a call that is over) and end here as finished if so.
   /// If the server still calls it live (it never heard the other side
-  /// leave), leave anyway shortly after: one person is not a call.
+  /// leave), leave anyway shortly after: one person is not a call —
+  /// unless someone is still being rung, who is worth waiting for.
   /// Someone back in the room cancels the check.
   public func onRemoteCount(_ remotes: Int) {
     post { [self] in
@@ -225,14 +235,14 @@ public final class CallCoreRuntime {
     }
   }
 
-  private func scheduleAloneProbe(_ callId: String, attempt: Int) {
+  private func scheduleAloneProbe(_ callId: String, attempt: Int, delayMs: Int64? = nil) {
     guard attempt < CallCoreRuntime.ALONE_PROBES_MS.count else { return }
     let g = gen
-    timers.schedule(key: CallCoreRuntime.T_ALONE, delayMs: CallCoreRuntime.ALONE_PROBES_MS[attempt]) { [weak self] in
+    timers.schedule(key: CallCoreRuntime.T_ALONE,
+                    delayMs: delayMs ?? CallCoreRuntime.ALONE_PROBES_MS[attempt]) { [weak self] in
       self?.post { [weak self] in
         guard let self = self, g == self.gen, self.state.callId == callId else { return }
-        if attempt == CallCoreRuntime.ALONE_PROBES_MS.count - 1 { self.leaveAlone(callId) }
-        else { self.probeAlone(callId, attempt: attempt) }
+        self.probeAlone(callId, attempt: attempt)
       }
     }
   }
@@ -240,13 +250,20 @@ public final class CallCoreRuntime {
   private func probeAlone(_ callId: String, attempt: Int) {
     guard state.phase == .active, let b = bundle else { return }
     let g = gen
+    let last = attempt == CallCoreRuntime.ALONE_PROBES_MS.count - 1
     // A still-live answer carries a fresh bundle; the current one stays
     // in use (its token is still good), so it is dropped.
     http.reconnect(current: b) { [weak self] res in
       self?.post { [weak self] in
         guard let self = self, g == self.gen, self.state.callId == callId else { return }
-        if case .gone = res { self.dispatch(.callFinished(callId: callId, reason: "finished")) }
-        else { self.scheduleAloneProbe(callId, attempt: attempt + 1) }
+        switch res {
+        case .gone:
+          self.dispatch(.callFinished(callId: callId, reason: "finished"))
+        case let .ok(fresh) where fresh.ringing > 0:
+          self.scheduleAloneProbe(callId, attempt: 0, delayMs: CallCoreRuntime.ALONE_RINGING_RECHECK_MS)
+        default:
+          if last { self.leaveAlone(callId) } else { self.scheduleAloneProbe(callId, attempt: attempt + 1) }
+        }
       }
     }
   }

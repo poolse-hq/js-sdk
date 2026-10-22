@@ -1,6 +1,11 @@
 import AVFoundation
 import CallKit
 import Foundation
+#if canImport(LiveKitClient)
+import LiveKitClient // CocoaPods module name
+#else
+import LiveKit // SwiftPM module name
+#endif
 import UIKit
 
 /// The host-supplied configuration, persisted so a PushKit cold wake
@@ -146,6 +151,8 @@ final class CallCore {
   private var audioRoute: String?
   private var audioOutputs: [AudioOutput] = []
   private var audioOutputId: String?
+  private var connectionQuality = "unknown"
+  private var videoPaused = false
 
   /// ring_ended reasons seen per call — the CallKit end reason.
   private var ringEndReasons: [String: String] = [:]
@@ -291,8 +298,13 @@ final class CallCore {
   /// Not optimistic: the adapter reports the route once iOS has moved it.
   func setAudioOutput(_ id: String) { runtime.setAudioOutput(id) }
 
+  /// The current call's id and control token (main thread).
+  var control: (callId: String, controlToken: String)? { runtime.control }
+
   /// A video slot for the native view. Main thread.
-  func createVideoSurface() -> LiveKitVideoSurface { mediaPort.createVideoSurface() }
+  func createVideoSurface(renderMode: VideoView.RenderMode = .auto) -> LiveKitVideoSurface {
+    mediaPort.createVideoSurface(renderMode: renderMode)
+  }
 
   /// The contract Snapshot (nil = idle), safe from any thread.
   func snapshot() -> [String: Any]? {
@@ -344,7 +356,9 @@ final class CallCore {
       mutedSelf: mutedSelf,
       cameraOn: cameraOn,
       cameraFacing: cameraFacing,
-      waiting: runtime.waitingRing
+      waiting: runtime.waitingRing,
+      connectionQuality: connectionQuality,
+      videoPaused: videoPaused
     )
     snapshotLock.lock(); lastSnapshot = snap; snapshotLock.unlock()
     reconcileCallKit(state)
@@ -364,6 +378,8 @@ final class CallCore {
     audioRoute = nil
     audioOutputs = []
     audioOutputId = nil
+    connectionQuality = "unknown"
+    videoPaused = false
   }
 
   /// CallKit follows the FINAL state of each dispatch.
@@ -475,6 +491,10 @@ final class CallCore {
     runtime.post { [weak self] in self?.audioOutputs = list; self?.audioOutputId = selected }
     runtime.reemit()
   }
+  fileprivate func network(quality: String, videoPaused paused: Bool) {
+    runtime.post { [weak self] in self?.connectionQuality = quality; self?.videoPaused = paused }
+    runtime.reemit()
+  }
   fileprivate func localCamera(on: Bool, facing: String?) {
     runtime.post { [weak self] in self?.cameraOn = on; self?.cameraFacing = facing }
     runtime.reemit()
@@ -577,6 +597,7 @@ private final class EventsAdapter: MediaEvents {
   func onAudioRoute(_ route: String) { core?.route(route) }
   func onLocalCamera(on: Bool, facing: String?) { core?.localCamera(on: on, facing: facing) }
   func onAudioOutputs(_ outputs: [AudioOutput], selectedId: String?) { core?.outputs(outputs, selected: selectedId) }
+  func onNetwork(quality: String, videoPaused: Bool) { core?.network(quality: quality, videoPaused: videoPaused) }
 }
 
 /// Host-facing entry points.

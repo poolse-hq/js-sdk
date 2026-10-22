@@ -47,7 +47,8 @@ class CallCoreRuntime(
   private var waitingRingCtx: RingContext? = null
 
   /** The session bundle of the current call, once the server accepted. */
-  private var bundle: CallSessionBundle? = null
+  // Volatile: [control] is read from the bridge's thread.
+  @Volatile private var bundle: CallSessionBundle? = null
 
   /** The session token place/join were called with, for one retry. */
   private var sessionToken: String? = null
@@ -120,10 +121,16 @@ class CallCoreRuntime(
     private const val T_ALONE = "alone_probe"
     /**
      * Alone in a call: ask the server after a moment (the other side's own
-     * reconnect gets that long); still alone this much later, leave — the
-     * last step does not ask, a call with one person in it is over.
+     * reconnect gets that long); still alone this much later, leave — a
+     * call with one person in it is over, whatever the server thinks.
      */
     val ALONE_PROBES_MS = longArrayOf(3_000L, 9_000L)
+
+    /**
+     * …unless someone is being rung into it: ask again this often until
+     * they pick up or it rings out.
+     */
+    const val ALONE_RINGING_RECHECK_MS = 5_000L
   }
 
   // ── inputs from adapters ────────────────────────────────────────────
@@ -135,6 +142,13 @@ class CallCoreRuntime(
 
   /** `room` or `call`, once the server's bundle says; null before. Runtime thread only. */
   val callKind: String? get() = bundle?.kind
+
+  /**
+   * The current call's id and control token — what authorizes acting on
+   * the call itself (ringing more people in). Null with no session yet.
+   * Safe from any thread.
+   */
+  val control: Pair<String, String>? get() = bundle?.let { it.callId to it.controlToken }
 
   /** The call waiting beside the current one, with its caller's names. Runtime thread only. */
   val waitingRing: RingContext? get() = if (state.waiting == null) null else waitingRingCtx
@@ -231,7 +245,8 @@ class CallCoreRuntime(
    * have been left. So, alone, ask the server (the reconnect endpoint
    * answers 410 for a call that is over) and end here as finished if so.
    * If the server still calls it live (it never heard the other side
-   * leave), leave anyway shortly after: one person is not a call.
+   * leave), leave anyway shortly after: one person is not a call —
+   * unless someone is still being rung, who is worth waiting for.
    * Someone back in the room cancels the check.
    */
   fun onRemoteCount(remotes: Int) = post {
@@ -245,14 +260,11 @@ class CallCoreRuntime(
     scheduleAloneProbe(callId, 0)
   }
 
-  private fun scheduleAloneProbe(callId: String, attempt: Int) {
+  private fun scheduleAloneProbe(callId: String, attempt: Int, delayMs: Long? = null) {
     if (attempt >= ALONE_PROBES_MS.size) return
     val g = gen
-    timers.schedule(T_ALONE, ALONE_PROBES_MS[attempt]) {
-      post {
-        if (g != gen || state.callId != callId) return@post
-        if (attempt == ALONE_PROBES_MS.size - 1) leaveAlone(callId) else probeAlone(callId, attempt)
-      }
+    timers.schedule(T_ALONE, delayMs ?: ALONE_PROBES_MS[attempt]) {
+      post { if (g == gen && state.callId == callId) probeAlone(callId, attempt) }
     }
   }
 
@@ -260,13 +272,19 @@ class CallCoreRuntime(
     if (state.phase != Phase.ACTIVE) return
     val b = bundle ?: return
     val g = gen
+    val last = attempt == ALONE_PROBES_MS.size - 1
     // A still-live answer carries a fresh bundle; the current one stays
     // in use (its token is still good), so it is dropped.
     http.reconnect(b) { res ->
       post {
         if (g != gen || state.callId != callId) return@post
-        if (res == HttpResult.Gone) dispatch(Event.CallFinished(callId, "finished"))
-        else scheduleAloneProbe(callId, attempt + 1)
+        when {
+          res == HttpResult.Gone -> dispatch(Event.CallFinished(callId, "finished"))
+          res is HttpResult.Ok && res.bundle.ringing > 0 ->
+            scheduleAloneProbe(callId, 0, ALONE_RINGING_RECHECK_MS)
+          last -> leaveAlone(callId)
+          else -> scheduleAloneProbe(callId, attempt + 1)
+        }
       }
     }
   }

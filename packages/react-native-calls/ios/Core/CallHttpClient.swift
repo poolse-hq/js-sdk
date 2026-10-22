@@ -158,6 +158,7 @@ public final class CallHttpClient: HttpPort {
       b.livekitUrl = optString(livekit, "url") ?? current.livekitUrl
       b.livekitToken = try getString(livekit, "token")
       b.controlToken = optString(root, "control_token") ?? current.controlToken
+      b.ringing = 0
       return b
     }
     guard let controlToken = optString(root, "control_token") ?? current?.controlToken else {
@@ -172,7 +173,8 @@ public final class CallHttpClient: HttpPort {
       livekitUrl: try getString(livekit, "url"),
       livekitToken: try getString(livekit, "token"),
       controlToken: controlToken,
-      kind: optString(call, "kind") ?? current?.kind ?? "call"
+      kind: optString(call, "kind") ?? current?.kind ?? "call",
+      ringing: ((call["ring_states"] as? [String: Any]) ?? [:]).values.filter { ($0 as? String) == "ringing" }.count
     )
   }
 

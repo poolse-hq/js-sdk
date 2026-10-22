@@ -9,17 +9,23 @@ public struct SnapshotParticipant: Equatable {
   public var muted: Bool
   /// True only with a published, subscribed, unmuted camera track.
   public var cameraOn: Bool
+  /// Their link to the SFU: `good` | `poor` | `lost` (dropped, coming
+  /// back — "Reconnecting…") | `unknown`.
+  public var connectionQuality: String
 
-  public init(userId: String, externalId: String, speaking: Bool, muted: Bool, cameraOn: Bool) {
+  public init(userId: String, externalId: String, speaking: Bool, muted: Bool, cameraOn: Bool,
+              connectionQuality: String = "unknown") {
     self.userId = userId
     self.externalId = externalId
     self.speaking = speaking
     self.muted = muted
     self.cameraOn = cameraOn
+    self.connectionQuality = connectionQuality
   }
 
   public var dictionary: [String: Any] {
-    ["userId": userId, "externalId": externalId, "speaking": speaking, "muted": muted, "cameraOn": cameraOn]
+    ["userId": userId, "externalId": externalId, "speaking": speaking, "muted": muted, "cameraOn": cameraOn,
+     "connectionQuality": connectionQuality]
   }
 }
 
@@ -74,7 +80,9 @@ public extension MachineState {
                   mutedSelf: Bool = false,
                   cameraOn: Bool = false,
                   cameraFacing: String? = nil,
-                  waiting: RingContext? = nil) -> [String: Any]? {
+                  waiting: RingContext? = nil,
+                  connectionQuality: String = "unknown",
+                  videoPaused: Bool = false) -> [String: Any]? {
     if phase == .idle { return nil }
     var out: [String: Any] = [
       "cv": 1,
@@ -91,6 +99,8 @@ public extension MachineState {
       "audioOutputId": audioOutputId.map { $0 as Any } ?? NSNull(),
       "mutedSelf": mutedSelf,
       "cameraOn": cameraOn,
+      "connectionQuality": connectionQuality,
+      "videoPaused": videoPaused,
     ]
     // The call waiting beside this one: null when none.
     if let w = self.waiting {

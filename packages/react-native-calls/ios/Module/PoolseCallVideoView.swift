@@ -11,6 +11,8 @@ public final class PoolseCallVideoView: ExpoView {
   var local = false
   var mirror: Bool?
   var fit = "cover"
+  /// This view is what picture-in-picture grows out of (a remote's picture).
+  var pictureInPicture = false
 
   public required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -41,6 +43,7 @@ public final class PoolseCallVideoView: ExpoView {
   }
 
   func detachSurface() {
+    CallPictureInPicture.shared.clearSource(self)
     guard let s = surface else { return }
     surface = nil
     s.release()
@@ -53,6 +56,11 @@ public final class PoolseCallVideoView: ExpoView {
       return
     }
     s.configure(participantId: participantId, local: local, mirror: mirror, fit: fit == "contain" ? "contain" : "cover")
+    if pictureInPicture && !local && participantId != nil {
+      CallPictureInPicture.shared.setSource(self, participantId: participantId)
+    } else {
+      CallPictureInPicture.shared.clearSource(self)
+    }
   }
 
   deinit {

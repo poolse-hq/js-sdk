@@ -20,9 +20,10 @@ final class LiveKitVideoSurface: UIView {
   private var mirror: Bool?
   private var fit = "cover"
 
-  init(port: LiveKitMediaPort) {
+  init(port: LiveKitMediaPort, renderMode: VideoView.RenderMode = .auto) {
     self.port = port
     super.init(frame: .zero)
+    videoView.renderMode = renderMode
     backgroundColor = .clear
     clipsToBounds = true
     videoView.frame = bounds

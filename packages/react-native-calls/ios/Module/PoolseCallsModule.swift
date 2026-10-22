@@ -9,7 +9,7 @@ public class PoolseCallsModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PoolseCalls")
 
-    Events("onCallState", "onVoipToken")
+    Events("onCallState", "onVoipToken", "onPictureInPicture")
 
     // Normally done at launch by PoolseCallsAppDelegateSubscriber; this is
     // the backstop for a host whose AppDelegate does not forward to Expo.
@@ -28,6 +28,9 @@ public class PoolseCallsModule: Module {
         VoipPush.tokenListener = { [weak self] token in
           self?.sendEvent("onVoipToken", ["token": token, "environment": PoolseCallsModule.environment()])
         }
+        CallPictureInPicture.listener = { [weak self] active in
+          self?.sendEvent("onPictureInPicture", ["active": active])
+        }
       }
     }
 
@@ -35,6 +38,7 @@ public class PoolseCallsModule: Module {
       DispatchQueue.main.async {
         CallCore.listener = nil
         VoipPush.tokenListener = nil
+        CallPictureInPicture.listener = nil
       }
     }
 
@@ -74,6 +78,20 @@ public class PoolseCallsModule: Module {
     Function("setSpeaker") { (on: Bool) in onCore { $0.setSpeaker(on) } }
     Function("setAudioOutput") { (id: String) in onCore { $0.setAudioOutput(id) } }
 
+    // Picture-in-picture: armed while a video call shows someone; the
+    // <CallVideoView pictureInPicture> on screen is what it grows out of.
+    Function("setPictureInPictureEnabled") { (on: Bool) in
+      DispatchQueue.main.async { CallPictureInPicture.shared.setEnabled(on) }
+    }
+    Function("isInPictureInPicture") { () -> Bool in CallPictureInPicture.shared.active }
+    Function("pictureInPictureSupported") { () -> Bool in CallPictureInPicture.supported }
+
+    // What authorizes acting on the call itself (ringing people in).
+    AsyncFunction("callControl") { () -> [String: String]? in
+      guard let c = CallCore.getOrNull()?.control else { return nil }
+      return ["callId": c.callId, "controlToken": c.controlToken]
+    }.runOnQueue(.main)
+
     // The chat on screen: opening it clears what was already shown for it.
     // (Suppressing new ones while it is open happens in the app's
     // notification handler — see shouldPresentMessage in src/index.ts.)
@@ -106,6 +124,7 @@ public class PoolseCallsModule: Module {
       Prop("local") { (view: PoolseCallVideoView, local: Bool?) in view.local = local ?? false }
       Prop("mirror") { (view: PoolseCallVideoView, mirror: Bool?) in view.mirror = mirror }
       Prop("fit") { (view: PoolseCallVideoView, fit: String?) in view.fit = fit ?? "cover" }
+      Prop("pictureInPicture") { (view: PoolseCallVideoView, on: Bool?) in view.pictureInPicture = on ?? false }
       OnViewDidUpdateProps { (view: PoolseCallVideoView) in view.apply() }
     }
   }

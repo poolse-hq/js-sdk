@@ -67,7 +67,7 @@ The normal poolse user session (apps are open for both actions). Valid on
 Returned in every CallSessionBundle. Scoped `call:control` to
 (`call_id`, `sub`); honored only while the call is `live` (registry check —
 `exp` is a 24 h backstop, not the authority). Valid on `hangup`, `reconnect`,
-`stats`.
+`ring`, `stats`.
 
 ## 4 · REST API
 
@@ -83,6 +83,7 @@ effect.
 | `POST /calls/:id/join`                                         | session          | `200 CallSessionBundle`                                                                                                                                                        | `410 call_finished` · `403 not_member`                                                  |
 | `POST /calls/:id/decline` body `{reason?: "declined"\|"busy"}` | grant or session | `204` (also `204` after the call finished — a late decline is harmless)                                                                                                        | `401` invalid grant                                                                     |
 | `POST /calls/:id/hangup`                                       | control          | `204` ("I left" — ends the call only per the §1 finish rule)                                                                                                                   | `204` even if already finished                                                          |
+| `POST /calls/:id/ring` body `{user_ids?, external_ids?}`       | control          | `200 {cv, rung_user_ids}` — rings more of the conversation's members into a call under way ("Add people"), each on their own 45 s window; an earlier decline is lifted. Skips anyone in the call, still ringing, or not a member | `409 call_not_answered` (nobody has picked up yet) · `410 call_finished`              |
 | `POST /calls/:id/reconnect`                                    | control          | `200 CallSessionBundle` (full bundle, same shape as answer/join — one parser; cores still accept the older `{cv, livekit: {url, token}}` and apply it onto the current bundle) | `410 call_finished` · `401` control token invalid                                       |
 
 Error bodies use the envelope `{"error": {"code": "grant_spent", …}}`.
@@ -122,7 +123,7 @@ Clients map: `404`/`410` → gone (`ended(finished)`); `401`/`403`/`503`, other
   ],
   "ring_states": {
     // per CALLEE user (caller absent)
-    "<user_id>": "ringing", // ringing|answered|declined|busy|missed|cancelled
+    "<user_id>": "ringing", // ringing|answered|declined|missed — `ringing` only while their ring is out
   },
 }
 ```
@@ -438,7 +439,10 @@ type Snapshot = {
     speaking: boolean;
     muted: boolean;
     cameraOn: boolean;
+    connectionQuality: 'good' | 'poor' | 'lost' | 'unknown'; // lost = dropped, coming back
   }>;
+  connectionQuality: 'good' | 'poor' | 'lost' | 'unknown'; // our own link to the SFU
+  videoPaused: boolean;       // incoming video off to keep the audio going (weak link)
   audioRoute: 'earpiece' | 'speaker' | 'bluetooth' | 'headset';
   audioOutputs: Array<{
     id: string;
@@ -468,7 +472,21 @@ onRingEnded(callId, reason); onCallFinished(callId);   // socket forwarding, ide
 takeCallAction(); onCallAction(cb);                     // Android: missed-call notification taps (§5.4)
 setActiveConversation(id | null); shouldPresentMessage(data); conversationOfNotification(data); // §5.5
 canUseFullScreenIntent(); openFullScreenIntentSettings(); // Android
+ringIntoCall({ userIds?, externalIds? }): Promise<string[]>; // POST /calls/:id/ring with the core's control token
+setPictureInPictureEnabled(b); isInPictureInPicture(); onPictureInPicture(cb); // video PiP
 ```
+
+A participant's `externalId` comes from the LiveKit token's metadata
+(`{tenant_id, external_id}`), so a host maps the roster to its own users.
+
+Weak link (both cores): our quality `poor`/`lost` for 6 s with remote
+video → every remote camera publication is disabled (`videoPaused`,
+remotes read `cameraOn: false`); `good` for 10 s → re-enabled.
+
+Alone in a call (not a room) after someone else was in it: ask
+`/reconnect` at 3 s — `410` ends it `finished`; a bundle whose
+`ring_states` has anyone `ringing` re-asks every 5 s; otherwise ask once
+more at +9 s and then leave (`hangup`, ended `finished`) whatever the answer.
 
 Audio output rules, identical on both platforms. Without a choice: a
 connected headset or Bluetooth device, else the speaker for `video` or

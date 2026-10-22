@@ -24,8 +24,11 @@ export interface LiveCall {
   started_at: string | null;
   ended_at: string | null;
   participants: LiveCallMember[];
-  /** Callee user id → `ringing` | `answered` | `declined`. */
-  ring_states: Record<string, 'ringing' | 'answered' | 'declined'>;
+  /**
+   * Callee user id → `ringing` (their ring is out right now) | `answered`
+   * | `declined` | `missed` (rang out unanswered).
+   */
+  ring_states: Record<string, 'ringing' | 'answered' | 'declined' | 'missed'>;
 }
 
 /**

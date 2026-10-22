@@ -32,7 +32,7 @@ class PoolseCallsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("PoolseCalls")
 
-    Events("onCallState", "onCallAction")
+    Events("onCallState", "onCallAction", "onPictureInPicture")
 
     // <CallVideoView>: renders a participant's (or our own) camera.
     View(PoolseCallVideoView::class) {
@@ -41,6 +41,8 @@ class PoolseCallsModule : Module() {
       Prop("local") { view: PoolseCallVideoView, local: Boolean? -> view.local = local ?: false }
       Prop("mirror") { view: PoolseCallVideoView, mirror: Boolean? -> view.mirror = mirror }
       Prop("fit") { view: PoolseCallVideoView, fit: String? -> view.fit = fit ?: "cover" }
+      // iOS's picture-in-picture source; Android floats the whole activity.
+      Prop("pictureInPicture") { _: PoolseCallVideoView, _: Boolean? -> }
       OnViewDestroys { view: PoolseCallVideoView -> view.detachSurface() }
     }
 
@@ -49,10 +51,23 @@ class PoolseCallsModule : Module() {
     // listener is process-level, so subscribing before configure works.
     OnStartObserving {
       CallCore.listener = { snapshot -> sendEvent("onCallState", mapOf("snapshot" to snapshot)) }
+      CallPictureInPicture.listener = { active -> sendEvent("onPictureInPicture", mapOf("active" to active)) }
     }
     OnStopObserving {
       CallCore.listener = null
+      CallPictureInPicture.listener = null
     }
+
+    // Picture-in-picture: armed while a video call shows someone. Android
+    // 12+ enters by itself on Home; older versions enter here.
+    Function("setPictureInPictureEnabled") { on: Boolean ->
+      val activity = appContext.currentActivity
+      activity?.runOnUiThread { CallPictureInPicture.setEnabled(activity, on) }
+    }
+    Function("isInPictureInPicture") { CallPictureInPicture.active }
+    Function("pictureInPictureSupported") { CallPictureInPicture.supported(appContext.currentActivity) }
+    OnUserLeavesActivity { CallPictureInPicture.onUserLeave(appContext.currentActivity) }
+    OnActivityEntersForeground { CallPictureInPicture.refresh(appContext.currentActivity) }
 
     AsyncFunction("configure") { apiBaseUrl: String, options: Map<String, Any?>? ->
       val ctx = context ?: return@AsyncFunction null
@@ -90,6 +105,11 @@ class PoolseCallsModule : Module() {
     Function("switchCamera") { core()?.switchCamera() }
     Function("setSpeaker") { on: Boolean -> core()?.setSpeaker(on) }
     Function("setAudioOutput") { id: String -> core()?.setAudioOutput(id) }
+
+    // What authorizes acting on the call itself (ringing people in).
+    AsyncFunction("callControl") {
+      core()?.control?.let { (callId, token) -> mapOf("callId" to callId, "controlToken" to token) }
+    }
 
     // Socket forwarding (open app): idempotent with the FCM path.
     Function("onRingEnded") { callId: String, reason: String -> core()?.onRingEnded(callId, reason) }

@@ -27,6 +27,9 @@ protocol MediaEvents: AnyObject {
   func onAudioOutputs(_ outputs: [AudioOutput], selectedId: String?)
   /// The local camera track is (not) published + enabled; facing `front` | `back`.
   func onLocalCamera(on: Bool, facing: String?)
+  /// Our own link to the SFU (`good` | `poor` | `lost` | `unknown`), and
+  /// whether incoming video is paused to keep the audio going.
+  func onNetwork(quality: String, videoPaused: Bool)
 }
 
 /// Step-by-step trace of the audio path, in the device log as
@@ -88,6 +91,17 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private var mutedWanted = false
   private var cameraWanted: Bool?
   private var joinedCallId: String?
+
+  /// Our own link to the SFU, as last reported.
+  private var localQuality = "unknown"
+  /// Incoming video is switched off to keep the audio going (see
+  /// `qualityChanged`). Survives a rejoin of the same call, like mute.
+  private var videoPaused = false
+  private var pauseWork: DispatchWorkItem?
+  private var resumeWork: DispatchWorkItem?
+  /// Weak this long before video is paused; good this long before it is back.
+  private static let pauseVideoAfter: TimeInterval = 6
+  private static let resumeVideoAfter: TimeInterval = 10
 
   private let surfaces = NSHashTable<LiveKitVideoSurface>.weakObjects()
   private var audioPrepared = false
@@ -311,6 +325,13 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     mutedWanted = false
     cameraWanted = nil
     outputWanted = nil
+    pauseWork?.cancel()
+    resumeWork?.cancel()
+    pauseWork = nil
+    resumeWork = nil
+    videoPaused = false
+    localQuality = "unknown"
+    reportNetwork()
   }
 
   private func detach() {
@@ -319,6 +340,11 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     room = nil
     observer = nil
     connectedRoom = nil
+    // Their timers belong to that room; the next one starts its own.
+    pauseWork?.cancel()
+    resumeWork?.cancel()
+    pauseWork = nil
+    resumeWork = nil
     refreshVideo()
     Task { await r.disconnect() }
     events?.onLocalCamera(on: false, facing: nil)
@@ -555,8 +581,8 @@ final class LiveKitMediaPort: NSObject, MediaPort {
 
   // MARK: - video
 
-  func createVideoSurface() -> LiveKitVideoSurface {
-    let s = LiveKitVideoSurface(port: self)
+  func createVideoSurface(renderMode: VideoView.RenderMode = .auto) -> LiveKitVideoSurface {
+    let s = LiveKitVideoSurface(port: self, renderMode: renderMode)
     surfaces.add(s)
     return s
   }
@@ -582,7 +608,8 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   }
 
   private func remoteCamera(_ p: RemoteParticipant) -> VideoTrack? {
-    guard let pub = p.trackPublications.values.first(where: { $0.source == .camera }) as? RemoteTrackPublication,
+    // Paused: no picture to draw — the avatar shows, with the reason.
+    guard !videoPaused, let pub = p.trackPublications.values.first(where: { $0.source == .camera }) as? RemoteTrackPublication,
           pub.isSubscribed, !pub.isMuted else { return nil }
     return pub.track as? VideoTrack
   }
@@ -617,12 +644,94 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       emit(r)
       refreshVideo()
     case .tracksChanged:
+      if videoPaused { applyVideoPause(r) }
       emit(r)
       reportLocalCamera(r)
       refreshVideo()
     case .rosterChanged:
       emit(r)
+    case .quality:
+      qualityChanged(r)
+      emit(r)
     }
+  }
+
+  // MARK: - connection quality
+
+  static func wire(_ q: ConnectionQuality) -> String {
+    switch q {
+    case .excellent, .good: return "good"
+    case .poor: return "poor"
+    case .lost: return "lost"
+    default: return "unknown"
+    }
+  }
+
+  /// Our link went weak or came back. Weak for a while on a call with
+  /// video coming in: switch that video off so the audio keeps going —
+  /// the way FaceTime falls back — and bring it back once the link has
+  /// been good for a while. Brief dips change nothing.
+  private func qualityChanged(_ r: Room) {
+    guard room === r else { return }
+    let q = Self.wire(r.localParticipant.connectionQuality)
+    if q == "poor" || q == "lost" {
+      resumeWork?.cancel()
+      resumeWork = nil
+      if !videoPaused && pauseWork == nil && hasRemoteVideo(r) {
+        let w = DispatchWorkItem { [weak self, weak r] in
+          guard let self = self, let r = r, self.room === r else { return }
+          self.pauseWork = nil
+          self.setVideoPaused(r, true)
+        }
+        pauseWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.pauseVideoAfter, execute: w)
+      }
+    } else if q == "good" {
+      pauseWork?.cancel()
+      pauseWork = nil
+      if videoPaused && resumeWork == nil {
+        let w = DispatchWorkItem { [weak self, weak r] in
+          guard let self = self, let r = r, self.room === r else { return }
+          self.resumeWork = nil
+          self.setVideoPaused(r, false)
+        }
+        resumeWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.resumeVideoAfter, execute: w)
+      }
+    }
+    if q != localQuality {
+      localQuality = q
+      reportNetwork()
+    }
+  }
+
+  private func hasRemoteVideo(_ r: Room) -> Bool {
+    r.remoteParticipants.values.contains { p in p.trackPublications.values.contains { $0.source == .camera } }
+  }
+
+  private func setVideoPaused(_ r: Room, _ paused: Bool) {
+    pcTrace("incoming video \(paused ? "paused" : "resumed") quality=\(localQuality)")
+    videoPaused = paused
+    applyVideoPause(r)
+    refreshVideo()
+    emit(r)
+    reportNetwork()
+  }
+
+  /// Every remote camera on or off to match `videoPaused` — including
+  /// one published after the pause began.
+  private func applyVideoPause(_ r: Room) {
+    let enabled = !videoPaused
+    for p in r.remoteParticipants.values {
+      for case let pub as RemoteTrackPublication in p.trackPublications.values
+      where pub.source == .camera && pub.isEnabled != enabled {
+        Task { try? await pub.set(enabled: enabled) }
+      }
+    }
+  }
+
+  private func reportNetwork() {
+    events?.onNetwork(quality: localQuality, videoPaused: videoPaused)
   }
 
   /// The REMOTE roster — the local participant is never included.
@@ -634,7 +743,8 @@ final class LiveKitMediaPort: NSObject, MediaPort {
         externalId: externalId(p) ?? identity,
         speaking: p.isSpeaking,
         muted: !p.isMicrophoneEnabled(),
-        cameraOn: remoteCamera(p) != nil
+        cameraOn: remoteCamera(p) != nil,
+        connectionQuality: Self.wire(p.connectionQuality)
       )
     }
     events?.onParticipants(roster)
@@ -652,7 +762,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
 
 /// LiveKit's delegate → main-thread room events for the port.
 final class RoomObserver: NSObject, RoomDelegate, @unchecked Sendable {
-  enum Kind { case connected, reconnecting, reconnected, disconnected, participantJoined, tracksChanged, rosterChanged }
+  enum Kind { case connected, reconnecting, reconnected, disconnected, participantJoined, tracksChanged, rosterChanged, quality }
 
   private weak var port: LiveKitMediaPort?
   private weak var room: Room?
@@ -684,4 +794,5 @@ final class RoomObserver: NSObject, RoomDelegate, @unchecked Sendable {
   func room(_ room: Room, didUpdateSpeakingParticipants participants: [Participant]) { send(room, .rosterChanged) }
   func room(_ room: Room, participant: Participant, didUpdateMetadata metadata: String?) { send(room, .rosterChanged) }
   func room(_ room: Room, participant: Participant, didUpdateAttributes attributes: [String: String]) { send(room, .rosterChanged) }
+  func room(_ room: Room, participant: Participant, didUpdateConnectionQuality quality: ConnectionQuality) { send(room, .quality) }
 }

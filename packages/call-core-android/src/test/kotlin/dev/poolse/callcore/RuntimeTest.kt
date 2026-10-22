@@ -227,10 +227,42 @@ class RuntimeTest {
     assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
     assertEquals(9_000L, r.timers.scheduled["alone_probe"]?.first)
     r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!!(HttpResult.Timeout) // no answer from the server: leave all the same
     assertTrue(r.http.log.contains("hangup:c1:ctl-c1"))
     assertEquals(Phase.ENDED, r.runtime.currentState().phase)
     assertEquals(EndReason.FINISHED, r.runtime.currentState().reason)
     assertEquals("leave", r.media.log.last())
+  }
+
+  @Test
+  fun `alone while someone is rung in waits for them`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    val ringing = bundle("c1").copy(ringing = 1)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!!(HttpResult.Ok(ringing))
+    assertEquals(5_000L, r.timers.scheduled["alone_probe"]?.first)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!!(HttpResult.Ok(ringing))
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+    assertFalse(r.http.log.contains("hangup:c1:ctl-c1"))
+    // Rang out: back to leaving shortly after.
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!!(HttpResult.Ok(bundle("c1")))
+    assertEquals(9_000L, r.timers.scheduled["alone_probe"]?.first)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!!(HttpResult.Ok(bundle("c1")))
+    assertEquals(Phase.ENDED, r.runtime.currentState().phase)
+  }
+
+  @Test
+  fun `control is the current call's token`() {
+    val r = Rig()
+    assertNull(r.runtime.control)
+    r.activeCall()
+    assertEquals("c1" to "ctl-c1", r.runtime.control)
   }
 
   @Test

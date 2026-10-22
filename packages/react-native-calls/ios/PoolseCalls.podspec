@@ -63,6 +63,6 @@ Pod::Spec.new do |s|
     'SWIFT_COMPILATION_MODE' => 'wholemodule',
   }
 
-  s.frameworks = 'CallKit', 'PushKit', 'AVFoundation', 'UIKit', 'UserNotifications'
+  s.frameworks = 'CallKit', 'PushKit', 'AVFoundation', 'AVKit', 'UIKit', 'UserNotifications'
   s.source_files = 'Core/**/*.swift', 'Platform/**/*.swift', 'Module/**/*.swift'
 end

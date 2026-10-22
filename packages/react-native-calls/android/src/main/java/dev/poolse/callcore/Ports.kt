@@ -55,6 +55,8 @@ data class CallSessionBundle(
   val controlToken: String,
   /** `room` (rings nobody, CONTRACT.md §5.6) or `call`. */
   val kind: String = "call",
+  /** How many people the server says are being rung right now. */
+  val ringing: Int = 0,
 )
 
 /** LiveKit (or any SFU) — media only, no lifecycle opinions. */
