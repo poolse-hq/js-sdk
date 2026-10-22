@@ -13,6 +13,9 @@ protocol CallKitActions: AnyObject {
   func callKitAudioActivated(_ session: AVAudioSession)
   func callKitAudioDeactivated(_ session: AVAudioSession)
   func callKitReset()
+  /// "Hold & Accept" on the call-waiting screen: true if `callId` is the
+  /// current call with another waiting (it will be ENDED, not held).
+  func callKitHoldForWaiting(callId: String) -> Bool
 }
 
 /// The iOS ring surface + call session: one CXProvider for the process.
@@ -61,7 +64,12 @@ final class CallKitController: NSObject, CXProviderDelegate {
     // display name) but still honoured; the label is the product's.
     let config = CXProviderConfiguration(localizedName: "Loop")
     config.supportsVideo = true
-    config.maximumCallGroups = 1
+    // Two groups: room for a second call to ring beside the live one, so
+    // iOS presents its call-waiting screen (End & Accept / Decline). With
+    // one, a second call rang as a plain Accept/Decline that silently
+    // ended the first. There is never a second call in progress — Loop
+    // cannot hold: answering one ends the other (`callKitHoldForWaiting`).
+    config.maximumCallGroups = 2
     config.maximumCallsPerCallGroup = 1
     config.supportedHandleTypes = [.generic]
     config.includesCallsInRecents = false
@@ -113,10 +121,15 @@ final class CallKitController: NSObject, CXProviderDelegate {
       return
     }
     let t = Tracked(uuid: UUID(), callId: ring.callId, outgoing: false, hasVideo: hasVideo, title: title)
+    // A call waiting beside a live one must not touch the live call's
+    // session (a voice ring switched a video call's mode, and its route).
+    let beside = !liveCalls.isEmpty
     calls[t.uuid] = t
-    Self.prepareSessionForCall(video: hasVideo)
+    pcTrace("CallKit report incoming \(ring.callId) beside=\(beside) live=\(liveCalls.count)")
+    if !beside { Self.prepareSessionForCall(video: hasVideo) }
     provider.reportNewIncomingCall(with: t.uuid, update: update(title: title, handle: ring.conversationId, video: hasVideo)) { [weak self] error in
       guard let error = error else { return }
+      pcTrace("CallKit refused incoming \(ring.callId): \(error.localizedDescription)")
       NSLog("[PoolseCalls] CallKit refused incoming call %@: %@", ring.callId, error.localizedDescription)
       // Refused (DND, blocked, busy group): CallKit holds nothing for it.
       // End the ring in the core too — silently (no decline is sent), so
@@ -250,8 +263,9 @@ final class CallKitController: NSObject, CXProviderDelegate {
   }
 
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
-    pcTrace("CallKit answer action")
-    guard let t = calls[action.callUUID], !t.ended else { action.fail(); return }
+    let found = calls[action.callUUID]
+    pcTrace("CallKit answer action \(found?.callId ?? "unknown") live=\(liveCalls.count)")
+    guard let t = found, !t.ended else { action.fail(); return }
     let fromUs = t.answered
     t.answered = true
     // Before fulfil: CallKit activates the session right after.
@@ -264,6 +278,7 @@ final class CallKitController: NSObject, CXProviderDelegate {
   }
 
   func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+    pcTrace("CallKit end action \(calls[action.callUUID]?.callId ?? "unknown") live=\(liveCalls.count)")
     guard let t = calls[action.callUUID] else { action.fulfill(); return }
     let fromUs = t.ended
     t.ended = true
@@ -285,7 +300,18 @@ final class CallKitController: NSObject, CXProviderDelegate {
   }
 
   func provider(_ provider: CXProvider, perform action: CXSetHeldCallAction) {
-    action.fail() // no hold: one call at a time
+    let t = calls[action.callUUID]
+    pcTrace("CallKit held action \(t?.callId ?? "unknown") onHold=\(action.isOnHold)")
+    // No hold, one call at a time. "Hold & Accept" on the call-waiting
+    // screen holds this call and answers the other: here the answer that
+    // follows ENDS this one (end-and-answer), so the hold is honoured as
+    // that. Already gone (the answer came first and ended it): nothing to do.
+    guard let t = t else { action.fulfill(); return }
+    if action.isOnHold, actions?.callKitHoldForWaiting(callId: t.callId) == true {
+      action.fulfill()
+    } else {
+      action.fail()
+    }
   }
 
   func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {

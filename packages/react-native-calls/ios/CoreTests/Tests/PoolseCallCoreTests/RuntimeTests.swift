@@ -320,6 +320,76 @@ final class RuntimeTests: XCTestCase {
     XCTAssertEqual(r.session.log.last, "stop")
   }
 
+  // ── alone in a call: ask the server ─────────────────────────────────
+
+  func testAloneInACallTheServerSaysItIsOverAndItEndsHere() {
+    let r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    XCTAssertEqual(r.timers.scheduled["alone_probe"]?.0, 3_000)
+    r.timers.fire("alone_probe")
+    XCTAssertEqual(r.http.log.last, "reconnect:c1:ctl-c1")
+    r.http.lastReconnectCb!(.gone)
+    XCTAssertEqual(r.runtime.currentState().phase, .ended)
+    XCTAssertEqual(r.runtime.currentState().reason, .finished)
+    XCTAssertEqual(r.media.log.last, "leave")
+  }
+
+  func testAloneButStillLiveAsksOnceMoreThenStops() {
+    let r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!(.ok(bundle("c1")))
+    XCTAssertEqual(r.runtime.currentState().phase, .active)
+    XCTAssertEqual(r.timers.scheduled["alone_probe"]?.0, 35_000)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!(.ok(bundle("c1")))
+    XCTAssertNil(r.timers.scheduled["alone_probe"])
+    XCTAssertEqual(r.runtime.currentState().phase, .active)
+  }
+
+  func testSomeoneBackCancelsTheCheckAndNobodyYetNeverStartsIt() {
+    let r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(0) // nobody has been in it yet: still waiting for them
+    XCTAssertNil(r.timers.scheduled["alone_probe"])
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    r.runtime.onRemoteCount(1)
+    XCTAssertNil(r.timers.scheduled["alone_probe"])
+  }
+
+  func testARoomIsNeverOverForBeingAlone() {
+    let r = Rig()
+    r.runtime.onRing(ring())
+    r.runtime.answer()
+    var b = bundle()
+    b.kind = "room"
+    r.http.lastCb!(.ok(b))
+    r.runtime.onMediaConnected()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    XCTAssertNil(r.timers.scheduled["alone_probe"])
+  }
+
+  func testALateProbeAnswerNeverEndsTheNextCall() {
+    let r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    r.timers.fire("alone_probe")
+    let late = r.http.lastReconnectCb!
+    r.runtime.hangUp()
+    r.timers.fire("linger")
+    r.activeCall("c2")
+    late(.gone)
+    XCTAssertEqual(r.runtime.currentState().callId, "c2")
+    XCTAssertEqual(r.runtime.currentState().phase, .active)
+  }
+
   func testExhaustedReconnectBudgetHangsUp() {
     let r = Rig()
     r.activeCall()

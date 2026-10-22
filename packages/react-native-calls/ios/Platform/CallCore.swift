@@ -377,6 +377,7 @@ final class CallCore {
       // Not the call the machine is in (ended, busy-declined, superseded).
       // Terminal: whatever CallKit still shows is the call that just ended.
       let reason = endReason(for: t, state: state, current: terminal || t.callId == state.callId)
+      pcTrace("reconcile end \(t.callId) reason=\(reason.map { "\($0.rawValue)" } ?? "local") phase=\(state.phase)")
       callKit.end(t, reason: reason)
     }
     for t in live where !terminal && t.callId == state.callId {
@@ -463,6 +464,7 @@ final class CallCore {
   fileprivate func remoteJoined() { runtime.onRemoteJoined() }
   fileprivate func participants(_ p: [SnapshotParticipant]) {
     runtime.post { [weak self] in self?.roster = p }
+    runtime.onRemoteCount(p.count)
     runtime.reemit()
   }
   fileprivate func route(_ r: String) {
@@ -484,6 +486,7 @@ final class CallCore {
 extension CallCore: CallKitActions {
   func callKitAnswer(callId: String) {
     let s = runtime.currentState()
+    pcTrace("callKitAnswer \(callId) phase=\(s.phase) current=\(s.callId ?? "-") waiting=\(s.waiting?.callId ?? "-")")
     // End & Accept may answer the waiting call before ending the current
     // one: answering it ends the current call itself.
     if s.waiting?.callId == callId {
@@ -496,6 +499,7 @@ extension CallCore: CallKitActions {
 
   func callKitEnd(callId: String) {
     let s = runtime.currentState()
+    pcTrace("callKitEnd \(callId) phase=\(s.phase) current=\(s.callId ?? "-") waiting=\(s.waiting?.callId ?? "-")")
     // Decline on CallKit's call-waiting UI.
     if s.waiting?.callId == callId {
       runtime.declineWaiting(callId: callId)
@@ -519,6 +523,11 @@ extension CallCore: CallKitActions {
   func callKitAudioDeactivated(_ session: AVAudioSession) {
     ringback.stop()
     mediaPort.audioDeactivated()
+  }
+
+  func callKitHoldForWaiting(callId: String) -> Bool {
+    let s = runtime.currentState()
+    return s.callId == callId && s.waiting != nil
   }
 
   func callKitReset() {

@@ -199,6 +199,79 @@ class RuntimeTest {
     assertTrue(r.surface.log.none { it == "ringback+" })
   }
 
+  // ── alone in a call: ask the server ─────────────────────────────────
+
+  @Test
+  fun `alone in a call the server says it is over and it ends here`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    assertEquals(3_000L, r.timers.scheduled["alone_probe"]?.first)
+    r.timers.fire("alone_probe")
+    assertEquals("reconnect:c1:ctl-c1", r.http.log.last())
+    r.http.lastReconnectCb!!(HttpResult.Gone)
+    assertEquals(Phase.ENDED, r.runtime.currentState().phase)
+    assertEquals(EndReason.FINISHED, r.runtime.currentState().reason)
+    assertEquals("leave", r.media.log.last())
+  }
+
+  @Test
+  fun `alone but still live asks once more then stops`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!!(HttpResult.Ok(bundle("c1")))
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+    assertEquals(35_000L, r.timers.scheduled["alone_probe"]?.first)
+    r.timers.fire("alone_probe")
+    r.http.lastReconnectCb!!(HttpResult.Ok(bundle("c1")))
+    assertNull(r.timers.scheduled["alone_probe"])
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+  }
+
+  @Test
+  fun `someone back cancels the check and nobody yet never starts it`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(0)
+    assertNull(r.timers.scheduled["alone_probe"])
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    r.runtime.onRemoteCount(1)
+    assertNull(r.timers.scheduled["alone_probe"])
+  }
+
+  @Test
+  fun `a room is never over for being alone`() {
+    val r = Rig()
+    r.runtime.onRing(ring())
+    r.runtime.answer()
+    r.http.lastCb!!(HttpResult.Ok(bundle().copy(kind = "room")))
+    r.runtime.onMediaConnected()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    assertNull(r.timers.scheduled["alone_probe"])
+  }
+
+  @Test
+  fun `a late probe answer never ends the next call`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    r.timers.fire("alone_probe")
+    val late = r.http.lastReconnectCb!!
+    r.runtime.hangUp()
+    r.timers.fire("linger")
+    r.activeCall("c2")
+    late(HttpResult.Gone)
+    assertEquals("c2", r.runtime.currentState().callId)
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+  }
+
   @Test
   fun `reconnect uses the control token and a refusal means we are out`() {
     val r = Rig()

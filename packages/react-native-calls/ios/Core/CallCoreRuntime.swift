@@ -32,6 +32,10 @@ public final class CallCoreRuntime {
   private static let T_CONNECT = "connect_watchdog"
   private static let T_RING_OUT = "ring_out_backstop"
   private static let T_WAITING = "waiting_deadline"
+  private static let T_ALONE = "alone_probe"
+  /// Alone in a call: ask the server after a moment (the other side's own
+  /// reconnect gets that long), and once more past its 30s drop grace.
+  public static let ALONE_PROBES_MS: [Int64] = [3_000, 35_000]
 
   private let http: HttpPort
   private let media: MediaPort
@@ -57,6 +61,8 @@ public final class CallCoreRuntime {
   private var gen = 0
   /// callIds already resolved on this device; bounded LRU (insertion/refresh order).
   private var resolved: [String] = []
+  /// The call whose media has had someone else in it (for `onRemoteCount`).
+  private var remoteSeenFor: String?
 
   private var queue: [() -> Void] = []
   private var draining = false
@@ -194,6 +200,52 @@ public final class CallCoreRuntime {
   public func onMediaReconnecting() { post { [self] in dispatch(.mediaReconnecting) } }
   public func onMediaRecovered() { post { [self] in dispatch(.mediaRecovered) } }
   public func onRemoteJoined() { post { [self] in dispatch(.remoteJoined) } }
+
+  /// The media's remote roster changed: `remotes` other people in it.
+  ///
+  /// Everyone else gone from a call (not a room) usually means it is over
+  /// — and this device may never be told: an iPhone gets no `finished`
+  /// push, and the conversation channel that carries the socket event can
+  /// have been left. So, alone, ask the server (the reconnect endpoint
+  /// answers 410 for a call that is over) and end here as finished if so.
+  /// Someone back in the room cancels the check.
+  public func onRemoteCount(_ remotes: Int) {
+    post { [self] in
+      guard let callId = state.callId else { return }
+      if remotes > 0 {
+        remoteSeenFor = callId
+        timers.cancel(key: CallCoreRuntime.T_ALONE)
+        return
+      }
+      guard state.phase == .active, callKind != "room", remoteSeenFor == callId else { return }
+      scheduleAloneProbe(callId, attempt: 0)
+    }
+  }
+
+  private func scheduleAloneProbe(_ callId: String, attempt: Int) {
+    guard attempt < CallCoreRuntime.ALONE_PROBES_MS.count else { return }
+    let g = gen
+    timers.schedule(key: CallCoreRuntime.T_ALONE, delayMs: CallCoreRuntime.ALONE_PROBES_MS[attempt]) { [weak self] in
+      self?.post { [weak self] in
+        guard let self = self, g == self.gen, self.state.callId == callId else { return }
+        self.probeAlone(callId, attempt: attempt)
+      }
+    }
+  }
+
+  private func probeAlone(_ callId: String, attempt: Int) {
+    guard state.phase == .active, let b = bundle else { return }
+    let g = gen
+    // A still-live answer carries a fresh bundle; the current one stays
+    // in use (its token is still good), so it is dropped.
+    http.reconnect(current: b) { [weak self] res in
+      self?.post { [weak self] in
+        guard let self = self, g == self.gen, self.state.callId == callId else { return }
+        if case .gone = res { self.dispatch(.callFinished(callId: callId, reason: "finished")) }
+        else { self.scheduleAloneProbe(callId, attempt: attempt + 1) }
+      }
+    }
+  }
 
   public func setMuted(_ muted: Bool) { post { [self] in media.setMuted(muted) } }
   public func setCamera(_ on: Bool) { post { [self] in media.setCamera(on) } }

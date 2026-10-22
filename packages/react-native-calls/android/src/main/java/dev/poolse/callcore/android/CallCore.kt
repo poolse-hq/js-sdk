@@ -338,6 +338,7 @@ class CallCore private constructor(context: Context) {
     override fun onRemoteJoined() = runtime.onRemoteJoined()
     override fun onParticipants(participants: List<MediaParticipant>) {
       runtime.post { roster = participants }
+      runtime.onRemoteCount(participants.size)
       runtime.reemit()
     }
     override fun onAudioRoute(route: String) {
