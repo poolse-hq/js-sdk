@@ -1,6 +1,6 @@
 {
   "name": "@poolse/react-native-calls",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Native call core for poolse — Kotlin/Swift calling engine with a thin React Native bridge. Ring, answer and carry audio with the app killed and the phone locked.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,9 @@
       "react-native": "./src/index.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./app.plugin.js": "./app.plugin.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "src",
@@ -28,8 +30,11 @@
     "ios/PoolseCalls.podspec",
     "!ios/CoreTests",
     "!**/.build",
+    "app.plugin.js",
+    "plugin",
     "expo-module.config.json",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup",

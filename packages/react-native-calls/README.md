@@ -26,6 +26,38 @@ calls.setAudioOutput(s.audioOutputs[0].id);
 calls.setSpeaker(true); // the one-tap toggle, still there
 ```
 
+## Setup
+
+One config plugin does everything the native core needs from the
+generated projects. In `app.json`, after `expo-notifications`:
+
+```json
+"plugins": [
+  "expo-notifications",
+  ["@poolse/react-native-calls", { "ringback": "./assets/sounds/ringback.mp3" }]
+]
+```
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `ringback` | none | A sound file shipped in both bundles; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only (an Android resource name). Without it the caller hears nothing while it rings. |
+| `pictureInPicture` | `true` | Android: the activity may float as a picture-in-picture window during a video call. |
+| `lockscreen` | `true` | Android: the app shows over the lock screen when it is opened for a call, so answering never demands an unlock. |
+
+Always applied (Android): the LiveKit media adapter (`poolse.livekit`
+gradle property) and `expo-notifications` as the delegate for pushes
+that are not calls. iOS needs nothing beyond the ringback: CallKit,
+PushKit and picture-in-picture come with the module itself.
+
+### Moving from per-app plugins (0.12 and earlier)
+
+Apps that copied `withNativeCallMedia`, `withCallDelegate`,
+`withLockscreenCalls`, `withPictureInPicture` and `withRingback` into
+their own `plugins/` folder delete them and add the single entry above;
+the generated projects come out the same. Keep the ringback file where
+it is and point `ringback` at it — its name is what `configure` already
+passes. Run `npx expo prebuild --clean` once afterwards.
+
 ### Rooms — voice or video, nobody rings
 
 A room is the conversation's drop-in call: members join when they like
