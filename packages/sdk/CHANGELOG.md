@@ -4,6 +4,23 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+
+## [3.0.0] — 2026-10-26
+
+### Changed
+
+- **License.** From 3.0.0 this package is under the poolse SDK License
+  (see `LICENSE`): free to use, including commercially, in apps built on
+  poolse; not for use with other backends or to build a competing
+  service. Versions before 3.0.0 remain MIT.
+- First stable release; all `@poolse/*` packages move to 3.0.0 together.
+  Earlier versions are deprecated. See `MIGRATING.md`.
+
+### Added
+
+- `LiveCall.video_allowed` and `LiveCall.max_participants`: the workspace's
+  call limits, set on the dashboard's Calls page.
+
 ## [2.26.0] — 2026-10-22
 
 ### Removed

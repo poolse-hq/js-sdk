@@ -11,7 +11,7 @@ coverage
 packages/call-core-android/build/
 
 # Android library build artifacts
-packages/react-native-calls/android/build/
-packages/react-native-calls/android/.gradle/
-packages/react-native-calls/android/local.properties
+packages/native/android/build/
+packages/native/android/.gradle/
+packages/native/android/local.properties
 .gradle/

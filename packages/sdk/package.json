@@ -1,8 +1,8 @@
 {
   "name": "@poolse/sdk",
-  "version": "2.26.0",
-  "description": "Headless TypeScript chat SDK for the poolse realtime backend. REST + WebSocket client for Node, Bun, Deno, browsers, and React Native. Framework-agnostic, no UI. MIT — alternative to Sendbird, Stream, Pusher, TalkJS, CometChat.",
-  "license": "MIT",
+  "version": "3.0.0",
+  "description": "Headless TypeScript chat SDK for the poolse realtime backend. REST + WebSocket client for Node, Bun, Deno, browsers, and React Native. Framework-agnostic, no UI. MIT \u2014 alternative to Sendbird, Stream, Pusher, TalkJS, CometChat.",
+  "license": "SEE LICENSE IN LICENSE",
   "keywords": [
     "chat",
     "chat-sdk",
@@ -53,6 +53,7 @@
   "files": [
     "dist",
     "README.md",
+    "LICENSE",
     "CHANGELOG.md"
   ],
   "scripts": {

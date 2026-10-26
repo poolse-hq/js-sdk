@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "description": "Workspace root for the poolse JS SDKs (@poolse/sdk, @poolse/react, @poolse/react-ui).",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",

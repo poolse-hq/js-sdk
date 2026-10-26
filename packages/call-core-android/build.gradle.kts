@@ -17,7 +17,7 @@ repositories { mavenCentral() }
 sourceSets {
   main {
     kotlin {
-      setSrcDirs(listOf("../react-native-calls/android/src/main/java"))
+      setSrcDirs(listOf("../native/android/src/main/java"))
       // Only the dependency-free core package — the sibling `.android`
       // package needs the Android SDK and is built by the library.
       include("dev/poolse/callcore/CallMachine.kt")

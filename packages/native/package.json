@@ -1,0 +1,55 @@
+{
+  "name": "@poolse/native",
+  "version": "3.0.0",
+  "description": "Native call core for poolse \u2014 Kotlin/Swift calling engine with a thin React Native bridge. Ring, answer and carry audio with the app killed and the phone locked.",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./app.plugin.js": "./app.plugin.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "dist",
+    "android/build.gradle",
+    "android/consumer-rules.pro",
+    "android/src",
+    "ios/Core",
+    "ios/Platform",
+    "ios/Module",
+    "ios/PoolseCalls.podspec",
+    "!ios/CoreTests",
+    "!**/.build",
+    "app.plugin.js",
+    "plugin",
+    "expo-module.config.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "expo-notifications": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "expo-modules-core": "*",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.0"
+  }
+}

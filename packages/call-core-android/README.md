@@ -14,7 +14,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17 \
 The vectors (`contracts/call-core/vectors.json`) are a tracked input
 of the test task: editing the contract re-runs the suite.
 
-Layering (see contracts/call-core/CONTRACT.md and the plan artifact):
+Layering (see poolse-server/docs/CALL_CONTRACT.md and the plan artifact):
 
 - `CallMachine` — events in, (state, effects) out. Never does I/O,
   never counts participants: lifecycle authority is the server's.
@@ -25,5 +25,5 @@ Layering (see contracts/call-core/CONTRACT.md and the plan artifact):
 Next increments: the runtime that executes effects through the ports,
 the Android adapters (moving the ring surface out of the Loop app's
 local module), the FirebaseMessagingService intake, and the
-`@poolse/react-native-calls` bridge. Maven extraction happens in
+`@poolse/native` bridge. Maven extraction happens in
 Stage 5.

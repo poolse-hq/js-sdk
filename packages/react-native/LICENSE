@@ -1,0 +1,206 @@
+poolse SDK License
+
+Copyright (c) 2026 Torsten Labs DOO. All rights reserved.
+
+Version 1.0. Applies to poolse SDK releases from version 3.0.0 onwards.
+
+
+SUMMARY (NOT PART OF THE LICENSE TERMS)
+
+This summary is for convenience only. It is not part of the license and
+has no legal effect. If it differs from the terms below, the terms below
+apply.
+
+  - You can use, copy and modify the SDK for free, including in
+    commercial apps, as long as your app talks to the poolse Services.
+  - You can ship the SDK inside your app, compiled or bundled, including
+    the native iOS and Android source code needed to build it.
+  - You cannot use the SDK with any other backend, use it to build a
+    competing chat, realtime, calling or push service, or redistribute
+    or sell it as a standalone library or SDK.
+  - Keep this license notice in copies of the SDK source.
+  - The SDK comes with no warranty.
+  - Versions published before 3.0.0 remain under the MIT License.
+
+
+TERMS AND CONDITIONS
+
+1. Definitions
+
+"Licensor" means Torsten Labs DOO, Ilindenska 335, 1200 Tetovo, North
+Macedonia.
+
+"You" means the individual or legal entity exercising rights under this
+license. If you accept this license on behalf of an organisation, "you"
+includes that organisation.
+
+"SDK" means the software in this package or repository published by the
+Licensor under this license, including source code, compiled code, native
+iOS and Android code, type definitions, configuration plugins, examples
+and documentation, together with any updates the Licensor provides under
+this license.
+
+"poolse Services" means the hosted services operated by the Licensor under
+the name "poolse", currently offered at https://poolse.dev, including their
+APIs, realtime, calling and push notification infrastructure. It also
+includes any self-hosted or on-premise deployment of poolse that you have
+licensed directly from the Licensor, for as long as that license is in
+effect.
+
+"Application" means a website, mobile app, desktop app, server or other
+software product that you develop and that provides material functionality
+of its own beyond the SDK.
+
+"Derivative Work" means any modification of the SDK, and any work that
+contains the SDK or a substantial portion of it.
+
+2. License Grant
+
+Subject to the terms of this license, the Licensor grants you a worldwide,
+non-exclusive, non-transferable, royalty-free license to:
+
+  (a) install, use, copy and modify the SDK, and create Derivative Works,
+      solely to develop, test and operate Applications that use the poolse
+      Services; and
+
+  (b) distribute the SDK and your Derivative Works, in source or compiled
+      form, only as an integrated part of your Applications. This includes
+      bundled or minified JavaScript and the native iOS and Android source
+      code that must be included for your Application to be compiled.
+
+Your Applications may be commercial, and you may charge for them.
+
+3. Restrictions
+
+You may not, and may not allow anyone else to:
+
+  (a) use the SDK or any Derivative Work with, or adapt it to connect to,
+      any backend, API or service other than the poolse Services;
+
+  (b) use the SDK or any Derivative Work to build, offer or operate a
+      product or service that competes with the poolse Services, including
+      any chat, messaging, realtime, voice or video calling, or push
+      notification service or infrastructure offered to third parties;
+
+  (c) sell, sublicense, rent, lease or distribute the SDK or any Derivative
+      Work on its own, or as a library, SDK, framework, component kit or
+      developer tool, rather than as an integrated part of an Application;
+
+  (d) remove, alter or obscure this license, any copyright notice, or any
+      other proprietary notice in the SDK; or
+
+  (e) use the SDK in violation of applicable law or of the terms of service
+      that govern your use of the poolse Services.
+
+Nothing in this license grants you any right to use the poolse Services
+themselves. Your use of the poolse Services is governed by your separate
+agreement with the Licensor, including its terms of service.
+
+4. Notices
+
+Any copy of the SDK or a Derivative Work in source form, including native
+source code distributed with an Application, must keep this license file
+or a clear reference to it. You do not need to display this license to the
+end users of your Application.
+
+5. Contributions
+
+If you submit code, documentation or other material to the Licensor for
+inclusion in the SDK (for example, as a pull request), you grant the
+Licensor a perpetual, worldwide, irrevocable, royalty-free license to use,
+modify, sublicense and distribute that material as part of the SDK or any
+other Licensor product, and you confirm that you have the right to grant
+that license.
+
+6. Ownership
+
+The SDK is licensed, not sold. The Licensor and its licensors keep all
+rights, title and interest in the SDK, including all intellectual property
+rights. All rights not expressly granted in this license are reserved. The
+names "poolse" and "Torsten Labs" and their logos are not licensed to you
+except as needed to truthfully describe that your Application uses the
+poolse Services.
+
+You own your modifications to the SDK, subject to the Licensor's rights in
+the SDK and to the terms of this license.
+
+7. Feedback
+
+If you give the Licensor suggestions or feedback about the SDK, the
+Licensor may use them without any obligation to you.
+
+8. Termination
+
+This license ends automatically, without notice, if you breach any of its
+terms. If you cure the breach within 30 days after you become aware of it,
+your license is reinstated, unless the Licensor has notified you in writing
+that it is terminating your license, or you have breached this license
+before.
+
+When this license ends, you must stop using and distributing the SDK and
+your Derivative Works, and delete all copies in your possession. Copies of
+Applications already delivered to end users before termination may continue
+to be used by those end users. Sections 3, 5, 6, 7, 9, 10, 11 and 12
+survive termination.
+
+9. Disclaimer of Warranty
+
+THE SDK IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS, IMPLIED OR STATUTORY, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND
+NON-INFRINGEMENT. THE LICENSOR DOES NOT WARRANT THAT THE SDK WILL BE
+ERROR-FREE, SECURE OR UNINTERRUPTED. YOU USE THE SDK AT YOUR OWN RISK.
+
+10. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL THE
+LICENSOR, ITS AFFILIATES OR ITS CONTRIBUTORS BE LIABLE FOR ANY INDIRECT,
+INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY OR PUNITIVE DAMAGES, OR FOR
+ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL OR BUSINESS OPPORTUNITY,
+ARISING OUT OF OR IN CONNECTION WITH THIS LICENSE OR THE SDK, WHETHER IN
+CONTRACT, TORT (INCLUDING NEGLIGENCE) OR OTHERWISE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES. BECAUSE THE SDK IS PROVIDED FREE OF CHARGE,
+THE LICENSOR'S TOTAL LIABILITY ARISING OUT OF OR IN CONNECTION WITH THIS
+LICENSE OR THE SDK WILL NOT EXCEED ONE HUNDRED EUROS (EUR 100).
+
+NOTHING IN THIS LICENSE EXCLUDES OR LIMITS ANY LIABILITY THAT CANNOT BE
+EXCLUDED OR LIMITED UNDER APPLICABLE LAW, INCLUDING LIABILITY FOR WILFUL
+MISCONDUCT OR GROSS NEGLIGENCE.
+
+11. Governing Law and Disputes
+
+This license is governed by the laws of the Republic of North Macedonia,
+without regard to its conflict of laws rules. The courts of the Republic of
+North Macedonia have exclusive jurisdiction over any dispute arising out of
+or in connection with this license, except that the Licensor may seek
+injunctive relief to protect its intellectual property in any court of
+competent jurisdiction.
+
+12. General
+
+This license is the entire agreement between you and the Licensor about the
+SDK. If any provision is found unenforceable, it will be enforced to the
+maximum extent possible and the remaining provisions stay in effect. A
+failure to enforce a provision is not a waiver. You may not assign this
+license without the Licensor's prior written consent. The Licensor may
+publish new versions of this license; each release of the SDK is governed
+by the version of this license included with it.
+
+13. Earlier Versions
+
+Versions of the poolse SDK packages published before version 3.0.0
+(including @poolse/sdk, @poolse/react, @poolse/react-ui and
+@poolse/react-native) were released under the MIT License and remain
+available under the MIT License. This license applies only to versions
+3.0.0 and later, and to any package first published by the Licensor under
+this license.
+
+14. Contact
+
+Questions about this license, or requests for permission beyond it, can be
+sent to legal@poolse.dev.
+
+Torsten Labs DOO
+Ilindenska 335
+1200 Tetovo
+North Macedonia

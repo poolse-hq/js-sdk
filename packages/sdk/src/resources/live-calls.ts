@@ -9,7 +9,7 @@ export interface LiveCallMember {
 }
 
 /**
- * The call running on a conversation right now (CONTRACT.md §4.2's
+ * The call running on a conversation right now (CALL_CONTRACT.md §4.2's
  * CallSummary). `participants` is who is in the room at this moment.
  */
 export interface LiveCall {
@@ -29,6 +29,10 @@ export interface LiveCall {
    * | `declined` | `missed` (rang out unanswered).
    */
   ring_states: Record<string, 'ringing' | 'answered' | 'declined' | 'missed'>;
+  /** The workspace's call limits (dashboard → Calls). False: hide the camera button. */
+  video_allowed?: boolean;
+  /** How many people the call holds; one more joining is refused with `call_full`. */
+  max_participants?: number;
 }
 
 /**

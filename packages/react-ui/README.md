@@ -2,7 +2,7 @@
 
 Drop-in React chat components — `<ConversationView>` mounts the whole chat surface in one component, or compose the building blocks (`<MessageBubble>`, `<MessageComposer>`, `<ConversationList>`, `<MemberList>`, `<ThreadView>`, `<MentionInput>`, `<TypingIndicator>`, `<ReactionPicker>`) for custom layouts. CSS-variable theming — re-skin without a rebuild. Built for Next.js + React 18+.
 
-> **MIT-licensed alternative to Sendbird UIKit, Stream Chat React UI, TalkJS, and CometChat React UI Kit.** Same component names + prop shapes as [`@poolse/react-native`](https://www.npmjs.com/package/@poolse/react-native) so cross-platform code stays mechanical to port.
+> **Source-available alternative to Sendbird UIKit, Stream Chat React UI, TalkJS, and CometChat React UI Kit.** Same component names + prop shapes as [`@poolse/react-native`](https://www.npmjs.com/package/@poolse/react-native) so cross-platform code stays mechanical to port.
 
 Sits on top of [`@poolse/react`](https://www.npmjs.com/package/@poolse/react) (hooks) and [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk) (client).
 
@@ -332,4 +332,4 @@ The package also re-exports a few helpers that are useful when you're composing 
 
 ## License
 
-MIT
+Licensed under the [poolse SDK License](./LICENSE) from 3.0.0 (source-available, for use with the poolse Services only); versions before 3.0.0 remain MIT.

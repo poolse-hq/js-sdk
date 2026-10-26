@@ -1,6 +1,6 @@
 {
   "cv": 1,
-  "notes": "Conformance vectors for the call state machine (CONTRACT.md §7). Every implementation (Kotlin core, Swift core, JS mirror) runs all vectors. given.phase + event → expect.phase + expect.effects (ordered, EMIT(snapshot) implicit on every transition). callId defaults to \"c1\"; \"c2\" is a different call. waitingCallId (given/expect): the call waiting beside the current one; expect null = none, absent = not checked.",
+  "notes": "Conformance vectors for the call state machine (CALL_CONTRACT.md §7). Every implementation (Kotlin core, Swift core, JS mirror) runs all vectors. given.phase + event → expect.phase + expect.effects (ordered, EMIT(snapshot) implicit on every transition). callId defaults to \"c1\"; \"c2\" is a different call. waitingCallId (given/expect): the call waiting beside the current one; expect null = none, absent = not checked.",
   "constants": {
     "FINISH_GRACE_MS": 30000,
     "ENDED_LINGER_MS": 2500,

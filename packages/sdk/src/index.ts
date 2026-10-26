@@ -108,7 +108,7 @@ export type {
 
 // ── Calling ──────────────────────────────────────────────────────────
 // Phones ring and carry calls in the native call core
-// (@poolse/react-native-calls); the web joins rooms (`poolse.rooms`,
+// (@poolse/native); the web joins rooms (`poolse.rooms`,
 // `CallRoom`). What both share:
 export type { CallMedia } from './voice/types.js';
 

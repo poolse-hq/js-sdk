@@ -2,7 +2,7 @@
 
 React hooks library for realtime chat. Wraps [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk) in `PoolseProvider` + a typed hook per resource — `useMessages`, `useThread`, `useReactions`, `useTyping`, `usePresence`, `useMembers`, `useAttachmentUpload`. Works in both web React and React Native — same hook surface, same behaviour, same types. No UI: for components see [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui) (web) or [`@poolse/react-native`](https://www.npmjs.com/package/@poolse/react-native) (mobile).
 
-> **MIT-licensed alternative to `sendbird-chat-react`, `stream-chat-react`, and `talkjs-react`.** Hooks-only by design — bring your own UI, or drop into the components when you don't want to.
+> **Source-available alternative to `sendbird-chat-react`, `stream-chat-react`, and `talkjs-react`.** Hooks-only by design — bring your own UI, or drop into the components when you don't want to.
 
 > **⚠️ Upgrading from 1.x?** See [MIGRATING.md](https://github.com/poolse-hq/js-sdk/blob/main/MIGRATING.md). `useUser`, `useTyping`, `usePresence`, and `useMembers().removeMember` all key by your `external_id` now instead of poolse uuids.
 
@@ -332,4 +332,4 @@ export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError };
 
 ## License
 
-MIT
+Licensed under the [poolse SDK License](./LICENSE) from 3.0.0 (source-available, for use with the poolse Services only); versions before 3.0.0 remain MIT.

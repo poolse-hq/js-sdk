@@ -2,7 +2,7 @@
 
 Headless TypeScript chat SDK — the REST + WebSocket client for the [poolse](https://poolse.dev) realtime backend. Drop-in for any runtime with `fetch` + `WebSocket`: browsers, Node ≥ 18, Bun, Deno, React Native. No UI, no framework dependency, fully typed surface.
 
-> **MIT-licensed alternative to Sendbird, Stream Chat, Pusher Chat, TalkJS, and CometChat.** SDK is open source; the hosted backend is paid (free tier available, no time limit).
+> **Source-available alternative to Sendbird, Stream Chat, Pusher Chat, TalkJS, and CometChat.** SDK source is available under the poolse SDK License; the hosted backend is paid (free tier available, no time limit).
 
 If you're using React, you'll usually want [`@poolse/react`](https://www.npmjs.com/package/@poolse/react) (hooks) or [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui) (prebuilt chat surface). Both sit on top of this package; you can drop down to it whenever you outgrow them.
 
@@ -394,4 +394,4 @@ The package exports the `Poolse` class, the resource and channel classes (`Conve
 
 ## License
 
-MIT
+Licensed under the [poolse SDK License](./LICENSE) from 3.0.0 (source-available, for use with the poolse Services only); versions before 3.0.0 remain MIT.

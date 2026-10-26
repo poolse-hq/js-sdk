@@ -81,7 +81,7 @@ export type {
 export { useAppStateLifecycle } from './lifecycle/useAppStateLifecycle.js';
 
 // ── Call building blocks ──────────────────────────────────────
-// Calls themselves run in the native call core (@poolse/react-native-calls),
+// Calls themselves run in the native call core (@poolse/native),
 // which hands your screen a snapshot to draw. These are the pieces that
 // are fiddly to get right, for building that screen.
 export { CallControlButton, type CallControlButtonProps } from './voice/CallControlButton.js';
