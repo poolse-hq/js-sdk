@@ -1,23 +1,54 @@
 # poolse-js
 
-TypeScript SDKs for the [poolse](https://github.com/jasirfetai/poolse) Chat-as-a-Service backend.
+TypeScript SDKs for [poolse](https://poolse.dev). Docs: <https://poolse.dev/docs/sdk>
 
-This repository is a pnpm monorepo. **Four packages**, each usable independently:
+This repository is a pnpm monorepo with **five packages**. They share one
+version number and are released together (current release: 3.1).
 
-| Package                                           | What                                                                                                                   | Use when                                                                     |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [`@poolse/sdk`](./packages/sdk)                   | Headless TypeScript SDK. REST + WebSocket + offline queue. No React, no DOM.                                           | Building for Node, vanilla JS, mobile (RN), or you want zero UI opinions.    |
-| [`@poolse/react`](./packages/react)               | Headless React hooks built on `@poolse/sdk`. Provider + `useMessages` / `useTyping` / `usePresence` / etc. **No UI**.  | You want real-time wired up but you're building your own UI from scratch.    |
-| [`@poolse/react-ui`](./packages/react-ui)         | Plug-and-play React components built on `@poolse/react`. CSS-variable theming + render-slot escape hatches.            | You want a working chat in 5 minutes; eject to lower layers later if needed. |
-| [`@poolse/react-native`](./packages/react-native) | Plug-and-play React Native components — same component names + prop shapes as `react-ui`, JS theme tokens, Expo-ready. | You're shipping an Expo / bare React Native app.                             |
+| Package                                           | What                                                                                                               | Use when                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| [`@poolse/sdk`](./packages/sdk)                   | Headless TypeScript client: REST, the realtime WebSocket, rooms and call media on the web. No React, no UI.        | Node, vanilla JS, other frameworks, or your own layer on top. |
+| [`@poolse/react`](./packages/react)               | React provider and hooks (`useMessages`, `useTyping`, `usePresence`, `useRoom`, …). No UI. Web and React Native.   | Your own UI with realtime state handled for you.              |
+| [`@poolse/react-ui`](./packages/react-ui)         | Prebuilt web components (`PoolseInbox`, `ConversationView`, room UI), themed with CSS variables.                   | A working web chat quickly.                                   |
+| [`@poolse/react-native`](./packages/react-native) | Prebuilt React Native / Expo components, a JS theme, the app-lifecycle hook, call-screen building blocks.          | An Expo or bare React Native app.                             |
+| [`@poolse/native`](./packages/native)             | Native call core (CallKit/PushKit on iOS, call service on Android), chat-notification helpers, Expo config plugin. | Phone calls and poolse's push notifications on phones.        |
 
-You can mix and match. `<ConversationView>` uses the hooks from `@poolse/react`, which use the client from `@poolse/sdk` — drop down a layer at any point without re-architecting.
+`ConversationView` uses the hooks from `@poolse/react`, which use the client
+from `@poolse/sdk`, so you can drop down a layer at any point.
 
-## Quickstart (5-minute chat — web)
+## Quick start (web)
 
 ```bash
-pnpm add @poolse/sdk @poolse/react @poolse/react-ui
+npm install @poolse/sdk @poolse/react @poolse/react-ui
 ```
+
+```tsx
+import '@poolse/react-ui/styles.css';
+import { PoolseProvider, type PoolseConfig } from '@poolse/react';
+import { ConversationView } from '@poolse/react-ui';
+
+const config: PoolseConfig = {
+  // apiUrl defaults to https://api.poolse.dev
+  getToken: async () => {
+    const res = await fetch('/api/chat-token', { method: 'POST' }); // your backend mints the JWT
+    const { token } = await res.json();
+    return token;
+  },
+};
+
+export default function App() {
+  return (
+    <PoolseProvider config={config}>
+      <div style={{ height: '100vh' }}>
+        <ConversationView conversationId="..." />
+      </div>
+    </PoolseProvider>
+  );
+}
+```
+
+Backend token minting and the rest of a production setup:
+[INTEGRATION.md](./INTEGRATION.md).
 
 ### React Native (Expo)
 
@@ -33,42 +64,25 @@ npx expo install \
   expo-image-manipulator
 ```
 
-All peer dependencies are required — see [`@poolse/react-native` README](./packages/react-native#install) for what each one powers and the iOS Info.plist keys you'll need.
+Every peer is required; see the [`@poolse/react-native` README](./packages/react-native#install).
+Add `@poolse/native` (and `expo-notifications`) for calls and notifications.
+
+## Hooks only (your own UI)
 
 ```tsx
-import '@poolse/react-ui/styles.css';
-import { PoolseProvider } from '@poolse/react';
-import { ConversationView } from '@poolse/react-ui';
-
-const config = {
-  apiUrl: import.meta.env.VITE_POOLSE_URL ?? 'http://localhost:4000',
-  getToken: async () => fetchJwtFromYourBackend(),
-};
-
-export default function App() {
-  return (
-    <PoolseProvider config={config}>
-      <ConversationView conversationId="..." />
-    </PoolseProvider>
-  );
-}
-```
-
-## Hooks-only (custom UI, real-time wired)
-
-```tsx
-import { PoolseProvider, useMessages, useTyping } from '@poolse/react';
+import { useMessages, useTyping } from '@poolse/react';
 
 function Chat({ conversationId }: { conversationId: string }) {
   const { messages, send, loadMore, hasMore } = useMessages(conversationId);
   const { typing, signalTyping } = useTyping(conversationId);
 
   return (
-    <YourCustomChatUI
+    <YourChatUI
       messages={messages}
-      typing={typing}
+      someoneTyping={typing.size > 0}
       onSend={(body) => send({ body })}
       onInput={signalTyping}
+      onLoadOlder={hasMore ? loadMore : undefined}
     />
   );
 }
@@ -79,64 +93,59 @@ function Chat({ conversationId }: { conversationId: string }) {
 ```ts
 import { Poolse } from '@poolse/sdk';
 
-const chat = new Poolse({ apiUrl, getToken });
+const poolse = new Poolse({ getToken });
 
-const conv = chat.realtime.conversation('conv-uuid');
+const conv = poolse.realtime.conversation(conversationId);
 conv.onMessage((msg) => render(msg));
 conv.sendTyping();
 
-await chat.conversations.one('conv-uuid').messages.send({ body: 'hello' });
+await poolse.conversations.one(conversationId).messages.send({ body: 'hello' });
 ```
 
-## Customization
+## Customisation
 
-`@poolse/react-ui` defaults are driven by CSS variables — rebrand without touching JS:
+`@poolse/react-ui` reads CSS variables, so you can rebrand without touching
+JS:
 
 ```css
 :root {
-  --poolse-color-primary: #ff5722;
-  --poolse-color-self-bubble: #ff5722;
-  --poolse-radius: 8px;
+  --poolse-brand: #ff5722;
+  --poolse-brand-soft: #ffe7df;
+  --poolse-radius-md: 8px;
 }
 ```
 
-Need more control? Three escape hatches in order:
+For more control, in order:
 
-1. **Render slots** — swap a specific subcomponent:
-   ```tsx
-   <ConversationView renderMessage={(msg, currentUserId) => <MyBubble {...} />} />
-   ```
-2. **Component composition** — use individual pieces (`<MessageBubble>`, `<MessageComposer>`, `<TypingIndicator>`) directly.
-3. **Drop to `@poolse/react`** — write your own component using the same hooks `<ConversationView>` uses. No fork.
+1. Render props, for example `<ConversationView renderMessage={(msg, currentUserId) => <MyRow … />} />`.
+2. The individual components (`MessageBubble`, `MessageComposer`, `TypingIndicator`, …).
+3. Your own components on the `@poolse/react` hooks.
 
-## Wiring user identity
+## User names and avatars
 
-The SDK doesn't store user names or avatars — that's your app's data. Pass `userResolver` once on the provider and every sender label, mention dropdown, member list, and read-receipt tooltip lights up automatically:
+poolse doesn't hold your users' names or avatars. Pass `userResolver` on the
+provider. It receives **your** user id (the `external_id` you minted the
+token for):
 
 ```tsx
 <PoolseProvider
   config={{
-    apiUrl,
     getToken,
-    userResolver: async (userId) => {
-      const u = await fetch(`/api/users/by-poolse-id/${userId}`).then((r) => r.json());
+    userResolver: async (externalId) => {
+      const u = await fetch(`/api/users/${encodeURIComponent(externalId)}`).then((r) => r.json());
       return { displayName: u.full_name, avatarUrl: u.avatar_url };
     },
   }}
 >
 ```
 
-See [`@poolse/react`](./packages/react#identity-resolution-userresolver) for caching semantics.
-
-## What's in v1
-
-- **A11y baseline** — `role="log"` messages, live regions for typing + status + connection, combobox ARIA on mentions, focus management on thread + lightbox, scoped `prefers-reduced-motion`.
-- **Mobile baseline** — 44px touch targets, 16px composer (no iOS auto-zoom), `safe-area-inset` on overlays + composer, `…` tap-reveal for message actions, full-screen thread pane <760px.
-- **Attachments** — multi-file picker, drag-and-drop a batch onto the conversation, XHR progress per item with cancel + retry-on-error dismissal, image lightbox with ESC + click-outside + body-scroll lock.
+Results are cached and concurrent lookups are shared. See
+<https://poolse.dev/docs/sdk/sdk#poolseusers>.
 
 ## Development
 
-All work runs inside Docker — nothing in this project should be installed on the host (matches the backend repo's rule).
+All work runs inside Docker; nothing in this project should be installed on
+the host.
 
 ```bash
 docker compose run --rm node pnpm install      # one-time
@@ -154,10 +163,16 @@ poolse-js-sdk/
 │   ├── sdk/            @poolse/sdk
 │   ├── react/          @poolse/react
 │   ├── react-ui/       @poolse/react-ui
-│   └── react-native/   @poolse/react-native
+│   ├── react-native/   @poolse/react-native
+│   └── native/         @poolse/native
 ├── tsconfig.base.json      ← shared base for all packages
 ├── eslint.config.js        ← shared (flat config, ESLint 9)
 ├── .prettierrc.json
 ├── docker-compose.yml
 └── Dockerfile.dev
 ```
+
+## License
+
+The packages are licensed under the [poolse SDK License](./LICENSE) from
+3.0.0; versions before 3.0.0 remain MIT.

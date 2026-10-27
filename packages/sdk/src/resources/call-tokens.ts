@@ -16,10 +16,10 @@ export class CallTokensResource {
   /**
    * POST /v1/conversations/:conversationId/call-token
    *
-   * Resolves `null` when the deployment has no SFU configured (503).
-   * That is deliberately not an error — the caller falls back to the
-   * peer-to-peer mesh, which is how every call worked before the SFU
-   * existed. A 403 still throws: that one really is a refusal.
+   * Resolves `null` when the deployment has no SFU configured (503):
+   * calls are unavailable there, which the caller shows as such rather
+   * than as a failed call. A 403 still throws: that one really is a
+   * refusal.
    */
   async create(conversationId: string, signal?: AbortSignal): Promise<CallConnection | null> {
     try {

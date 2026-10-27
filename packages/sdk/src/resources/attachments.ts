@@ -123,7 +123,7 @@ export class AttachmentsResource {
    * });
    * await chat.conversations.one(convId).messages.send({
    *   body: 'Look at this!',
-   *   custom_data: { attachment_id: att.id },
+   *   attachment_ids: [att.id],
    * });
    * ```
    *

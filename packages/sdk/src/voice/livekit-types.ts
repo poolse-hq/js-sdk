@@ -235,8 +235,8 @@ export interface CallRoomOptions {
    * Resolves SFU credentials for this conversation.
    *
    * Returning `null` means the deployment has no SFU configured (the API
-   * answers 503), which callers treat as "fall back to the mesh" rather
-   * than as an error.
+   * answers 503): calls are unavailable, which callers show as such
+   * rather than as an error.
    */
   tokenProvider: () => Promise<CallConnection | null>;
   /** Publish the camera on join. Audio calls start with it off. */

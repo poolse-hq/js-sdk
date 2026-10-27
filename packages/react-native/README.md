@@ -1,10 +1,15 @@
 # `@poolse/react-native`
 
-Drop-in React Native chat SDK for Expo and bare React Native. `<ConversationView>` and `<PoolseInbox>` mount a complete chat surface with camera, attachments, markdown, typing indicators, reactions, threads, and AppState lifecycle baked in. Mirrors [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui) — same component names, same prop shapes — but implemented against native primitives (`View` / `Text` / `FlatList` / `TextInput` / `Pressable` / `Modal` / `KeyboardAvoidingView`).
+Prebuilt React Native and Expo chat components for
+[poolse](https://poolse.dev): `<PoolseInbox>`, `<ConversationView>` and the
+pieces they are built from, a JS theme, the app-lifecycle hook, and building
+blocks for a call screen. Built on
+[`@poolse/react`](https://www.npmjs.com/package/@poolse/react).
 
-> **Source-available alternative to `sendbird-chat-react-native`, `stream-chat-react-native`, and CometChat React Native UIKit.** Works out of the box with Expo (SDK 50+) and bare React Native (≥ 0.73). JS theme tokens, no native module setup beyond standard peer deps.
+Calls on phones (ringing a locked phone, CallKit, the Android call service)
+are in [`@poolse/native`](https://www.npmjs.com/package/@poolse/native).
 
-Sits on top of [`@poolse/react`](https://www.npmjs.com/package/@poolse/react) (hooks) and [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk) (client).
+Full reference: <https://poolse.dev/docs/sdk/react-native>
 
 ## Install
 
@@ -20,219 +25,95 @@ npx expo install \
   expo-image-manipulator
 ```
 
-Use `npx expo install` (not plain `npm install`) so each module is
-pinned to a version compatible with your Expo SDK. On bare React
-Native without the Expo CLI, swap it for `npm install` and pin
-versions yourself.
+Every peer is required: the package imports each one when it loads, so a
+missing one breaks the bundle. Peer ranges: `react` ≥ 18, `react-native` ≥
+0.73, `react-native-svg` ≥ 14, `react-native-safe-area-context` ≥ 4,
+`react-native-markdown-display` ≥ 7, any `expo-*` version.
 
-**All peer dependencies are required.** The chat surface eagerly
-imports each one at module-load time (Metro can't follow `try /
-require`, so we don't try — see `2.1.1` release notes). If any peer
-is missing the bundle blows up the first time you mount
-`<ConversationView>` / `<PoolseInbox>` with "Requiring unknown
-module …".
+iOS needs `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` in
+`ios.infoPlist` for the attachment picker.
 
-| Peer                             | What it powers                                                                                                                                                                                                                                |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `react-native-svg`               | All `<PoolseIcon>` glyphs (send, reply, reactions, chevrons).                                                                                                                                                                                 |
-| `react-native-markdown-display`  | Bold / italic / code / clickable links inside message bubbles. Disable with `markdown={false}` on `<ConversationView>` if you don't want it — the import still ships in the bundle.                                                           |
-| `react-native-safe-area-context` | Composer bottom inset when the keyboard is closed, and the `keyboardVerticalOffset` math `<PoolseInbox>` does for its header. Falls back to hardcoded iOS 50/34 constants if missing — usable, but wrong on devices with non-standard insets. |
-| `expo-clipboard`                 | The Copy action in the long-press message menu.                                                                                                                                                                                               |
-| `expo-image-picker`              | Camera + Photo-library entries in `<AttachmentPicker>`.                                                                                                                                                                                       |
-| `expo-document-picker`           | File entry in `<AttachmentPicker>`.                                                                                                                                                                                                           |
-| `expo-image-manipulator`         | WebP resize + compress on picked photos before upload (keeps payloads under ~250 KB).                                                                                                                                                         |
-
-**iOS Info.plist** (`app.json` → `ios.infoPlist`):
-
-```json
-{
-  "NSCameraUsageDescription": "Take photos to send in chat.",
-  "NSPhotoLibraryUsageDescription": "Pick photos to send in chat."
-}
-```
-
-Pass `camera={false}` to `<AttachmentPicker>` if you want to skip
-the camera entry (and Apple's review burden for `NSCameraUsageDescription`).
-
-**App root** — wrap once with `<SafeAreaProvider>` and `<PoolseProvider>`:
+## Quick start
 
 ```tsx
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { PoolseProvider } from '@poolse/react';
+import { PoolseInbox, PoolseTheme, useAppStateLifecycle } from '@poolse/react-native';
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <PoolseProvider config={{ getToken: ..., apiUrl: ... }}>
-        <YourScreens />
+      <PoolseProvider config={config}>
+        <ChatRoot />
       </PoolseProvider>
     </SafeAreaProvider>
   );
 }
-```
 
-## Quick start
-
-The drop-in inbox — list + detail with a slide animation between them, edge-swipe back, plus built-in pickers when you provide a user directory:
-
-```tsx
-import { PoolseProvider } from '@poolse/react';
-import { PoolseInbox, PoolseTheme } from '@poolse/react-native';
-
-const users = [
-  { externalId: 'alice', name: 'Alice', avatarUrl: 'https://…' },
-  { externalId: 'bob', name: 'Bob', avatarUrl: 'https://…' },
-];
-
-export default function InboxScreen() {
+function ChatRoot() {
+  useAppStateLifecycle(); // inside the provider
   return (
-    <PoolseProvider config={{ getToken, userResolver }}>
+    <SafeAreaView style={{ flex: 1 }}>
       <PoolseTheme>
-        <PoolseInbox
-          title="Chats"
-          users={users}
-          labelFor={(externalId) =>
-            users.find((u) => u.externalId === externalId)?.name ?? externalId
-          }
-          avatarFor={(externalId) =>
-            users.find((u) => u.externalId === externalId)?.avatarUrl ?? null
-          }
-        />
+        <PoolseInbox title="Chats" users={users} labelFor={labelFor} avatarFor={avatarFor} />
       </PoolseTheme>
-    </PoolseProvider>
+    </SafeAreaView>
   );
 }
 ```
 
-If you'd rather render a single conversation (your app already owns the navigation), use `<ConversationView>` directly:
+To show one conversation inside your own navigation, render
+`<ConversationView conversationId={id} keyboardOffset={headerHeight} />`.
 
-```tsx
-import { PoolseProvider } from '@poolse/react';
-import { PoolseTheme, ConversationView } from '@poolse/react-native';
+## `useAppStateLifecycle()`
 
-export default function ChatScreen({ conversationId }: { conversationId: string }) {
-  return (
-    <PoolseProvider config={{ getToken, userResolver }}>
-      <PoolseTheme>
-        <ConversationView conversationId={conversationId} />
-      </PoolseTheme>
-    </PoolseProvider>
-  );
-}
-```
+Call it once inside `<PoolseProvider>`. From 3.1 it pauses the socket when
+the app goes to the background and resumes it when the app becomes active;
+channels and listeners survive, and `useMessages` / `useConversations`
+reload from REST after the reconnect. The iOS `inactive` state doesn't pause
+anything. (In 3.0 it destroyed every channel instead, which left mounted
+hooks silent until they remounted.)
 
-The same `<PoolseProvider>` you use on web. Wrap it once at the app root if you have multiple chat screens. Drop the `<PoolseTheme>` wrapper if you don't need to override the brand defaults — every component has a fallback theme baked in.
+## Components
 
-## What ships
+- Composed: `PoolseInbox` (ref: `open`, `openDirect`, `openGroup`,
+  `promptNewChat`, `promptNewGroup`, `close`), `ConversationView`,
+  `ChatHeader`, `ThreadView` (bottom sheet), `GroupDetailsSheet`.
+- Messages: `MessageList`, `MessageRow`, `MessageBubble`, `MessageActions`
+  (long-press sheet), `TypingIndicator`, `DaySeparator`, `CallLogRow`,
+  `LiveCallBanner`, `ImageMosaic`.
+- Composer: `MessageComposer`, `MentionInput`, `AttachmentPicker`,
+  `UploadQueueStrip`, `AttachmentPreview`.
+- Lists: `ConversationList`, `MemberList`.
+- Reactions: `ReactionStrip`, `ReactionPicker`.
+- Identity and brand: `UserName`, `useDisplayName`, `Avatar`, `PoolseIcon`,
+  `PoolseLogo`, `Primitives`.
+- Call screen: `CallControlButton`, `CallAvatar`, `AudioRouteSheet`,
+  `callColors`, `useCallDuration`.
 
-| Component                                     | What it does                                                                                                                                                                                                                                                                                              |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<PoolseInbox>`                               | Full inbox shell — list + detail with an iOS-style slide animation between them, left-edge-swipe-back to return to the list, built-in `New chat` / `New group` picker sheets when `users` is provided. Imperative ref API: `open`, `openDirect`, `openGroup`, `promptNewChat`, `promptNewGroup`, `close`. |
-| `<ChatHeader>`                                | Title bar — direct chats resolve the other member's name + avatar via `labelFor` / `avatarFor`, groups show member count, presence-driven green dot. Optional `onBack` button.                                                                                                                            |
-| `<ConversationView>`                          | Composed chat surface — message list + composer + typing strip + thread modal. Single `KeyboardAvoidingView` covers the whole thing so the composer stays above the keyboard on both platforms.                                                                                                           |
-| `<ThreadView>`                                | Bottom-sheet modal for thread replies. Reactions + attachments + pull-down-to-close via a 60-pt header drag strip. Composer reuses the same `UploadProvider` queue as the picker.                                                                                                                         |
-| `<GroupDetailsSheet>`                         | Bottom sheet showing a group's name, avatar, and member roster with presence. Opened from `<ChatHeader>`'s members button.                                                                                                                                                                                |
-| `<MessageBubble>` / `<EditableMessageBubble>` | Single message render — body, meta, read receipt, quoted card, in-bubble attachments.                                                                                                                                                                                                                     |
-| `<MessageRow>`                                | Bubble + alignment + swipe-to-reply (capture-phase, 1:1 finger follow, sqrt-damped past 50pt threshold).                                                                                                                                                                                                  |
-| `<MessageList>`                               | Inverted `FlatList` wrapper — stick-to-bottom, hold-position, auto-load-more.                                                                                                                                                                                                                             |
-| `<MessageComposer>`                           | Text input with auto-grow, send button, attach button, quote chip.                                                                                                                                                                                                                                        |
-| `<MessageActions>`                            | Long-press menu (reply / quote / edit / delete / copy / react).                                                                                                                                                                                                                                           |
-| `<TypingIndicator>`                           | Animated three-dot indicator + labels.                                                                                                                                                                                                                                                                    |
-| `<ConversationList>`                          | `FlatList` of conversation rows. Direct rows pull the other member's name + avatar via `labelFor` / `avatarFor`; preview reads `last_message_preview` updated in realtime by the SDK's `conversation:updated` subscription. Unread badges.                                                                |
-| `<MemberList>`                                | Member roster with avatars + remove action.                                                                                                                                                                                                                                                               |
-| `<MentionInput>`                              | `TextInput` + autocomplete popover.                                                                                                                                                                                                                                                                       |
-| `<ReactionStrip>` / `<ReactionPicker>`        | Reaction summary + emoji picker sheet.                                                                                                                                                                                                                                                                    |
-| `<AttachmentPreview>` / `<AttachmentPicker>`  | Image or file card. Picker wraps `expo-image-picker` + `expo-document-picker`.                                                                                                                                                                                                                            |
-| `<UploadQueueStrip>`                          | Pending uploads with cancel.                                                                                                                                                                                                                                                                              |
-| `<UserName>` / `useDisplayName(externalId)`   | Display name resolution via the SDK's `userResolver`.                                                                                                                                                                                                                                                     |
-| `<Avatar>`                                    | Initials + URL fallback, stable color per user.                                                                                                                                                                                                                                                           |
-| `<PoolseIcon>` / `<PoolseLogo>`               | Brand chrome via `react-native-svg`.                                                                                                                                                                                                                                                                      |
+The names follow `@poolse/react-ui`, but the props differ in places (for
+example `ThreadView` needs `visible` and `onClose`, and there is no
+`EditableMessageBubble`); see the docs for each component's props.
 
 ## Theming
 
-JS object via `<PoolseTheme theme={overrides}>`. The full token
-surface mirrors the web `--poolse-*` CSS variables, grouped by
-purpose:
-
 ```tsx
-<PoolseTheme
-  theme={{
-    colors: {
-      brand: '#ff5733',
-      brandSoft: '#ffe9e3',
-      onBrand: '#ffffff',
-    },
-    radii: {
-      bubble: 18,
-    },
-  }}
->
-  {/* ... */}
+<PoolseTheme mode="dark" theme={{ colors: { brand: '#ff5733' }, radii: { bubble: 18 } }}>
+  {children}
 </PoolseTheme>
 ```
 
-Pass nothing to use the brand defaults. Pass `mode="dark"` to swap
-to the warm dark palette. Deep-merges your overrides on top —
-unspecified tokens keep their default.
-
-## Lifecycle
-
-```tsx
-import { useAppStateLifecycle } from '@poolse/react-native';
-
-function App() {
-  useAppStateLifecycle();
-  return <PoolseProvider config={config}>{/* ... */}</PoolseProvider>;
-}
-```
-
-Closes the SDK WebSocket cleanly when the app backgrounds (iOS /
-Android suspend sockets aggressively — keeping them open wastes
-battery and produces no benefit). Reopens on foreground and triggers
-a tail refetch on the currently-mounted `<ConversationView>` so the
-user lands on a fresh state instead of catching up via stale
-realtime.
-
-Pair with push notifications on your backend (subscribe to
-`message.created` / `mention.created` webhooks, fan out via APNs /
-FCM / Expo's push service) — that's how the user learns about new
-messages while the app is closed.
-
-## Identity model
-
-Same SDK 2.0 contract as the web side. All component props that
-deal with users are keyed by your `external_id`:
-
-- `useUser(externalId)`, `useDisplayName(externalId)`
-- `<UserName externalId={message.sender_external_id} />`
-- `<MemberList labelFor={(externalId) => ...} avatarFor={(externalId) => ...} onlineExternalIds={set} />`
-- `<MessageBubble>` / `<MessageComposer>` / `<MentionInput>` / `<TypingIndicator>` — every `labelFor` is `(externalId) => string`.
-
-The wire still carries `user_id` (the poolse uuid) alongside
-`external_id`, but day-to-day app code never has to touch it.
-
-## Differences from `@poolse/react-ui`
-
-| Concern             | Web (`react-ui`)              | Native (`react-native`)                      |
-| ------------------- | ----------------------------- | -------------------------------------------- |
-| Styling             | CSS variables in `styles.css` | JS theme via `<PoolseTheme>`                 |
-| Action menu trigger | Hover                         | Long-press                                   |
-| Reaction picker     | Inline popover                | Modal sheet                                  |
-| Mention picker      | Inline dropdown               | Modal sheet                                  |
-| Attachment picker   | `<input type=file>`           | `expo-image-picker` + `expo-document-picker` |
-| Message list        | Reversed CSS flexbox          | Inverted `FlatList`                          |
-| Markdown            | `react-markdown`              | Plain text                                   |
-
-Everything else — feature flags, prop names, callback shapes, hook signatures — is intentionally identical so a web codebase ports across with mostly mechanical changes.
+Overrides merge over the light or dark base theme one group at a time
+(`colors`, `type`, `radii`, `spacing`, `shadows`). `mode` doesn't follow the
+system by itself; pass `useColorScheme()` if you want that. Read the active
+theme with `usePoolseTheme()`.
 
 ## Links
 
-- Docs: [poolse.dev/docs/sdk/react-native](https://poolse.dev/docs/sdk/react-native)
-- Source: [github.com/poolse-hq/js-sdk](https://github.com/poolse-hq/js-sdk/tree/main/packages/react-native)
-- Web sibling: [`@poolse/react-ui`](https://www.npmjs.com/package/@poolse/react-ui)
-- Hooks (used internally): [`@poolse/react`](https://www.npmjs.com/package/@poolse/react)
-- Core client: [`@poolse/sdk`](https://www.npmjs.com/package/@poolse/sdk)
+- Docs: <https://poolse.dev/docs/sdk/react-native>
+- Source: <https://github.com/poolse-hq/js-sdk>
 
 ## License
 
-Licensed under the [poolse SDK License](./LICENSE) from 3.0.0 (source-available, for use with the poolse Services only); versions before 3.0.0 remain MIT.
+Licensed under the [poolse SDK License](./LICENSE) from 3.0.0; versions
+before 3.0.0 remain MIT.

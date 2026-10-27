@@ -1,35 +1,34 @@
-# @poolse/native
+# `@poolse/native`
 
-The React Native bridge over poolse's native call core — the Kotlin
-(`dev.poolse:call-core`) and, later, Swift engines that ring, answer and
-carry audio with the app killed and the phone locked.
+The call engine for phones, for [poolse](https://poolse.dev). A native core
+(Swift on iOS, Kotlin on Android) rings, answers and carries calls with the
+app closed and the phone locked: CallKit and PushKit on iOS, a call service
+and full-screen notifications on Android. You send commands; the core sends
+back one `Snapshot` describing the call. The package also shows poolse's
+chat notifications and gives you helpers for them.
 
-This package is thin on purpose: commands go in, one `Snapshot` event
-comes out, and every call decision lives in the native core (behaviour
-pinned by `contracts/call-core/vectors.json`). On a build without the
-native module it degrades to safe no-ops with an idle state, so a host
-can render against it unconditionally.
+Formerly `@poolse/react-native-calls`.
 
-```ts
-import * as calls from '@poolse/native';
+Full reference: <https://poolse.dev/docs/sdk/native>
 
-await calls.configure('https://api.poolse.dev', { smallIcon: 'ic_call', ringback: 'ringback' });
-const stop = calls.onCallState((s) => render(s)); // s: Snapshot | null
-await calls.place(conversationId, { media: 'audio', sessionToken });
-calls.answer();
-calls.decline();
-calls.hangUp();
+## Requirements
 
-// Audio output: s.audioOutputs lists the phone, the speaker and every
-// connected headset/Bluetooth device by name; s.audioOutputId is the live one.
-calls.setAudioOutput(s.audioOutputs[0].id);
-calls.setSpeaker(true); // the one-tap toggle, still there
+- A development or release build. It is a native module, so it isn't in
+  Expo Go; without the module every command does nothing and
+  `nativeCallsAvailable` is `false`.
+- Peers: `expo`, `expo-notifications`, `react`, `react-native`.
+- Node 20.19 or newer for `expo prebuild`.
+- iOS 15.1+; Android `minSdkVersion` 24.
+- Push credentials (APNs key, FCM service account) for your workspace on the
+  poolse dashboard.
+
+## Install and setup
+
+```bash
+npx expo install @poolse/native expo-notifications
 ```
 
-## Setup
-
-One config plugin does everything the native core needs from the
-generated projects. In `app.json`, after `expo-notifications`:
+In `app.json`, after `expo-notifications`:
 
 ```json
 "plugins": [
@@ -38,112 +37,74 @@ generated projects. In `app.json`, after `expo-notifications`:
 ]
 ```
 
-| Option | Default | What it does |
-| --- | --- | --- |
-| `ringback` | none | A sound file shipped in both bundles; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only (an Android resource name). Without it the caller hears nothing while it rings. |
-| `pictureInPicture` | `true` | Android: the activity may float as a picture-in-picture window during a video call. |
-| `lockscreen` | `true` | Android: the app shows over the lock screen when it is opened for a call, so answering never demands an unlock. |
+| Option             | Default | What it does                                                                                                                    |
+| ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `ringback`         | none    | Ships this sound in both apps; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only. |
+| `pictureInPicture` | `true`  | Android: the activity may float as a picture-in-picture window.                                                                 |
+| `lockscreen`       | `true`  | Android: the app shows over the lock screen when opened for a call.                                                             |
 
-Always applied (Android): the LiveKit media adapter (`poolse.livekit`
-gradle property) and `expo-notifications` as the delegate for pushes
-that are not calls. iOS needs nothing beyond the ringback: CallKit,
-PushKit and picture-in-picture come with the module itself.
+Always applied on Android: the LiveKit media adapter, and `expo-notifications`
+as the receiver for pushes that aren't calls. On iOS, add `UIBackgroundModes`
+`audio`, `voip` and `remote-notification`, `NSMicrophoneUsageDescription`
+(and `NSCameraUsageDescription` for video) and the `aps-environment`
+entitlement yourself. Then run `npx expo prebuild --clean`.
 
-### Moving from per-app plugins (0.12 and earlier)
-
-Apps that copied `withNativeCallMedia`, `withCallDelegate`,
-`withLockscreenCalls`, `withPictureInPicture` and `withRingback` into
-their own `plugins/` folder delete them and add the single entry above;
-the generated projects come out the same. Keep the ringback file where
-it is and point `ringback` at it — its name is what `configure` already
-passes. Run `npx expo prebuild --clean` once afterwards.
-
-### Rooms — voice or video, nobody rings
-
-A room is the conversation's drop-in call: members join when they like
-while the chat carries on, and no phone rings. It runs on the same
-native core as a call — CallKit on iOS, the call service on Android — so
-it keeps going with the phone locked and routes audio like a call.
+## Usage
 
 ```ts
-// Start the room (or join whatever is live on the conversation).
-await calls.startRoom(conversationId, { media: 'video', sessionToken });
+import * as calls from '@poolse/native';
 
-// Everyone else: useLiveCall(conversationId) from @poolse/react shows it
-// (call.kind === 'room'); LiveCallBanner's Join calls
-await calls.join(call.id, conversationId, sessionToken);
-
-calls.hangUp(); // leaves — the room ends once it has been empty a moment
-```
-
-`snapshot.kind` is `'room'` for a room (`'call'` otherwise), so a host
-can show it differently from a call — Loop shows a bar over the chat
-with mute, camera, audio output and Leave rather than the call screen.
-A room plays on the speaker unless a headset or Bluetooth device is in,
-and turning the camera on (`setCamera(true)`) is all it takes to go from
-voice to video.
-
-### Call waiting
-
-A call that rings while one is in progress (or while you sit in a room)
-waits beside it instead of being refused: `snapshot.waiting` carries it
-(`callId`, names, media), and the native side shows its own surface —
-CallKit's call-waiting screen on iOS, a heads-up with Decline / End &
-answer and the call-waiting beep on Android.
-
-```ts
-if (s.waiting) {
-  calls.answerWaiting(s.waiting.callId);  // ends this call, answers that one
-  calls.declineWaiting(s.waiting.callId); // its caller hears "Busy"
-}
-```
-
-Pass the `callId`: a tap that lands after the waiting call changed is
-then ignored rather than acting on a different one. If the current call
-ends on its own, the waiting call simply becomes the ringing call; left
-alone it times out as missed. A third call while one waits is busy.
-
-### Chat notifications
-
-poolse sends message notifications itself, with the push credentials you
-set up for calls. Register the devices (Android: the FCM token; iOS: the
-regular APNs token with `kind: 'alert'`, beside the VoIP one), and the
-core does the rest — one notification per conversation with every
-message a line in it, Reply and Mark as read straight from the
-notification (no app, no session), cleared when the chat is read on
-another device. Requires `expo-notifications` (a peer dependency).
-
-```ts
-calls.setActiveConversation(conversationId); // on screen: don't notify it
-calls.setActiveConversation(null); // left it, or app backgrounded
-
-// iOS, in your expo-notifications handler:
-Notifications.setNotificationHandler({
-  handleNotification: async (n) => {
-    const show = calls.shouldPresentMessage(n.request.content.data);
-    return {
-      shouldShowBanner: show,
-      shouldShowList: show,
-      shouldPlaySound: show,
-      shouldSetBadge: true,
-    };
-  },
+await calls.configure('https://api.poolse.dev', {
+  ringback: 'ringback',
+  apnsEnvironment: 'production',
 });
-// A tap opens the app: calls.conversationOfNotification(data) (iOS), or
-// takeCallAction()/onCallAction() with type 'open' (Android).
+
+const stop = calls.onCallState((snapshot) => render(snapshot)); // Snapshot | null
+render(calls.getCallState());
+
+await calls.place(conversationId, { media: 'audio', sessionToken }); // sessionToken: the user's poolse JWT
+calls.answer();
+calls.decline();
+calls.hangUp();
+calls.setMuted(true);
+calls.setCamera(true);
+
+// Audio outputs: snapshot.audioOutputs lists the phone, the speaker and each
+// connected headset or Bluetooth device; snapshot.audioOutputId is the one in use.
+function onPickOutput(snapshot: calls.Snapshot, id: string) {
+  if (snapshot.audioOutputs.some((o) => o.id === id)) calls.setAudioOutput(id);
+}
+calls.setSpeaker(true); // the one-tap speaker toggle
 ```
 
-## Layout
+The full API:
 
-- `src/` — the TypeScript API (this is what apps import).
-- `android/src/main/java/dev/poolse/callcore/` — the pure state machine
-  and ports (contract cv 1).
-- `android/src/main/java/dev/poolse/callcore/android/` — the Android
-  adapters (HTTP, timers, ring surface, foreground service, FCM intake,
-  composition root).
-- `android/src/main/java/expo/modules/poolsecalls/` — the Expo bridge
-  module (compiled by the app's autolinking).
-- `android/src/main/livekit/` — the shipped LiveKit `MediaPort`, opt-in
-  via the `poolse.livekit` gradle property; the core is SFU-agnostic.
+- Setup: `configure`, `nativeCallsAvailable`, `getCallState`, `onCallState`.
+- Calls: `place`, `join`, `answer`, `decline`, `hangUp`, `setMuted`,
+  `setCamera`, `switchCamera`, `setSpeaker`, `setAudioOutput`,
+  `ringIntoCall({ userIds?, externalIds? })`.
+- Rooms (nobody rings): `startRoom(conversationId, { media, sessionToken })`,
+  then `join` for the others and `hangUp` to leave.
+- Call waiting: `snapshot.waiting`, `answerWaiting(callId)`,
+  `declineWaiting(callId)`.
+- Video: `<CallVideoView participantId | local mirror fit pictureInPicture />`,
+  `setPictureInPictureEnabled`, `isInPictureInPicture`,
+  `pictureInPictureSupported`, `onPictureInPicture`.
+- Android: `canUseFullScreenIntent`, `openFullScreenIntentSettings`,
+  `setShowOnLockscreen`, `takeCallAction`, `onCallAction`.
+- iOS VoIP token: `getVoipToken`, `onVoipToken`. Register it with
+  `poolse.devices.register({ token, platform: 'ios', kind: 'voip', environment })`
+  from `@poolse/sdk`, and the regular APNs token with `kind: 'alert'`.
+- Chat notifications: `setActiveConversation`, `shouldPresentMessage`,
+  `conversationOfNotification`.
+- Socket forwarding (optional): `onCallFinished`, `onRingEnded`.
 
-Stage 3 adds the Swift core under `ios/`.
+## Links
+
+- Docs: <https://poolse.dev/docs/sdk/native>
+- Source: <https://github.com/poolse-hq/js-sdk>
+
+## License
+
+Licensed under the [poolse SDK License](./LICENSE) from 3.0.0; versions
+before 3.0.0 remain MIT.

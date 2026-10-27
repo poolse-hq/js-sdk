@@ -12,7 +12,9 @@ All notable changes to `@poolse/react` are documented here. Format follows
 - `useMessages` and `useConversations` reload from REST when the socket
   reconnects, so messages and conversation updates sent while it was
   down (a network drop, or a mobile app in the background) appear
-  without a manual `refetch()`.
+  without a manual `refetch()`. The socket's first connect is not treated
+  as a reconnect (no duplicate fetch on mount); `useLiveCall` follows the
+  same rule.
 
 ## [3.0.0] — 2026-10-26
 

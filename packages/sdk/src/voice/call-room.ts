@@ -19,33 +19,24 @@ export type Unsubscribe = () => void;
  *
  * ## What this is not
  *
- * It is not the call. Ringing, accept/decline/hangup, presence, the
- * roster and mute state all stay on poolse's own channels — see
- * `CallsResource` and `VoiceRoom`. This object owns audio and video
- * packets and nothing else. A client joins both: `voice:conversation:<id>`
- * for who is here and what they are doing, this for what they sound and
- * look like.
+ * It is not the call. Placing, ringing, answer/decline/hangup and the
+ * roster are poolse's REST call API and realtime events (`rooms`,
+ * `liveCalls`, the conversation channel's `call:*` events). This object
+ * owns audio and video and nothing else.
  *
- * ## Why an SFU rather than the mesh
+ * ## Why an SFU
  *
- * {@link VoiceRoom} connects every participant to every other one, so
- * each uploads N-1 encoded copies of their own camera. At four people
- * that is roughly 3 Mbps of sustained upload from a phone plus three
- * simultaneous encodes — the handset overheats, iOS throttles, and
- * quality collapses for everyone. Audio survives it because Opus is
- * ~25x cheaper; video does not.
- *
- * The SFU also makes the mid-call camera toggle tractable. Turning a
- * camera on mid-call means renegotiating a live peer connection, which
- * the mesh cannot do — it offers once, on peer discovery. Here it is
+ * Every participant sends one copy of their media to the SFU, which
+ * forwards it to the others, instead of each phone uploading a copy per
+ * peer — which a phone cannot sustain for video beyond two or three
+ * people. It also makes the mid-call camera toggle a plain
  * `setCameraEnabled`.
  *
  * ## Availability
  *
  * A deployment with no SFU configured answers 503, which arrives as
- * `tokenProvider` returning `null`. That is not an error: the caller
- * falls back to the mesh, which is what every call used before this
- * existed. `join()` resolves `false` to say so.
+ * `tokenProvider` returning `null`. That is not an error — calls are
+ * simply unavailable there. `join()` resolves `false` to say so.
  */
 /**
  * Copy device records into plain objects.
@@ -92,7 +83,7 @@ export class CallRoom {
   private status: CallRoomStatus = 'idle';
   private selfId: string | null = null;
 
-  // Reference counted like VoiceRoom: a call screen and a roster can
+  // Reference counted: a call screen and a roster can
   // both hold the same call, and the second holder must not open a
   // second SFU connection or tear the first one down on leaving.
   private holders = 0;
@@ -200,8 +191,8 @@ export class CallRoom {
    * Connect to the SFU.
    *
    * Resolves `true` once media is flowing, `false` when the deployment
-   * has no SFU — the caller should fall back to the mesh rather than
-   * treat that as a failed call.
+   * has no SFU — calls are unavailable there; show that rather than a
+   * failed call.
    */
   async join(): Promise<boolean> {
     if (this.room) {

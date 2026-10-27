@@ -56,6 +56,11 @@ describe('useMessages', () => {
     expect(result.current.msgs.messages.map((m) => m.id)).toEqual(['m1', 'm2']);
 
     const realtime = result.current.chat.realtime as unknown as StatusDriver;
+    // The first connect is not a reconnect: no extra fetch.
+    act(() => realtime.setStatus('connected'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fetchFn.calls).toHaveLength(2);
+
     act(() => realtime.setStatus('reconnecting'));
     act(() => realtime.setStatus('connected'));
 

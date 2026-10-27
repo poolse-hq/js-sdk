@@ -175,10 +175,14 @@ export function useMessages(conversationId: string): UseMessagesState {
     // in the background) are never replayed, so catch up from REST once
     // it is back. Merged by id, so older loaded pages and pending sends
     // survive.
+    // The socket's first connect isn't a reconnect: the list above is
+    // already loading.
     let wasConnected = chat.realtime.getStatus() === 'connected';
+    let connectedBefore = wasConnected;
     const offStatus = chat.realtime.onStatus((status) => {
-      const reconnected = status === 'connected' && !wasConnected;
+      const reconnected = status === 'connected' && !wasConnected && connectedBefore;
       wasConnected = status === 'connected';
+      connectedBefore ||= wasConnected;
       if (!reconnected || cancelled) return;
       handle
         .list({ limit: PAGE_SIZE })

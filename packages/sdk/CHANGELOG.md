@@ -12,6 +12,20 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 - `realtime.pause()` / `realtime.resume()`: close the socket and reopen
   it while keeping every channel handle and its listeners, so code
   holding a handle keeps receiving events after resume.
+- `UserChannel.onRingEnded()` and `UserChannel.onCallFinished()` for the
+  `call:ring_ended` / `call:finished` events on `user:<id>`, and the
+  `RingEndedEvent` type. No more reaching for the internal `_channel()`.
+- `ConversationChannel.onClosed()`: fires when the channel closes for
+  good — the server removed you from the conversation, or you left.
+
+### Fixed
+
+- A conversation channel the server closes (you were removed) is dropped,
+  so `realtime.conversation(id)` returns a fresh handle instead of a dead
+  one that never received events again.
+- After a refused socket handshake (for example a revoked token) the
+  realtime layer fetches a fresh token from `getToken` (at most every
+  30s) instead of retrying with the cached one forever.
 
 ## [3.0.0] — 2026-10-26
 

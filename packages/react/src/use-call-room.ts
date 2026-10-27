@@ -52,7 +52,7 @@ export interface UseCallRoom {
    * earpiece, but it does have several microphones and a pair of
    * headphones, and choosing between them is the same job. Sparse on
    * React Native, where routing goes through the platform audio session
-   * instead (see `useCallAudio` in `@poolse/react-native`).
+   * instead (`setAudioOutput` in `@poolse/native`).
    */
   devices: Record<CallDeviceKind, CallDevice[]>;
   /** Device id in use per kind, where the platform reports one. */

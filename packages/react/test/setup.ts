@@ -52,6 +52,7 @@ vi.mock('phoenix', () => {
     on() {
       return 0;
     }
+    onClose() {}
     off() {}
     join() {
       const recv = { receive: () => recv };

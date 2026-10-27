@@ -1,65 +1,79 @@
 # Integration guide
 
-End-to-end walkthrough for integrating poolse into a production app. Pairs with [QUICKSTART.md](./QUICKSTART.md) (which is a 5-minute local sanity check) by going deeper on the parts you can't skip in production: auth, identity, storage, and the pitfalls that bite customers in the first week.
+How to take a poolse integration to production: the token route on your
+backend, the provider in your frontend, names and avatars, attachments,
+connection handling and the common mistakes. The same guide, kept current, is
+at <https://poolse.dev/docs/guides/integration>.
 
-## Architecture
+## How the pieces fit
 
 ```
-┌──────────────┐   API key     ┌──────────────┐   short-lived JWT   ┌──────────────┐
-│ Your backend │ ────────────▶ │  poolse REST │ ◀────────────────── │ Your browser │
-│              │ ◀──── user_id │              │                     │ (poolse SDK) │
-│ /api/chat-   │               │              │  WebSocket + REST   │              │
-│ token        │ ────────────────────────────────────────────────▶  │              │
-└──────────────┘     JWT delivered to the browser via your own fetch └──────────────┘
+┌──────────────┐   API key     ┌──────────────┐
+│ Your backend │ ────────────▶ │  poolse API  │
+│ /api/chat-   │ ◀──────────── │              │
+│ token        │   user + JWT  │              │
+└──────┬───────┘               └──────▲───────┘
+       │ JWT (your own request)       │ REST + WebSocket with the JWT
+       ▼                              │
+┌──────────────────────────────────────┴──┐
+│ Your frontend (poolse SDK)              │
+└─────────────────────────────────────────┘
 ```
 
-**The poolse API key NEVER touches the browser.** Your backend exchanges it for short-lived End User JWTs (~1h TTL); the SDK uses those JWTs for REST + WebSocket. The SDK calls your `getToken` only when the cached JWT is missing or expired.
+- Your backend holds the API key; it never reaches the browser or the phone.
+- Your backend mints end-user JWTs, valid for one hour, for signed-in users.
+- The SDK uses the JWT for REST and the WebSocket and asks your `getToken`
+  for a new one shortly before it expires.
 
-## 1. Backend — mint user JWTs
-
-Your application backend owns the api key and brokers JWTs to the browser. On any authenticated request from a signed-in user, mint a JWT and return it:
+## 1. Backend: the token route
 
 ```ts
-// e.g. Next.js API route, Rails controller, anything — all your existing
-// auth applies BEFORE this call. The API key proves YOUR identity to
-// poolse; the JWT is for ONE specific End User.
-async function POST(req: Request) {
-  const session = await yourAuth(req); // returns { user_id: '...', ... }
+// e.g. app/api/chat-token/route.ts (Next.js); the same two calls work in any backend
+const API = 'https://api.poolse.dev';
+const KEY = process.env.POOLSE_API_KEY!;
+
+export async function POST(req: Request) {
+  const session = await yourAuth(req);
   if (!session) return new Response('unauthorized', { status: 401 });
 
-  // First time? Create the user in poolse. Idempotent on external_id.
-  const userRes = await fetch('https://api.poolse.dev/v1/users', {
+  const userRes = await fetch(`${API}/v1/users`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.POOLSE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      external_id: session.user_id,
-      display_name: session.display_name,
-    }),
+    headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ external_id: session.userId }),
   });
-  const { id: poolseUserId } = await userRes.json();
+  if (!userRes.ok) return new Response('upsert failed', { status: 502 });
+  const user = await userRes.json();
 
-  // Mint a 1h JWT for that user.
-  const tokenRes = await fetch(`https://api.poolse.dev/v1/users/${poolseUserId}/tokens`, {
+  const tokenRes = await fetch(`${API}/v1/users/${user.id}/tokens`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.POOLSE_API_KEY}` },
+    headers: { Authorization: `Bearer ${KEY}` },
   });
+  if (!tokenRes.ok) return new Response('mint failed', { status: 502 });
   const { token } = await tokenRes.json();
-  return Response.json({ token, user_id: poolseUserId });
+
+  return Response.json({ token });
 }
 ```
 
-## 2. Frontend — install + provider
+- Minting needs the `users:manage` scope on the key (selected by default for
+  new dashboard keys); without it the mint answers `403 forbidden`.
+- `POST /v1/users` is an upsert keyed on `external_id`. Only the fields you
+  send are written (`display_name`, `avatar_url`, `custom_data`,
+  `is_blocked`); fields you leave out keep their values.
+- Mint a new token on every request; don't cache tokens on the server.
+- Users you add with `member_external_ids` or `external_ids` are created
+  automatically, up to 50 new users per caller per hour
+  (`429 lazy_provision_rate_limited` past that).
 
-**Web (React)**
+## 2. Frontend: install and provider
+
+Web:
 
 ```bash
 npm install @poolse/sdk @poolse/react @poolse/react-ui
 ```
 
-**React Native (Expo)**
+React Native (Expo):
 
 ```bash
 npx expo install \
@@ -73,23 +87,27 @@ npx expo install \
   expo-image-manipulator
 ```
 
-All peer dependencies are required — the chat surface eagerly imports each one, so a missing peer crashes Metro with "Requiring unknown module …" the first time you mount `<ConversationView>`. See [`packages/react-native/README.md`](./packages/react-native#install) for what each library powers and the iOS Info.plist entries you'll need for camera + photo library.
+Every React Native peer is required; a missing one breaks the bundle. See
+[`packages/react-native/README.md`](./packages/react-native#install).
 
 ```tsx
+'use client';
+
 import '@poolse/react-ui/styles.css';
-import { PoolseProvider } from '@poolse/react';
+import { PoolseProvider, type PoolseConfig } from '@poolse/react';
 import { ConversationView } from '@poolse/react-ui';
 
-const config = {
-  apiUrl: 'https://api.poolse.dev',
+const config: PoolseConfig = {
   getToken: async () => {
-    const res = await fetch('/api/chat-token', { credentials: 'include' });
+    const res = await fetch('/api/chat-token', { method: 'POST', credentials: 'include' });
+    if (!res.ok) throw new Error(`chat-token failed: ${res.status}`);
     const { token } = await res.json();
     return token;
   },
-  // see step 3
-  userResolver: async (poolseUserId) => {
-    const u = await fetch(`/api/users/by-poolse-id/${poolseUserId}`).then((r) => r.json());
+  userResolver: async (externalId) => {
+    const res = await fetch(`/api/users/${encodeURIComponent(externalId)}`);
+    if (!res.ok) return null;
+    const u = await res.json();
     return { displayName: u.display_name, avatarUrl: u.avatar_url };
   },
 };
@@ -103,97 +121,91 @@ export default function Chat({ conversationId }: { conversationId: string }) {
 }
 ```
 
-## 3. Identity — wire `userResolver`
+- `getToken` must use the method your route accepts (`POST` here).
+- Remount the provider with a new `key` when the signed-in user changes.
 
-poolse doesn't store user names or avatars. The SDK only knows a `user_id` (uuid). Your `userResolver` callback maps each `user_id` to the metadata stored in YOUR database:
+## 3. Identity: `userResolver`
+
+poolse doesn't store names or avatars for the UI. Every user the SDK shows
+(`message.sender_external_id`, `member.external_id`, the typing and presence
+sets) is identified by the `external_id` you gave poolse, and `userResolver`
+maps it to your data:
 
 ```ts
-{
-  userResolver: async (poolseUserId) => {
-    const u = await db.users.findOne({ poolse_user_id: poolseUserId });
-    if (!u) return null; // SDK falls back to "User abc123" + initials avatar
-    return {
-      displayName: u.full_name,
-      avatarUrl: u.avatar_url,
-    };
-  };
-}
+userResolver: async (externalId) => {
+  const u = await db.users.findById(externalId);
+  if (!u) return null;
+  return { displayName: u.fullName, avatarUrl: u.avatarUrl ?? null };
+};
 ```
 
-The SDK caches resolved profiles in-memory and dedupes concurrent lookups, so a 50-message render fires the resolver once per unique sender — not 50 times. `<MessageBubble>`, `<MemberList>`, `<TypingIndicator>`, `<MentionInput>`, and the avatar slot all pick this up automatically.
+You don't need to store any poolse id. Results are cached in memory and
+concurrent lookups for one id share a call. When the resolver returns `null`
+or throws, the UI shows the external id and an initials avatar.
 
-## 4. Attachments — bucket + CORS
+## 4. Attachments
 
-Attachment uploads go directly from the browser to your storage bucket via presigned PUT URLs — the bytes never touch poolse's API server. Configure your bucket once:
+Files go from the client straight to poolse's storage through a presigned
+URL. There is no bucket or CORS for you to configure. `ConversationView`'s
+composer handles uploads; for your own UI, use `poolse.attachments.upload` or
+`useAttachmentUpload`, declare the file's real size, then send the
+attachment ids with the message. Details:
+<https://poolse.dev/docs/guides/attachment-uploads>.
 
-### Cloudflare R2
+## 5. Connection handling
 
-```jsonc
-// cors.json — apply via wrangler or the Cloudflare dashboard
-{
-  "AllowedOrigins": ["https://your-app.com", "http://localhost:3000"],
-  "AllowedMethods": ["GET", "PUT", "HEAD"],
-  "AllowedHeaders": ["*"],
-  "ExposeHeaders": ["ETag"],
-  "MaxAgeSeconds": 3600,
-}
-```
+- **Web:** the socket reconnects after a network drop. Events sent while it
+  was down aren't replayed; from 3.1 `useMessages`, `useConversations` and
+  `useLiveCall` reload from REST after a reconnect.
+- **React Native:** call `useAppStateLifecycle()` once inside the provider.
+  It pauses the socket in the background and resumes it on return. New
+  messages and calls reach a backgrounded app as push notifications from
+  poolse, which needs `@poolse/native`, push credentials on the dashboard and
+  registered devices (`poolse.devices.register`).
 
-```bash
-wrangler r2 bucket cors put YOUR_BUCKET --file cors.json
-```
+## 6. Pitfalls
 
-**Custom domains caveat**: R2 custom domains serve public reads only — they DON'T accept signed PUTs (returns 401). Sign and PUT against the raw `<accountid>.r2.cloudflarestorage.com` host; expose downloads via the custom domain if you want.
+### Next.js: don't transpile the packages
 
-### AWS S3
+Don't add `@poolse/*` to `transpilePackages`. The packages are already
+compiled, and `@poolse/react` and `@poolse/react-ui` start with
+`'use client'`.
 
-Standard S3 + CloudFront also works. Set bucket CORS to allow `PUT` from your origins and `GET` for the download URL.
+### A second 401 ends the session
 
-## 5. Pitfalls
+On a 401 the SDK asks `getToken` once for a new token and retries. If that
+also fails it throws `AuthError` (for example `token_revoked`, or
+`user_blocked` for a blocked user). A route that returns a cached or expired
+token ends up here.
 
-### React duplication in Next.js
+### Markdown in messages
 
-**Don't** add `@poolse/*` to `transpilePackages` in `next.config.mjs`. The published packages already ship dual-format dists (ESM + CJS) with `'use client'` directives baked in by tsup. Walking into the source with `transpilePackages` causes Next to bind those modules to its own bundled React, which produces two React copies and a runtime error from `useContext`.
+`@poolse/react-ui` renders bodies as GitHub-flavoured Markdown with
+`react-markdown`. Raw HTML isn't rendered; links open in a new tab with
+`rel="noopener noreferrer nofollow"`. Pass `markdown={false}` for plain text.
 
-### Token refresh on 401
+### Idempotency keys are per caller
 
-The SDK auto-invalidates its cached JWT on a 401 response and re-calls `getToken` once. If you return the same expired token twice, the SDK gives up and throws `AuthError`. Your `/api/chat-token` route must always return a fresh JWT — don't cache it on the server side.
+The SDK sends an `Idempotency-Key` on every write and reuses it on retries.
+The server keeps successful responses for 24 hours per workspace, caller,
+method, path and key; error responses aren't kept.
 
-### Markdown rendering safety
+## 7. Production checklist
 
-`@poolse/react-ui` renders message bodies as GFM via `react-markdown`. The default sanitization disables raw HTML, embedded scripts, javascript: URLs, and inline event handlers. Disable with `<ConversationView markdown={false}>` if you want raw-text rendering.
-
-### CORS preflight cache
-
-Browsers cache failed CORS preflights for a few minutes per origin. After fixing bucket CORS, hard-reload (or open an incognito window) before testing the upload again — otherwise the browser keeps replaying the failed preflight from cache.
-
-## 6. Production checklist
-
-- [ ] `POOLSE_API_KEY` lives in your backend env, never client-side
-- [ ] `/api/chat-token` is authenticated by your existing user-session middleware
-- [ ] `userResolver` returns `null` for unknown ids (SDK falls back gracefully)
-- [ ] Bucket CORS allows your production origin AND any preview/staging origins
-- [ ] Webhook (or polling) updates an attachment's `:pending` → `:ready` after the PUT completes
-- [ ] `apiUrl` + `wsUrl` are HTTPS / WSS in prod (mixed-content blocks WebSocket otherwise)
-
-## Reference implementation
-
-The live showcase at <https://poolse.dev/chat> is the closest thing to a copy-pasteable production app — it's a Next.js 15 app deployed against the hosted poolse backend. Read it to see each piece of this guide wired up for real:
-
-| File                             | What it demonstrates                                                                                                  |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `app/api/chat-token/route.ts`    | Backend JWT-mint endpoint — creates the poolse user idempotently, then mints a token via the API key                  |
-| `app/api/conversations/route.ts` | Creating a conversation as an admin "bot" so the bot retains `:manage_members` for invite-link joins                  |
-| `app/chat/showcase-shell.tsx`    | Client provider wiring: `getToken`, `userResolver`, `apiUrl` override, sidebar + main pane + collapsible member panel |
-| `app/chat/c/[id]/page.tsx`       | Invite-link landing — joins the visitor to the linked conversation before rendering chat                              |
-| `lib/session.ts`                 | Per-browser session id stored in localStorage (stands in for "your auth system's user id")                            |
-| `next.config.mjs`                | Minimal Next config — note the deliberate absence of `transpilePackages: ['@poolse/*']`                               |
+- [ ] `POOLSE_API_KEY` is only in your backend's environment, with only the scopes it needs.
+- [ ] `/api/chat-token` requires your user session.
+- [ ] `getToken` and the route use the same HTTP method.
+- [ ] `userResolver` returns `null` for unknown ids.
+- [ ] The provider is remounted when the user changes.
+- [ ] React Native: `useAppStateLifecycle()` is called inside the provider.
+- [ ] Phones: push credentials are on the dashboard; devices are registered, and unregistered on sign-out.
+- [ ] Webhook receivers verify the signature.
 
 ## Reference
 
-- Quickstart (local backend) — [QUICKSTART.md](./QUICKSTART.md)
-- SDK API — [`@poolse/sdk`](./packages/sdk)
-- React hooks — [`@poolse/react`](./packages/react)
-- React UI — [`@poolse/react-ui`](./packages/react-ui)
-- Showcase source — <https://github.com/poolse-hq/poolse-showcase>
-- Docs site — <https://poolse.dev/docs>
+- Docs: <https://poolse.dev/docs>
+- `@poolse/sdk`: [packages/sdk](./packages/sdk)
+- `@poolse/react`: [packages/react](./packages/react)
+- `@poolse/react-ui`: [packages/react-ui](./packages/react-ui)
+- `@poolse/react-native`: [packages/react-native](./packages/react-native)
+- `@poolse/native`: [packages/native](./packages/native)

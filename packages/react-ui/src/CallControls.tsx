@@ -27,8 +27,8 @@ export interface CallControlButtonProps {
  * One round call control, matching `@poolse/react-native`'s
  * `CallControlButton` so the two platforms read the same.
  *
- * Ships no CSS — the host app owns the look, as everywhere else in this
- * package.
+ * Styled by `@poolse/react-ui/styles.css` (`.callbtn`); override those
+ * classes to restyle.
  */
 export function CallControlButton({
   icon,

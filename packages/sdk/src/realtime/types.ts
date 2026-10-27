@@ -63,8 +63,24 @@ export interface CallFinishedEvent {
   ended_at?: string;
   duration_ms?: number;
   joined_user_ids?: Uuid[];
-  /** `finished` | `declined_all` | `no_answer` | `cancelled`. */
+  /** `finished` | `declined_all` | `busy_all` | `no_answer` | `cancelled`. */
   reason?: string;
+  /** Present on the `user:<id>` copy (`UserChannel.onCallFinished`). */
+  conversation_id?: Uuid;
+}
+
+/**
+ * Your ring for a call is over (`call:ring_ended` on `user:<id>`): stop
+ * ringing on this device.
+ */
+export interface RingEndedEvent {
+  cv: number;
+  call_id: string;
+  conversation_id: Uuid;
+  /** `answered_elsewhere` | `declined` | `cancelled` | `timeout` | `finished`. */
+  reason: string;
+  /** The device that resolved the ring (e.g. the one that answered), so it can ignore this. */
+  device_id?: string;
 }
 
 /** Per-user mention push on the `user:<id>` channel. */

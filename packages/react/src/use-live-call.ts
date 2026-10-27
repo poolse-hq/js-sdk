@@ -64,10 +64,13 @@ export function useLiveCall(conversationId: string | null): UseLiveCall {
       seq.current++;
       apply(null);
     });
+    // The first connect isn't a reconnect: the mount already read it.
     let wasConnected = chat.realtime.getStatus() === 'connected';
+    let connectedBefore = wasConnected;
     const offStatus = chat.realtime.onStatus((status) => {
-      if (status === 'connected' && !wasConnected) refresh();
+      if (status === 'connected' && !wasConnected && connectedBefore) refresh();
       wasConnected = status === 'connected';
+      connectedBefore ||= wasConnected;
     });
     return () => {
       offStarted();

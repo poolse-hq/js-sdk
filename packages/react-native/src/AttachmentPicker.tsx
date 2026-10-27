@@ -243,7 +243,8 @@ async function assetsToInputs(assets: ReadonlyArray<ImagePicker.ImagePickerAsset
         return {
           body: blob,
           contentType,
-          byteSize: asset.fileSize ?? blob.size,
+          // The uploaded bytes: the server refuses a file bigger than declared.
+          byteSize: blob.size || asset.fileSize || 0,
           filename: asset.fileName ?? `image-${Date.now()}.jpg`,
           _previewUri: asset.uri,
         };
@@ -311,7 +312,8 @@ async function defaultAdapter(kind: 'image' | 'document' | 'camera') {
       return {
         body: blob,
         contentType,
-        byteSize: asset.size ?? blob.size,
+        // The uploaded bytes: the server refuses a file bigger than declared.
+        byteSize: blob.size || asset.size || 0,
         filename: asset.name,
         _previewUri: asset.uri,
       };

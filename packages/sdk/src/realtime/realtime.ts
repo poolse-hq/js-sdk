@@ -32,9 +32,12 @@ import type {
   PresenceSnapshot,
   ReactionEvent,
   RealtimeStatus,
+  RingEndedEvent,
   TypingEvent,
   Unsubscribe,
 } from './types.js';
+
+const TOKEN_REFRESH_ON_ERROR_MS = 30_000;
 
 interface RealtimeOptions {
   /**
@@ -64,6 +67,7 @@ export class PoolseRealtime {
 
   private status: RealtimeStatus = 'idle';
   private paused = false;
+  private lastTokenRefreshMs = 0;
   private readonly statusListeners = new Set<(s: RealtimeStatus) => void>();
 
   constructor(config: ResolvedConfig, tokenCache: TokenCache, opts: RealtimeOptions = {}) {
@@ -131,11 +135,20 @@ export class PoolseRealtime {
       // Errors don't tear down the socket — Phoenix retries internally.
       // Surface as `reconnecting` so the UI can show a banner.
       this.setStatus('reconnecting');
+      // A handshake the server refuses looks like any other error here.
+      // If the cached token was revoked, every retry would present it
+      // again, so fetch a fresh one — at most every 30s, since a plain
+      // network outage lands here too.
+      if (Date.now() - this.lastTokenRefreshMs > TOKEN_REFRESH_ON_ERROR_MS) {
+        this.lastTokenRefreshMs = Date.now();
+        void this.tokenCache.getToken({ forceRefresh: true }).catch(() => {});
+      }
       this.config.onSocketError?.(new PoolseError(`socket error: ${String(err)}`));
     });
 
     this.socket = socket;
 
+    this.lastTokenRefreshMs = Date.now();
     // Pre-fetch the JWT, then open the socket. Channel joins called
     // between now and socket.connect() are buffered by Phoenix and
     // flushed on open, so callers don't need to await anything.
@@ -213,7 +226,13 @@ export class PoolseRealtime {
     }
 
     const channel = this.socket.channel(`conversation:${conversationId}`, {});
-    const handle = new ConversationChannel(conversationId, channel);
+    // A channel the server closes (the user was removed from the
+    // conversation) is never rejoined: drop the handle so the next
+    // `conversation(id)` — say after being added back — joins afresh.
+    const handle: ConversationChannel = new ConversationChannel(conversationId, channel, () => {
+      if (this.conversations.get(conversationId) === handle)
+        this.conversations.delete(conversationId);
+    });
     this.conversations.set(conversationId, handle);
     handle._join();
     return handle;
@@ -273,10 +292,17 @@ export class ConversationChannel {
   // state here and replay it on subscribe.
   private presenceState: PresenceSnapshot = {};
   private presenceStateSeen = false;
+  private readonly closedListeners = new Set<() => void>();
 
-  constructor(conversationId: string, channel: Channel) {
+  constructor(conversationId: string, channel: Channel, onGone?: () => void) {
     this.conversationId = conversationId;
     this.channel = channel;
+
+    channel.onClose(() => {
+      onGone?.();
+      this.closedListeners.forEach((l) => l());
+      this.closedListeners.clear();
+    });
 
     // Bind presence handlers eagerly (not via the lazy `subscribe`
     // path) so the cache fills regardless of subscriber timing.
@@ -371,6 +397,19 @@ export class ConversationChannel {
     return this.subscribe('presence_diff', fn as (p: unknown) => void);
   }
 
+  /**
+   * The channel closed for good: the server removed you from the
+   * conversation, or `leave()` / `disconnect()` was called. No more
+   * events arrive on this handle; `realtime.conversation(id)` returns a
+   * fresh one.
+   */
+  onClosed(fn: () => void): Unsubscribe {
+    this.closedListeners.add(fn);
+    return () => {
+      this.closedListeners.delete(fn);
+    };
+  }
+
   /** Current presence snapshot for sync access — usually used in tests. */
   getPresenceState(): PresenceSnapshot {
     return this.presenceState;
@@ -424,6 +463,8 @@ export class UserChannel {
   private mentionBound = false;
   private conversationCreatedBound = false;
   private conversationUpdatedBound = false;
+  // One Phoenix binding per event, fanned out — as in ConversationChannel.
+  private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
 
   constructor(userId: string, channel: Channel) {
     this.userId = userId;
@@ -498,6 +539,23 @@ export class UserChannel {
     };
   }
 
+  /**
+   * Your ring for a call ended — answered on another device, declined,
+   * cancelled by the caller or timed out. Stop ringing on this device.
+   */
+  onRingEnded(fn: (evt: RingEndedEvent) => void): Unsubscribe {
+    return this.subscribe('call:ring_ended', fn as (p: unknown) => void);
+  }
+
+  /**
+   * A call you were part of (rung or joined) is over. Arrives on the
+   * user channel, which the app stays joined to even after leaving the
+   * conversation's channel mid-call.
+   */
+  onCallFinished(fn: (evt: CallFinishedEvent) => void): Unsubscribe {
+    return this.subscribe('call:finished', fn as (p: unknown) => void);
+  }
+
   /** @internal */
   _join(): void {
     this.channel.join();
@@ -505,10 +563,26 @@ export class UserChannel {
 
   /** @internal */
   _destroy(): void {
+    this.listeners.clear();
     this.mentionListeners.clear();
     this.conversationCreatedListeners.clear();
     this.conversationUpdatedListeners.clear();
     this.channel.leave();
+  }
+
+  private subscribe(event: string, fn: (payload: unknown) => void): Unsubscribe {
+    let set = this.listeners.get(event);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(event, set);
+      this.channel.on(event, (payload: unknown) => {
+        this.listeners.get(event)?.forEach((l) => l(payload));
+      });
+    }
+    set.add(fn);
+    return () => {
+      set.delete(fn);
+    };
   }
 }
 

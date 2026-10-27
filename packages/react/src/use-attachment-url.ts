@@ -20,7 +20,7 @@ interface UseAttachmentUrlState {
  * re-keys on a timer.
  *
  * ```tsx
- * const { url } = useAttachmentUrl(message.custom_data?.attachment_id ?? null);
+ * const { url } = useAttachmentUrl(message.attachments?.[0]?.id ?? null);
  * return url ? <img src={url} /> : <Spinner />;
  * ```
  */

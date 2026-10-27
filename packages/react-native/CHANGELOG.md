@@ -14,6 +14,8 @@ versions follow [semver](https://semver.org).
   so mounted hooks keep receiving events; before, they went silent until
   remounted. It now pauses only on `background`, not on iOS `inactive`
   (notification centre, app switcher).
+- `AttachmentPicker` declares the size of the bytes it actually uploads.
+  The server now refuses a file bigger than its declared size.
 
 ## [3.0.0] — 2026-10-26
 

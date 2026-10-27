@@ -75,3 +75,23 @@ describe('Poolse.realtime pause/resume', () => {
     expect(c.realtime.getStatus()).toBe('idle');
   });
 });
+
+describe('ConversationChannel close', () => {
+  it('a server-closed channel is dropped and reported', () => {
+    const c = new Poolse({
+      apiUrl: 'https://chat.example',
+      getToken: () => 'tok',
+      fetch: vi.fn() as unknown as typeof globalThis.fetch,
+    });
+    const handle = c.realtime.conversation('c-1');
+    const closed = vi.fn();
+    handle.onClosed(closed);
+
+    // What phoenix.js does on the server's phx_close.
+    (handle as unknown as { channel: { trigger(e: string): void } }).channel.trigger('phx_close');
+
+    expect(closed).toHaveBeenCalledOnce();
+    expect(c.realtime.conversation('c-1')).not.toBe(handle);
+    c.destroy();
+  });
+});

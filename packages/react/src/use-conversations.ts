@@ -91,9 +91,13 @@ export function useConversations(): UseConversationsState {
     });
     // Updates sent while the socket was down are never replayed: reload
     // the list once it is back.
+    // The first connect isn't a reconnect: the list is already loading.
     let wasConnected = chat.realtime.getStatus() === 'connected';
+    let connectedBefore = wasConnected;
     const offStatus = chat.realtime.onStatus((status) => {
-      if (status === 'connected' && !wasConnected) {
+      const reconnected = status === 'connected' && !wasConnected && connectedBefore;
+      connectedBefore ||= status === 'connected';
+      if (reconnected) {
         // Quietly — no loading flash for a background resync.
         chat.conversations
           .list()

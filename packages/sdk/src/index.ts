@@ -65,6 +65,7 @@ export type {
   ConversationUpdatedEvent,
   MemberReadEvent,
   MentionEvent,
+  RingEndedEvent,
   MessageDeletedEvent,
   MessageNewEvent,
   MessageUpdatedEvent,

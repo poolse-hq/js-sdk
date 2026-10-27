@@ -113,7 +113,7 @@ export class Poolse {
    *
    *     import * as livekit from 'livekit-client';
    *     const call = poolse.call(conversationId, { livekit, video: true });
-   *     const usingSfu = await call.join();   // false = no SFU, use the mesh
+   *     const joined = await call.join();   // false = calls aren't available on this deployment
    */
   call(
     conversationId: string,
