@@ -96,8 +96,11 @@ Notes that trip people up:
   fails.
 - `useAttachmentUpload().upload` takes `{ body, contentType, byteSize, filename? }`,
   not a bare `File`. Send `item.attachment.id`, not `item.localId`.
-- From 3.1, `useMessages` and `useConversations` reload from REST after the
-  socket reconnects, so nothing sent while it was down is missed.
+- From 3.1, `useMessages` (the newest 50, merged in) and `useConversations`
+  reload from REST after the socket reconnects. The first connect doesn't
+  count as a reconnect.
+- If the user is removed from a conversation, its mounted hooks stop
+  updating; hooks mounted later join a fresh channel.
 
 ## Links
 

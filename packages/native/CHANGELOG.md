@@ -2,7 +2,7 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
-## Unreleased
+## 3.1.0 — 2026-10-27
 
 - Declares `react` as a peer dependency (the package imports it).
 - `expo prebuild` needs Node 20.19 or newer (the config plugin entry is

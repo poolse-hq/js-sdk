@@ -4,8 +4,7 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
-
-## [Unreleased]
+## [3.1.0] — 2026-10-27
 
 ### Fixed
 
@@ -100,7 +99,7 @@ versions follow [semver](https://semver.org).
 ### Added
 
 - `CallScreen onSpeakerChange` — fires with `(speakerOn,
-  externalDevice)` whenever the audio route changes. Hosts use it to
+externalDevice)` whenever the audio route changes. Hosts use it to
   drive the proximity sensor: the screen should only go dark near an
   ear when the sound is actually at the ear.
 

@@ -74,6 +74,16 @@ in each package, or <https://poolse.dev/legal/sdk-license>). Versions before
   `background` and resumes it on `active`, instead of destroying every
   channel. Call it inside `<PoolseProvider>`.
 - `@poolse/native`: declares `react` as a peer dependency.
+- `@poolse/sdk`: `UserChannel.onRingEnded` / `onCallFinished` (use these
+  instead of the internal `_channel()` to forward `call:ring_ended` /
+  `call:finished` to `@poolse/native`); `ConversationChannel.onClosed`, and a
+  server-closed channel is dropped so `realtime.conversation(id)` joins
+  afresh; after a refused socket handshake the SDK fetches a new token from
+  `getToken` (at most every 30 s).
+- `@poolse/react`: the reconnect reload no longer runs on the socket's first
+  connect.
+- `@poolse/react-native`: `AttachmentPicker` declares the size of the bytes it
+  uploads (the server refuses a file bigger than declared).
 
 ## 5. Server features you can use
 

@@ -4,6 +4,13 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.1.0] — 2026-10-27
+
+### Changed
+
+- Moves with `@poolse/sdk` and `@poolse/react` 3.1.0 (reconnect catch-up,
+  user-channel call events). README rewritten against the code;
+  `CallControlButton` docs corrected (it is styled by `styles.css`).
 
 ## [3.0.0] — 2026-10-26
 

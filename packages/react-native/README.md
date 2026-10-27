@@ -83,7 +83,10 @@ hooks silent until they remounted.)
   (long-press sheet), `TypingIndicator`, `DaySeparator`, `CallLogRow`,
   `LiveCallBanner`, `ImageMosaic`.
 - Composer: `MessageComposer`, `MentionInput`, `AttachmentPicker`,
-  `UploadQueueStrip`, `AttachmentPreview`.
+  `UploadQueueStrip`, `AttachmentPreview`. `AttachmentPicker` declares the
+  size of the bytes it uploads; a custom `onPickInputs` must set `byteSize`
+  to the size of `body`, because the server refuses a file bigger than
+  declared.
 - Lists: `ConversationList`, `MemberList`.
 - Reactions: `ReactionStrip`, `ReactionPicker`.
 - Identity and brand: `UserName`, `useDisplayName`, `Avatar`, `PoolseIcon`,

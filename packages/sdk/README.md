@@ -88,14 +88,22 @@ poolse.destroy();
 Conversation channels emit `onMessage`, `onMessageUpdated`,
 `onMessageDeleted`, `onTypingStart`, `onTypingStop`, `onReactionAdded`,
 `onReactionRemoved`, `onMemberRead`, `onCallStarted`, `onCallParticipants`,
-`onCallFinished`, `onPresenceState` and `onPresenceDiff`, and have
-`sendTyping()` and `getPresenceState()`. The user channel emits `onMention`,
-`onConversationCreated` and `onConversationUpdated`.
+`onCallFinished`, `onPresenceState`, `onPresenceDiff` and `onClosed`, and
+have `sendTyping()` and `getPresenceState()`. The user channel emits
+`onMention`, `onConversationCreated`, `onConversationUpdated`, `onRingEnded`
+(`RingEndedEvent`: `reason` is `answered_elsewhere`, `declined`,
+`cancelled`, `timeout` or `finished`) and `onCallFinished` (with
+`conversation_id`).
 
 Events sent while the socket is down aren't replayed; reload from REST when
-`onStatus` reports `connected` again. `realtime.pause()` / `resume()` (3.1)
-close and reopen the socket while keeping every channel and listener, for an
-app going to the background. `disconnect()` destroys them.
+`onStatus` reports `connected` again. `realtime.pause()` / `resume()` close
+and reopen the socket while keeping every channel and listener, for an app
+going to the background. `disconnect()` destroys them.
+
+A channel the server closes (you were removed from the conversation) fires
+`onClosed` and is dropped, so a later `realtime.conversation(id)` joins
+afresh. After a refused socket handshake (for example a revoked token) the
+SDK fetches a new token from `getToken`, at most every 30 seconds.
 
 ## Errors
 

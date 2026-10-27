@@ -4,8 +4,7 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
-
-## [Unreleased]
+## [3.1.0] — 2026-10-27
 
 ### Fixed
 

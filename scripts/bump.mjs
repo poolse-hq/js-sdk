@@ -17,7 +17,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const PACKAGES = ['sdk', 'react', 'react-ui', 'react-native'];
+const PACKAGES = ['sdk', 'react', 'react-ui', 'react-native', 'native'];
 
 const next = process.argv[2];
 if (!next || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(next)) {

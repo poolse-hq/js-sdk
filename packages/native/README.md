@@ -97,7 +97,14 @@ The full API:
   from `@poolse/sdk`, and the regular APNs token with `kind: 'alert'`.
 - Chat notifications: `setActiveConversation`, `shouldPresentMessage`,
   `conversationOfNotification`.
-- Socket forwarding (optional): `onCallFinished`, `onRingEnded`.
+- Socket forwarding (optional): `onCallFinished`, `onRingEnded`. Feed them
+  from `@poolse/sdk` 3.1's user channel:
+
+  ```ts
+  const userChannel = poolse.realtime.user(me.id);
+  userChannel.onRingEnded((e) => calls.onRingEnded(e.call_id, e.reason));
+  userChannel.onCallFinished((e) => calls.onCallFinished(e.call_id, e.reason));
+  ```
 
 ## Links
 
