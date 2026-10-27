@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
 
+## [Unreleased]
+
+### Fixed
+
+- `useAppStateLifecycle` no longer tears down every channel when the app
+  goes to the background. It pauses the socket and resumes it on return,
+  so mounted hooks keep receiving events; before, they went silent until
+  remounted. It now pauses only on `background`, not on iOS `inactive`
+  (notification centre, app switcher).
+
 ## [3.0.0] — 2026-10-26
 
 ### Changed

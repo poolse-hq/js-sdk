@@ -3,13 +3,18 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { usePoolse } from '@poolse/react';
 
 /**
- * Closes the SDK WebSocket cleanly when the app backgrounds and
- * reopens it when the app comes back to the foreground. Designed
- * to pair with push-notification delivery on the dev's backend —
- * iOS / Android suspend sockets aggressively, so we don't fight
- * the OS; we let the push wake the app and resync on resume.
+ * Closes the SDK WebSocket when the app goes to the background and
+ * reopens it when the app comes back. iOS and Android suspend sockets
+ * in the background anyway; closing cleanly avoids a half-dead
+ * connection on resume. poolse sends push notifications for messages
+ * and calls itself, so nothing is lost while the socket is closed.
  *
- * Mount once near the root of your app:
+ * Channel handles and their listeners survive the pause, so mounted
+ * hooks keep working after resume, and `useMessages` /
+ * `useConversations` reload from REST to catch up on what was sent
+ * while the app was away.
+ *
+ * Mount once, inside the provider:
  *
  *     <PoolseProvider config={config}>
  *       <AppShell />
@@ -24,34 +29,12 @@ export function useAppStateLifecycle() {
   const poolse = usePoolse();
 
   useEffect(() => {
-    let prev: AppStateStatus = AppState.currentState;
-    const sub = AppState.addEventListener('change', (next) => {
-      const wasActive = prev === 'active';
-      const isActive = next === 'active';
-
-      if (wasActive && !isActive) {
-        // Going to background — close the WS cleanly. The SDK's
-        // realtime layer reopens lazily on the next subscription
-        // call, so there's nothing to clean up state-side.
-        try {
-          poolse.realtime?.disconnect?.();
-        } catch {
-          // Older SDK builds may not expose disconnect; harmless.
-        }
-      } else if (!wasActive && isActive) {
-        // Returning to foreground — the next hook render that
-        // touches `realtime.conversation(...)` will reopen the
-        // socket. `useMessages`/`useTyping`/`usePresence` all
-        // refetch their starting snapshot on remount, so the active
-        // conversation lands fresh.
-        try {
-          poolse.realtime?.connect?.();
-        } catch {
-          // Same compat note as above.
-        }
-      }
-
-      prev = next;
+    // Only 'background' pauses: iOS reports 'inactive' for the
+    // notification centre or the app switcher, which is no reason to drop
+    // the connection.
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'background') poolse.realtime.pause();
+      else if (next === 'active') poolse.realtime.resume();
     });
 
     return () => sub.remove();

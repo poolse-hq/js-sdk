@@ -89,9 +89,23 @@ export function useConversations(): UseConversationsState {
       const fromMe = by_user_id === me.id;
       setConversations((prev) => mergeUpdated(prev, conversation, fromMe));
     });
+    // Updates sent while the socket was down are never replayed: reload
+    // the list once it is back.
+    let wasConnected = chat.realtime.getStatus() === 'connected';
+    const offStatus = chat.realtime.onStatus((status) => {
+      if (status === 'connected' && !wasConnected) {
+        // Quietly — no loading flash for a background resync.
+        chat.conversations
+          .list()
+          .then((list) => setConversations(list.data))
+          .catch(() => {});
+      }
+      wasConnected = status === 'connected';
+    });
     return () => {
       offCreated();
       offUpdated();
+      offStatus();
     };
   }, [chat, me]);
 

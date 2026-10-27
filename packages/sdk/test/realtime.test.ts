@@ -48,3 +48,30 @@ describe('Poolse.realtime', () => {
     expect(observed).toBe('closed');
   });
 });
+
+describe('Poolse.realtime pause/resume', () => {
+  const chat = () =>
+    new Poolse({
+      apiUrl: 'https://chat.example',
+      getToken: () => 'tok',
+      fetch: vi.fn() as unknown as typeof globalThis.fetch,
+    });
+
+  it('keeps channel handles across a pause', () => {
+    const c = chat();
+    const handle = c.realtime.conversation('c-1');
+    c.realtime.pause();
+    expect(c.realtime.getStatus()).toBe('closed');
+    c.realtime.resume();
+    expect(c.realtime.getStatus()).toBe('connecting');
+    expect(c.realtime.conversation('c-1')).toBe(handle);
+    c.destroy();
+  });
+
+  it('is a no-op before anything connected', () => {
+    const c = chat();
+    c.realtime.pause();
+    c.realtime.resume();
+    expect(c.realtime.getStatus()).toBe('idle');
+  });
+});

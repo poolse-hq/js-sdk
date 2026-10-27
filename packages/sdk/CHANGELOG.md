@@ -5,6 +5,14 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [semver](https://semver.org).
 
 
+## [Unreleased]
+
+### Added
+
+- `realtime.pause()` / `realtime.resume()`: close the socket and reopen
+  it while keeping every channel handle and its listeners, so code
+  holding a handle keeps receiving events after resume.
+
 ## [3.0.0] — 2026-10-26
 
 ### Changed

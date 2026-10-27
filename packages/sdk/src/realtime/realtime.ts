@@ -63,6 +63,7 @@ export class PoolseRealtime {
   private userChannel: UserChannel | null = null;
 
   private status: RealtimeStatus = 'idle';
+  private paused = false;
   private readonly statusListeners = new Set<(s: RealtimeStatus) => void>();
 
   constructor(config: ResolvedConfig, tokenCache: TokenCache, opts: RealtimeOptions = {}) {
@@ -150,8 +151,41 @@ export class PoolseRealtime {
       });
   }
 
+  /**
+   * Close the socket but keep every channel handle and its listeners
+   * (for an app going to the background). `resume()` reopens it and
+   * Phoenix rejoins the channels. Events sent in between are not
+   * replayed; the React hooks reload from REST on reconnect.
+   */
+  pause(): void {
+    if (!this.socket || this.paused) return;
+    this.paused = true;
+    this.setStatus('closed');
+    this.socket.disconnect();
+  }
+
+  /** Reopen a socket closed by `pause()`, with a fresh token. */
+  resume(): void {
+    const socket = this.socket;
+    if (!socket || !this.paused) return;
+    this.paused = false;
+    this.setStatus('connecting');
+    void this.tokenCache
+      .getToken()
+      .catch((err) => {
+        this.config.onSocketError?.(
+          new PoolseError(`token fetch failed before socket open: ${String(err)}`),
+        );
+      })
+      .finally(() => {
+        // A disconnect() meanwhile dropped this socket.
+        if (this.socket === socket && !this.paused) socket.connect();
+      });
+  }
+
   /** Close the socket and tear down every joined channel. */
   disconnect(): void {
+    this.paused = false;
     this.setStatus('closed');
     this.conversations.forEach((c) => c._destroy());
     this.conversations.clear();

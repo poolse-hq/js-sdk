@@ -5,6 +5,15 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [semver](https://semver.org).
 
 
+## [Unreleased]
+
+### Fixed
+
+- `useMessages` and `useConversations` reload from REST when the socket
+  reconnects, so messages and conversation updates sent while it was
+  down (a network drop, or a mobile app in the background) appear
+  without a manual `refetch()`.
+
 ## [3.0.0] — 2026-10-26
 
 ### Changed

@@ -171,11 +171,31 @@ export function useMessages(conversationId: string): UseMessagesState {
       });
     });
 
+    // Events sent while the socket was down (a network drop, or the app
+    // in the background) are never replayed, so catch up from REST once
+    // it is back. Merged by id, so older loaded pages and pending sends
+    // survive.
+    let wasConnected = chat.realtime.getStatus() === 'connected';
+    const offStatus = chat.realtime.onStatus((status) => {
+      const reconnected = status === 'connected' && !wasConnected;
+      wasConnected = status === 'connected';
+      if (!reconnected || cancelled) return;
+      handle
+        .list({ limit: PAGE_SIZE })
+        .then((page) => {
+          if (!cancelled) setMessages((prev) => mergeLatest(prev, page.data));
+        })
+        .catch(() => {
+          // The next reconnect or an explicit refetch() tries again.
+        });
+    });
+
     return () => {
       cancelled = true;
       offNew();
       offUpdated();
       offDeleted();
+      offStatus();
       // Don't leave the channel — another component may still be reading
       // this conversation. The Poolse.destroy() at provider-unmount
       // tears everything down.
@@ -348,4 +368,11 @@ function upsertById(prev: Message[], msg: Message): Message[] {
   const next = prev.slice();
   next[idx] = msg;
   return next;
+}
+
+/** Upsert a freshly fetched page into the list, kept in sequence order. */
+function mergeLatest(prev: Message[], page: Message[]): Message[] {
+  let next = prev;
+  for (const msg of page) next = upsertById(next, msg);
+  return next === prev ? prev : [...next].sort((a, b) => a.sequence - b.sequence);
 }
