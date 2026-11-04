@@ -27,6 +27,7 @@ import type {
   MemberReadEvent,
   MentionEvent,
   MessageDeletedEvent,
+  MessageStreamEvent,
   MessageNewEvent,
   MessageUpdatedEvent,
   PresenceSnapshot,
@@ -336,6 +337,11 @@ export class ConversationChannel {
   /** Tombstone for a soft-deleted message. */
   onMessageDeleted(fn: (evt: MessageDeletedEvent) => void): Unsubscribe {
     return this.subscribe('message:deleted', fn as (p: unknown) => void);
+  }
+
+  /** An AI agent's reply as it's written (`message:stream`); see `MessageStreamEvent`. */
+  onMessageStream(fn: (evt: MessageStreamEvent) => void): Unsubscribe {
+    return this.subscribe('message:stream', fn as (p: unknown) => void);
   }
 
   onTypingStart(fn: (evt: TypingEvent) => void): Unsubscribe {

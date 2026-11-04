@@ -4,6 +4,14 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0-dev.0] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Added
+
+- `useMessageStreams(conversationId)`: AI agent replies being written,
+  built from `message:stream`; each is dropped when its finished message
+  arrives.
+
 ## [3.1.0] — 2026-10-27
 
 ### Fixed

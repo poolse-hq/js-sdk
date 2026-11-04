@@ -4,6 +4,15 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0-dev.0] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Added
+
+- `ConversationChannel.onMessageStream()` and the `MessageStreamEvent`
+  type for `message:stream`: an AI agent's reply as it's written
+  (`started`, text `delta`s, `failed`). The finished reply arrives as
+  `message:new` with the stream's `id`.
+
 ## [3.1.0] — 2026-10-27
 
 ### Added

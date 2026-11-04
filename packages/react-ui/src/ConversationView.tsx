@@ -15,11 +15,13 @@ import {
   isMessageVisibleTo,
   receiptsOf,
   useMembers,
+  useMessageStreams,
   useMessages,
   useMe,
   useLiveCall,
   useRealtimeStatus,
   useTyping,
+  type MessageStream,
 } from '@poolse/react';
 import React, { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePoolseFonts } from './fonts.js';
@@ -202,7 +204,18 @@ export function ConversationView({
     delete: deleteMsg,
     markReadUpTo,
   } = useMessages(conversationId);
-  const { typing, signalTyping } = useTyping(conversationId);
+  const { typing: typingPeople, signalTyping } = useTyping(conversationId);
+  // AI agent replies being written. Before the first words arrive the
+  // agent shows as typing; then its reply streams into a bubble.
+  const streams = useMessageStreams(conversationId);
+  const typing = useMemo(() => {
+    const thinking = streams.filter((s) => s.status === 'streaming' && !s.text);
+    if (thinking.length === 0) return typingPeople;
+    const next = new Set(typingPeople);
+    for (const s of thinking) if (s.sender_external_id) next.add(s.sender_external_id);
+    return next;
+  }, [typingPeople, streams]);
+  const visibleStreams = streams.filter((s) => s.text || s.status === 'failed');
   const status = useRealtimeStatus();
   // Members are needed for mentions + read-receipt auto-compute +
   // the `auto` resolution of senderLabels / avatars in group chats.
@@ -312,6 +325,14 @@ export function ConversationView({
       setNewCountWhileAway((n) => n + 1);
     }
   }, [messages, atBottom, me]);
+
+  // Keep a streaming reply in view as it grows.
+  const streamedChars = visibleStreams.reduce((n, s) => n + s.text.length, 0);
+  useEffect(() => {
+    if (!atBottom || streamedChars === 0) return;
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [streamedChars, atBottom]);
 
   // Auto-mark-read whenever the latest message is in view.
   // Fire-and-forget — the server handles dedup if we call repeatedly
@@ -654,6 +675,31 @@ export function ConversationView({
             })
           )}
 
+          {visibleStreams.map((stream) =>
+            stream.status === 'failed' ? (
+              <div key={stream.id} className="poolse-stream-failed" role="status">
+                {stream.error
+                  ? `The agent couldn't reply: ${stream.error}`
+                  : "The agent couldn't reply."}
+              </div>
+            ) : (
+              <div key={stream.id} className="poolse-stream" aria-busy="true">
+                <MessageRow
+                  msg={streamingMessage(stream)}
+                  meId={me?.id ?? null}
+                  reactions={false}
+                  actions={false}
+                  threads={false}
+                  quotations={false}
+                  markdown={markdown}
+                  showSenderName={showSenderLabelsResolved}
+                  showAvatar={showAvatarsResolved}
+                  {...(labelFor ? { labelFor } : {})}
+                />
+              </div>
+            ),
+          )}
+
           {error && (
             <div className="poolse-conversation__empty">Failed to load: {error.message}</div>
           )}
@@ -730,4 +776,28 @@ function JoinBanner({
   // Already in the room on another device: nothing to join.
   if (meId !== null && participantIds.includes(meId)) return null;
   return <LiveCallBanner call={call} inCall={participantIds.length} onJoin={onJoin} />;
+}
+
+// A streaming agent reply shaped as a Message, so it renders with the
+// same row and bubble as the finished one that replaces it.
+function streamingMessage(stream: MessageStream): Message {
+  const now = new Date().toISOString();
+  return {
+    id: stream.id,
+    tenant_id: '',
+    conversation_id: stream.conversation_id,
+    sender_id: stream.sender_id,
+    sender_external_id: stream.sender_external_id,
+    type: 'text',
+    body: stream.text,
+    reply_to_id: null,
+    thread_root_id: null,
+    mentions: [],
+    reactions: {},
+    edited_at: null,
+    deleted_at: null,
+    sequence: Number.MAX_SAFE_INTEGER,
+    inserted_at: now,
+    updated_at: now,
+  };
 }

@@ -13,6 +13,7 @@ export { useMessages } from './use-messages.js';
 export { useReactions, type ReactionMap } from './use-reactions.js';
 export { useThread } from './use-thread.js';
 export { useTyping } from './use-typing.js';
+export { useMessageStreams, type MessageStream } from './use-message-streams.js';
 export { usePresence } from './use-presence.js';
 export { useRealtimeStatus } from './use-realtime-status.js';
 export {

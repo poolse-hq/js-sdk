@@ -3576,3 +3576,45 @@
   outline: 2px solid var(--poolse-brand);
   outline-offset: 2px;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Streaming AI agent reply (useMessageStreams)
+   ───────────────────────────────────────────────────────────── */
+
+/* A blinking caret after the text while the reply is being written.
+   The timestamp is meaningless until the message lands, so hide it. */
+.poolse-stream .poolse-message__meta {
+  visibility: hidden;
+}
+
+.poolse-stream .poolse-message__body:not(.poolse-message__body--md)::after,
+.poolse-stream .poolse-message__body--md > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  opacity: 0.6;
+  animation: poolse-caret 1s steps(1) infinite;
+}
+
+@keyframes poolse-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poolse-stream .poolse-message__body:not(.poolse-message__body--md)::after,
+  .poolse-stream .poolse-message__body--md > :last-child::after {
+    animation: none;
+  }
+}
+
+.poolse-stream-failed {
+  margin: 4px 16px;
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+}

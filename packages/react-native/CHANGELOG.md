@@ -4,6 +4,12 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [3.2.0-dev.0] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Changed
+
+- Moves with `@poolse/sdk` 3.2.0-dev.0.
+
 ## [3.1.0] — 2026-10-27
 
 ### Fixed

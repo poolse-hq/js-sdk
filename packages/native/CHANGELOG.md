@@ -2,6 +2,10 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.2.0-dev.0 — 2026-11-04 (prerelease, npm tag `dev`)
+
+- Moves with `@poolse/sdk` 3.2.0-dev.0.
+
 ## 3.1.0 — 2026-10-27
 
 - Declares `react` as a peer dependency (the package imports it).
