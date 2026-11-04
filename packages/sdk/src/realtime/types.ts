@@ -19,6 +19,7 @@ export interface MessageDeletedEvent {
  *
  *   * `started`: the agent began writing (carries `sender_external_id`).
  *   * `delta`: the next piece of text; append it.
+ *   * `tool`: the agent is running one of its tools (`tool` is its name).
  *   * `failed`: the agent couldn't answer; nothing will be posted.
  *
  * The finished reply arrives as a normal `message:new` whose `id`
@@ -28,9 +29,10 @@ export interface MessageStreamEvent {
   id: Uuid;
   conversation_id: Uuid;
   sender_id: Uuid;
-  status: 'started' | 'delta' | 'failed';
+  status: 'started' | 'delta' | 'tool' | 'failed';
   sender_external_id?: string | null;
   delta?: string;
+  tool?: string;
   error?: string;
 }
 

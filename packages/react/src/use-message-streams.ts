@@ -12,6 +12,8 @@ export interface MessageStream {
   /** The text so far; empty until the first delta. */
   text: string;
   status: 'streaming' | 'failed';
+  /** The tool the agent is running right now, if any (cleared by the next text). */
+  tool?: string;
   error?: string;
 }
 
@@ -70,7 +72,11 @@ export function useMessageStreams(conversationId: string): MessageStream[] {
         };
 
         let next: MessageStream;
-        if (evt.status === 'delta') next = { ...base, text: base.text + (evt.delta ?? '') };
+        if (evt.status === 'delta') {
+          const { tool: _done, ...rest } = base;
+          next = { ...rest, text: base.text + (evt.delta ?? '') };
+        } else if (evt.status === 'tool')
+          next = { ...base, ...(evt.tool ? { tool: evt.tool } : {}) };
         else if (evt.status === 'failed')
           next = { ...base, status: 'failed', ...(evt.error ? { error: evt.error } : {}) };
         else

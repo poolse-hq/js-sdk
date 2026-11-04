@@ -8,10 +8,12 @@ import {
   sameDay,
   useMe,
   useMembers,
+  useMessageStreams,
   useMessages,
   useRealtimeStatus,
   useLiveCall,
   useTyping,
+  type MessageStream,
 } from '@poolse/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
@@ -20,6 +22,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 
@@ -174,7 +177,18 @@ export function ConversationView({
     markReadUpTo,
     refetch,
   } = useMessages(conversationId);
-  const { typing, signalTyping } = useTyping(conversationId);
+  const { typing: typingPeople, signalTyping } = useTyping(conversationId);
+  // AI agent replies being written. Before the first words arrive the
+  // agent shows as typing; then its reply streams into a bubble.
+  const streams = useMessageStreams(conversationId);
+  const typing = useMemo(() => {
+    const thinking = streams.filter((s) => s.status === 'streaming' && !s.text);
+    if (thinking.length === 0) return typingPeople;
+    const next = new Set(typingPeople);
+    for (const s of thinking) if (s.sender_external_id) next.add(s.sender_external_id);
+    return next;
+  }, [typingPeople, streams]);
+  const visibleStreams = streams.filter((s) => s.text || s.status === 'failed');
   const realtimeStatus = useRealtimeStatus();
 
   // Pull the latest page when the app foregrounds or the socket
@@ -474,7 +488,40 @@ export function ConversationView({
             hasMore={hasMore}
             onLoadMore={loadMore}
             renderItem={renderItem}
-            ListHeader={<TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />}
+            ListHeader={
+              <View>
+                {visibleStreams.map((stream) =>
+                  stream.status === 'failed' ? (
+                    <Text
+                      key={stream.id}
+                      style={[styles.streamFailed, { color: theme.colors.ink3 }]}
+                      accessibilityRole="alert"
+                    >
+                      {stream.error
+                        ? `The agent couldn't reply: ${stream.error}`
+                        : "The agent couldn't reply."}
+                    </Text>
+                  ) : (
+                    <MessageRow
+                      key={stream.id}
+                      msg={streamingMessage(stream)}
+                      meId={meId}
+                      reactions={false}
+                      attachments={false}
+                      actions={false}
+                      threads={false}
+                      quotations={false}
+                      {...(labelFor ? { labelFor } : {})}
+                      {...(avatarFor ? { avatarFor } : {})}
+                      showSenderName={showSenderLabels}
+                      showAvatar={showAvatars}
+                      markdown={markdown}
+                    />
+                  ),
+                )}
+                <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
+              </View>
+            }
             {...(emptyState !== undefined ? { emptyState } : {})}
           />
           {/* WhatsApp-style dim while editing: the overlay covers
@@ -557,6 +604,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
+  streamFailed: {
+    fontSize: 12,
+    marginHorizontal: 16,
+    marginVertical: 4,
+  },
   listWrap: {
     flex: 1,
   },
@@ -569,3 +621,28 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
 });
+
+// A streaming agent reply shaped as a Message, so it renders with the
+// same row and bubble as the finished one that replaces it. A caret
+// marks it as still being written.
+function streamingMessage(stream: MessageStream): Message {
+  const now = new Date().toISOString();
+  return {
+    id: stream.id,
+    tenant_id: '',
+    conversation_id: stream.conversation_id,
+    sender_id: stream.sender_id,
+    sender_external_id: stream.sender_external_id,
+    type: 'text',
+    body: `${stream.text} ▍`,
+    reply_to_id: null,
+    thread_root_id: null,
+    mentions: [],
+    reactions: {},
+    edited_at: null,
+    deleted_at: null,
+    sequence: Number.MAX_SAFE_INTEGER,
+    inserted_at: now,
+    updated_at: now,
+  };
+}

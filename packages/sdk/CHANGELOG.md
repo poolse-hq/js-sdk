@@ -4,6 +4,12 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0-dev.1] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Added
+
+- `message:stream` gains a `tool` status (the agent is running a tool; `tool` is its name).
+
 ## [3.2.0-dev.0] — 2026-11-04 (prerelease, npm tag `dev`)
 
 ### Added

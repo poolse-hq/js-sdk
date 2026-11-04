@@ -2,6 +2,10 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.2.0-dev.1 — 2026-11-04 (prerelease, npm tag `dev`)
+
+- Moves with `@poolse/sdk` 3.2.0-dev.1.
+
 ## 3.2.0-dev.0 — 2026-11-04 (prerelease, npm tag `dev`)
 
 - Moves with `@poolse/sdk` 3.2.0-dev.0.
