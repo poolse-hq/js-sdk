@@ -4,6 +4,30 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0-dev.4] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Changed
+
+- A redesigned call screen. `RoomStage`'s controls are one floating dock of
+  round glass buttons with filled icons; they never wrap to a second row, so
+  Leave stays on screen on a phone, and they shrink when the room is narrow.
+  A control you turned off (muted, camera off) turns red; screen sharing
+  lights up blue. Device menus open from a chevron in the same pill as their
+  button. Labels became tooltips and accessible names.
+- The room's header shows a live clock with a red dot and a people count as
+  chips. Tiles are rounder, the speaking ring sits inside the tile, and the
+  name captions are frosted.
+- A shared screen stacks above the faces whenever the room is narrow, not
+  only when the window is.
+
+### Added
+
+- `CallControlButton` takes `highlight` for something you turned on, and
+  shows its label as a tooltip.
+- Filled call icons: `mic-fill`, `mic-off-fill`, `video-fill`,
+  `video-off-fill`, `screen-share-fill`, `screen-share-off-fill`,
+  `phone-off-fill`, `speaker-fill`.
+
 ## [3.2.0-dev.3] — 2026-11-16 (prerelease, npm tag `dev`)
 
 ### Added

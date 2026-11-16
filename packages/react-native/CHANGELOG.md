@@ -4,6 +4,14 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [3.2.0-dev.4] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Filled call icons: `mic-fill`, `mic-off-fill`, `video-fill`,
+  `video-off-fill`, `screen-share-fill`, `screen-share-off-fill`,
+  `phone-off-fill`, `speaker-fill`.
+
 ## [3.2.0-dev.3] — 2026-11-16 (prerelease, npm tag `dev`)
 
 ### Added

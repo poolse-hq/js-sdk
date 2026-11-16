@@ -2,6 +2,10 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.2.0-dev.4 — 2026-11-16 (prerelease, npm tag `dev`)
+
+- No changes; released with the other packages.
+
 ## 3.2.0-dev.3 — 2026-11-16 (prerelease, npm tag `dev`)
 
 - No changes; released with the other packages.

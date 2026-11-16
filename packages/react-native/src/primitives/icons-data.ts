@@ -123,9 +123,17 @@ export const ICONS = {
     vb: '0 0 24 24',
     d: '<rect x="9" y="2.6" width="6" height="11.2" rx="3"/><path d="M5.6 11.2a6.4 6.4 0 0 0 12.8 0"/><path d="M12 17.6v3.4"/><path d="M8.6 21h6.8"/>',
   },
+  'mic-fill': {
+    vb: '0 0 24 24',
+    d: '<rect x="8.5" y="2.5" width="7" height="12" rx="3.5" fill="currentColor" stroke="none"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/>',
+  },
   'mic-off': {
     vb: '0 0 24 24',
     d: '<rect x="9" y="2.6" width="6" height="11.2" rx="3"/><path d="M5.6 11.2a6.4 6.4 0 0 0 12.8 0"/><path d="M12 17.6v3.4"/><path d="M8.6 21h6.8"/><path d="M3.6 3.2 20.4 20.8"/>',
+  },
+  'mic-off-fill': {
+    vb: '0 0 24 24',
+    d: '<defs><mask id="poolse-cut-mic" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#fff" stroke="none"/><path d="M3.5 3.5 20.5 20.5" stroke="#000" stroke-width="5"/></mask></defs><g mask="url(#poolse-cut-mic)"><rect x="8.5" y="2.5" width="7" height="12" rx="3.5" fill="currentColor" stroke="none"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></g><path d="M3.5 3.5 20.5 20.5"/>',
   },
   'more-h': {
     vb: '0 0 24 24',
@@ -142,6 +150,10 @@ export const ICONS = {
   'phone-off': {
     vb: '0 0 24 24',
     d: '<g transform="rotate(135 12 12)"><path d="M6.6 3.5h3l1.5 3.7-1.9 1.4a12.5 12.5 0 0 0 6.2 6.2l1.4-1.9 3.7 1.5v3a2 2 0 0 1-2.2 2A16.8 16.8 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z"/></g>',
+  },
+  'phone-off-fill': {
+    vb: '0 0 24 24',
+    d: '<g transform="rotate(135 12 12)"><path d="M6.6 3.5h3l1.5 3.7-1.9 1.4a12.5 12.5 0 0 0 6.2 6.2l1.4-1.9 3.7 1.5v3a2 2 0 0 1-2.2 2A16.8 16.8 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2Z" fill="currentColor" stroke-width="1.2"/></g>',
   },
   pin: {
     vb: '0 0 24 24',
@@ -167,9 +179,17 @@ export const ICONS = {
     vb: '0 0 24 24',
     d: '<rect x="2.6" y="4" width="18.8" height="12.6" rx="2"/><path d="M8.4 20.4h7.2"/><path d="M12 16.6v3.8"/><path d="M12 13V7.4"/><path d="M9.4 9.8 12 7.2l2.6 2.6"/>',
   },
+  'screen-share-fill': {
+    vb: '0 0 24 24',
+    d: '<defs><mask id="poolse-cut-share" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#fff" stroke="none"/><path d="M12 14.2V7.8M9 10.6l3-3 3 3" stroke="#000" stroke-width="2" fill="none"/></mask></defs><g mask="url(#poolse-cut-share)"><rect x="2.4" y="3.8" width="19.2" height="13.4" rx="2.6" fill="currentColor" stroke="none"/><path d="M8.6 20.6h6.8"/></g>',
+  },
   'screen-share-off': {
     vb: '0 0 24 24',
     d: '<rect x="2.6" y="4" width="18.8" height="12.6" rx="2"/><path d="M8.4 20.4h7.2"/><path d="M12 16.6v3.8"/><path d="M9.6 8 14.4 12.6"/><path d="M14.4 8 9.6 12.6"/>',
+  },
+  'screen-share-off-fill': {
+    vb: '0 0 24 24',
+    d: '<defs><mask id="poolse-cut-unshare" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#fff" stroke="none"/><path d="M9.4 7.9l5.2 5.2M14.6 7.9l-5.2 5.2" stroke="#000" stroke-width="2" fill="none"/></mask></defs><g mask="url(#poolse-cut-unshare)"><rect x="2.4" y="3.8" width="19.2" height="13.4" rx="2.6" fill="currentColor" stroke="none"/><path d="M8.6 20.6h6.8"/></g>',
   },
   search: {
     vb: '0 0 24 24',
@@ -194,6 +214,10 @@ export const ICONS = {
   speaker: {
     vb: '0 0 24 24',
     d: '<path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z"/><path d="M15.6 9.2a4 4 0 0 1 0 5.6"/><path d="M18.2 6.6a7.7 7.7 0 0 1 0 10.8"/>',
+  },
+  'speaker-fill': {
+    vb: '0 0 24 24',
+    d: '<path d="M3.5 9.4h3.3L11.4 5a.6.6 0 0 1 1 .44v13.12a.6.6 0 0 1-1 .44L6.8 14.6H3.5a1 1 0 0 1-1-1V10.4a1 1 0 0 1 1-1Z" fill="currentColor" stroke="none"/><path d="M15.6 9.2a4 4 0 0 1 0 5.6"/><path d="M18.3 6.5a7.8 7.8 0 0 1 0 11"/>',
   },
   'speaker-off': {
     vb: '0 0 24 24',
@@ -227,9 +251,17 @@ export const ICONS = {
     vb: '0 0 24 24',
     d: '<rect x="2.6" y="6" width="13" height="12" rx="2.4"/><path d="M15.6 11.2 21.4 8v8l-5.8-3.2Z"/>',
   },
+  'video-fill': {
+    vb: '0 0 24 24',
+    d: '<rect x="2" y="6" width="13.6" height="12" rx="3" fill="currentColor" stroke="none"/><path d="M17.1 10.3 21 7.8a.7.7 0 0 1 1.1.6v7.2a.7.7 0 0 1-1.1.6l-3.9-2.5Z" fill="currentColor" stroke="none"/>',
+  },
   'video-off': {
     vb: '0 0 24 24',
     d: '<rect x="2.6" y="6" width="13" height="12" rx="2.4"/><path d="M15.6 11.2 21.4 8v8l-5.8-3.2Z"/><path d="M3.6 3.2 20.4 20.8"/>',
+  },
+  'video-off-fill': {
+    vb: '0 0 24 24',
+    d: '<defs><mask id="poolse-cut-video" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#fff" stroke="none"/><path d="M3.5 3.5 20.5 20.5" stroke="#000" stroke-width="5"/></mask></defs><g mask="url(#poolse-cut-video)"><rect x="2" y="6" width="13.6" height="12" rx="3" fill="currentColor" stroke="none"/><path d="M17.1 10.3 21 7.8a.7.7 0 0 1 1.1.6v7.2a.7.7 0 0 1-1.1.6l-3.9-2.5Z" fill="currentColor" stroke="none"/></g><path d="M3.5 3.5 20.5 20.5"/>',
   },
   webhook: {
     vb: '0 0 24 24',
