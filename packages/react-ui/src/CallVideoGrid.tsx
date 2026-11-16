@@ -2,6 +2,7 @@ import type { CallParticipant } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { PoolseIcon } from './PoolseIcon.js';
+import { useFullscreen } from './useFullscreen.js';
 import { userColor } from './userColor.js';
 
 /**
@@ -232,6 +233,8 @@ function ScreenTile({
   label: (userId: string) => string;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const tile = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(tile, ref);
   const track = participant.screenTrack as AttachableTrack | null;
   const name = participant.isSelf
     ? 'Your screen'
@@ -247,7 +250,11 @@ function ScreenTile({
   }, [track]);
 
   return (
-    <div className="callpresent__screen">
+    <div
+      ref={tile}
+      className="callpresent__screen"
+      onDoubleClick={fullscreen.supported ? fullscreen.toggle : undefined}
+    >
       <video
         ref={ref}
         className="callgrid__video"
@@ -260,6 +267,21 @@ function ScreenTile({
         <PoolseIcon name="screen-share" size={13} label={null} />
         <span className="callgrid__name">{name}</span>
       </div>
+      {fullscreen.supported && (
+        <button
+          type="button"
+          className="callpresent__fullscreen"
+          onClick={fullscreen.toggle}
+          aria-label={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+          title={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+        >
+          <PoolseIcon
+            name={fullscreen.active ? 'fullscreen-exit' : 'fullscreen'}
+            size={18}
+            label={null}
+          />
+        </button>
+      )}
     </div>
   );
 }

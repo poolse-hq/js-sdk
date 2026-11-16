@@ -4,6 +4,17 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0-dev.3] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Full screen in calls. `RoomStage` has a Full screen button in its header that
+  takes the whole room (video, controls) full screen; a shared screen has its
+  own button (and double-click) to watch just the screen full screen. On iPhone
+  Safari, which has no element full screen, the screen opens in the native video
+  player. The button is hidden where neither works.
+- Icons `fullscreen` and `fullscreen-exit`.
+
 ## [3.2.0-dev.2] — 2026-11-16 (prerelease, npm tag `dev`)
 
 ### Added

@@ -4,6 +4,12 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [3.2.0-dev.3] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Icons `fullscreen` and `fullscreen-exit`.
+
 ## [3.2.0-dev.2] — 2026-11-16 (prerelease, npm tag `dev`)
 
 ### Added

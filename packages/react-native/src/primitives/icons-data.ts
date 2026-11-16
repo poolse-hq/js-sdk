@@ -75,6 +75,14 @@ export const ICONS = {
     vb: '0 0 24 24',
     d: '<circle cx="12" cy="12" r="8.6"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/><path d="M8.4 14.2a4.6 4.6 0 0 0 7.2 0"/>',
   },
+  fullscreen: {
+    vb: '0 0 24 24',
+    d: '<path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9"/><path d="M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9"/><path d="M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15"/><path d="M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/>',
+  },
+  'fullscreen-exit': {
+    vb: '0 0 24 24',
+    d: '<path d="M9 4v3.5A1.5 1.5 0 0 1 7.5 9H4"/><path d="M20 9h-3.5A1.5 1.5 0 0 1 15 7.5V4"/><path d="M15 20v-3.5a1.5 1.5 0 0 1 1.5-1.5H20"/><path d="M4 15h3.5A1.5 1.5 0 0 1 9 16.5V20"/>',
+  },
   headphones: {
     vb: '0 0 24 24',
     d: '<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14h2.6a1.4 1.4 0 0 1 1.4 1.4v3.2A1.4 1.4 0 0 1 6.6 20H5.4A1.4 1.4 0 0 1 4 18.6Z"/><path d="M20 14h-2.6a1.4 1.4 0 0 0-1.4 1.4v3.2A1.4 1.4 0 0 0 17.4 20h1.2A1.4 1.4 0 0 0 20 18.6Z"/>',

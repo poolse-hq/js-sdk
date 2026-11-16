@@ -10,11 +10,12 @@
 
 import type { UseRoom } from '@poolse/react';
 import type { CallDeviceKind } from '@poolse/sdk';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CallControlButton, CallDeviceMenu } from './CallControls.js';
 import { CallVideoGrid } from './CallVideoGrid.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { useFullscreen } from './useFullscreen.js';
 
 export interface RoomJoinBarProps {
   room: UseRoom;
@@ -117,6 +118,8 @@ export interface RoomStageProps {
  */
 export function RoomStage({ room, title, labelFor, className }: RoomStageProps) {
   const media = room.media;
+  const stage = useRef<HTMLElement>(null);
+  const fullscreen = useFullscreen(stage);
   const [menu, setMenu] = useState<CallDeviceKind | null>(null);
   const elapsed = useElapsed(room.live?.started_at ?? null, media.status === 'connected');
 
@@ -139,10 +142,29 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
       : `${count} in the room${elapsed ? ` · ${elapsed}` : ''}`;
 
   return (
-    <section className={['poolse-room', className].filter(Boolean).join(' ')} aria-label="Room">
+    <section
+      ref={stage}
+      className={['poolse-room', className].filter(Boolean).join(' ')}
+      aria-label="Room"
+    >
       <header className="poolse-room__head">
         <span className="poolse-room__title">{title ?? 'Room'}</span>
         <span className="poolse-room__status">{status}</span>
+        {fullscreen.supported && (
+          <button
+            type="button"
+            className="poolse-room__fullscreen"
+            onClick={fullscreen.toggle}
+            aria-label={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+            title={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+          >
+            <PoolseIcon
+              name={fullscreen.active ? 'fullscreen-exit' : 'fullscreen'}
+              size={17}
+              label={null}
+            />
+          </button>
+        )}
       </header>
 
       <div className="poolse-room__stage">
