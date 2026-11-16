@@ -95,7 +95,7 @@ export interface Snapshot {
    * `cameraOn: false` meanwhile. Absent before 0.11.0.
    */
   videoPaused?: boolean;
-  /** You are sharing your screen (Android). Absent before 3.2. */
+  /** You are sharing your screen. Absent before 3.2. */
   screenSharing?: boolean;
 }
 
@@ -355,17 +355,21 @@ export const switchCamera = (): void => native?.switchCamera();
 
 /**
  * Whether this build can share the screen in a call: Android with the
- * LiveKit media engine. iOS shares through a broadcast extension, which
- * comes in a later release; it can already show other people's screens.
+ * LiveKit media engine; iOS when the app was built with the config
+ * plugin's `screenShare` option (the broadcast extension). Every build
+ * shows other people's screens.
  */
 export const screenShareSupported = (): boolean => native?.screenShareSupported?.() ?? false;
 
 /**
  * Share the screen. Android asks the user first (the system's "Start
- * recording or casting?" prompt); resolves `false` when they say no or
- * the build cannot share. `snapshot.screenSharing` turns true once the
- * screen is actually going out. Stopping from the system notification
- * ends it the same way.
+ * recording or casting?" prompt) and resolves `false` when they say no.
+ * iOS shows the system's broadcast sheet and resolves `true` once it is
+ * up; the user still has to tap Start Broadcast. Either way it resolves
+ * `false` when the build cannot share, and `snapshot.screenSharing`
+ * turns true only once the screen is actually going out. Stopping from
+ * the system notification (Android) or the status bar (iOS) ends it the
+ * same way.
  */
 export const startScreenShare = async (): Promise<boolean> =>
   (await native?.startScreenShare?.()) ?? false;

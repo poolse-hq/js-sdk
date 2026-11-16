@@ -75,9 +75,18 @@ public class PoolseCallsModule: Module {
     Function("setMuted") { (muted: Bool) in onCore { $0.setMuted(muted) } }
     Function("setCamera") { (on: Bool) in onCore { $0.setCamera(on) } }
     Function("switchCamera") { onCore { $0.switchCamera() } }
-    // Sharing from iOS needs a broadcast upload extension (a later
-    // release); other people's screens already show via `source`.
-    Function("screenShareSupported") { false }
+    // Sharing from iOS goes through the app's broadcast upload extension
+    // (the config plugin's `screenShare` option); without it this is false.
+    Function("screenShareSupported") { () -> Bool in LiveKitMediaPort.screenShareSupported }
+    // Shows the system's broadcast picker; the snapshot's `screenSharing`
+    // turns true once the user taps Start Broadcast. Resolves whether the
+    // picker could be shown at all.
+    AsyncFunction("startScreenShare") { () -> Bool in
+      guard LiveKitMediaPort.screenShareSupported, CallCore.getOrNull() != nil else { return false }
+      onCore { $0.setScreenShare(true) }
+      return true
+    }
+    Function("stopScreenShare") { onCore { $0.setScreenShare(false) } }
     Function("setSpeaker") { (on: Bool) in onCore { $0.setSpeaker(on) } }
     Function("setAudioOutput") { (id: String) in onCore { $0.setAudioOutput(id) } }
 

@@ -2,6 +2,20 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.2.0-dev.5 — 2026-11-17 (prerelease, npm tag `dev`)
+
+- Screen sharing from iOS. Add `"screenShare": true` to the config plugin's
+  options: it adds a Broadcast Upload Extension (`PoolseBroadcast`, bundle id
+  `<app>.broadcast`), the app group `group.<app>` on the app and the
+  extension (`{ "screenShare": { "appGroup": "…" } }` for your own) and
+  LiveKit to the extension's Podfile target. Then `screenShareSupported()` is
+  true, `startScreenShare()` shows the system's broadcast sheet, and the
+  snapshot's `screenSharing` turns true once the user taps Start Broadcast.
+  Stopping from the app, from the status bar or by ending the call all end
+  the broadcast.
+- Signing: register the app group in the Apple Developer portal and assign it
+  to both App IDs; automatic signing then provisions the extension.
+
 ## 3.2.0-dev.4 — 2026-11-16 (prerelease, npm tag `dev`)
 
 - No changes; released with the other packages.

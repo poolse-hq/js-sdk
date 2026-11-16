@@ -85,7 +85,8 @@ public extension MachineState {
                   cameraFacing: String? = nil,
                   waiting: RingContext? = nil,
                   connectionQuality: String = "unknown",
-                  videoPaused: Bool = false) -> [String: Any]? {
+                  videoPaused: Bool = false,
+                  screenSharing: Bool = false) -> [String: Any]? {
     if phase == .idle { return nil }
     var out: [String: Any] = [
       "cv": 1,
@@ -104,6 +105,7 @@ public extension MachineState {
       "cameraOn": cameraOn,
       "connectionQuality": connectionQuality,
       "videoPaused": videoPaused,
+      "screenSharing": screenSharing,
     ]
     // The call waiting beside this one: null when none.
     if let w = self.waiting {

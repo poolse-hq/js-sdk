@@ -760,6 +760,9 @@ final class HttpAndSnapshotTests: XCTestCase {
     let active = MachineState(phase: .active, callId: "c1", conversationId: "v").toSnapshot()!
     XCTAssertNil(active["reason"])
     XCTAssertNil(active["cameraFacing"])
+    XCTAssertEqual(active["screenSharing"] as? Bool, false)
+    let sharing = MachineState(phase: .active, callId: "c1", conversationId: "v").toSnapshot(screenSharing: true)!
+    XCTAssertEqual(sharing["screenSharing"] as? Bool, true)
     XCTAssertEqual(active["direction"] as? String, "incoming")
     XCTAssertTrue(JSONSerialization.isValidJSONObject(snap))
   }
