@@ -1,8 +1,10 @@
 package expo.modules.poolsecalls
 
+import android.app.Activity
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -10,6 +12,7 @@ import android.util.Log
 import dev.poolse.callcore.android.CallCore
 import dev.poolse.callcore.android.MessageNotifications
 import dev.poolse.callcore.android.MissedCallNotification
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -41,6 +44,8 @@ class PoolseCallsModule : Module() {
       Prop("local") { view: PoolseCallVideoView, local: Boolean? -> view.local = local ?: false }
       Prop("mirror") { view: PoolseCallVideoView, mirror: Boolean? -> view.mirror = mirror }
       Prop("fit") { view: PoolseCallVideoView, fit: String? -> view.fit = fit ?: "cover" }
+      // `camera` (default) or `screen`: their shared screen instead of their face.
+      Prop("source") { view: PoolseCallVideoView, source: String? -> view.source = source ?: "camera" }
       // iOS's picture-in-picture source; Android floats the whole activity.
       Prop("pictureInPicture") { _: PoolseCallVideoView, _: Boolean? -> }
       OnViewDestroys { view: PoolseCallVideoView -> view.detachSurface() }
@@ -102,6 +107,43 @@ class PoolseCallsModule : Module() {
     Function("declineWaiting") { callId: String? -> core()?.declineWaiting(callId) }
     Function("setMuted") { muted: Boolean -> core()?.setMuted(muted) }
     Function("setCamera") { on: Boolean -> core()?.setCamera(on) }
+
+    // Screen sharing: the system asks the user first (only an Activity
+    // can), then the core publishes with that answer. Resolves whether
+    // the user allowed it; the snapshot's `screenSharing` follows once
+    // the screen is actually published.
+    Function("screenShareSupported") { core()?.screenShareSupported ?: false }
+    AsyncFunction("startScreenShare") { promise: Promise ->
+      val activity = appContext.currentActivity
+      val core = core()
+      if (activity == null || core == null || !core.screenShareSupported) {
+        promise.resolve(false)
+        return@AsyncFunction
+      }
+      pendingShare?.resolve(false)
+      pendingShare = promise
+      val manager = activity.getSystemService(MediaProjectionManager::class.java)
+      activity.runOnUiThread {
+        runCatching { activity.startActivityForResult(manager.createScreenCaptureIntent(), SCREEN_SHARE_REQUEST) }
+          .onFailure {
+            Log.w(TAG, "screen capture prompt failed", it)
+            pendingShare?.resolve(false)
+            pendingShare = null
+          }
+      }
+    }
+    Function("stopScreenShare") { core()?.setScreenShare(false, null) }
+    OnActivityResult { _, payload ->
+      if (payload.requestCode != SCREEN_SHARE_REQUEST) return@OnActivityResult
+      val promise = pendingShare
+      pendingShare = null
+      val data = payload.data
+      if (payload.resultCode == Activity.RESULT_OK && data != null) {
+        promise?.resolve(core()?.setScreenShare(true, data) ?: false)
+      } else {
+        promise?.resolve(false)
+      }
+    }
     Function("switchCamera") { core()?.switchCamera() }
     Function("setSpeaker") { on: Boolean -> core()?.setSpeaker(on) }
     Function("setAudioOutput") { id: String -> core()?.setAudioOutput(id) }
@@ -174,6 +216,9 @@ class PoolseCallsModule : Module() {
 
   private fun core(): CallCore? = context?.let(CallCore::getOrNull)
 
+  /** The startScreenShare waiting on the system's capture prompt. */
+  private var pendingShare: Promise? = null
+
   /**
    * The call action an intent carries, removed from it so a later read
    * (rotation, re-mount) cannot replay it. Acting on it from the app
@@ -201,5 +246,6 @@ class PoolseCallsModule : Module() {
 
   private companion object {
     const val TAG = "PoolseCalls"
+    const val SCREEN_SHARE_REQUEST = 0x5C5E
   }
 }

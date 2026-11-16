@@ -31,6 +31,8 @@ export interface LiveCall {
   ring_states: Record<string, 'ringing' | 'answered' | 'declined' | 'missed'>;
   /** The workspace's call limits (dashboard → Calls). False: hide the camera button. */
   video_allowed?: boolean;
+  /** Whether the workspace lets people share a screen in calls. */
+  screen_share_allowed?: boolean;
   /** How many people the call holds; one more joining is refused with `call_full`. */
   max_participants?: number;
 }

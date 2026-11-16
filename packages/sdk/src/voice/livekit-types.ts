@@ -83,6 +83,7 @@ export interface LiveKitParticipant {
   name?: string | undefined;
   isMicrophoneEnabled?: boolean;
   isCameraEnabled?: boolean;
+  isScreenShareEnabled?: boolean;
   isSpeaking?: boolean;
   getTrackPublication(source: string): LiveKitPublication | undefined;
 }
@@ -95,6 +96,13 @@ export interface LiveKitLocalParticipant extends LiveKitParticipant {
    */
   setCameraEnabled(enabled: boolean, options?: { facingMode?: CameraFacing }): Promise<unknown>;
   setMicrophoneEnabled(enabled: boolean): Promise<unknown>;
+  /**
+   * Publish a screen or window. On the web the browser shows its own
+   * picker; `audio` asks for the tab's or system's sound with it, which
+   * the browser may not offer. Optional because a React Native build
+   * without screen capture wired up has no such method.
+   */
+  setScreenShareEnabled?(enabled: boolean, options?: { audio?: boolean }): Promise<unknown>;
 }
 
 export interface LiveKitRoomHandle {
@@ -223,6 +231,16 @@ export interface CallParticipant {
    * the view is drawn at.
    */
   videoTrackRef: LiveKitTrackReference | null;
+  /** Sharing a screen or window right now. */
+  screenSharing: boolean;
+  /**
+   * The shared screen, or null. Separate from {@link videoTrack}: someone
+   * can share with their camera on, and the two are drawn differently
+   * (the screen large and uncropped, the camera as a face).
+   */
+  screenTrack: LiveKitTrack | null;
+  /** The shared screen as a renderable reference, for React Native's `<VideoTrack>`. */
+  screenTrackRef: LiveKitTrackReference | null;
 }
 
 export interface CallRoomOptions {

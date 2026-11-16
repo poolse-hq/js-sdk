@@ -4,6 +4,17 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0-dev.2] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Screen sharing in calls and rooms: `CallRoom.setScreenShareEnabled(on, { audio })`,
+  `isScreenShareEnabled()` and `canShareScreen()`. Each `CallParticipant` gains
+  `screenSharing`, `screenTrack` and `screenTrackRef`, separate from the camera.
+  Closing the browser's picker is not an error.
+- `LiveCall.screen_share_allowed`: the workspace lets people share a screen
+  (dashboard → Calls). Off, the media token cannot publish one.
+
 ## [3.2.0-dev.1] — 2026-11-04 (prerelease, npm tag `dev`)
 
 ### Added

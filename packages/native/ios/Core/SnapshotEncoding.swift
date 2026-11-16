@@ -9,23 +9,26 @@ public struct SnapshotParticipant: Equatable {
   public var muted: Bool
   /// True only with a published, subscribed, unmuted camera track.
   public var cameraOn: Bool
+  /// True with a published, subscribed, unmuted screen share.
+  public var screenSharing: Bool
   /// Their link to the SFU: `good` | `poor` | `lost` (dropped, coming
   /// back — "Reconnecting…") | `unknown`.
   public var connectionQuality: String
 
   public init(userId: String, externalId: String, speaking: Bool, muted: Bool, cameraOn: Bool,
-              connectionQuality: String = "unknown") {
+              connectionQuality: String = "unknown", screenSharing: Bool = false) {
     self.userId = userId
     self.externalId = externalId
     self.speaking = speaking
     self.muted = muted
     self.cameraOn = cameraOn
     self.connectionQuality = connectionQuality
+    self.screenSharing = screenSharing
   }
 
   public var dictionary: [String: Any] {
     ["userId": userId, "externalId": externalId, "speaking": speaking, "muted": muted, "cameraOn": cameraOn,
-     "connectionQuality": connectionQuality]
+     "connectionQuality": connectionQuality, "screenSharing": screenSharing]
   }
 }
 

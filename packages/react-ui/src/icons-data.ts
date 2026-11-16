@@ -151,6 +151,14 @@ export const ICONS = {
     vb: '0 0 24 24',
     d: '<path d="M9 7 4 12l5 5"/><path d="M4 12h9.5a6.5 6.5 0 0 1 6.5 6.5V20"/>',
   },
+  'screen-share': {
+    vb: '0 0 24 24',
+    d: '<rect x="2.6" y="4" width="18.8" height="12.6" rx="2"/><path d="M8.4 20.4h7.2"/><path d="M12 16.6v3.8"/><path d="M12 13V7.4"/><path d="M9.4 9.8 12 7.2l2.6 2.6"/>',
+  },
+  'screen-share-off': {
+    vb: '0 0 24 24',
+    d: '<rect x="2.6" y="4" width="18.8" height="12.6" rx="2"/><path d="M8.4 20.4h7.2"/><path d="M12 16.6v3.8"/><path d="M9.6 8 14.4 12.6"/><path d="M14.4 8 9.6 12.6"/>',
+  },
   search: {
     vb: '0 0 24 24',
     d: '<circle cx="11" cy="11" r="6.8"/><path d="M20.8 20.8 16 16"/>',

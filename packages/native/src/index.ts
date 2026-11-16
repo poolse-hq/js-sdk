@@ -47,6 +47,11 @@ export interface Snapshot {
     /** True only with a published, subscribed, unmuted camera track (show video, not avatar). */
     cameraOn: boolean;
     /**
+     * Sharing their screen: draw it with `<CallVideoView source="screen">`,
+     * large and with `fit="contain"`. Absent before 3.2.
+     */
+    screenSharing?: boolean;
+    /**
      * Their link to the call: `lost` while they have dropped and are
      * coming back (show "Reconnecting…"), `poor` for a weak signal.
      * Absent before 0.11.0.
@@ -90,6 +95,8 @@ export interface Snapshot {
    * `cameraOn: false` meanwhile. Absent before 0.11.0.
    */
   videoPaused?: boolean;
+  /** You are sharing your screen (Android). Absent before 3.2. */
+  screenSharing?: boolean;
 }
 
 /** `good` covers good and excellent; `unknown` until the SFU has measured. */
@@ -172,6 +179,9 @@ interface PoolseCallsNative {
   setMuted(muted: boolean): void;
   setCamera(on: boolean): void;
   switchCamera(): void;
+  screenShareSupported?(): boolean;
+  startScreenShare?(): Promise<boolean>;
+  stopScreenShare?(): void;
   setSpeaker(on: boolean): void;
   setAudioOutput?(id: string): void;
   callControl?(): Promise<{ callId: string; controlToken: string } | null>;
@@ -342,6 +352,25 @@ export const declineWaiting = (callId?: string): void => native?.declineWaiting?
 export const setMuted = (muted: boolean): void => native?.setMuted(muted);
 export const setCamera = (on: boolean): void => native?.setCamera(on);
 export const switchCamera = (): void => native?.switchCamera();
+
+/**
+ * Whether this build can share the screen in a call: Android with the
+ * LiveKit media engine. iOS shares through a broadcast extension, which
+ * comes in a later release; it can already show other people's screens.
+ */
+export const screenShareSupported = (): boolean => native?.screenShareSupported?.() ?? false;
+
+/**
+ * Share the screen. Android asks the user first (the system's "Start
+ * recording or casting?" prompt); resolves `false` when they say no or
+ * the build cannot share. `snapshot.screenSharing` turns true once the
+ * screen is actually going out. Stopping from the system notification
+ * ends it the same way.
+ */
+export const startScreenShare = async (): Promise<boolean> =>
+  (await native?.startScreenShare?.()) ?? false;
+
+export const stopScreenShare = (): void => native?.stopScreenShare?.();
 /** Route call audio to the loudspeaker (`true`) or back to earpiece / headset (`false`). */
 export const setSpeaker = (on: boolean): void => native?.setSpeaker(on);
 
@@ -524,6 +553,12 @@ export interface CallVideoViewProps extends ViewProps {
   /** default 'cover' */
   fit?: 'cover' | 'contain';
   /**
+   * `camera` (default), or `screen`: the participant's shared screen
+   * (with `local`, your own). A screen is never mirrored; draw it with
+   * `fit="contain"` so nothing is cropped.
+   */
+  source?: 'camera' | 'screen';
+  /**
    * iOS: this remote picture is the one picture-in-picture floats when
    * the app is left (`setPictureInPictureEnabled`). Mark one at a time.
    */
@@ -557,7 +592,15 @@ function nativeVideoView(): ComponentType<NativeVideoProps> | null {
 export function CallVideoView(props: CallVideoViewProps): ReactElement | null {
   const Native = nativeVideoView();
   if (!Native) {
-    const { participantId: _p, local: _l, mirror: _m, fit: _f, pictureInPicture: _pip, ...rest } = props;
+    const {
+      participantId: _p,
+      local: _l,
+      mirror: _m,
+      fit: _f,
+      source: _s,
+      pictureInPicture: _pip,
+      ...rest
+    } = props;
     return createElement(View, rest);
   }
   return createElement(Native, props);

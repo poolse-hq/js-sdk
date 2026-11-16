@@ -43,6 +43,19 @@ export interface UseCallRoom {
   participants: CallParticipant[];
   cameraEnabled: boolean;
   micEnabled: boolean;
+  /** You are sharing a screen or window. */
+  screenSharing: boolean;
+  /**
+   * Whoever is sharing a screen right now (you included), or null. When
+   * several share at once, the first in the roster.
+   */
+  sharingParticipant: CallParticipant | null;
+  /**
+   * Whether this platform can share a screen: a desktop browser, or a
+   * native build with screen capture. Phone browsers cannot. Also hide
+   * the control when the call's `screen_share_allowed` is false.
+   */
+  canShareScreen: boolean;
   /** Which camera is publishing. Meaningless while the camera is off. */
   facingMode: CameraFacing;
   /**
@@ -101,6 +114,9 @@ export interface UseCallRoom {
   switchCamera: () => Promise<void>;
   setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
   toggleMic: () => Promise<void>;
+  /** Share a screen (the platform's picker opens) or stop sharing. */
+  setScreenShareEnabled: (enabled: boolean) => Promise<void>;
+  toggleScreenShare: () => Promise<void>;
 }
 
 /**
@@ -114,8 +130,8 @@ export interface UseCallRoom {
  *     await media.join();
  *     await media.toggleCamera();
  *
- * Both the camera and the microphone can be turned on and off at any
- * point during the call.
+ * The camera, the microphone and screen sharing can each be turned on
+ * and off at any point during the call.
  */
 export function useCallRoom(conversationId: string | null, opts: UseCallRoomOptions): UseCallRoom {
   const poolse = usePoolse();
@@ -124,6 +140,8 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   const [participants, setParticipants] = useState<CallParticipant[]>([]);
   const [cameraEnabled, setCamera] = useState(false);
   const [micEnabled, setMic] = useState(false);
+  const [screenSharing, setScreen] = useState(false);
+  const [canShareScreen, setCanShare] = useState(false);
   const [facingMode, setFacing] = useState<CameraFacing>(opts.facing ?? 'user');
   const [alone, setAlone] = useState(false);
   const [devices, setDevices] = useState<Record<CallDeviceKind, CallDevice[]>>({
@@ -212,6 +230,8 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     if (!target) return;
     setCamera(target.isCameraEnabled());
     setMic(target.isMicrophoneEnabled());
+    setScreen(target.isScreenShareEnabled());
+    setCanShare(target.canShareScreen());
     setFacing(target.getFacingMode());
   }, []);
 
@@ -327,6 +347,25 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     await setMicrophoneEnabled(!room.isMicrophoneEnabled());
   }, [room, setMicrophoneEnabled]);
 
+  const setScreenShareEnabled = useCallback(
+    async (enabled: boolean) => {
+      if (!room) return;
+      await room.setScreenShareEnabled(enabled);
+      sync(room);
+    },
+    [room, sync],
+  );
+
+  const toggleScreenShare = useCallback(async () => {
+    if (!room) return;
+    await setScreenShareEnabled(!room.isScreenShareEnabled());
+  }, [room, setScreenShareEnabled]);
+
+  const sharingParticipant = useMemo(
+    () => participants.find((p) => p.screenSharing) ?? null,
+    [participants],
+  );
+
   const switchCamera = useCallback(async () => {
     if (!room) return;
     await room.switchCamera();
@@ -354,6 +393,9 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     participants,
     cameraEnabled,
     micEnabled,
+    screenSharing,
+    sharingParticipant,
+    canShareScreen,
     facingMode,
     alone,
     devices,
@@ -369,5 +411,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     selectDevice,
     setMicrophoneEnabled,
     toggleMic,
+    setScreenShareEnabled,
+    toggleScreenShare,
   };
 }

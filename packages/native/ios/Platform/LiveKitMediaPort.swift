@@ -614,6 +614,27 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     return pub.track as? VideoTrack
   }
 
+  /// A participant's shared screen (with [local], our own), once
+  /// published, subscribed and unmuted. Not paused with the cameras on a
+  /// weak link: the shared screen is usually what the call is about.
+  func screenTrack(participantId: String?, local: Bool) -> VideoTrack? {
+    guard let r = room else { return nil }
+    if local {
+      guard let pub = r.localParticipant.trackPublications.values.first(where: { $0.source == .screenShareVideo }),
+            !pub.isMuted else { return nil }
+      return pub.track as? VideoTrack
+    }
+    guard let id = participantId,
+          let p = r.remoteParticipants.values.first(where: { $0.identity?.stringValue == id }) else { return nil }
+    return remoteScreen(p)
+  }
+
+  private func remoteScreen(_ p: RemoteParticipant) -> VideoTrack? {
+    guard let pub = p.trackPublications.values.first(where: { $0.source == .screenShareVideo }) as? RemoteTrackPublication,
+          pub.isSubscribed, !pub.isMuted else { return nil }
+    return pub.track as? VideoTrack
+  }
+
   /// `front` | `back` of the published local camera, or nil when none.
   func cameraFacing() -> String? {
     guard let r = room, let track = localCameraTrack(r) else { return nil }
@@ -744,7 +765,8 @@ final class LiveKitMediaPort: NSObject, MediaPort {
         speaking: p.isSpeaking,
         muted: !p.isMicrophoneEnabled(),
         cameraOn: remoteCamera(p) != nil,
-        connectionQuality: Self.wire(p.connectionQuality)
+        connectionQuality: Self.wire(p.connectionQuality),
+        screenSharing: remoteScreen(p) != nil
       )
     }
     events?.onParticipants(roster)

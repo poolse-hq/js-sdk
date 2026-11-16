@@ -2,6 +2,14 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.2.0-dev.2 — 2026-11-16 (prerelease, npm tag `dev`)
+
+- Screen sharing. Android: `startScreenShare()` (the system asks first; resolves
+  whether the user allowed it), `stopScreenShare()` and `screenShareSupported()`;
+  the snapshot's `screenSharing` follows the published screen. Both platforms:
+  each participant's `screenSharing`, and `<CallVideoView source="screen">` draws
+  their shared screen (never mirrored). Sharing from iOS comes in a later release.
+
 ## 3.2.0-dev.1 — 2026-11-04 (prerelease, npm tag `dev`)
 
 - Moves with `@poolse/sdk` 3.2.0-dev.1.

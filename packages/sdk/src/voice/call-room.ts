@@ -344,6 +344,61 @@ export class CallRoom {
     }
   }
 
+  /**
+   * Share a screen or window, or stop sharing.
+   *
+   * On the web the browser opens its own picker. Closing it without
+   * choosing is not an error: the call carries on and nothing is
+   * reported. Stopping from the browser's own "Stop sharing" bar ends
+   * the share the same way, and the roster follows.
+   *
+   * A workspace with screen sharing off (or out of video minutes) has a
+   * media token that cannot publish a screen; LiveKit refuses it and the
+   * refusal arrives through `onError`. Hide the control instead using
+   * the call's `screen_share_allowed`.
+   */
+  async setScreenShareEnabled(enabled: boolean, options: { audio?: boolean } = {}): Promise<void> {
+    const room = this.room;
+    if (!room) return;
+    const local = room.localParticipant;
+    if (!local.setScreenShareEnabled) {
+      this.emitError(new Error('screen sharing is not available on this platform'));
+      return;
+    }
+
+    try {
+      await local.setScreenShareEnabled(
+        enabled,
+        enabled ? { audio: options.audio ?? true } : undefined,
+      );
+      this.emitParticipants();
+    } catch (err) {
+      // The picker was closed, or the user said no. A choice, not a failure.
+      const name = (err as { name?: string } | null)?.name;
+      if (name === 'NotAllowedError' || name === 'AbortError') {
+        this.emitParticipants();
+        return;
+      }
+      this.emitError(new Error(`could not share the screen: ${String(err)}`));
+    }
+  }
+
+  isScreenShareEnabled(): boolean {
+    return this.room?.localParticipant.isScreenShareEnabled ?? false;
+  }
+
+  /**
+   * Whether this platform can share a screen at all: a browser with
+   * `getDisplayMedia` (not phone browsers), or a native build with
+   * screen capture. Only meaningful once joined on native.
+   */
+  canShareScreen(): boolean {
+    const local = this.room?.localParticipant;
+    if (local && !local.setScreenShareEnabled) return false;
+    if (typeof document === 'undefined') return !!local?.setScreenShareEnabled;
+    return typeof globalThis.navigator?.mediaDevices?.getDisplayMedia === 'function';
+  }
+
   /** Which camera the local video track is capturing from. */
   getFacingMode(): CameraFacing {
     return this.facing;
@@ -560,6 +615,13 @@ export class CallRoom {
     const live = publication && !publication.isMuted && publication.track ? publication : null;
     const videoTrack: LiveKitTrack | null = live?.track ?? null;
 
+    const screenSource = this.livekit.Track.Source['ScreenShare'] ?? 'screen_share';
+    const screenPublication = participant.getTrackPublication(screenSource);
+    const screen =
+      screenPublication && !screenPublication.isMuted && screenPublication.track
+        ? screenPublication
+        : null;
+
     return {
       userId: participant.identity,
       name: participant.name,
@@ -569,6 +631,9 @@ export class CallRoom {
       speaking: participant.isSpeaking ?? false,
       videoTrack,
       videoTrackRef: live ? { participant, publication: live, source: cameraSource } : null,
+      screenSharing: !!screen,
+      screenTrack: screen?.track ?? null,
+      screenTrackRef: screen ? { participant, publication: screen, source: screenSource } : null,
     };
   }
 

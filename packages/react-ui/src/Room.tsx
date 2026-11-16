@@ -110,8 +110,9 @@ export interface RoomStageProps {
 
 /**
  * The room you are in: everyone's video (or their initial while their
- * camera is off), and the controls — microphone, camera and output, each
- * with a device picker, and Leave. Fills its container: give it the
+ * camera is off), a shared screen large when someone shares, and the
+ * controls — microphone, camera and output, each with a device picker,
+ * screen sharing where the browser and the workspace allow it, and Leave. Fills its container: give it the
  * space your layout has for the stage.
  */
 export function RoomStage({ room, title, labelFor, className }: RoomStageProps) {
@@ -130,6 +131,8 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
   );
 
   const count = media.participants.length;
+  // Phone browsers cannot capture a screen, and a workspace can turn it off.
+  const canShare = media.canShareScreen && room.live?.screen_share_allowed !== false;
   const status =
     media.status === 'connecting' || room.joining
       ? 'Connecting…'
@@ -153,6 +156,16 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
           <div className="poolse-room__waiting">Connecting…</div>
         )}
       </div>
+
+      {media.screenSharing && (
+        <div className="poolse-room__sharing" role="status">
+          <PoolseIcon name="screen-share" size={15} label={null} />
+          <span>You are sharing your screen</span>
+          <button type="button" onClick={() => void media.setScreenShareEnabled(false)}>
+            Stop sharing
+          </button>
+        </div>
+      )}
 
       {room.error && <p className="poolse-room__error">{room.error.message}</p>}
 
@@ -197,6 +210,15 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
             />
           )}
         </span>
+
+        {(canShare || media.screenSharing) && (
+          <CallControlButton
+            icon={media.screenSharing ? 'screen-share-off' : 'screen-share'}
+            active={media.screenSharing}
+            label={media.screenSharing ? 'Stop sharing' : 'Share screen'}
+            onClick={() => void media.toggleScreenShare()}
+          />
+        )}
 
         {media.devices.audiooutput.length > 0 && (
           <span className="callsheet__control">

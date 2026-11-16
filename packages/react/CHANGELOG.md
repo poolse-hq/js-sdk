@@ -4,6 +4,13 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0-dev.2] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- `useCallRoom` returns `screenSharing`, `sharingParticipant`, `canShareScreen`,
+  `setScreenShareEnabled()` and `toggleScreenShare()`.
+
 ## [3.2.0-dev.1] — 2026-11-04 (prerelease, npm tag `dev`)
 
 ### Added

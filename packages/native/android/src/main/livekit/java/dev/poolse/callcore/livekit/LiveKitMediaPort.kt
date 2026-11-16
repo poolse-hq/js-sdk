@@ -2,6 +2,7 @@ package dev.poolse.callcore.livekit
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -13,6 +14,7 @@ import dev.poolse.callcore.android.CallVideoSource
 import dev.poolse.callcore.android.CallVideoSurface
 import dev.poolse.callcore.android.MediaEvents
 import dev.poolse.callcore.android.MediaParticipant
+import dev.poolse.callcore.android.ScreenShareSource
 import io.livekit.android.ConnectOptions
 import io.livekit.android.LiveKit
 import io.livekit.android.audio.AudioSwitchHandler
@@ -56,7 +58,7 @@ import org.json.JSONObject
 class LiveKitMediaPort(
   private val context: Context,
   private val events: MediaEvents,
-) : MediaPort, CallVideoSource {
+) : MediaPort, CallVideoSource, ScreenShareSource {
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   @Volatile private var room: Room? = null
@@ -201,6 +203,7 @@ class LiveKitMediaPort(
     refreshVideo()
     teardown(r)
     events.onLocalCamera(false, null)
+    events.onLocalScreen(false)
   }
 
   private fun teardown(r: Room) {
@@ -224,6 +227,24 @@ class LiveKitMediaPort(
       enableCamera(r, on)
       if (room !== r) return@launch
       reportLocalCamera(r)
+      refreshVideo()
+    }
+  }
+
+  /**
+   * Publish the screen with the user's answer to the capture prompt, or
+   * stop. LiveKit runs its own `mediaProjection` foreground service for
+   * the capture (Android 14 requires one), with its own notification.
+   * A refusal is logged and reported as not sharing: the call goes on.
+   */
+  override fun setScreenShare(on: Boolean, permission: Intent?) {
+    val r = room ?: return
+    if (on && permission == null) return
+    scope.launch {
+      runCatching { r.localParticipant.setScreenShareEnabled(on, if (on) permission else null) }
+        .onFailure { Log.w(TAG, "screen share ${if (on) "start" else "stop"} failed", it) }
+      if (room !== r) return@launch
+      reportLocalScreen(r)
       refreshVideo()
     }
   }
@@ -278,6 +299,31 @@ class LiveKitMediaPort(
     val pub = p.getTrackPublication(Track.Source.CAMERA) as? RemoteTrackPublication ?: return null
     if (!pub.subscribed || pub.muted) return null
     return pub.track as? VideoTrack
+  }
+
+  private fun localScreenTrack(r: Room): VideoTrack? =
+    r.localParticipant.getTrackPublication(Track.Source.SCREEN_SHARE)
+      ?.takeIf { !it.muted }?.track as? VideoTrack
+
+  /** A participant's shared screen, once published, subscribed and unmuted. */
+  internal fun screenTrack(participantId: String?, local: Boolean): VideoTrack? {
+    val r = room ?: return null
+    if (local) return localScreenTrack(r)
+    val p = r.remoteParticipants.values.firstOrNull { it.identity?.value == participantId } ?: return null
+    return remoteScreen(p)
+  }
+
+  // Not paused with the cameras on a weak link: the shared screen is
+  // usually what the call is about.
+  private fun remoteScreen(p: Participant): VideoTrack? {
+    val pub = p.getTrackPublication(Track.Source.SCREEN_SHARE) as? RemoteTrackPublication ?: return null
+    if (!pub.subscribed || pub.muted) return null
+    return pub.track as? VideoTrack
+  }
+
+  private fun reportLocalScreen(r: Room) {
+    if (room !== r) return
+    events.onLocalScreen(localScreenTrack(r) != null)
   }
 
   /** `front` | `back` of the published local camera, or null when none. */
@@ -454,6 +500,9 @@ class LiveKitMediaPort(
           if (videoPaused) applyVideoPause(room)
           emit(room)
           reportLocalCamera(room)
+          // Also how a share stopped from the system's capture
+          // notification (not from our button) reaches the snapshot.
+          reportLocalScreen(room)
           refreshVideo()
         }
         is RoomEvent.ConnectionQualityChanged -> {
@@ -481,6 +530,7 @@ class LiveKitMediaPort(
           // Video, not avatar, only when there is a frame to draw:
           // published, subscribed and unmuted.
           cameraOn = remoteCamera(it) != null,
+          screenSharing = remoteScreen(it) != null,
           connectionQuality = wire(it.connectionQuality),
           externalId = externalIdOf(it) ?: identity,
         )
