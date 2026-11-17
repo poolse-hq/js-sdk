@@ -29,6 +29,8 @@ class PoolseCallVideoView(context: Context, appContext: AppContext) : ExpoView(c
     set(v) { field = v; apply() }
   var fit: String = "cover"
     set(v) { field = v; apply() }
+  var source: String = "camera"
+    set(v) { field = v; apply() }
 
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
@@ -59,6 +61,12 @@ class PoolseCallVideoView(context: Context, appContext: AppContext) : ExpoView(c
   private fun apply() {
     // Mounted before the core existed (configure still pending): try again.
     val s = surface ?: run { if (isAttachedToWindow) attachSurface(); return }
-    s.configure(participantId, local, mirror, if (fit == "contain") "contain" else "cover")
+    s.configure(
+      participantId,
+      local,
+      mirror,
+      if (fit == "contain") "contain" else "cover",
+      if (source == "screen") "screen" else "camera",
+    )
   }
 }

@@ -11,6 +11,7 @@ public final class PoolseCallVideoView: ExpoView {
   var local = false
   var mirror: Bool?
   var fit = "cover"
+  var source = "camera"
   /// This view is what picture-in-picture grows out of (a remote's picture).
   var pictureInPicture = false
 
@@ -55,7 +56,8 @@ public final class PoolseCallVideoView: ExpoView {
       if window != nil { attachSurface() }
       return
     }
-    s.configure(participantId: participantId, local: local, mirror: mirror, fit: fit == "contain" ? "contain" : "cover")
+    s.configure(participantId: participantId, local: local, mirror: mirror,
+                fit: fit == "contain" ? "contain" : "cover", source: source == "screen" ? "screen" : "camera")
     if pictureInPicture && !local && participantId != nil {
       CallPictureInPicture.shared.setSource(self, participantId: participantId)
     } else {

@@ -22,7 +22,7 @@ import { ICONS, type IconName } from './icons-data.js';
 export type { IconName };
 
 export interface PoolseIconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
-  /** Icon name — see {@link IconName} for the full list of 41 icons. */
+  /** Icon name — see {@link IconName} for the full list of 64 icons. */
   name: IconName;
   /** Width + height in pixels. Defaults to `1.2em` so the icon scales with surrounding text. */
   size?: number | string;

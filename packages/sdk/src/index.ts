@@ -67,6 +67,7 @@ export type {
   MentionEvent,
   RingEndedEvent,
   MessageDeletedEvent,
+  MessageStreamEvent,
   MessageNewEvent,
   MessageUpdatedEvent,
   PresenceSnapshot,

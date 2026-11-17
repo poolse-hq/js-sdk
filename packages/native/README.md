@@ -37,11 +37,12 @@ In `app.json`, after `expo-notifications`:
 ]
 ```
 
-| Option             | Default | What it does                                                                                                                    |
-| ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `ringback`         | none    | Ships this sound in both apps; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only. |
-| `pictureInPicture` | `true`  | Android: the activity may float as a picture-in-picture window.                                                                 |
-| `lockscreen`       | `true`  | Android: the app shows over the lock screen when opened for a call.                                                             |
+| Option             | Default | What it does                                                                                                                                                                                                                                                                                   |
+| ------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ringback`         | none    | Ships this sound in both apps; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only.                                                                                                                                                                |
+| `pictureInPicture` | `true`  | Android: the activity may float as a picture-in-picture window.                                                                                                                                                                                                                                |
+| `lockscreen`       | `true`  | Android: the app shows over the lock screen when opened for a call.                                                                                                                                                                                                                            |
+| `screenShare`      | `false` | iOS: adds the broadcast upload extension that sharing the screen needs, and the app group `group.<bundle id>` it shares with the app (`{ "appGroup": "…" }` for your own). Register that group in the Apple Developer portal and assign it to the app's and `<bundle id>.broadcast`'s App IDs. |
 
 Always applied on Android: the LiveKit media adapter, and `expo-notifications`
 as the receiver for pushes that aren't calls. On iOS, add `UIBackgroundModes`
@@ -87,6 +88,10 @@ The full API:
   then `join` for the others and `hangUp` to leave.
 - Call waiting: `snapshot.waiting`, `answerWaiting(callId)`,
   `declineWaiting(callId)`.
+- Screen sharing: `screenShareSupported`, `startScreenShare`, `stopScreenShare`,
+  `snapshot.screenSharing` (yours) and `participants[].screenSharing`; draw a
+  shared screen with `<CallVideoView participantId source="screen" fit="contain" />`.
+  iOS needs the `screenShare` plugin option.
 - Video: `<CallVideoView participantId | local mirror fit pictureInPicture />`,
   `setPictureInPictureEnabled`, `isInPictureInPicture`,
   `pictureInPictureSupported`, `onPictureInPicture`.

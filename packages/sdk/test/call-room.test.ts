@@ -24,7 +24,10 @@ const CONNECTION: CallConnection = {
 
 function fakeParticipant(
   identity: string,
-  overrides: Partial<LiveKitParticipant> & { cameraTrack?: LiveKitPublication } = {},
+  overrides: Partial<LiveKitParticipant> & {
+    cameraTrack?: LiveKitPublication;
+    screenTrack?: LiveKitPublication;
+  } = {},
 ): LiveKitParticipant {
   return {
     identity,
@@ -32,7 +35,12 @@ function fakeParticipant(
     isMicrophoneEnabled: overrides.isMicrophoneEnabled ?? true,
     isCameraEnabled: overrides.isCameraEnabled ?? false,
     isSpeaking: overrides.isSpeaking ?? false,
-    getTrackPublication: () => overrides.cameraTrack,
+    getTrackPublication: (source: string) =>
+      source === 'camera'
+        ? overrides.cameraTrack
+        : source === 'screen_share'
+          ? overrides.screenTrack
+          : undefined,
   };
 }
 
@@ -45,7 +53,7 @@ interface Harness {
   disconnect: ReturnType<typeof vi.fn>;
 }
 
-function harness(opts: { connectRejects?: boolean } = {}): Harness {
+function harness(opts: { connectRejects?: boolean; screenShareRejects?: Error } = {}): Harness {
   const handlers = new Map<string, (...args: never[]) => void>();
 
   const local = {
@@ -60,9 +68,15 @@ function harness(opts: { connectRejects?: boolean } = {}): Harness {
     setMicrophoneEnabled: vi.fn(async (enabled: boolean) => {
       local.isMicrophoneEnabled = enabled;
     }),
+    isScreenShareEnabled: false,
+    setScreenShareEnabled: vi.fn(async (enabled: boolean) => {
+      if (opts.screenShareRejects) throw opts.screenShareRejects;
+      local.isScreenShareEnabled = enabled;
+    }),
   } as unknown as LiveKitLocalParticipant & {
     isCameraEnabled: boolean;
     isMicrophoneEnabled: boolean;
+    isScreenShareEnabled: boolean;
   };
 
   const connect = vi.fn(async () => {
@@ -760,5 +774,76 @@ describe('CallRoom remote audio', () => {
     h.handlers.get('trackSubscribed')?.(track as never);
 
     expect(track.attach).not.toHaveBeenCalled();
+  });
+});
+
+describe('CallRoom screen sharing', () => {
+  async function joined(opts: { screenShareRejects?: Error } = {}) {
+    const h = harness(opts);
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    await room.join();
+    return { h, room };
+  }
+
+  it('starts and stops a share, with sound asked for', async () => {
+    const { h, room } = await joined();
+
+    await room.setScreenShareEnabled(true);
+    expect(h.local.setScreenShareEnabled).toHaveBeenLastCalledWith(true, { audio: true });
+    expect(room.isScreenShareEnabled()).toBe(true);
+
+    await room.setScreenShareEnabled(false);
+    expect(h.local.setScreenShareEnabled).toHaveBeenLastCalledWith(false, undefined);
+    expect(room.isScreenShareEnabled()).toBe(false);
+  });
+
+  it('closing the picker is a choice, not an error', async () => {
+    const cancelled = Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+    const { room } = await joined({ screenShareRejects: cancelled });
+    const errors: Error[] = [];
+    room.onError((e) => errors.push(e));
+
+    await room.setScreenShareEnabled(true);
+
+    expect(errors).toEqual([]);
+    expect(room.getStatus()).toBe('connected');
+  });
+
+  it('a refused share (workspace setting off) reports, and the call carries on', async () => {
+    const { room } = await joined({ screenShareRejects: new Error('insufficient permissions') });
+    const errors: Error[] = [];
+    room.onError((e) => errors.push(e));
+
+    await room.setScreenShareEnabled(true);
+
+    expect(errors[0]?.message).toMatch(/could not share the screen/);
+    expect(room.getStatus()).toBe('connected');
+  });
+
+  it('shows a remote share apart from their camera', async () => {
+    const { h, room } = await joined();
+    const screen = { track: { kind: 'video' }, isMuted: false };
+    const camera = { track: { kind: 'video' }, isMuted: false };
+    h.room.remoteParticipants.set(
+      'u-bob',
+      fakeParticipant('u-bob', { isCameraEnabled: true, cameraTrack: camera, screenTrack: screen }),
+    );
+
+    const bob = room.getParticipants().find((p) => p.userId === 'u-bob')!;
+    expect(bob.screenSharing).toBe(true);
+    expect(bob.screenTrack).toBe(screen.track);
+    expect(bob.screenTrackRef?.source).toBe('screen_share');
+    expect(bob.videoTrack).toBe(camera.track);
+  });
+
+  it('a platform without screen capture says so instead of failing', async () => {
+    const { h, room } = await joined();
+    delete (h.local as { setScreenShareEnabled?: unknown }).setScreenShareEnabled;
+    const errors: Error[] = [];
+    room.onError((e) => errors.push(e));
+
+    expect(room.canShareScreen()).toBe(false);
+    await room.setScreenShareEnabled(true);
+    expect(errors[0]?.message).toMatch(/not available on this platform/);
   });
 });

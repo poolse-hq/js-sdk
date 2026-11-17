@@ -2,6 +2,7 @@ import type { CallParticipant } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { PoolseIcon } from './PoolseIcon.js';
+import { useFullscreen } from './useFullscreen.js';
 import { userColor } from './userColor.js';
 
 /**
@@ -17,6 +18,10 @@ import { userColor } from './userColor.js';
  * mobile: one other person gets the whole frame with you tucked into a
  * corner, because splitting a two-person call into equal boxes spends
  * most of the screen on letterboxing. Three or more get a grid.
+ *
+ * A shared screen takes the stage whatever the size of the call: it is
+ * what everyone is looking at, drawn whole (never cropped), with
+ * everyone's faces in a strip beside it.
  *
  * Someone with their camera off still gets a tile showing their name
  * and mute state. Dropping them would make a call with cameras off look
@@ -52,6 +57,26 @@ export function CallVideoGrid({
   const others = useMemo(() => participants.filter((p) => !p.isSelf), [participants]);
 
   if (participants.length === 0) return null;
+
+  // ── someone is sharing a screen: the screen, faces in a strip ───────
+  // Another person's share wins over your own: yours is what you already
+  // see on your monitor, theirs is what you joined to watch.
+  const presenter =
+    others.find((p) => p.screenSharing && p.screenTrack) ??
+    (self?.screenSharing && self.screenTrack ? self : null);
+  if (presenter) {
+    const faces = [...others, ...(self ? [self] : [])];
+    return (
+      <div className={className ?? 'callpresent'}>
+        <ScreenTile participant={presenter} label={label} />
+        <div className="callpresent__strip">
+          {faces.map((participant) => (
+            <CallVideoTile key={participant.userId} participant={participant} label={label} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // ── one other person (or nobody yet): spotlight + corner preview ────
   if (others.length <= 1) {
@@ -190,6 +215,72 @@ function CallVideoTile({
           )}
           <span className="callgrid__name">{name}</span>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A shared screen: drawn whole and unmirrored, and always muted here —
+ * a share's sound is played with the rest of the call's audio, not by
+ * this element.
+ */
+function ScreenTile({
+  participant,
+  label,
+}: {
+  participant: CallParticipant;
+  label: (userId: string) => string;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const tile = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(tile, ref);
+  const track = participant.screenTrack as AttachableTrack | null;
+  const name = participant.isSelf
+    ? 'Your screen'
+    : `${participant.name ?? label(participant.userId)}'s screen`;
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !track) return;
+    track.attach(element);
+    return () => {
+      track.detach(element);
+    };
+  }, [track]);
+
+  return (
+    <div
+      ref={tile}
+      className="callpresent__screen"
+      onDoubleClick={fullscreen.supported ? fullscreen.toggle : undefined}
+    >
+      <video
+        ref={ref}
+        className="callgrid__video"
+        autoPlay
+        playsInline
+        muted
+        style={{ objectFit: 'contain' }}
+      />
+      <div className="callgrid__caption">
+        <PoolseIcon name="screen-share" size={13} label={null} />
+        <span className="callgrid__name">{name}</span>
+      </div>
+      {fullscreen.supported && (
+        <button
+          type="button"
+          className="callpresent__fullscreen"
+          onClick={fullscreen.toggle}
+          aria-label={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+          title={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+        >
+          <PoolseIcon
+            name={fullscreen.active ? 'fullscreen-exit' : 'fullscreen'}
+            size={18}
+            label={null}
+          />
+        </button>
       )}
     </div>
   );

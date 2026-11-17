@@ -4,6 +4,46 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [3.2.0] — 2026-11-17
+
+Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).
+
+## [3.2.0-dev.5] — 2026-11-17 (prerelease, npm tag `dev`)
+
+No changes; released with the other packages.
+
+## [3.2.0-dev.4] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Filled call icons: `mic-fill`, `mic-off-fill`, `video-fill`,
+  `video-off-fill`, `screen-share-fill`, `screen-share-off-fill`,
+  `phone-off-fill`, `speaker-fill`.
+
+## [3.2.0-dev.3] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Icons `fullscreen` and `fullscreen-exit`.
+
+## [3.2.0-dev.2] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Icons `screen-share` and `screen-share-off`.
+
+## [3.2.0-dev.1] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Added
+
+- `<ConversationView>` streams AI agent replies as they're written, like `@poolse/react-ui`: typing first, then a growing bubble, replaced by the finished message.
+
+## [3.2.0-dev.0] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Changed
+
+- Moves with `@poolse/sdk` 3.2.0-dev.0.
+
 ## [3.1.0] — 2026-10-27
 
 ### Fixed

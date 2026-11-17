@@ -14,6 +14,12 @@ export interface CallControlButtonProps {
    * needing to be read one at a time.
    */
   active?: boolean;
+  /**
+   * Something you turned on is running — sharing your screen. Lit in
+   * the accent colour, unlike `active`, which marks a control you
+   * turned off.
+   */
+  highlight?: boolean;
   /** Paints the button solid: the hang-up and answer actions. */
   tone?: 'neutral' | 'danger' | 'accept';
   large?: boolean;
@@ -35,6 +41,7 @@ export function CallControlButton({
   label,
   onClick,
   active = false,
+  highlight = false,
   tone = 'neutral',
   large = false,
   disabled = false,
@@ -45,6 +52,7 @@ export function CallControlButton({
     'callbtn',
     tone !== 'neutral' ? `callbtn--${tone}` : '',
     active ? 'callbtn--active' : '',
+    highlight ? 'callbtn--highlight' : '',
     large ? 'callbtn--large' : '',
   ]
     .filter(Boolean)
@@ -52,14 +60,17 @@ export function CallControlButton({
 
   return (
     <span className="callbtn__slot">
-      <span className="callbtn__wrap">
+      <span
+        className={`callbtn__wrap${hasMenu ? ' callbtn__wrap--menu' : ''}${active ? ' callbtn__wrap--active' : ''}`}
+      >
         <button
           type="button"
           className={classes}
           onClick={onClick}
           disabled={disabled}
-          aria-pressed={tone === 'neutral' ? active : undefined}
+          aria-pressed={tone === 'neutral' ? active || highlight : undefined}
           aria-label={label}
+          title={label}
         >
           <PoolseIcon name={icon} size={large ? 26 : 22} label={null} />
         </button>
@@ -73,6 +84,7 @@ export function CallControlButton({
             className="callbtn__caret"
             onClick={onMenuClick}
             aria-label={`${label} options`}
+            title={`${label} options`}
           >
             <PoolseIcon name="chevron-up" size={13} label={null} />
           </button>

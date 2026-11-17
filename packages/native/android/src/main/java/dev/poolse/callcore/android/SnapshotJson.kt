@@ -30,6 +30,8 @@ internal fun MachineState.toSnapshot(
   connectionQuality: String = "unknown",
   /** Incoming video switched off to keep the audio going. */
   videoPaused: Boolean = false,
+  /** We are sharing our screen. */
+  screenSharing: Boolean = false,
 ): Map<String, Any?>? {
   if (phase == Phase.IDLE) return null
   return buildMap {
@@ -37,6 +39,7 @@ internal fun MachineState.toSnapshot(
     put("kind", kind)
     put("connectionQuality", connectionQuality)
     put("videoPaused", videoPaused)
+    put("screenSharing", screenSharing)
     put("audioOutputs", audioOutputs)
     put("audioOutputId", audioOutputId)
     // Optional in the contract: present only while a camera is published.

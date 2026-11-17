@@ -4,6 +4,54 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0] — 2026-11-17
+
+Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).
+
+### Changed
+
+- `CallParticipant` has three new fields, `screenSharing`, `screenTrack` and
+  `screenTrackRef`. Code that builds `CallParticipant` objects by hand (test
+  mocks, custom adapters) needs to set them.
+
+## [3.2.0-dev.5] — 2026-11-17 (prerelease, npm tag `dev`)
+
+No changes; released with the other packages.
+
+## [3.2.0-dev.4] — 2026-11-16 (prerelease, npm tag `dev`)
+
+No changes; released with the other packages.
+
+## [3.2.0-dev.3] — 2026-11-16 (prerelease, npm tag `dev`)
+
+No changes; released with the other packages.
+
+## [3.2.0-dev.2] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Screen sharing in calls and rooms: `CallRoom.setScreenShareEnabled(on, { audio })`,
+  `isScreenShareEnabled()` and `canShareScreen()`. Each `CallParticipant` gains
+  `screenSharing`, `screenTrack` and `screenTrackRef`, separate from the camera.
+  Closing the browser's picker is not an error.
+- `LiveCall.screen_share_allowed`: the workspace lets people share a screen
+  (dashboard → Calls). Off, the media token cannot publish one.
+
+## [3.2.0-dev.1] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Added
+
+- `message:stream` gains a `tool` status (the agent is running a tool; `tool` is its name).
+
+## [3.2.0-dev.0] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Added
+
+- `ConversationChannel.onMessageStream()` and the `MessageStreamEvent`
+  type for `message:stream`: an AI agent's reply as it's written
+  (`started`, text `delta`s, `failed`). The finished reply arrives as
+  `message:new` with the stream's `id`.
+
 ## [3.1.0] — 2026-10-27
 
 ### Added

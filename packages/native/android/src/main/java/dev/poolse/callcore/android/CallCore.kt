@@ -72,6 +72,7 @@ class CallCore private constructor(context: Context) {
   private var mutedSelf = false
   private var cameraOn = false
   private var cameraFacing: String? = null
+  private var screenSharing = false
   private var audioRoute: String? = null
   private var audioOutputs: List<AudioOutput> = emptyList()
   private var audioOutputId: String? = null
@@ -186,6 +187,21 @@ class CallCore private constructor(context: Context) {
   fun switchCamera() = runtime.switchCamera()
 
   /**
+   * Share the screen with the result of the system's capture prompt, or
+   * stop ([permission] unused). Main thread. Not optimistic:
+   * `screenSharing` flips when the adapter reports the track published.
+   * False when the media engine cannot capture the screen.
+   */
+  fun setScreenShare(on: Boolean, permission: android.content.Intent?): Boolean {
+    val source = media as? ScreenShareSource ?: return false
+    source.setScreenShare(on, permission)
+    return true
+  }
+
+  /** Whether this build's media engine can share the screen. */
+  val screenShareSupported: Boolean get() = media is ScreenShareSource
+
+  /**
    * A video slot for `<CallVideoView>`, or null when the media engine
    * renders no video (signalling-only build). Main thread.
    */
@@ -255,6 +271,7 @@ class CallCore private constructor(context: Context) {
           "speaking" to it.speaking,
           "muted" to it.muted,
           "cameraOn" to it.cameraOn,
+          "screenSharing" to it.screenSharing,
           "connectionQuality" to it.connectionQuality,
         )
       },
@@ -267,6 +284,7 @@ class CallCore private constructor(context: Context) {
       waitingRing = runtime.waitingRing,
       connectionQuality = connectionQuality,
       videoPaused = videoPaused,
+      screenSharing = screenSharing,
     )
     lastSnapshot = snap
     reconcileAndroid(state)
@@ -288,6 +306,7 @@ class CallCore private constructor(context: Context) {
     // Reported by the media adapter once the camera is really published.
     cameraOn = false
     cameraFacing = null
+    screenSharing = false
     audioRoute = null
     audioOutputs = emptyList()
     audioOutputId = null
@@ -357,6 +376,10 @@ class CallCore private constructor(context: Context) {
     }
     override fun onLocalCamera(on: Boolean, facing: String?) {
       runtime.post { cameraOn = on; cameraFacing = facing }
+      runtime.reemit()
+    }
+    override fun onLocalScreen(on: Boolean) {
+      runtime.post { screenSharing = on }
       runtime.reemit()
     }
     override fun onAudioOutputs(outputs: List<AudioOutput>, selectedId: String?) {
@@ -545,6 +568,8 @@ interface MediaEvents {
   fun onAudioRoute(route: String)
   /** The local camera track is (not) published + enabled; [facing] `front` | `back`. */
   fun onLocalCamera(on: Boolean, facing: String?) {}
+  /** The local screen share is (not) published. */
+  fun onLocalScreen(on: Boolean) {}
   /** Every output call audio can play through right now, and the one it does. */
   fun onAudioOutputs(outputs: List<AudioOutput>, selectedId: String?) {}
   /**
@@ -571,6 +596,8 @@ data class MediaParticipant(
   val muted: Boolean,
   /** True only with a published, subscribed, unmuted camera track — a frame to draw. */
   val cameraOn: Boolean = false,
+  /** True with a published, subscribed, unmuted screen share — a screen to draw. */
+  val screenSharing: Boolean = false,
   /** The host app's own id for the user, when the SFU carries it; else the identity. */
   val externalId: String = identity,
   /** Their link to the SFU: `good` | `poor` | `lost` (dropped, coming back) | `unknown`. */

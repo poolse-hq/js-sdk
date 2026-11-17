@@ -19,6 +19,7 @@ final class LiveKitVideoSurface: UIView {
   private var local = false
   private var mirror: Bool?
   private var fit = "cover"
+  private var source = "camera"
 
   init(port: LiveKitMediaPort, renderMode: VideoView.RenderMode = .auto) {
     self.port = port
@@ -36,24 +37,29 @@ final class LiveKitVideoSurface: UIView {
 
   /// [participantId] is the remote's userId (SFU identity); [local] shows
   /// the self view. [mirror] nil = mirrored for the local front camera only.
-  func configure(participantId: String?, local: Bool, mirror: Bool?, fit: String) {
+  /// [source] `camera` or `screen`: their shared screen, never mirrored.
+  func configure(participantId: String?, local: Bool, mirror: Bool?, fit: String, source: String = "camera") {
     self.participantId = participantId
     self.local = local
     self.mirror = mirror
     self.fit = fit
+    self.source = source
     rebind()
   }
 
   func rebind() {
     guard !released else { return }
-    let next = port?.cameraTrack(participantId: participantId, local: local)
+    let screen = source == "screen"
+    let next = screen
+      ? port?.screenTrack(participantId: participantId, local: local)
+      : port?.cameraTrack(participantId: participantId, local: local)
     if (videoView.track as AnyObject?) !== (next as AnyObject?) {
       videoView.track = next
     }
     // No camera: hide so a last frozen frame never shows; the UI draws
     // the avatar from the snapshot's cameraOn underneath.
     videoView.isHidden = next == nil
-    let mirrored = mirror ?? (local && port?.cameraFacing() != "back")
+    let mirrored = !screen && (mirror ?? (local && port?.cameraFacing() != "back"))
     videoView.mirrorMode = mirrored ? .mirror : .off
     videoView.layoutMode = fit == "contain" ? .fit : .fill
   }

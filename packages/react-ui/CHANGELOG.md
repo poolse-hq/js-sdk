@@ -4,6 +4,72 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0] — 2026-11-17
+
+Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).
+
+## [3.2.0-dev.5] — 2026-11-17 (prerelease, npm tag `dev`)
+
+No changes; released with the other packages.
+
+## [3.2.0-dev.4] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Changed
+
+- A redesigned call screen. `RoomStage`'s controls are one floating dock of
+  round glass buttons with filled icons; they never wrap to a second row, so
+  Leave stays on screen on a phone, and they shrink when the room is narrow.
+  A control you turned off (muted, camera off) turns red; screen sharing
+  lights up blue. Device menus open from a chevron in the same pill as their
+  button. Labels became tooltips and accessible names.
+- The room's header shows a live clock with a red dot and a people count as
+  chips. Tiles are rounder, the speaking ring sits inside the tile, and the
+  name captions are frosted.
+- A shared screen stacks above the faces whenever the room is narrow, not
+  only when the window is.
+
+### Added
+
+- `CallControlButton` takes `highlight` for something you turned on, and
+  shows its label as a tooltip.
+- Filled call icons: `mic-fill`, `mic-off-fill`, `video-fill`,
+  `video-off-fill`, `screen-share-fill`, `screen-share-off-fill`,
+  `phone-off-fill`, `speaker-fill`.
+
+## [3.2.0-dev.3] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Full screen in calls. `RoomStage` has a Full screen button in its header that
+  takes the whole room (video, controls) full screen; a shared screen has its
+  own button (and double-click) to watch just the screen full screen. On iPhone
+  Safari, which has no element full screen, the screen opens in the native video
+  player. The button is hidden where neither works.
+- Icons `fullscreen` and `fullscreen-exit`.
+
+## [3.2.0-dev.2] — 2026-11-16 (prerelease, npm tag `dev`)
+
+### Added
+
+- Screen sharing in `RoomStage`: a Share button where the browser and the
+  workspace allow it, a "You are sharing your screen · Stop sharing" bar, and
+  `CallVideoGrid` draws a shared screen large and uncropped with faces in a strip.
+- Icons `screen-share` and `screen-share-off`.
+
+## [3.2.0-dev.1] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Added
+
+- Moves with `@poolse/react` 3.2.0-dev.1.
+
+## [3.2.0-dev.0] — 2026-11-04 (prerelease, npm tag `dev`)
+
+### Added
+
+- `<ConversationView>` shows AI agent replies as they're written: the
+  agent appears as typing, then its reply streams into a bubble with a
+  caret, and is replaced by the finished message.
+
 ## [3.1.0] — 2026-10-27
 
 ### Changed

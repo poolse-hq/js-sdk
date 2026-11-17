@@ -148,6 +148,7 @@ final class CallCore {
   private var mutedSelf = false
   private var cameraOn = false
   private var cameraFacing: String?
+  private var screenSharing = false
   private var audioRoute: String?
   private var audioOutputs: [AudioOutput] = []
   private var audioOutputId: String?
@@ -287,6 +288,9 @@ final class CallCore {
 
   func switchCamera() { runtime.switchCamera() }
 
+  /// Not optimistic: screenSharing flips when the screen is published.
+  func setScreenShare(_ on: Bool) { onMain { [self] in mediaPort.setScreenShare(on) } }
+
   func setSpeaker(_ on: Bool) {
     onMain { [self] in
       audioRoute = on ? "speaker" : "earpiece" // optimistic; the adapter reports the real one
@@ -358,7 +362,8 @@ final class CallCore {
       cameraFacing: cameraFacing,
       waiting: runtime.waitingRing,
       connectionQuality: connectionQuality,
-      videoPaused: videoPaused
+      videoPaused: videoPaused,
+      screenSharing: screenSharing
     )
     snapshotLock.lock(); lastSnapshot = snap; snapshotLock.unlock()
     reconcileCallKit(state)
@@ -375,6 +380,7 @@ final class CallCore {
     mutedSelf = false
     cameraOn = false
     cameraFacing = nil
+    screenSharing = false
     audioRoute = nil
     audioOutputs = []
     audioOutputId = nil
@@ -499,6 +505,10 @@ final class CallCore {
     runtime.post { [weak self] in self?.cameraOn = on; self?.cameraFacing = facing }
     runtime.reemit()
   }
+  fileprivate func localScreen(_ on: Bool) {
+    runtime.post { [weak self] in self?.screenSharing = on }
+    runtime.reemit()
+  }
 }
 
 // MARK: - CallKit actions
@@ -596,6 +606,7 @@ private final class EventsAdapter: MediaEvents {
   func onParticipants(_ participants: [SnapshotParticipant]) { core?.participants(participants) }
   func onAudioRoute(_ route: String) { core?.route(route) }
   func onLocalCamera(on: Bool, facing: String?) { core?.localCamera(on: on, facing: facing) }
+  func onLocalScreen(_ on: Bool) { core?.localScreen(on) }
   func onAudioOutputs(_ outputs: [AudioOutput], selectedId: String?) { core?.outputs(outputs, selected: selectedId) }
   func onNetwork(quality: String, videoPaused: Bool) { core?.network(quality: quality, videoPaused: videoPaused) }
 }

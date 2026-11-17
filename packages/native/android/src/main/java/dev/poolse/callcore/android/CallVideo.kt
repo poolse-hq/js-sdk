@@ -17,7 +17,17 @@ interface CallVideoSource {
   fun createVideoSurface(context: Context): CallVideoSurface
 }
 
-/** One on-screen video slot, bound to a participant's camera. */
+/**
+ * Screen sharing, for a media port that can capture the screen. The
+ * permission is the result of the system's screen-capture prompt
+ * (`MediaProjectionManager.createScreenCaptureIntent`), which only an
+ * Activity can ask for; the bridge asks and hands the result here.
+ */
+interface ScreenShareSource {
+  fun setScreenShare(on: Boolean, permission: android.content.Intent?)
+}
+
+/** One on-screen video slot, bound to a participant's camera or shared screen. */
 interface CallVideoSurface {
   /** The Android view to host; it fills its parent. */
   val view: View
@@ -26,10 +36,12 @@ interface CallVideoSurface {
    * What to show. [participantId] is the remote's userId (SFU
    * identity); [local] shows the self view instead. [mirror] null =
    * the default (mirrored for the local front camera only). [fit] is
-   * `cover` or `contain`. Rebinds immediately and again whenever the
-   * underlying track appears, disappears, mutes or the room is replaced.
+   * `cover` or `contain`. [source] is `camera` or `screen` (a shared
+   * screen is never mirrored). Rebinds immediately and again whenever
+   * the underlying track appears, disappears, mutes or the room is
+   * replaced.
    */
-  fun configure(participantId: String?, local: Boolean, mirror: Boolean?, fit: String)
+  fun configure(participantId: String?, local: Boolean, mirror: Boolean?, fit: String, source: String = "camera")
 
   /** Detach from any track and free the renderer. Idempotent. */
   fun release()

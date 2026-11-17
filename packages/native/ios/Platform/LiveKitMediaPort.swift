@@ -27,6 +27,8 @@ protocol MediaEvents: AnyObject {
   func onAudioOutputs(_ outputs: [AudioOutput], selectedId: String?)
   /// The local camera track is (not) published + enabled; facing `front` | `back`.
   func onLocalCamera(on: Bool, facing: String?)
+  /// Our shared screen is (not) published.
+  func onLocalScreen(_ on: Bool)
   /// Our own link to the SFU (`good` | `poor` | `lost` | `unknown`), and
   /// whether incoming video is paused to keep the audio going.
   func onNetwork(quality: String, videoPaused: Bool)
@@ -348,6 +350,41 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     refreshVideo()
     Task { await r.disconnect() }
     events?.onLocalCamera(on: false, facing: nil)
+    // The broadcast is its own process: end it with the call, or the
+    // red status-bar pill would keep recording into nothing.
+    if BroadcastManager.shared.isBroadcasting { BroadcastManager.shared.requestStop() }
+    events?.onLocalScreen(false)
+  }
+
+  // MARK: - screen sharing
+
+  /// Sharing the screen needs the app's broadcast upload extension (the
+  /// config plugin's `screenShare` option) and the app group it shares
+  /// with the app; without them iOS can only record the app itself,
+  /// which is not what anyone means by sharing.
+  static var screenShareSupported: Bool { ScreenShareCaptureOptions.defaultToBroadcastExtension }
+
+  /// On: shows the system's broadcast picker. LiveKit publishes the
+  /// screen once the user taps Start Broadcast (and unpublishes when the
+  /// broadcast ends, from here or from the status bar), so the snapshot
+  /// follows the real state rather than the request.
+  func setScreenShare(_ on: Bool) {
+    guard let r = room, connectedRoom == ObjectIdentifier(r) else { return }
+    if !on, BroadcastManager.shared.isBroadcasting { BroadcastManager.shared.requestStop() }
+    Task { [weak self] in
+      do { _ = try await r.localParticipant.setScreenShare(enabled: on) } catch {
+        NSLog("[PoolseCalls] setScreenShare failed: %@", "\(error)")
+      }
+      await MainActor.run {
+        guard let self = self, self.room === r else { return }
+        self.reportLocalScreen(r)
+      }
+    }
+  }
+
+  private func reportLocalScreen(_ r: Room) {
+    guard room === r else { return }
+    events?.onLocalScreen(screenTrack(participantId: nil, local: true) != nil)
   }
 
   func setMuted(_ muted: Bool) {
@@ -614,6 +651,27 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     return pub.track as? VideoTrack
   }
 
+  /// A participant's shared screen (with [local], our own), once
+  /// published, subscribed and unmuted. Not paused with the cameras on a
+  /// weak link: the shared screen is usually what the call is about.
+  func screenTrack(participantId: String?, local: Bool) -> VideoTrack? {
+    guard let r = room else { return nil }
+    if local {
+      guard let pub = r.localParticipant.trackPublications.values.first(where: { $0.source == .screenShareVideo }),
+            !pub.isMuted else { return nil }
+      return pub.track as? VideoTrack
+    }
+    guard let id = participantId,
+          let p = r.remoteParticipants.values.first(where: { $0.identity?.stringValue == id }) else { return nil }
+    return remoteScreen(p)
+  }
+
+  private func remoteScreen(_ p: RemoteParticipant) -> VideoTrack? {
+    guard let pub = p.trackPublications.values.first(where: { $0.source == .screenShareVideo }) as? RemoteTrackPublication,
+          pub.isSubscribed, !pub.isMuted else { return nil }
+    return pub.track as? VideoTrack
+  }
+
   /// `front` | `back` of the published local camera, or nil when none.
   func cameraFacing() -> String? {
     guard let r = room, let track = localCameraTrack(r) else { return nil }
@@ -647,6 +705,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       if videoPaused { applyVideoPause(r) }
       emit(r)
       reportLocalCamera(r)
+      reportLocalScreen(r)
       refreshVideo()
     case .rosterChanged:
       emit(r)
@@ -744,7 +803,8 @@ final class LiveKitMediaPort: NSObject, MediaPort {
         speaking: p.isSpeaking,
         muted: !p.isMicrophoneEnabled(),
         cameraOn: remoteCamera(p) != nil,
-        connectionQuality: Self.wire(p.connectionQuality)
+        connectionQuality: Self.wire(p.connectionQuality),
+        screenSharing: remoteScreen(p) != nil
       )
     }
     events?.onParticipants(roster)

@@ -10,11 +10,12 @@
 
 import type { UseRoom } from '@poolse/react';
 import type { CallDeviceKind } from '@poolse/sdk';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CallControlButton, CallDeviceMenu } from './CallControls.js';
 import { CallVideoGrid } from './CallVideoGrid.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { useFullscreen } from './useFullscreen.js';
 
 export interface RoomJoinBarProps {
   room: UseRoom;
@@ -110,12 +111,15 @@ export interface RoomStageProps {
 
 /**
  * The room you are in: everyone's video (or their initial while their
- * camera is off), and the controls — microphone, camera and output, each
- * with a device picker, and Leave. Fills its container: give it the
+ * camera is off), a shared screen large when someone shares, and the
+ * controls — microphone, camera and output, each with a device picker,
+ * screen sharing where the browser and the workspace allow it, and Leave. Fills its container: give it the
  * space your layout has for the stage.
  */
 export function RoomStage({ room, title, labelFor, className }: RoomStageProps) {
   const media = room.media;
+  const stage = useRef<HTMLElement>(null);
+  const fullscreen = useFullscreen(stage);
   const [menu, setMenu] = useState<CallDeviceKind | null>(null);
   const elapsed = useElapsed(room.live?.started_at ?? null, media.status === 'connected');
 
@@ -130,16 +134,49 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
   );
 
   const count = media.participants.length;
-  const status =
-    media.status === 'connecting' || room.joining
-      ? 'Connecting…'
-      : `${count} in the room${elapsed ? ` · ${elapsed}` : ''}`;
+  // Phone browsers cannot capture a screen, and a workspace can turn it off.
+  const canShare = media.canShareScreen && room.live?.screen_share_allowed !== false;
+  const connecting = media.status === 'connecting' || room.joining;
 
   return (
-    <section className={['poolse-room', className].filter(Boolean).join(' ')} aria-label="Room">
+    <section
+      ref={stage}
+      className={['poolse-room', className].filter(Boolean).join(' ')}
+      aria-label="Room"
+    >
       <header className="poolse-room__head">
         <span className="poolse-room__title">{title ?? 'Room'}</span>
-        <span className="poolse-room__status">{status}</span>
+        {connecting ? (
+          <span className="poolse-room__status">Connecting…</span>
+        ) : (
+          <span className="poolse-room__status">
+            {elapsed && (
+              <span className="poolse-room__chip poolse-room__chip--live">
+                <span className="poolse-room__dot" aria-hidden="true" />
+                {elapsed}
+              </span>
+            )}
+            <span className="poolse-room__chip" aria-label={`${count} in the room`}>
+              <PoolseIcon name="users" size={14} label={null} />
+              {count}
+            </span>
+          </span>
+        )}
+        {fullscreen.supported && (
+          <button
+            type="button"
+            className="poolse-room__fullscreen"
+            onClick={fullscreen.toggle}
+            aria-label={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+            title={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+          >
+            <PoolseIcon
+              name={fullscreen.active ? 'fullscreen-exit' : 'fullscreen'}
+              size={17}
+              label={null}
+            />
+          </button>
+        )}
       </header>
 
       <div className="poolse-room__stage">
@@ -154,12 +191,22 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
         )}
       </div>
 
+      {media.screenSharing && (
+        <div className="poolse-room__sharing" role="status">
+          <PoolseIcon name="screen-share" size={15} label={null} />
+          <span>You are sharing your screen</span>
+          <button type="button" onClick={() => void media.setScreenShareEnabled(false)}>
+            Stop sharing
+          </button>
+        </div>
+      )}
+
       {room.error && <p className="poolse-room__error">{room.error.message}</p>}
 
       <div className="poolse-room__bar">
         <span className="callsheet__control">
           <CallControlButton
-            icon={media.micEnabled ? 'mic' : 'mic-off'}
+            icon={media.micEnabled ? 'mic-fill' : 'mic-off-fill'}
             active={!media.micEnabled}
             label={media.micEnabled ? 'Mute' : 'Unmute'}
             onClick={() => void media.toggleMic()}
@@ -179,7 +226,7 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
 
         <span className="callsheet__control">
           <CallControlButton
-            icon={media.cameraEnabled ? 'video' : 'video-off'}
+            icon={media.cameraEnabled ? 'video-fill' : 'video-off-fill'}
             active={!media.cameraEnabled}
             label={media.cameraEnabled ? 'Camera' : 'Camera off'}
             onClick={() => void media.toggleCamera()}
@@ -198,10 +245,19 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
           )}
         </span>
 
+        {(canShare || media.screenSharing) && (
+          <CallControlButton
+            icon={media.screenSharing ? 'screen-share-off-fill' : 'screen-share-fill'}
+            highlight={media.screenSharing}
+            label={media.screenSharing ? 'Stop sharing' : 'Share screen'}
+            onClick={() => void media.toggleScreenShare()}
+          />
+        )}
+
         {media.devices.audiooutput.length > 0 && (
           <span className="callsheet__control">
             <CallControlButton
-              icon="speaker"
+              icon="speaker-fill"
               label="Speaker"
               onClick={() => openMenu('audiooutput')}
             />
@@ -218,7 +274,7 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
         )}
 
         <CallControlButton
-          icon="phone-off"
+          icon="phone-off-fill"
           tone="danger"
           large
           label="Leave"

@@ -14,6 +14,28 @@ export interface MessageDeletedEvent {
   deleted_at: string | null;
 }
 
+/**
+ * `message:stream` — an AI agent's reply as it's being written.
+ *
+ *   * `started`: the agent began writing (carries `sender_external_id`).
+ *   * `delta`: the next piece of text; append it.
+ *   * `tool`: the agent is running one of its tools (`tool` is its name).
+ *   * `failed`: the agent couldn't answer; nothing will be posted.
+ *
+ * The finished reply arrives as a normal `message:new` whose `id`
+ * equals the stream's `id`, so swap the streaming bubble for it.
+ */
+export interface MessageStreamEvent {
+  id: Uuid;
+  conversation_id: Uuid;
+  sender_id: Uuid;
+  status: 'started' | 'delta' | 'tool' | 'failed';
+  sender_external_id?: string | null;
+  delta?: string;
+  tool?: string;
+  error?: string;
+}
+
 /** `typing:start` / `typing:stop`. */
 export interface TypingEvent {
   /** Internal poolse user id. Most consumer code uses `external_id` instead. */

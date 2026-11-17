@@ -39,12 +39,14 @@ internal class LiveKitVideoSurface(
   private var local = false
   private var mirror: Boolean? = null
   private var fit = "cover"
+  private var source = "camera"
 
-  override fun configure(participantId: String?, local: Boolean, mirror: Boolean?, fit: String) {
+  override fun configure(participantId: String?, local: Boolean, mirror: Boolean?, fit: String, source: String) {
     this.participantId = participantId
     this.local = local
     this.mirror = mirror
     this.fit = fit
+    this.source = source
     rebind()
   }
 
@@ -63,7 +65,12 @@ internal class LiveKitVideoSurface(
       }
     }
 
-    val next = if (initRoom != null) port.cameraTrack(participantId, local) else null
+    val screen = source == "screen"
+    val next = when {
+      initRoom == null -> null
+      screen -> port.screenTrack(participantId, local)
+      else -> port.cameraTrack(participantId, local)
+    }
     if (next !== track) {
       detachTrack()
       if (next != null) {
@@ -76,7 +83,7 @@ internal class LiveKitVideoSurface(
     renderer.visibility = if (track != null) View.VISIBLE else View.INVISIBLE
     if (initRoom != null) {
       runCatching {
-        renderer.setMirror(mirror ?: (local && port.cameraFacing() != "back"))
+        renderer.setMirror(!screen && (mirror ?: (local && port.cameraFacing() != "back")))
         renderer.setScalingType(
           if (fit == "contain") RendererCommon.ScalingType.SCALE_ASPECT_FIT
           else RendererCommon.ScalingType.SCALE_ASPECT_FILL,
