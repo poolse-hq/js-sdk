@@ -138,11 +138,16 @@ function withExtensionFiles(config, appGroup) {
       // LiveKit in the extension: the same pod (and so the same version)
       // the app already resolves through @poolse/native.
       const podfile = path.join(root, 'Podfile');
+      // CocoaPods refuses an extension target whose use_frameworks!
+      // differs from the app's, so repeat the app's (Expo's template).
+      const linkage =
+        "  use_frameworks! :linkage => podfile_properties['ios.useFrameworks'].to_sym if defined?(podfile_properties) && podfile_properties['ios.useFrameworks']\n" +
+        "  use_frameworks! :linkage => ENV['USE_FRAMEWORKS'].to_sym if ENV['USE_FRAMEWORKS']\n";
       const text = fs.readFileSync(podfile, 'utf8');
       if (!text.includes(`target '${TARGET}'`)) {
         fs.writeFileSync(
           podfile,
-          `${text.trimEnd()}\n\n# @poolse/native: the screen-sharing broadcast extension.\ntarget '${TARGET}' do\n  pod 'LiveKitClient'\nend\n`,
+          `${text.trimEnd()}\n\n# @poolse/native: the screen-sharing broadcast extension.\ntarget '${TARGET}' do\n${linkage}  pod 'LiveKitClient'\nend\n`,
         );
       }
       return c;

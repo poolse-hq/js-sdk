@@ -2,6 +2,13 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.2.0 — 2026-11-17
+
+- Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).
+- Screen sharing's config plugin now gives the `PoolseBroadcast` Podfile
+  target the app's `use_frameworks!` setting, so apps with
+  `ios.useFrameworks` (e.g. `"static"`) pass `pod install`.
+
 ## 3.2.0-dev.5 — 2026-11-17 (prerelease, npm tag `dev`)
 
 - Screen sharing from iOS. Add `"screenShare": true` to the config plugin's

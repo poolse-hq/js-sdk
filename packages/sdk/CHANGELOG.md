@@ -4,6 +4,16 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.2.0] — 2026-11-17
+
+Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).
+
+### Changed
+
+- `CallParticipant` has three new fields, `screenSharing`, `screenTrack` and
+  `screenTrackRef`. Code that builds `CallParticipant` objects by hand (test
+  mocks, custom adapters) needs to set them.
+
 ## [3.2.0-dev.5] — 2026-11-17 (prerelease, npm tag `dev`)
 
 No changes; released with the other packages.

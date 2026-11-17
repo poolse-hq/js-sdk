@@ -4,6 +4,10 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [3.2.0] — 2026-11-17
+
+Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).
+
 ## [3.2.0-dev.5] — 2026-11-17 (prerelease, npm tag `dev`)
 
 No changes; released with the other packages.
