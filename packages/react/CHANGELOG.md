@@ -4,6 +4,28 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `useConversations().mentionUnreadCounts`.
+- `useMessages().loadUntil(messageId, maxPages?)`: pages back until a message
+  is loaded; resolves whether it was found.
+- `useAppEvent(handler)` for `app:event`.
+- Re-exported types `AppEvent`, `ConversationReadEvent`, `NotifyLevel`,
+  `NotificationPreferences`, `OwnMembership`, `OwnMembershipUpdateRequest`.
+
+### Changed
+
+- `useConversations()` state is shared by every caller under one
+  `<PoolseProvider>` (one fetch, one list). `markConversationRead` and a
+  successful `useMessages().markReadUpTo` zero the unread and mention counts
+  in every view; `conversation:read` from the user channel applies the
+  server's counts. A remount shows the rows it had at once and refreshes
+  quietly.
+- `useUser` keeps the previous profile on screen while an invalidated one
+  re-resolves.
+
 ## [3.2.0] — 2026-11-17
 
 Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).

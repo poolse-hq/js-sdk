@@ -1,7 +1,7 @@
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { safeUuid } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePoolse } from './provider.js';
+import { useConversationsStore, usePoolse } from './provider.js';
 import { useMe } from './use-me.js';
 
 interface UseMessagesState {
@@ -28,10 +28,20 @@ interface UseMessagesState {
    */
   delete: (messageId: Uuid) => Promise<void>;
   /**
+   * Load older pages until `messageId` is in `messages` — to jump to a
+   * message further back than what's loaded. Resolves `true` once it's
+   * there, `false` when history runs out (or after `maxPages` pages,
+   * default 20) without it: deleted, a thread reply, or not in this
+   * conversation.
+   */
+  loadUntil: (messageId: Uuid, maxPages?: number) => Promise<boolean>;
+  /**
    * Advance the caller's read cursor to `messageId`. Server emits
-   * read-receipt updates to other members; the conversation's
-   * unread count drops to zero. No local state mutation — this is
-   * "tell the server we read up to here".
+   * read-receipt updates to other members. Once it accepts, the
+   * conversation's unread and mention counts drop to zero in every
+   * `useConversations()` under the same provider (the server's
+   * `conversation:read` push then confirms the exact counts on all of
+   * the user's devices).
    */
   markReadUpTo: (messageId: Uuid) => Promise<void>;
   /**
@@ -64,6 +74,7 @@ const PAGE_SIZE = 50;
  */
 export function useMessages(conversationId: string): UseMessagesState {
   const chat = usePoolse();
+  const conversationsStore = useConversationsStore();
   const { me } = useMe();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +83,12 @@ export function useMessages(conversationId: string): UseMessagesState {
 
   // Cursor for `loadMore` — the lowest sequence currently in state.
   const oldestSequenceRef = useRef<number | null>(null);
+  // Latest list and `hasMore` for `loadUntil`, which pages in a loop
+  // and can't wait for a re-render between pages.
+  const messagesRef = useRef<Message[]>(messages);
+  messagesRef.current = messages;
+  const hasMoreRef = useRef(hasMore);
+  hasMoreRef.current = hasMore;
   // Mutable refetch implementation. Set per-effect (it captures the
   // current conversation's `messages` resource handle). Exposed
   // through the stable `refetch` callback below so consumers can wire
@@ -225,6 +242,32 @@ export function useMessages(conversationId: string): UseMessagesState {
     oldestSequenceRef.current = older[0]?.sequence ?? oldestSequenceRef.current;
   }, [chat, conversationId, hasMore, loading]);
 
+  const loadUntil = useCallback(
+    async (messageId: Uuid, maxPages = 20): Promise<boolean> => {
+      if (messagesRef.current.some((m) => m.id === messageId)) return true;
+      const handle = chat.conversations.one(conversationId).messages;
+      for (let i = 0; i < maxPages; i++) {
+        const before = oldestSequenceRef.current;
+        if (before === null || !hasMoreRef.current) return false;
+        const page = await handle.list({ limit: PAGE_SIZE, before });
+        const older = [...page.data].reverse();
+        if (older.length > 0) {
+          // A concurrent `loadMore` may have fetched the same page.
+          setMessages((prev) => {
+            const have = new Set(prev.map((m) => m.id));
+            return [...older.filter((m) => !have.has(m.id)), ...prev];
+          });
+          oldestSequenceRef.current = older[0]!.sequence;
+        }
+        hasMoreRef.current = page.data.length === PAGE_SIZE;
+        setHasMore(hasMoreRef.current);
+        if (older.some((m) => m.id === messageId)) return true;
+      }
+      return false;
+    },
+    [chat, conversationId],
+  );
+
   const send = useCallback(
     async (attrs: MessageCreateRequest) => {
       // Generate the message id client-side and pass it through, so
@@ -342,8 +385,9 @@ export function useMessages(conversationId: string): UseMessagesState {
       // and broadcasts the resulting membership update to other clients
       // (which is what drives read-receipt glyphs in their UIs).
       await chat.conversations.one(conversationId).messages.markRead(messageId);
+      conversationsStore.markRead(conversationId);
     },
-    [chat, conversationId],
+    [chat, conversationId, conversationsStore],
   );
 
   const refetch = useCallback(async (): Promise<void> => {
@@ -358,6 +402,7 @@ export function useMessages(conversationId: string): UseMessagesState {
     error,
     hasMore,
     loadMore,
+    loadUntil,
     send,
     edit,
     delete: deleteMessage,

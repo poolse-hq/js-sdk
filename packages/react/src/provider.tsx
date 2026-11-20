@@ -1,8 +1,11 @@
 import { Poolse, type PoolseConfig } from '@poolse/sdk';
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { ConversationsStore } from './conversations-store.js';
 
 interface PoolseContextValue {
   chat: Poolse;
+  /** The conversation list every `useConversations()` shares. */
+  conversations: ConversationsStore;
 }
 
 const PoolseContext = createContext<PoolseContextValue | null>(null);
@@ -124,7 +127,7 @@ export function PoolseProvider({ config, children }: PoolseProviderProps) {
     };
   }, [chat]);
 
-  const value = useMemo(() => ({ chat }), [chat]);
+  const value = useMemo(() => ({ chat, conversations: new ConversationsStore(chat) }), [chat]);
 
   return <PoolseContext.Provider value={value}>{children}</PoolseContext.Provider>;
 }
@@ -136,14 +139,27 @@ export function PoolseProvider({ config, children }: PoolseProviderProps) {
  * realtime control).
  */
 export function usePoolse(): Poolse {
+  return usePoolseContext('usePoolse').chat;
+}
+
+/**
+ * The conversation-list store shared under this provider.
+ *
+ * @internal Used by `useConversations` and `useMessages`.
+ */
+export function useConversationsStore(): ConversationsStore {
+  return usePoolseContext('useConversations').conversations;
+}
+
+function usePoolseContext(hook: string): PoolseContextValue {
   const value = useContext(PoolseContext);
 
   if (!value) {
     throw new Error(
-      'usePoolse(): no <PoolseProvider> in the tree. Wrap your component ' +
+      `${hook}(): no <PoolseProvider> in the tree. Wrap your component ` +
         'with `<PoolseProvider config={{apiUrl, getToken}}>` first.',
     );
   }
 
-  return value.chat;
+  return value;
 }

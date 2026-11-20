@@ -124,4 +124,20 @@ describe('useUser', () => {
     });
     await waitFor(() => expect(resolver).toHaveBeenCalledTimes(2));
   });
+
+  it('keeps showing the old profile while an invalidated one re-resolves', async () => {
+    let name = 'Old';
+    const resolver = vi.fn(async () => ({ displayName: name, avatarUrl: null }));
+    const { result } = renderHook(() => ({ chat: usePoolse(), u: useUser('u-1') }), {
+      wrapper: withResolver(resolver),
+    });
+    await waitFor(() => expect(result.current.u.profile?.displayName).toBe('Old'));
+
+    name = 'New';
+    act(() => result.current.chat.users.invalidate('u-1'));
+
+    expect(result.current.u.profile?.displayName).toBe('Old');
+    await waitFor(() => expect(result.current.u.profile?.displayName).toBe('New'));
+    expect(result.current.u.loading).toBe(false);
+  });
 });

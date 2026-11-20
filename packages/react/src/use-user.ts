@@ -8,7 +8,7 @@
 // without that fragility.
 
 import type { PoolseUserProfile } from '@poolse/sdk';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 
 export interface UseUserState {
@@ -31,9 +31,16 @@ const EMPTY: UseUserState = { profile: null, loading: false };
  *
  * Pass `null` / empty string to opt out (the hook becomes a no-op).
  * Useful for self bubbles (you already know who you are).
+ *
+ * After `chat.users.invalidate(externalId)` (or a `member:updated` app
+ * event) the hook re-resolves the user, showing the old profile until
+ * the new one lands.
  */
 export function useUser(externalId: string | null | undefined): UseUserState {
   const chat = usePoolse();
+  // Whose profile `state` holds, so a refresh keeps it on screen but a
+  // switch to another user doesn't.
+  const shownForRef = useRef<string | null>(null);
   const [state, setState] = useState<UseUserState>(() => {
     if (!externalId) return EMPTY;
     const cached = chat.users.peek(externalId);
@@ -50,9 +57,11 @@ export function useUser(externalId: string | null | undefined): UseUserState {
     const apply = () => {
       const cached = chat.users.peek(externalId);
       if (cached === undefined) {
-        setState({ profile: null, loading: true });
+        const keep = shownForRef.current === externalId;
+        setState((prev) => ({ profile: keep ? prev.profile : null, loading: true }));
         void chat.users.get(externalId);
       } else {
+        shownForRef.current = externalId;
         setState({ profile: cached, loading: false });
       }
     };

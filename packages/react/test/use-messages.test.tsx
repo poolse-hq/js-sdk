@@ -69,4 +69,61 @@ describe('useMessages', () => {
     );
     expect(fetchFn.calls[2]?.url).toContain('/v1/conversations/c-1/messages');
   });
+
+  describe('loadUntil', () => {
+    const page = (from: number, to: number) => {
+      const out = [];
+      for (let seq = to; seq >= from; seq--) out.push(msg(`m${seq}`, seq));
+      return out;
+    };
+
+    it('pages back until the message is loaded', async () => {
+      const fetchFn = scriptedFetch([
+        jsonResponse(me),
+        jsonResponse({ data: page(101, 150) }),
+        jsonResponse({ data: page(51, 100) }),
+        jsonResponse({ data: page(1, 50) }),
+      ]);
+      const { result } = renderHookWithProvider(() => useMessages('c-1'), fetchFn);
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      let found = false;
+      await act(async () => {
+        found = await result.current.loadUntil('m20');
+      });
+
+      expect(found).toBe(true);
+      expect(result.current.messages[0]?.id).toBe('m1');
+      expect(result.current.messages).toHaveLength(150);
+      expect(fetchFn.calls[2]?.url).toContain('before=101');
+      expect(fetchFn.calls[3]?.url).toContain('before=51');
+    });
+
+    it('resolves true without fetching when already loaded', async () => {
+      const fetchFn = scriptedFetch([jsonResponse(me), jsonResponse({ data: page(1, 3) })]);
+      const { result } = renderHookWithProvider(() => useMessages('c-1'), fetchFn);
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await expect(result.current.loadUntil('m2')).resolves.toBe(true);
+      expect(fetchFn.calls).toHaveLength(2);
+    });
+
+    it('resolves false when history runs out', async () => {
+      const fetchFn = scriptedFetch([
+        jsonResponse(me),
+        jsonResponse({ data: page(51, 100) }),
+        jsonResponse({ data: page(1, 50).slice(0, 10) }),
+      ]);
+      const { result } = renderHookWithProvider(() => useMessages('c-1'), fetchFn);
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      let found = true;
+      await act(async () => {
+        found = await result.current.loadUntil('nope');
+      });
+
+      expect(found).toBe(false);
+      expect(result.current.hasMore).toBe(false);
+    });
+  });
 });

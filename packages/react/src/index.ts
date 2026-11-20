@@ -23,6 +23,7 @@ export {
 } from './use-attachment-upload.js';
 export { useAttachmentUrl } from './use-attachment-url.js';
 export { useUser, type UseUserState } from './use-user.js';
+export { useAppEvent } from './use-app-event.js';
 export {
   computeGroupPosition,
   sameGroup,
@@ -34,6 +35,7 @@ export {
 // Re-export the SDK so consumers can pull in types / errors from one
 // package — saves a second `npm install @poolse/sdk` for React-only apps.
 export type {
+  AppEvent,
   Attachment,
   AttachmentStatus,
   AttachmentUploadInput,
@@ -41,9 +43,14 @@ export type {
   AttachmentUploadResponse,
   Conversation,
   ConversationCreateRequest,
+  ConversationReadEvent,
   Me,
   MemberRole,
   Membership,
+  NotificationPreferences,
+  NotifyLevel,
+  OwnMembership,
+  OwnMembershipUpdateRequest,
   Message,
   MessageCreateRequest,
   MessageType,
