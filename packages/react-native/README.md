@@ -111,15 +111,39 @@ example `ThreadView` needs `visible` and `onClose`, and there is no
 ## Theming
 
 ```tsx
+<PoolseTheme theme="ocean" colorScheme="system">
+  {children}
+</PoolseTheme>
+```
+
+`theme` takes one of the eight built-in themes from
+[`@poolse/theme`](../theme) — `coral` (default), `ocean`, `forest`, `grape`,
+`slate`, `sunset`, `rose`, `mono` — or a `Theme` (`createTheme`, or
+`decodeTheme` for a shared theme code). `colorScheme` is `'light'`, `'dark'` or
+`'system'` (follows the OS live; the default when `theme` is given). Switching
+either re-renders in place; nothing remounts. React Native can't use the web
+font stacks, so themes use the platform fonts unless you pass
+`fonts={{ body: 'Inter', display: 'Inter', mono: 'JetBrainsMono' }}` with
+names you loaded via expo-font.
+
+Every component reads its colours, fonts, radii, spacing and shadows from
+`useTheme()`, which returns the active tokens (`colors.accent`,
+`colors.ownBubble`, `fonts.body`, `fonts.lineHeight` in px, `radii.bubble`,
+`shadows.md` as a style, …). Use it in your own components too.
+
+Without `theme`, the original palette is used (light unless `colorScheme` or
+`mode` says otherwise). The original override form still works but is
+deprecated:
+
+```tsx
 <PoolseTheme mode="dark" theme={{ colors: { brand: '#ff5733' }, radii: { bubble: 18 } }}>
   {children}
 </PoolseTheme>
 ```
 
-Overrides merge over the light or dark base theme one group at a time
-(`colors`, `type`, `radii`, `spacing`, `shadows`). `mode` doesn't follow the
-system by itself; pass `useColorScheme()` if you want that. Read the active
-theme with `usePoolseTheme()`.
+Overrides merge over the light or dark base palette one group at a time
+(`colors`, `type`, `radii`, `spacing`, `shadows`); `usePoolseTheme()` still
+returns that original shape.
 
 ## Links
 

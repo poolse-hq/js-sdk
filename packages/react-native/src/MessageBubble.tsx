@@ -9,7 +9,7 @@ import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './internal/bubbleText.js';
 import { renderMarkdown } from './internal/markdown.js';
 import { userColor } from './primitives/userColor.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export type BubbleGroupPosition = 'first' | 'middle' | 'last' | 'standalone';
 
@@ -17,7 +17,7 @@ export interface MessageBubbleProps {
   message: Message;
   /** Used to decide left/right alignment, color, and read-receipt visibility. */
   currentUserId: string | null;
-  /** `'sent'` → single tick, `'read'` → double tick (theme.colors.brand). */
+  /** `'sent'` → single tick, `'read'` → double tick (theme.colors.accent). */
   readState?: 'sent' | 'read';
   /** Label resolver keyed by `external_id` — falls back to the externalId itself. */
   labelFor?: (externalId: string) => string;
@@ -72,7 +72,7 @@ export function MessageBubble({
   markdown = true,
   onLongPress,
 }: MessageBubbleProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const { width: screenWidth } = useWindowDimensions();
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
   const [expanded, setExpanded] = useState(false);
@@ -104,8 +104,8 @@ export function MessageBubble({
 
   const tailCorner = groupPosition === 'last' || groupPosition === 'standalone';
   const bubbleRadius = theme.radii.bubble;
-  const textColor = isSelf ? theme.colors.selfBubbleText : theme.colors.otherBubbleText;
-  const mutedOnBubble = isSelf ? theme.colors.onBrand : theme.colors.ink3;
+  const textColor = isSelf ? theme.colors.ownBubbleText : theme.colors.otherBubbleText;
+  const mutedOnBubble = isSelf ? theme.colors.ownBubbleText : theme.colors.textSubtle;
 
   const radii = {
     topLeft: bubbleRadius,
@@ -164,7 +164,11 @@ export function MessageBubble({
 
   const metaRow = (variant: 'inline' | 'wrapped' | 'block' | 'overlay' | 'jumbo') => {
     const color =
-      variant === 'overlay' ? '#FFFFFF' : variant === 'jumbo' ? theme.colors.ink3 : mutedOnBubble;
+      variant === 'overlay'
+        ? '#FFFFFF'
+        : variant === 'jumbo'
+          ? theme.colors.textSubtle
+          : mutedOnBubble;
     return (
       <View
         style={[
@@ -212,7 +216,7 @@ export function MessageBubble({
       <View
         style={[
           jumboCount === 0 && {
-            backgroundColor: isSelf ? theme.colors.selfBubble : theme.colors.otherBubble,
+            backgroundColor: isSelf ? theme.colors.ownBubble : theme.colors.otherBubble,
             borderColor: isSelf ? 'transparent' : theme.colors.border,
             borderWidth: isSelf ? 0 : StyleSheet.hairlineWidth,
             borderTopLeftRadius: radii.topLeft,
@@ -228,7 +232,7 @@ export function MessageBubble({
         jumboCount === 0 &&
         (groupPosition === 'first' || groupPosition === 'standalone') ? (
           <Text
-            style={[styles.senderName, { color: senderTint, fontFamily: theme.type.fontBody }]}
+            style={[styles.senderName, { color: senderTint, fontFamily: theme.fonts.body }]}
             {...(onSenderPress
               ? {
                   onPress: onSenderPress,
@@ -285,9 +289,9 @@ export function MessageBubble({
               style={{
                 color: mutedOnBubble,
                 opacity: 0.7,
-                fontFamily: theme.type.fontBody,
-                fontSize: theme.type.bodySize,
-                lineHeight: theme.type.lineHeight,
+                fontFamily: theme.fonts.body,
+                fontSize: theme.fonts.sizeMd,
+                lineHeight: theme.fonts.lineHeight,
                 fontStyle: 'italic',
               }}
             >
@@ -319,10 +323,10 @@ export function MessageBubble({
             {markdown && !inlineMeta ? (
               renderMarkdown(truncated, {
                 textColor,
-                linkColor: isSelf ? theme.colors.onBrand : theme.colors.brand,
-                fontFamily: theme.type.fontBody,
-                fontSize: theme.type.bodySize,
-                lineHeight: theme.type.lineHeight,
+                linkColor: isSelf ? theme.colors.ownBubbleText : theme.colors.link,
+                fontFamily: theme.fonts.body,
+                fontSize: theme.fonts.sizeMd,
+                lineHeight: theme.fonts.lineHeight,
                 onLinkPress: (url: string) => {
                   void Linking.openURL(url).catch(() => undefined);
                   return false;
@@ -332,9 +336,9 @@ export function MessageBubble({
               <Text
                 style={{
                   color: textColor,
-                  fontFamily: theme.type.fontBody,
-                  fontSize: theme.type.bodySize,
-                  lineHeight: theme.type.lineHeight,
+                  fontFamily: theme.fonts.body,
+                  fontSize: theme.fonts.sizeMd,
+                  lineHeight: theme.fonts.lineHeight,
                 }}
                 onTextLayout={
                   inlineMeta
@@ -355,7 +359,7 @@ export function MessageBubble({
                 <Text
                   style={[
                     styles.readMore,
-                    { color: isSelf ? theme.colors.onBrand : theme.colors.brand },
+                    { color: isSelf ? theme.colors.ownBubbleText : theme.colors.link },
                   ]}
                 >
                   {expanded ? 'Show less' : 'Read more'}
@@ -392,7 +396,7 @@ function QuotedCard({
   labelFor?: (externalId: string) => string;
   onPress?: () => void;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   // Priority: explicit prop > SDK userResolver > externalId fallback.
   const resolved = useUser(quoted.sender_external_id);
   const senderName = quoted.sender_external_id
@@ -402,9 +406,9 @@ function QuotedCard({
     : 'Unknown';
   // Darker than the bubble on both sides, so the quote reads as
   // something the message sits on top of.
-  const bg = isSelf ? 'rgba(0,0,0,0.16)' : theme.colors.surface2;
-  const accent = isSelf ? theme.colors.onBrand : theme.colors.brand;
-  const txt = isSelf ? theme.colors.onBrand : theme.colors.ink;
+  const bg = isSelf ? 'rgba(0,0,0,0.16)' : theme.colors.surfaceAlt;
+  const accent = isSelf ? theme.colors.ownBubbleText : theme.colors.accent;
+  const txt = isSelf ? theme.colors.ownBubbleText : theme.colors.text;
   return (
     <Pressable
       onPress={onPress}

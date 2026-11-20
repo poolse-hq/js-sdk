@@ -1,6 +1,6 @@
 import { Svg, Path, Circle, G } from 'react-native-svg';
 
-import { usePoolseTheme } from '../theme/PoolseTheme.js';
+import { useTheme } from '../theme/PoolseTheme.js';
 
 export type PoolseLogoVariant = 'lockup' | 'mark' | 'wordmark' | 'mono';
 
@@ -36,17 +36,17 @@ const VARIANT_VB: Record<
 };
 
 export function PoolseLogo({ variant = 'lockup', size = 28, color, label }: PoolseLogoProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const mono = variant === 'mono';
-  const monoColor = color ?? theme.colors.ink;
+  const monoColor = color ?? theme.colors.text;
 
-  const tileFill = mono ? 'none' : theme.colors.brand;
+  const tileFill = mono ? 'none' : theme.colors.accent;
   const tileStroke = mono ? monoColor : 'transparent';
   const tileStrokeWidth = mono ? 5 : 0;
-  const pulseStroke = mono ? monoColor : theme.colors.onBrand;
-  const pulseDotFill = mono ? monoColor : theme.colors.onBrand;
-  const inkFill = mono ? monoColor : theme.colors.ink;
-  const oFill = mono ? monoColor : theme.colors.brand;
+  const pulseStroke = mono ? monoColor : theme.colors.accentText;
+  const pulseDotFill = mono ? monoColor : theme.colors.accentText;
+  const inkFill = mono ? monoColor : theme.colors.text;
+  const oFill = mono ? monoColor : theme.colors.accent;
 
   const { vb, aspect } = VARIANT_VB[variant];
   const width = size * aspect;

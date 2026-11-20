@@ -6,7 +6,7 @@ import { Image, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface ImageMosaicProps {
   images: Attachment[];
@@ -55,7 +55,7 @@ export function ImageMosaic({
   squareBottom = false,
   onLongPress,
 }: ImageMosaicProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const r = radius ?? theme.radii.md;
   const rBottom = squareBottom ? 5 : r;
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
@@ -214,20 +214,20 @@ function Tile({
   onPress: () => void;
   onLongPress?: (() => void) | undefined;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const { url } = useAttachmentUrl(attachment.id);
   return (
     <Pressable onPress={onPress} onLongPress={onLongPress} style={[styles.tileBase, style]}>
       {url ? (
         <Image
           source={{ uri: url }}
-          style={[styles.tileImage, { backgroundColor: theme.colors.surface2 }]}
+          style={[styles.tileImage, { backgroundColor: theme.colors.surfaceAlt }]}
           resizeMode="cover"
           accessible
           accessibilityLabel={attachment.original_filename ?? 'image'}
         />
       ) : (
-        <View style={[styles.tileImage, { backgroundColor: theme.colors.surface2 }]} />
+        <View style={[styles.tileImage, { backgroundColor: theme.colors.surfaceAlt }]} />
       )}
       {overlay ? (
         <View style={styles.overflow}>

@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 
 import { indexOfMessage } from './internal/messageFocus.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 /**
  * Either a real message or a day-separator row. ConversationView
@@ -86,7 +86,7 @@ export function MessageList({
   scrollToMessageId = null,
   scrollRequest = 0,
 }: MessageListProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const flatListRef = useRef<FlatList<MessageListItem>>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [newCount, setNewCount] = useState(0);
@@ -177,17 +177,17 @@ export function MessageList({
 
   if (loading && messages.length === 0) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.paper }]}>
-        <ActivityIndicator color={theme.colors.brand} />
+      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator color={theme.colors.accent} />
       </View>
     );
   }
 
   if (messages.length === 0) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.paper }]}>
+      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
         {typeof emptyState === 'string' ? (
-          <Text style={{ color: theme.colors.ink3, fontFamily: theme.type.fontBody }}>
+          <Text style={{ color: theme.colors.textSubtle, fontFamily: theme.fonts.body }}>
             {emptyState}
           </Text>
         ) : (
@@ -218,12 +218,12 @@ export function MessageList({
         ListFooterComponent={
           <View>
             {hasMore && loading ? (
-              <ActivityIndicator color={theme.colors.ink3} style={{ marginVertical: 8 }} />
+              <ActivityIndicator color={theme.colors.textSubtle} style={{ marginVertical: 8 }} />
             ) : null}
             {ListFooter}
           </View>
         }
-        style={{ backgroundColor: theme.colors.paper }}
+        style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={{ paddingVertical: 8 }}
       />
 
@@ -233,14 +233,14 @@ export function MessageList({
           style={[
             styles.jumpButton,
             {
-              backgroundColor: theme.colors.brand,
+              backgroundColor: theme.colors.accent,
             },
             theme.shadows.sm,
           ]}
           accessibilityLabel={`${newCount} new ${newCount === 1 ? 'message' : 'messages'}, jump to latest`}
         >
-          <PoolseIcon name="chevron-down" size={14} color={theme.colors.onBrand} />
-          <Text style={[styles.jumpText, { color: theme.colors.onBrand }]}>
+          <PoolseIcon name="chevron-down" size={14} color={theme.colors.accentText} />
+          <Text style={[styles.jumpText, { color: theme.colors.accentText }]}>
             {newCount} new {newCount === 1 ? 'message' : 'messages'}
           </Text>
         </Pressable>

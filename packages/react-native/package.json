@@ -66,7 +66,8 @@
   },
   "dependencies": {
     "@poolse/react": "^3.3.0",
-    "@poolse/sdk": "^3.3.0"
+    "@poolse/sdk": "^3.3.0",
+    "@poolse/theme": "^3.3.0"
   },
   "peerDependencies": {
     "react": ">=18",

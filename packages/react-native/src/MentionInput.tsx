@@ -16,7 +16,7 @@ import { MessageComposer, type MessageComposerProps } from './MessageComposer.js
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { useKeyboardOpen } from './internal/useKeyboardOpen.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface MentionInputProps extends Omit<MessageComposerProps, 'onSend'> {
   conversationId: Uuid;
@@ -38,7 +38,7 @@ export interface MentionInputProps extends Omit<MessageComposerProps, 'onSend'> 
  * to the backend) carries the corresponding internal `user_id`s.
  */
 export function MentionInput({ conversationId, onSend, ...composerProps }: MentionInputProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const insets = useSafeInsets();
   const keyboardOpen = useKeyboardOpen();
   const { members } = useMembers(conversationId);
@@ -106,7 +106,7 @@ export function MentionInput({ conversationId, onSend, ...composerProps }: Menti
               ]}
             >
               <Text
-                style={[styles.title, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
+                style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
               >
                 Mention a member
               </Text>
@@ -135,11 +135,11 @@ export function MentionInput({ conversationId, onSend, ...composerProps }: Menti
 }
 
 function MentionRow({ member, onPress }: { member: Membership; onPress: () => void }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   return (
     <Pressable onPress={onPress} style={styles.row}>
       <Avatar src={null} name={member.external_id} seed={member.external_id} size="sm" />
-      <Text style={[styles.rowText, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}>
+      <Text style={[styles.rowText, { color: theme.colors.text, fontFamily: theme.fonts.body }]}>
         {member.external_id}
       </Text>
     </Pressable>

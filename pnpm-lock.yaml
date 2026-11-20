@@ -97,6 +97,9 @@ importers:
       '@poolse/sdk':
         specifier: ^3.3.0
         version: link:../sdk
+      '@poolse/theme':
+        specifier: ^3.3.0
+        version: link:../theme
       expo-clipboard:
         specifier: '*'
         version: 56.0.4(expo@56.0.8)(react-native@0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@19.2.15)(react@19.2.6))(react@19.2.6)

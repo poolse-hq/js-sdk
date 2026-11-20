@@ -14,7 +14,7 @@ import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { ReactionStrip } from './Reactions.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 import { callLogDisplayFor, useReactions, useUser } from '@poolse/react';
 
 // Swipe-to-reply triggers at this much horizontal pull. iOS / WhatsApp
@@ -128,7 +128,7 @@ function BubbleMessageRow({
   onSenderPress,
   onAvatarPress,
 }: MessageRowProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const isSelf = meId !== null && msg.sender_id === meId;
   const [actionsOpen, setActionsOpen] = useState(false);
 
@@ -304,11 +304,11 @@ function BubbleMessageRow({
               {
                 opacity: replyIconOpacity,
                 transform: [{ scale: replyIconScale }],
-                backgroundColor: theme.colors.surface2,
+                backgroundColor: theme.colors.surfaceAlt,
               },
             ]}
           >
-            <PoolseIcon name="reply" size={16} color={theme.colors.brand} />
+            <PoolseIcon name="reply" size={16} color={theme.colors.accent} />
           </Animated.View>
         ) : null}
 
@@ -354,7 +354,7 @@ function BubbleMessageRow({
 
         {threads && (msg.reply_count ?? 0) > 0 && onOpenThread ? (
           <Pressable onPress={onOpenThread} style={styles.threadPill}>
-            <Text style={[styles.threadPillText, { color: theme.colors.brand }]}>
+            <Text style={[styles.threadPillText, { color: theme.colors.accent }]}>
               💬 {msg.reply_count} {msg.reply_count === 1 ? 'reply' : 'replies'}
             </Text>
           </Pressable>

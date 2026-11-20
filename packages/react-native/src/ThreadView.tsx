@@ -21,7 +21,7 @@ import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { UploadProvider } from './internal/uploadContext.js';
 import { useDismissableSheet } from './internal/useDismissableSheet.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface ThreadViewProps {
   visible: boolean;
@@ -99,7 +99,7 @@ function ThreadSheet({
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const { me } = useMe();
   const meId = me?.id ?? null;
   const {
@@ -191,7 +191,7 @@ function ThreadSheet({
           styles.sheet,
           {
             height: sheetHeight,
-            backgroundColor: theme.colors.paper,
+            backgroundColor: theme.colors.background,
             borderTopLeftRadius: theme.radii.xl,
             borderTopRightRadius: theme.radii.xl,
             paddingLeft: insets.left,
@@ -206,23 +206,20 @@ function ThreadSheet({
             pill on its own was nearly invisible to fingers. */}
         <View {...panHandlers}>
           <View style={styles.dragHandle}>
-            <View style={[styles.dragPill, { backgroundColor: theme.colors.ink3 }]} />
+            <View style={[styles.dragPill, { backgroundColor: theme.colors.textSubtle }]} />
           </View>
 
           <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
             <Pressable
               onPress={onClose}
               hitSlop={16}
-              style={[styles.closeBtn, { backgroundColor: theme.colors.surface2 }]}
+              style={[styles.closeBtn, { backgroundColor: theme.colors.surfaceAlt }]}
               accessibilityLabel="Close thread"
             >
-              <PoolseIcon name="close" size={18} color={theme.colors.ink} />
+              <PoolseIcon name="close" size={18} color={theme.colors.text} />
             </Pressable>
             <Text
-              style={[
-                styles.title,
-                { color: theme.colors.ink, fontFamily: theme.type.fontDisplay },
-              ]}
+              style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.display }]}
             >
               Thread
             </Text>
@@ -239,7 +236,7 @@ function ThreadSheet({
           behavior="padding"
           keyboardVerticalOffset={gutter}
         >
-          <View style={[styles.rootPreview, { backgroundColor: theme.colors.surface2 }]}>
+          <View style={[styles.rootPreview, { backgroundColor: theme.colors.surfaceAlt }]}>
             {rootRow}
           </View>
 

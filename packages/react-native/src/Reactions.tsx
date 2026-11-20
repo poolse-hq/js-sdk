@@ -4,7 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 const DEFAULT_EMOJIS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
 
@@ -22,7 +22,7 @@ export function ReactionStrip({
   meId,
   initialReactions,
 }: ReactionStripProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const { reactions, addReaction, removeReaction } = useReactions(messageId, {
     conversationId,
     currentUserId: meId,
@@ -43,8 +43,8 @@ export function ReactionStrip({
             style={[
               styles.chip,
               {
-                backgroundColor: meReacted ? theme.colors.brandSoft : theme.colors.surface2,
-                borderColor: meReacted ? theme.colors.brand : theme.colors.border,
+                backgroundColor: meReacted ? theme.colors.accentSoft : theme.colors.surfaceAlt,
+                borderColor: meReacted ? theme.colors.accent : theme.colors.border,
                 borderWidth: meReacted ? 1.5 : 1,
                 transform: meReacted ? [{ scale: 1.04 }] : undefined,
               },
@@ -55,7 +55,7 @@ export function ReactionStrip({
               style={[
                 styles.count,
                 {
-                  color: meReacted ? theme.colors.brand : theme.colors.ink2,
+                  color: meReacted ? theme.colors.accent : theme.colors.textMuted,
                   fontWeight: meReacted ? '700' : '600',
                 },
               ]}
@@ -83,7 +83,7 @@ export function ReactionPicker({
   onPick,
   emojis = DEFAULT_EMOJIS,
 }: ReactionPickerProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const insets = useSafeInsets();
   return (
     <Modal

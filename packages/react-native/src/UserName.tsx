@@ -1,7 +1,7 @@
 import { Text } from 'react-native';
 import { useUser } from '@poolse/react';
 
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface UserNameProps {
   /** The user's external_id. Pass null to render the fallback. */
@@ -17,9 +17,9 @@ export interface UserNameProps {
  * with caller-overridable + fallback fallbacks. Renders a `<Text>`.
  */
 export function UserName({ externalId, fallback, labelFor }: UserNameProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const name = useDisplayName(externalId, labelFor) ?? fallback ?? externalId ?? '';
-  return <Text style={{ color: theme.colors.ink, fontFamily: theme.type.fontBody }}>{name}</Text>;
+  return <Text style={{ color: theme.colors.text, fontFamily: theme.fonts.body }}>{name}</Text>;
 }
 
 /**

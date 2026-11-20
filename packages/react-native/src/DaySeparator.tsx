@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface DaySeparatorProps {
   label: string;
@@ -13,14 +13,14 @@ export interface DaySeparatorProps {
  * ("Today" / "Yesterday" / weekday / "26 May 2024").
  */
 export function DaySeparator({ label }: DaySeparatorProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   return (
     <View style={styles.wrap}>
       <View
         style={[
           styles.chip,
           {
-            backgroundColor: theme.colors.surface2,
+            backgroundColor: theme.colors.surfaceAlt,
             borderColor: theme.colors.border,
           },
         ]}
@@ -29,8 +29,8 @@ export function DaySeparator({ label }: DaySeparatorProps) {
           style={[
             styles.label,
             {
-              color: theme.colors.ink2,
-              fontFamily: theme.type.fontBody,
+              color: theme.colors.textMuted,
+              fontFamily: theme.fonts.body,
             },
           ]}
         >

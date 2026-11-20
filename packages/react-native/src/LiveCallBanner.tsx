@@ -2,7 +2,7 @@ import type { LiveCall } from '@poolse/sdk';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface LiveCallBannerProps {
   call: LiveCall;
@@ -18,7 +18,7 @@ export interface LiveCallBannerProps {
  * to place it elsewhere (with `useLiveCall`).
  */
 export function LiveCallBanner({ call, inCall, onJoin }: LiveCallBannerProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const what =
     call.kind === 'room'
       ? call.media === 'video'
@@ -46,10 +46,10 @@ export function LiveCallBanner({ call, inCall, onJoin }: LiveCallBannerProps) {
         label={null}
       />
       <View style={styles.text}>
-        <Text style={[styles.title, { fontFamily: theme.type.fontBody }]} numberOfLines={1}>
+        <Text style={[styles.title, { fontFamily: theme.fonts.body }]} numberOfLines={1}>
           {what}
         </Text>
-        <Text style={[styles.meta, { fontFamily: theme.type.fontBody }]} numberOfLines={1}>
+        <Text style={[styles.meta, { fontFamily: theme.fonts.body }]} numberOfLines={1}>
           {who}
         </Text>
       </View>
@@ -61,10 +61,7 @@ export function LiveCallBanner({ call, inCall, onJoin }: LiveCallBannerProps) {
         style={({ pressed }) => [styles.join, pressed && styles.joinPressed]}
       >
         <Text
-          style={[
-            styles.joinText,
-            { color: theme.colors.success, fontFamily: theme.type.fontBody },
-          ]}
+          style={[styles.joinText, { color: theme.colors.success, fontFamily: theme.fonts.body }]}
         >
           Join
         </Text>

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View, Easing } from 'react-native';
 
 import { useDisplayName } from './UserName.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface TypingIndicatorProps {
   /** Set of `external_id`s currently typing — what `useTyping` returns. */
@@ -34,7 +34,7 @@ export function TypingIndicator({ typing, labelFor }: TypingIndicatorProps) {
 }
 
 function TypingDots() {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const a = useRef(new Animated.Value(0)).current;
   const b = useRef(new Animated.Value(0)).current;
   const c = useRef(new Animated.Value(0)).current;
@@ -67,7 +67,7 @@ function TypingDots() {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: theme.colors.ink3,
+    backgroundColor: theme.colors.textSubtle,
     marginHorizontal: 2,
     transform: [
       {
@@ -93,7 +93,7 @@ function TypingLabel({
   ids: string[];
   labelFor?: (externalId: string) => string;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const id1 = ids[0] ?? null;
   const id2 = ids[1] ?? null;
   const name1 = useDisplayName(id1, labelFor);
@@ -107,7 +107,7 @@ function TypingLabel({
         : `${ids.length} people are typing`;
 
   return (
-    <Text style={[styles.label, { color: theme.colors.ink2, fontFamily: theme.type.fontBody }]}>
+    <Text style={[styles.label, { color: theme.colors.textMuted, fontFamily: theme.fonts.body }]}>
       {text}
     </Text>
   );

@@ -16,7 +16,7 @@ import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { useDismissableSheet } from './internal/useDismissableSheet.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface GroupDetailsSheetProps {
   visible: boolean;
@@ -49,7 +49,7 @@ export function GroupDetailsSheet({
   avatarFor,
   canRemoveMember,
 }: GroupDetailsSheetProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const { conversation } = useConversation(conversationId);
   const { members } = useMembers(conversationId);
   const insets = useSafeInsets();
@@ -83,7 +83,7 @@ export function GroupDetailsSheet({
           style={[
             styles.sheet,
             {
-              backgroundColor: theme.colors.paper,
+              backgroundColor: theme.colors.background,
               borderTopLeftRadius: theme.radii.xl,
               borderTopRightRadius: theme.radii.xl,
               // Header stays below the status bar even on short screens.
@@ -99,22 +99,22 @@ export function GroupDetailsSheet({
           {/* Pan handlers spread on the drag-pill region so list
               scrolling underneath isn't affected. */}
           <View {...panHandlers} style={styles.dragHandle}>
-            <View style={[styles.dragPill, { backgroundColor: theme.colors.ink3 }]} />
+            <View style={[styles.dragPill, { backgroundColor: theme.colors.textSubtle }]} />
           </View>
 
           <View style={styles.headerRow}>
             <Pressable
               onPress={onClose}
               hitSlop={16}
-              style={[styles.closeBtn, { backgroundColor: theme.colors.surface2 }]}
+              style={[styles.closeBtn, { backgroundColor: theme.colors.surfaceAlt }]}
               accessibilityLabel="Close"
             >
-              <PoolseIcon name="close" size={18} color={theme.colors.ink} />
+              <PoolseIcon name="close" size={18} color={theme.colors.text} />
             </Pressable>
             <Text
               style={[
                 styles.headerTitle,
-                { color: theme.colors.ink, fontFamily: theme.type.fontDisplay },
+                { color: theme.colors.text, fontFamily: theme.fonts.display },
               ]}
             >
               Group details
@@ -124,15 +124,12 @@ export function GroupDetailsSheet({
           <View style={styles.summary}>
             <Avatar src={null} name={title} seed={conversationId} size="lg" />
             <Text
-              style={[
-                styles.title,
-                { color: theme.colors.ink, fontFamily: theme.type.fontDisplay },
-              ]}
+              style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.display }]}
               numberOfLines={1}
             >
               {title}
             </Text>
-            <Text style={[styles.subtitle, { color: theme.colors.ink3 }]}>{subtitle}</Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]}>{subtitle}</Text>
           </View>
 
           <View style={[styles.divider, { backgroundColor: theme.colors.border }]} />
@@ -141,7 +138,7 @@ export function GroupDetailsSheet({
             <Text
               style={[
                 styles.sectionLabel,
-                { color: theme.colors.ink2, fontFamily: theme.type.fontBody },
+                { color: theme.colors.textMuted, fontFamily: theme.fonts.body },
               ]}
             >
               Members

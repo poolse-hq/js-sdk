@@ -3,7 +3,7 @@ import { useAttachmentUrl } from '@poolse/react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface AttachmentPreviewProps {
   attachment: Attachment;
@@ -25,7 +25,7 @@ export function AttachmentPreview({
   maxWidth = 280,
   tone = 'default',
 }: AttachmentPreviewProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const isImage = (attachment.content_type ?? '').startsWith('image/');
   const { url } = useAttachmentUrl(attachment.id);
 
@@ -39,7 +39,7 @@ export function AttachmentPreview({
               width: maxWidth,
               height: 200,
               borderRadius: theme.radii.md,
-              backgroundColor: theme.colors.surface2,
+              backgroundColor: theme.colors.surfaceAlt,
             }}
             resizeMode="cover"
             accessible
@@ -53,7 +53,7 @@ export function AttachmentPreview({
                 width: maxWidth,
                 height: 200,
                 borderRadius: theme.radii.md,
-                backgroundColor: theme.colors.surface2,
+                backgroundColor: theme.colors.surfaceAlt,
               },
             ]}
           />
@@ -63,8 +63,8 @@ export function AttachmentPreview({
   }
 
   const onBrand = tone === 'onBrand';
-  const ink = onBrand ? theme.colors.onBrand : theme.colors.ink;
-  const inkSoft = onBrand ? theme.colors.onBrand : theme.colors.ink3;
+  const ink = onBrand ? theme.colors.ownBubbleText : theme.colors.text;
+  const inkSoft = onBrand ? theme.colors.ownBubbleText : theme.colors.textSubtle;
 
   return (
     <Pressable
@@ -73,16 +73,16 @@ export function AttachmentPreview({
       style={[
         styles.fileCard,
         {
-          backgroundColor: onBrand ? 'rgba(255,255,255,0.18)' : theme.colors.surface2,
+          backgroundColor: onBrand ? 'rgba(255,255,255,0.18)' : theme.colors.surfaceAlt,
           borderColor: onBrand ? 'transparent' : theme.colors.border,
           borderRadius: theme.radii.md,
         },
       ]}
     >
-      <PoolseIcon name="attachment" size={18} color={onBrand ? ink : theme.colors.ink2} />
+      <PoolseIcon name="attachment" size={18} color={onBrand ? ink : theme.colors.textMuted} />
       <View style={{ flex: 1, marginLeft: 8 }}>
         <Text
-          style={[styles.fileName, { color: ink, fontFamily: theme.type.fontBody }]}
+          style={[styles.fileName, { color: ink, fontFamily: theme.fonts.body }]}
           numberOfLines={1}
         >
           {attachment.original_filename ?? 'file'}

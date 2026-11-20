@@ -16,5 +16,6 @@ export default defineConfig({
     'expo-document-picker',
     '@poolse/sdk',
     '@poolse/react',
+    '@poolse/theme',
   ],
 });

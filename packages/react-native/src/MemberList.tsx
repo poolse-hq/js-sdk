@@ -5,7 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 
 import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface MemberListProps {
   conversationId: Uuid;
@@ -26,7 +26,7 @@ export function MemberList({
   renderItem,
   emptyState,
 }: MemberListProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const { members, loading, error, removeMember } = useMembers(conversationId);
   const { online: presenceOnline } = usePresence(
     onlineExternalIds === undefined ? conversationId : '',
@@ -35,20 +35,22 @@ export function MemberList({
 
   if (loading && members.length === 0) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.paper }]}>
-        <ActivityIndicator color={theme.colors.brand} />
+      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator color={theme.colors.accent} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.paper }]}>
-        <Text style={{ color: theme.colors.error, fontFamily: theme.type.fontBody }}>
+      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
+        <Text style={{ color: theme.colors.danger, fontFamily: theme.fonts.body }}>
           Failed to load members.
         </Text>
         {error.message ? (
-          <Text style={[styles.errorDetail, { color: theme.colors.ink3 }]}>{error.message}</Text>
+          <Text style={[styles.errorDetail, { color: theme.colors.textSubtle }]}>
+            {error.message}
+          </Text>
         ) : null}
       </View>
     );
@@ -56,9 +58,9 @@ export function MemberList({
 
   if (members.length === 0) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.paper }]}>
+      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
         {typeof emptyState === 'string' || emptyState == null ? (
-          <Text style={{ color: theme.colors.ink3, fontFamily: theme.type.fontBody }}>
+          <Text style={{ color: theme.colors.textSubtle, fontFamily: theme.fonts.body }}>
             {(emptyState as string) ?? 'No members.'}
           </Text>
         ) : (
@@ -72,7 +74,7 @@ export function MemberList({
     <FlatList
       data={members}
       keyExtractor={(m) => m.user_id}
-      style={{ backgroundColor: theme.colors.paper }}
+      style={{ backgroundColor: theme.colors.background }}
       renderItem={({ item }) => {
         if (renderItem) return <>{renderItem(item)}</>;
         const isOnline = effectiveOnline.has(item.external_id);
@@ -107,7 +109,7 @@ function MemberRow({
   avatarFor?: (externalId: string) => string | null;
   onRemove?: () => void;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   // Priority: explicit prop > SDK userResolver > externalId fallback.
   // The previous version used `labelFor?.(id) ?? id` and skipped the
   // resolver entirely when labelFor wasn't passed, defeating the
@@ -121,16 +123,16 @@ function MemberRow({
       <Avatar src={avatarUrl} name={name} seed={externalId} online={online} size="md" />
       <View style={styles.body}>
         <Text
-          style={[styles.name, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
+          style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
           numberOfLines={1}
         >
           {name}
         </Text>
-        <Text style={[styles.role, { color: theme.colors.ink3 }]}>{role}</Text>
+        <Text style={[styles.role, { color: theme.colors.textSubtle }]}>{role}</Text>
       </View>
       {onRemove ? (
         <Pressable onPress={onRemove} hitSlop={8} style={styles.removeBtn}>
-          <PoolseIcon name="close" size={16} color={theme.colors.ink2} />
+          <PoolseIcon name="close" size={16} color={theme.colors.textMuted} />
         </Pressable>
       ) : null}
     </View>

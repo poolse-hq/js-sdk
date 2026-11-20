@@ -20,7 +20,7 @@ import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { useSharedUpload, useUploadPreview } from './internal/uploadContext.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface AttachmentPickerProps {
   visible: boolean;
@@ -61,7 +61,7 @@ export function AttachmentPicker({
   onPickInputs,
   camera = true,
 }: AttachmentPickerProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const insets = useSafeInsets();
   // Shared queue (via UploadProvider) so the composer sees these
   // uploads and can include them in the next send. Falls back to a
@@ -118,20 +118,20 @@ export function AttachmentPicker({
         >
           {camera ? (
             <Pressable style={styles.item} onPress={() => pickFromKind('camera')}>
-              <PoolseIcon name="camera" size={20} color={theme.colors.ink2} />
-              <Text style={[styles.itemText, { color: theme.colors.ink }]}>Camera</Text>
+              <PoolseIcon name="camera" size={20} color={theme.colors.textMuted} />
+              <Text style={[styles.itemText, { color: theme.colors.text }]}>Camera</Text>
             </Pressable>
           ) : null}
           <Pressable style={styles.item} onPress={() => pickFromKind('image')}>
-            <PoolseIcon name="image" size={20} color={theme.colors.ink2} />
-            <Text style={[styles.itemText, { color: theme.colors.ink }]}>Photo or video</Text>
+            <PoolseIcon name="image" size={20} color={theme.colors.textMuted} />
+            <Text style={[styles.itemText, { color: theme.colors.text }]}>Photo or video</Text>
           </Pressable>
           <Pressable style={styles.item} onPress={() => pickFromKind('document')}>
-            <PoolseIcon name="attachment" size={20} color={theme.colors.ink2} />
-            <Text style={[styles.itemText, { color: theme.colors.ink }]}>File</Text>
+            <PoolseIcon name="attachment" size={20} color={theme.colors.textMuted} />
+            <Text style={[styles.itemText, { color: theme.colors.text }]}>File</Text>
           </Pressable>
           <Pressable style={styles.cancel} onPress={onClose}>
-            <Text style={[styles.itemText, { color: theme.colors.brand }]}>Cancel</Text>
+            <Text style={[styles.itemText, { color: theme.colors.accent }]}>Cancel</Text>
           </Pressable>
         </View>
       </Pressable>

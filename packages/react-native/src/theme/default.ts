@@ -1,3 +1,5 @@
+import type { NativeTheme } from '@poolse/theme';
+
 import type { PoolseRNTheme, ThemeShadows } from './types.js';
 
 // Values mirror the --poolse-* CSS variables in @poolse/react-ui's
@@ -150,3 +152,108 @@ export const defaultDarkTheme: PoolseRNTheme = {
   spacing,
   shadows: darkShadows,
 };
+
+// ── Legacy shape ↔ @poolse/theme tokens ───────────────────────
+// Components read the @poolse/theme token names (`useTheme()`). These
+// two keep `<PoolseTheme theme={{ colors: { brand } }}>` overrides and
+// `usePoolseTheme()` working on top of them.
+
+/** A legacy-shaped theme as `useTheme()` tokens. */
+export function legacyToNative(l: PoolseRNTheme): NativeTheme {
+  const c = l.colors;
+  return {
+    id: 'default',
+    name: 'Default',
+    scheme: l.mode,
+    colors: {
+      background: c.paper,
+      surface: c.surface,
+      surfaceAlt: c.surface2,
+      text: c.ink,
+      textMuted: c.ink2,
+      textSubtle: c.ink3,
+      border: c.border,
+      accent: c.brand,
+      accentText: c.onBrand,
+      accentSoft: c.brandSoft,
+      accentStrong: c.brandStrong,
+      // Links in other people's bubbles have always been brand-coloured.
+      link: c.brand,
+      sidebar: c.surface2,
+      sidebarText: c.ink,
+      sidebarActive: c.brandSoft,
+      sidebarActiveText: c.brandStrong,
+      badge: c.unreadPill,
+      badgeText: c.unreadPillText,
+      mention: c.brandSoft,
+      mentionText: c.brandStrong,
+      danger: c.error,
+      warning: c.warning,
+      success: c.success,
+      info: c.info,
+      presence: c.presence,
+      ownBubble: c.selfBubble,
+      ownBubbleText: c.selfBubbleText,
+      otherBubble: c.otherBubble,
+      otherBubbleText: c.otherBubbleText,
+      overlay: '#00000073',
+    },
+    fonts: {
+      body: l.type.fontBody,
+      display: l.type.fontDisplay,
+      mono: l.type.fontMono,
+      sizeXs: 11,
+      sizeSm: 13,
+      sizeMd: l.type.bodySize,
+      sizeLg: 17,
+      sizeXl: 20,
+      lineHeight: l.type.lineHeight,
+    },
+    radii: { ...l.radii },
+    spacing: { ...l.spacing },
+    shadows: { sm: l.shadows.sm, md: l.shadows.md, lg: l.shadows.lg },
+  };
+}
+
+/** `useTheme()` tokens in the legacy shape, for `usePoolseTheme()`. */
+export function nativeToLegacy(n: NativeTheme): PoolseRNTheme {
+  const c = n.colors;
+  return {
+    mode: n.scheme,
+    colors: {
+      brand: c.accent,
+      brandStrong: c.accentStrong,
+      brandSoft: c.accentSoft,
+      onBrand: c.accentText,
+      paper: c.background,
+      surface: c.surface,
+      surface2: c.surfaceAlt,
+      ink: c.text,
+      ink2: c.textMuted,
+      ink3: c.textSubtle,
+      border: c.border,
+      presence: c.presence,
+      success: c.success,
+      warning: c.warning,
+      error: c.danger,
+      info: c.info,
+      selfBubble: c.ownBubble,
+      selfBubbleText: c.ownBubbleText,
+      otherBubble: c.otherBubble,
+      otherBubbleText: c.otherBubbleText,
+      unreadPill: c.badge,
+      unreadPillText: c.badgeText,
+    },
+    type: {
+      ...type,
+      fontDisplay: n.fonts.display,
+      fontBody: n.fonts.body,
+      fontMono: n.fonts.mono,
+      bodySize: n.fonts.sizeMd,
+      lineHeight: n.fonts.lineHeight,
+    },
+    radii: { ...n.radii },
+    spacing: { ...n.spacing },
+    shadows: { ...n.shadows },
+  };
+}

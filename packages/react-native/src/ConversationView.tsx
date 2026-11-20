@@ -38,7 +38,7 @@ import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
 import { latestMarkableId } from './internal/messageFocus.js';
 import { UploadProvider } from './internal/uploadContext.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 // Two messages from the same sender within this window collapse
 // into a visual cluster (tight margin, grouped bubble corners).
@@ -186,7 +186,7 @@ export function ConversationView({
   onJoinCall,
   currentCallId = null,
 }: ConversationViewProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const showComposer = composer && !readOnly;
   // Without a composer there's nowhere to quote into or attach to.
   const canQuote = quotations && showComposer;
@@ -433,7 +433,7 @@ export function ConversationView({
         />
       );
       if (msg.id !== highlightId) return row;
-      return <View style={{ backgroundColor: theme.colors.brandSoft }}>{row}</View>;
+      return <View style={{ backgroundColor: theme.colors.accentSoft }}>{row}</View>;
     },
     [
       onCallBack,
@@ -441,7 +441,7 @@ export function ConversationView({
       onSenderPress,
       onAvatarPress,
       highlightId,
-      theme.colors.brandSoft,
+      theme.colors.accentSoft,
       canQuote,
       renderMessage,
       meId,
@@ -558,7 +558,7 @@ export function ConversationView({
         //
         // Android uses `height` — works there because the layout
         // recomputes from the Android window resize.
-        style={[styles.root, { backgroundColor: theme.colors.paper }]}
+        style={[styles.root, { backgroundColor: theme.colors.background }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={keyboardOffset}
       >
@@ -567,7 +567,7 @@ export function ConversationView({
           <Text
             style={[
               styles.notice,
-              { color: theme.colors.ink2, backgroundColor: theme.colors.surface2 },
+              { color: theme.colors.textMuted, backgroundColor: theme.colors.surfaceAlt },
             ]}
             accessibilityRole="alert"
           >
@@ -599,7 +599,7 @@ export function ConversationView({
                   stream.status === 'failed' ? (
                     <Text
                       key={stream.id}
-                      style={[styles.streamFailed, { color: theme.colors.ink3 }]}
+                      style={[styles.streamFailed, { color: theme.colors.textSubtle }]}
                       accessibilityRole="alert"
                     >
                       {stream.error
@@ -635,7 +635,7 @@ export function ConversationView({
               Tap-outside cancels. */}
           {editingId ? (
             <Pressable
-              style={styles.editBackdrop}
+              style={[styles.editBackdrop, { backgroundColor: theme.colors.overlay }]}
               onPress={() => setEditingId(null)}
               accessibilityLabel="Cancel editing"
             />
@@ -725,7 +725,6 @@ const styles = StyleSheet.create({
   },
   editBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
     // Sit above message rows by default but below any row that
     // explicitly elevates itself (MessageRow bumps zIndex/elevation
     // when isEditing is true).

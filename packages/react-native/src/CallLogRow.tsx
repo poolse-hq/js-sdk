@@ -3,7 +3,7 @@ import { callLogDisplayFor } from '@poolse/react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface CallLogRowProps {
   /** The call-log message. Rows that aren't call logs render nothing. */
@@ -27,14 +27,14 @@ export interface CallLogRowProps {
  * `<MessageRow>` renders this automatically for call-log messages.
  */
 export function CallLogRow({ msg, meId, onCallBack }: CallLogRowProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const display = callLogDisplayFor(msg, meId);
   if (!display) return null;
 
-  const accent = display.missed ? theme.colors.error : theme.colors.ink3;
+  const accent = display.missed ? theme.colors.danger : theme.colors.textSubtle;
   const time = formatTime(msg.inserted_at);
   const label = [display.title, display.detail, time].filter(Boolean).join(', ');
-  const metaStyle = [styles.meta, { color: theme.colors.ink3, fontFamily: theme.type.fontBody }];
+  const metaStyle = [styles.meta, { color: theme.colors.textSubtle, fontFamily: theme.fonts.body }];
 
   return (
     <View style={styles.wrap} accessible accessibilityLabel={label}>
@@ -42,7 +42,7 @@ export function CallLogRow({ msg, meId, onCallBack }: CallLogRowProps) {
         style={[
           styles.chip,
           {
-            backgroundColor: theme.colors.surface2,
+            backgroundColor: theme.colors.surfaceAlt,
             borderColor: theme.colors.border,
           },
         ]}
@@ -52,8 +52,8 @@ export function CallLogRow({ msg, meId, onCallBack }: CallLogRowProps) {
           style={[
             styles.title,
             {
-              color: display.missed ? theme.colors.error : theme.colors.ink2,
-              fontFamily: theme.type.fontBody,
+              color: display.missed ? theme.colors.danger : theme.colors.textMuted,
+              fontFamily: theme.fonts.body,
             },
           ]}
           numberOfLines={1}
@@ -74,7 +74,7 @@ export function CallLogRow({ msg, meId, onCallBack }: CallLogRowProps) {
           <Text
             style={[
               styles.callBackText,
-              { color: theme.colors.brand, fontFamily: theme.type.fontBody },
+              { color: theme.colors.accent, fontFamily: theme.fonts.body },
             ]}
           >
             Call back

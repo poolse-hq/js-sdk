@@ -5,11 +5,13 @@
 // TextInput / Pressable / Image / Modal / KeyboardAvoidingView).
 //
 // Theming flows through a JS object via <PoolseTheme>; no CSS
-// variables. Override any token by passing a partial theme:
+// variables. Pick a @poolse/theme theme and scheme:
 //
-//     <PoolseTheme theme={{ colors: { brand: '#ff5733' } }}>
+//     <PoolseTheme theme="ocean" colorScheme="system">
 //       <ConversationView conversationId={id} />
 //     </PoolseTheme>
+//
+// Components read the tokens with `useTheme()`.
 
 // ── Inbox (composed list + detail with navigation) ────────────
 export {
@@ -65,7 +67,7 @@ export {
 export { Avatar, type AvatarProps } from './primitives/Avatar.js';
 
 // ── Theme ─────────────────────────────────────────────────────
-export { PoolseTheme, usePoolseTheme, type PoolseThemeProps } from './theme/PoolseTheme.js';
+export { PoolseTheme, useTheme, type PoolseThemeProps } from './theme/PoolseTheme.js';
 export { defaultLightTheme, defaultDarkTheme } from './theme/default.js';
 export type {
   PoolseRNTheme,

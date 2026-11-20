@@ -28,7 +28,7 @@ import { ConversationView } from './ConversationView.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { Avatar } from './primitives/Avatar.js';
 import { UserPickerSheet, type InboxUser } from './internal/UserPickerSheet.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export type { InboxUser } from './internal/UserPickerSheet.js';
 
@@ -123,7 +123,7 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
       keyboardOffset = 0,
     } = props;
 
-    const theme = usePoolseTheme();
+    const theme = useTheme();
     const { width: screenWidth } = useWindowDimensions();
     const { me } = useMe();
     const {
@@ -313,7 +313,7 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
     );
 
     return (
-      <View style={[styles.root, { backgroundColor: theme.colors.paper }]}>
+      <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
         {/* LIST PANE */}
         <Animated.View
           style={[StyleSheet.absoluteFillObject, { transform: [{ translateX: listTransform }] }]}
@@ -331,7 +331,7 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
             <Text
               style={[
                 styles.listTitle,
-                { color: theme.colors.ink, fontFamily: theme.type.fontDisplay },
+                { color: theme.colors.text, fontFamily: theme.fonts.display },
               ]}
             >
               {title}
@@ -449,7 +449,7 @@ function HeaderIconButton({
   onPress: () => void;
   label: string;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   return (
     <Pressable
       onPress={onPress}
@@ -458,11 +458,11 @@ function HeaderIconButton({
       style={({ pressed }) => [
         styles.iconBtn,
         {
-          backgroundColor: pressed ? theme.colors.surface2 : 'transparent',
+          backgroundColor: pressed ? theme.colors.surfaceAlt : 'transparent',
         },
       ]}
     >
-      <PoolseIcon name={icon} size={20} color={theme.colors.ink} />
+      <PoolseIcon name={icon} size={20} color={theme.colors.text} />
     </Pressable>
   );
 }
@@ -486,7 +486,7 @@ function DefaultConversationRow({
   avatarFor?: (externalId: string) => string | null;
   onPress: () => void;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
 
   // For directs, derive display from the OTHER member's external_id
   // (added to Conversation.member_external_ids by the backend). For
@@ -520,7 +520,7 @@ function DefaultConversationRow({
       style={[
         styles.row,
         {
-          backgroundColor: selected ? theme.colors.surface2 : 'transparent',
+          backgroundColor: selected ? theme.colors.surfaceAlt : 'transparent',
           borderBottomColor: theme.colors.border,
         },
       ]}
@@ -532,20 +532,20 @@ function DefaultConversationRow({
       )}
       <View style={styles.rowBody}>
         <Text
-          style={[styles.rowTitle, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
+          style={[styles.rowTitle, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
           numberOfLines={1}
         >
           {title}
         </Text>
-        <Text style={[styles.rowSubtitle, { color: theme.colors.ink3 }]} numberOfLines={1}>
+        <Text style={[styles.rowSubtitle, { color: theme.colors.textSubtle }]} numberOfLines={1}>
           {formatCallLogPreview(conv.last_message_preview, meId) ??
             conv.last_message_preview ??
             (isDirect ? (otherExtId ?? '') : `${(conv.member_external_ids ?? []).length} members`)}
         </Text>
       </View>
       {unread > 0 ? (
-        <View style={[styles.unreadPill, { backgroundColor: theme.colors.unreadPill }]}>
-          <Text style={[styles.unreadText, { color: theme.colors.unreadPillText }]}>
+        <View style={[styles.unreadPill, { backgroundColor: theme.colors.badge }]}>
+          <Text style={[styles.unreadText, { color: theme.colors.badgeText }]}>
             {unread > 99 ? '99+' : String(unread)}
           </Text>
         </View>

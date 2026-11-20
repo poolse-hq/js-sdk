@@ -8,7 +8,7 @@ import { UploadQueueStrip } from './UploadQueueStrip.js';
 import { useSharedUpload } from './internal/uploadContext.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { useKeyboardOpen } from './internal/useKeyboardOpen.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface MessageComposerProps {
   /**
@@ -87,7 +87,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     },
     ref,
   ) {
-    const theme = usePoolseTheme();
+    const theme = useTheme();
     const inputRef = useRef<TextInput>(null);
     const [value, setValue] = useState('');
     const [sending, setSending] = useState(false);
@@ -232,7 +232,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
               style={styles.iconBtn}
               accessibilityLabel="Attach file"
             >
-              <PoolseIcon name="attachment" size={22} color={theme.colors.ink2} />
+              <PoolseIcon name="attachment" size={22} color={theme.colors.textMuted} />
             </Pressable>
           ) : null}
 
@@ -244,17 +244,17 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
               onTyping?.();
             }}
             placeholder={placeholder}
-            placeholderTextColor={theme.colors.ink3}
+            placeholderTextColor={theme.colors.textSubtle}
             multiline
             editable={!disabled}
             style={[
               styles.input,
               {
-                color: theme.colors.ink,
-                backgroundColor: theme.colors.surface2,
+                color: theme.colors.text,
+                backgroundColor: theme.colors.surfaceAlt,
                 borderRadius: theme.radii.lg,
-                fontFamily: theme.type.fontBody,
-                fontSize: theme.type.bodySize,
+                fontFamily: theme.fonts.body,
+                fontSize: theme.fonts.sizeMd,
               },
             ]}
           />
@@ -265,13 +265,13 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             style={[
               styles.sendBtn,
               {
-                backgroundColor: submitDisabled ? theme.colors.ink3 : theme.colors.brand,
+                backgroundColor: submitDisabled ? theme.colors.textSubtle : theme.colors.accent,
                 opacity: submitDisabled ? 0.6 : 1,
               },
             ]}
             accessibilityLabel="Send message"
           >
-            <PoolseIcon name="send" size={18} color={theme.colors.onBrand} />
+            <PoolseIcon name="send" size={18} color={theme.colors.accentText} />
           </Pressable>
         </View>
       </View>
@@ -280,26 +280,26 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
 );
 
 function EditChip({ message, onCancel }: { message: Message; onCancel?: () => void }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   return (
     <View
       style={[
         styles.replyChip,
         {
-          backgroundColor: theme.colors.surface2,
-          borderLeftColor: theme.colors.brand,
+          backgroundColor: theme.colors.surfaceAlt,
+          borderLeftColor: theme.colors.accent,
         },
       ]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={[styles.replyName, { color: theme.colors.brand }]}>Editing message</Text>
-        <Text style={[styles.replyBody, { color: theme.colors.ink2 }]} numberOfLines={1}>
+        <Text style={[styles.replyName, { color: theme.colors.accent }]}>Editing message</Text>
+        <Text style={[styles.replyBody, { color: theme.colors.textMuted }]} numberOfLines={1}>
           {message.body ?? '…'}
         </Text>
       </View>
       {onCancel ? (
         <Pressable onPress={onCancel} hitSlop={8} style={styles.replyCancel}>
-          <PoolseIcon name="close" size={16} color={theme.colors.ink2} />
+          <PoolseIcon name="close" size={16} color={theme.colors.textMuted} />
         </Pressable>
       ) : null}
     </View>
@@ -315,7 +315,7 @@ function ReplyChip({
   labelFor?: (externalId: string) => string;
   onCancel?: () => void;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   // Priority: explicit prop > SDK userResolver > externalId fallback.
   const resolved = useUser(message.sender_external_id);
   const senderName = message.sender_external_id
@@ -328,22 +328,22 @@ function ReplyChip({
       style={[
         styles.replyChip,
         {
-          backgroundColor: theme.colors.surface2,
-          borderLeftColor: theme.colors.brand,
+          backgroundColor: theme.colors.surfaceAlt,
+          borderLeftColor: theme.colors.accent,
         },
       ]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={[styles.replyName, { color: theme.colors.brand }]}>
+        <Text style={[styles.replyName, { color: theme.colors.accent }]}>
           Replying to {senderName}
         </Text>
-        <Text style={[styles.replyBody, { color: theme.colors.ink2 }]} numberOfLines={1}>
+        <Text style={[styles.replyBody, { color: theme.colors.textMuted }]} numberOfLines={1}>
           {message.body ?? '…'}
         </Text>
       </View>
       {onCancel ? (
         <Pressable onPress={onCancel} hitSlop={8} style={styles.replyCancel}>
-          <PoolseIcon name="close" size={16} color={theme.colors.ink2} />
+          <PoolseIcon name="close" size={16} color={theme.colors.textMuted} />
         </Pressable>
       ) : null}
     </View>

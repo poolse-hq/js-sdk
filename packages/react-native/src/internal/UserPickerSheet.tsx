@@ -19,7 +19,7 @@ import { EDGE_TO_EDGE_MODAL } from './edgeToEdge.js';
 import { useSafeInsets } from './safeArea.js';
 import { useDismissableSheet } from './useDismissableSheet.js';
 import { useKeyboardOpen } from './useKeyboardOpen.js';
-import { usePoolseTheme } from '../theme/PoolseTheme.js';
+import { useTheme } from '../theme/PoolseTheme.js';
 
 export interface InboxUser {
   /** The user's external_id (the same id you mint JWTs with). */
@@ -68,7 +68,7 @@ export function UserPickerSheet({
   title,
   searchable,
 }: UserPickerSheetProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [groupName, setGroupName] = useState('');
@@ -158,7 +158,7 @@ export function UserPickerSheet({
           style={[
             styles.sheet,
             {
-              backgroundColor: theme.colors.paper,
+              backgroundColor: theme.colors.background,
               borderTopLeftRadius: theme.radii.xl,
               borderTopRightRadius: theme.radii.xl,
               height: sheetHeight,
@@ -183,22 +183,22 @@ export function UserPickerSheet({
             keyboardVerticalOffset={screenHeight - sheetHeight}
           >
             <View {...panHandlers} style={styles.dragHandle}>
-              <View style={[styles.dragPill, { backgroundColor: theme.colors.ink3 }]} />
+              <View style={[styles.dragPill, { backgroundColor: theme.colors.textSubtle }]} />
             </View>
 
             <View style={styles.header}>
               <Pressable
                 onPress={handleClose}
                 hitSlop={16}
-                style={[styles.closeBtn, { backgroundColor: theme.colors.surface2 }]}
+                style={[styles.closeBtn, { backgroundColor: theme.colors.surfaceAlt }]}
                 accessibilityLabel="Close picker"
               >
-                <PoolseIcon name="close" size={18} color={theme.colors.ink} />
+                <PoolseIcon name="close" size={18} color={theme.colors.text} />
               </Pressable>
               <Text
                 style={[
                   styles.title,
-                  { color: theme.colors.ink, fontFamily: theme.type.fontDisplay },
+                  { color: theme.colors.text, fontFamily: theme.fonts.display },
                 ]}
                 numberOfLines={1}
               >
@@ -212,14 +212,14 @@ export function UserPickerSheet({
                   style={[
                     styles.createBtn,
                     {
-                      backgroundColor: canCreate ? theme.colors.brand : theme.colors.surface2,
+                      backgroundColor: canCreate ? theme.colors.accent : theme.colors.surfaceAlt,
                       opacity: canCreate ? 1 : 0.6,
                     },
                   ]}
                 >
                   <Text
                     style={{
-                      color: canCreate ? theme.colors.onBrand : theme.colors.ink3,
+                      color: canCreate ? theme.colors.accentText : theme.colors.textSubtle,
                       fontWeight: '700',
                       fontSize: 13,
                     }}
@@ -233,17 +233,17 @@ export function UserPickerSheet({
             {isGroup ? (
               <TextInput
                 placeholder="Group name"
-                placeholderTextColor={theme.colors.ink3}
+                placeholderTextColor={theme.colors.textSubtle}
                 value={groupName}
                 onChangeText={setGroupName}
                 style={[
                   styles.groupNameInput,
                   {
-                    color: theme.colors.ink,
-                    backgroundColor: theme.colors.surface2,
+                    color: theme.colors.text,
+                    backgroundColor: theme.colors.surfaceAlt,
                     borderRadius: theme.radii.md,
-                    fontFamily: theme.type.fontBody,
-                    fontSize: theme.type.bodySize,
+                    fontFamily: theme.fonts.body,
+                    fontSize: theme.fonts.sizeMd,
                   },
                 ]}
               />
@@ -252,16 +252,16 @@ export function UserPickerSheet({
             {showSearch ? (
               <TextInput
                 placeholder="Search…"
-                placeholderTextColor={theme.colors.ink3}
+                placeholderTextColor={theme.colors.textSubtle}
                 value={query}
                 onChangeText={setQuery}
                 style={[
                   styles.searchInput,
                   {
-                    color: theme.colors.ink,
-                    backgroundColor: theme.colors.surface2,
+                    color: theme.colors.text,
+                    backgroundColor: theme.colors.surfaceAlt,
                     borderRadius: theme.radii.md,
-                    fontFamily: theme.type.fontBody,
+                    fontFamily: theme.fonts.body,
                     fontSize: 14,
                   },
                 ]}
@@ -275,7 +275,7 @@ export function UserPickerSheet({
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <View style={styles.empty}>
-                  <Text style={[styles.emptyText, { color: theme.colors.ink3 }]}>
+                  <Text style={[styles.emptyText, { color: theme.colors.textSubtle }]}>
                     {query ? 'No matches.' : 'No users to show.'}
                   </Text>
                 </View>
@@ -314,14 +314,14 @@ function UserRow({
   isGroup: boolean;
   onPress: () => void;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   return (
     <Pressable
       onPress={onPress}
       style={[
         styles.row,
         {
-          backgroundColor: selected ? theme.colors.brandSoft : 'transparent',
+          backgroundColor: selected ? theme.colors.accentSoft : 'transparent',
         },
       ]}
     >
@@ -332,13 +332,13 @@ function UserRow({
       )}
       <View style={styles.body}>
         <Text
-          style={[styles.name, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
+          style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
           numberOfLines={1}
         >
           {user.name}
         </Text>
         {user.subtitle ? (
-          <Text style={[styles.subtitle, { color: theme.colors.ink3 }]} numberOfLines={1}>
+          <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]} numberOfLines={1}>
             {user.subtitle}
           </Text>
         ) : null}
@@ -348,12 +348,12 @@ function UserRow({
           style={[
             styles.checkbox,
             {
-              borderColor: selected ? theme.colors.brand : theme.colors.border,
-              backgroundColor: selected ? theme.colors.brand : 'transparent',
+              borderColor: selected ? theme.colors.accent : theme.colors.border,
+              backgroundColor: selected ? theme.colors.accent : 'transparent',
             },
           ]}
         >
-          {selected ? <PoolseIcon name="check" size={14} color={theme.colors.onBrand} /> : null}
+          {selected ? <PoolseIcon name="check" size={14} color={theme.colors.accentText} /> : null}
         </View>
       ) : null}
     </Pressable>

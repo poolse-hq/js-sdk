@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from './primitives/Avatar.js';
 import { GroupDetailsSheet } from './GroupDetailsSheet.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface ChatHeaderProps {
   conversationId: Uuid;
@@ -55,7 +55,7 @@ export function ChatHeader({
   onPress,
   onBack,
 }: ChatHeaderProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const { conversation } = useConversation(conversationId);
   const { members } = useMembers(conversationId);
   const { me } = useMe();
@@ -125,19 +125,19 @@ export function ChatHeader({
       >
         {onBack ? (
           <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn} accessibilityLabel="Back">
-            <PoolseIcon name="reply" size={20} color={theme.colors.ink} />
+            <PoolseIcon name="reply" size={20} color={theme.colors.text} />
           </Pressable>
         ) : null}
         <Avatar src={avatarUrl} name={title} seed={avatarSeed} online={isOnline} size="md" />
         <View style={styles.titleCol}>
           <Text
-            style={[styles.title, { color: theme.colors.ink, fontFamily: theme.type.fontDisplay }]}
+            style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.display }]}
             numberOfLines={1}
           >
             {title}
           </Text>
           {subtitle ? (
-            <Text style={[styles.subtitle, { color: theme.colors.ink3 }]} numberOfLines={1}>
+            <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]} numberOfLines={1}>
               {subtitle}
             </Text>
           ) : null}
@@ -149,7 +149,7 @@ export function ChatHeader({
             style={styles.actionBtn}
             accessibilityLabel="Show members"
           >
-            <PoolseIcon name="users" size={20} color={theme.colors.ink2} />
+            <PoolseIcon name="users" size={20} color={theme.colors.textMuted} />
           </Pressable>
         ) : null}
       </Wrapper>

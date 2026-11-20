@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { PoolseIcon, type IconName } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 const DEFAULT_REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
 
@@ -45,7 +45,7 @@ export function MessageActions({
   onDelete,
   onCopy,
 }: MessageActionsProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const insets = useSafeInsets();
   const items: Array<{ label: string; icon: IconName; onPress: () => void; danger?: boolean }> = [];
   if (onReply) items.push({ label: 'Reply', icon: 'reply', onPress: onReply });
@@ -109,14 +109,14 @@ export function MessageActions({
               <PoolseIcon
                 name={item.icon}
                 size={18}
-                color={item.danger ? theme.colors.error : theme.colors.ink2}
+                color={item.danger ? theme.colors.danger : theme.colors.textMuted}
               />
               <Text
                 style={[
                   styles.itemText,
                   {
-                    color: item.danger ? theme.colors.error : theme.colors.ink,
-                    fontFamily: theme.type.fontBody,
+                    color: item.danger ? theme.colors.danger : theme.colors.text,
+                    fontFamily: theme.fonts.body,
                   },
                 ]}
               >

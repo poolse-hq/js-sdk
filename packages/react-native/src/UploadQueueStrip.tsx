@@ -2,7 +2,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { useSharedUpload, useUploadPreview } from './internal/uploadContext.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 /**
  * Horizontal scrolling preview row of pending / in-flight / ready
@@ -16,7 +16,7 @@ import { usePoolseTheme } from './theme/PoolseTheme.js';
  * pickup and the strip's display always agree.
  */
 export function UploadQueueStrip() {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const upload = useSharedUpload();
   const { getPreview } = useUploadPreview();
 
@@ -76,7 +76,7 @@ export function UploadQueueStrip() {
 
             {isUploading ? (
               <View style={styles.progressOverlay}>
-                <View style={[styles.spinner, { borderColor: theme.colors.onBrand }]} />
+                <View style={[styles.spinner, { borderColor: theme.colors.accentText }]} />
               </View>
             ) : null}
 
@@ -93,15 +93,15 @@ export function UploadQueueStrip() {
 }
 
 function ImageTile({ uri, uploading, error }: { uri: string; uploading: boolean; error: boolean }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   return (
     <Image
       source={{ uri }}
       style={[
         styles.imageTile,
         {
-          backgroundColor: theme.colors.surface2,
-          borderColor: error ? theme.colors.error : 'transparent',
+          backgroundColor: theme.colors.surfaceAlt,
+          borderColor: error ? theme.colors.danger : 'transparent',
           opacity: uploading ? 0.65 : 1,
         },
       ]}
@@ -121,32 +121,34 @@ function FileTile({
   uploading: boolean;
   error: boolean;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   return (
     <View
       style={[
         styles.fileTile,
         {
-          backgroundColor: theme.colors.surface2,
+          backgroundColor: theme.colors.surfaceAlt,
           borderColor: error
-            ? theme.colors.error
+            ? theme.colors.danger
             : uploading
-              ? theme.colors.brand
+              ? theme.colors.accent
               : theme.colors.border,
         },
       ]}
     >
-      <View style={[styles.fileIconBox, { backgroundColor: theme.colors.brandSoft }]}>
-        <PoolseIcon name="attachment" size={18} color={theme.colors.brand} />
+      <View style={[styles.fileIconBox, { backgroundColor: theme.colors.accentSoft }]}>
+        <PoolseIcon name="attachment" size={18} color={theme.colors.accent} />
       </View>
       <View style={styles.fileInfo}>
         <Text
-          style={[styles.fileName, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
+          style={[styles.fileName, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
           numberOfLines={1}
         >
           {filename}
         </Text>
-        <Text style={[styles.fileSize, { color: theme.colors.ink3 }]}>{formatBytes(size)}</Text>
+        <Text style={[styles.fileSize, { color: theme.colors.textSubtle }]}>
+          {formatBytes(size)}
+        </Text>
       </View>
     </View>
   );

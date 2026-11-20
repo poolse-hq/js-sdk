@@ -1,6 +1,6 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { usePoolseTheme } from '../theme/PoolseTheme.js';
+import { useTheme } from '../theme/PoolseTheme.js';
 import { userColor } from './userColor.js';
 
 export interface AvatarProps {
@@ -19,10 +19,10 @@ export interface AvatarProps {
 const SIZES = { sm: 28, md: 40, lg: 56 } as const;
 
 export function Avatar({ src, name, seed, online, size = 'md' }: AvatarProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const dim = SIZES[size];
   const initials = computeInitials(name);
-  const tint = seed ? userColor(seed) : theme.colors.brand;
+  const tint = seed ? userColor(seed) : theme.colors.accent;
   const fontSize = size === 'sm' ? 11 : size === 'lg' ? 22 : 15;
 
   return (
@@ -48,10 +48,10 @@ export function Avatar({ src, name, seed, online, size = 'md' }: AvatarProps) {
       ) : (
         <Text
           style={{
-            color: theme.colors.onBrand,
+            color: theme.colors.accentText,
             fontSize,
             fontWeight: '600',
-            fontFamily: theme.type.fontBody,
+            fontFamily: theme.fonts.body,
           }}
         >
           {initials}

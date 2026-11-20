@@ -4,6 +4,35 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `PoolseTheme` takes `theme` = a `@poolse/theme` built-in id (`coral`,
+  `ocean`, `forest`, `grape`, `slate`, `sunset`, `rose`, `mono`) or a `Theme`,
+  and `colorScheme` = `'light' | 'dark' | 'system'` (`'system'` follows
+  `useColorScheme()` live and is the default when `theme` is given). `fonts`
+  maps the theme onto font families you loaded. Switching re-renders without
+  remounting.
+- `useTheme()` returns the active tokens as a `NativeTheme`
+  (`@poolse/theme` names: `colors.accent`, `colors.surfaceAlt`, `fonts.body`,
+  `radii.bubble`, …). Every component now reads its tokens from it.
+- Re-exports `BUILT_IN_THEME_IDS`, `DEFAULT_THEME_ID`, `createTheme`,
+  `encodeTheme`, `decodeTheme` and the theme types from `@poolse/theme`.
+
+### Deprecated
+
+- The legacy `PoolseTheme` override object (`theme={{ colors: { brand } }}`),
+  `mode` (use `colorScheme`) and `usePoolseTheme()` (use `useTheme()`). All
+  still work: overrides merge over the original palette as before, and
+  `usePoolseTheme()` returns the original shape for any theme.
+
+### Changed
+
+- Own-bubble text, links and quote cards read `ownBubbleText` / `link`, and
+  the edit backdrop reads `overlay`; their values without a theme are
+  unchanged.
+
 ## [3.3.0] - 2026-11-20
 
 ### Added

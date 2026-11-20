@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 
 import { Avatar } from './primitives/Avatar.js';
-import { usePoolseTheme } from './theme/PoolseTheme.js';
+import { useTheme } from './theme/PoolseTheme.js';
 
 export interface ConversationListProps {
   selectedId?: string | null;
@@ -48,7 +48,7 @@ export function ConversationList({
   labelFor,
   avatarFor,
 }: ConversationListProps) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
   const auto = useConversations();
   const { me } = useMe();
   const meExternalId = me?.external_id ?? null;
@@ -61,16 +61,16 @@ export function ConversationList({
 
   if (loading && conversations.length === 0) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.paper }]}>
-        <ActivityIndicator color={theme.colors.brand} />
+      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator color={theme.colors.accent} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.paper }]}>
-        <Text style={{ color: theme.colors.error, fontFamily: theme.type.fontBody }}>
+      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
+        <Text style={{ color: theme.colors.danger, fontFamily: theme.fonts.body }}>
           Failed to load conversations.
         </Text>
       </View>
@@ -79,9 +79,9 @@ export function ConversationList({
 
   if (conversations.length === 0) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.paper }]}>
+      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
         {typeof emptyState === 'string' || emptyState == null ? (
-          <Text style={{ color: theme.colors.ink3, fontFamily: theme.type.fontBody }}>
+          <Text style={{ color: theme.colors.textSubtle, fontFamily: theme.fonts.body }}>
             {(emptyState as string) ?? 'No conversations yet.'}
           </Text>
         ) : (
@@ -95,7 +95,7 @@ export function ConversationList({
     <FlatList
       data={conversations}
       keyExtractor={(c) => c.id}
-      style={{ backgroundColor: theme.colors.paper }}
+      style={{ backgroundColor: theme.colors.background }}
       renderItem={({ item }) => {
         const selected = selectedId === item.id;
         if (renderItem) {
@@ -137,7 +137,7 @@ function ConversationRow({
   avatarFor?: (externalId: string) => string | null;
   onSelect?: (conv: Conversation) => void;
 }) {
-  const theme = usePoolseTheme();
+  const theme = useTheme();
 
   // For direct conversations the row title + avatar come from the OTHER
   // member, NOT the conversation itself (which has `name: null` for
@@ -167,7 +167,7 @@ function ConversationRow({
       style={[
         styles.row,
         {
-          backgroundColor: selected ? theme.colors.surface2 : 'transparent',
+          backgroundColor: selected ? theme.colors.surfaceAlt : 'transparent',
         },
       ]}
     >
@@ -178,24 +178,24 @@ function ConversationRow({
       )}
       <View style={styles.body}>
         <Text
-          style={[styles.name, { color: theme.colors.ink, fontFamily: theme.type.fontBody }]}
+          style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
           numberOfLines={1}
         >
           {title}
         </Text>
         {conv.last_message_preview ? (
-          <Text style={[styles.preview, { color: theme.colors.ink3 }]} numberOfLines={1}>
+          <Text style={[styles.preview, { color: theme.colors.textSubtle }]} numberOfLines={1}>
             {formatCallLogPreview(conv.last_message_preview, meId) ?? conv.last_message_preview}
           </Text>
         ) : conv.last_message_at ? (
-          <Text style={[styles.preview, { color: theme.colors.ink3 }]} numberOfLines={1}>
+          <Text style={[styles.preview, { color: theme.colors.textSubtle }]} numberOfLines={1}>
             {formatRelative(conv.last_message_at)}
           </Text>
         ) : null}
       </View>
       {unread > 0 ? (
-        <View style={[styles.unreadPill, { backgroundColor: theme.colors.unreadPill }]}>
-          <Text style={[styles.unreadText, { color: theme.colors.unreadPillText }]}>
+        <View style={[styles.unreadPill, { backgroundColor: theme.colors.badge }]}>
+          <Text style={[styles.unreadText, { color: theme.colors.badgeText }]}>
             {unread > 99 ? '99+' : String(unread)}
           </Text>
         </View>
