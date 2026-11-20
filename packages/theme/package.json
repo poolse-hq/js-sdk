@@ -1,0 +1,58 @@
+{
+  "name": "@poolse/theme",
+  "version": "3.3.0",
+  "description": "Design tokens and built-in themes for the poolse UI packages: typed tokens, eight light/dark themes, CSS variables for the web, a plain object for React Native, and shareable theme codes. No dependencies.",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": [
+    "theme",
+    "design-tokens",
+    "css-variables",
+    "dark-mode",
+    "react-native",
+    "chat-ui",
+    "typescript",
+    "poolse"
+  ],
+  "homepage": "https://poolse.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/poolse-hq/js-sdk.git",
+    "directory": "packages/theme"
+  },
+  "bugs": {
+    "url": "https://github.com/poolse-hq/js-sdk/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -173,6 +173,8 @@ importers:
         specifier: ^1.6.7
         version: 1.6.7
 
+  packages/theme: {}
+
 packages:
 
   '@babel/code-frame@7.29.7':

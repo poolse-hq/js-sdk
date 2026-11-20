@@ -25,6 +25,7 @@
     // config that declares them (this file, at the monorepo root).
     "baseUrl": ".",
     "paths": {
+      "@poolse/theme": ["packages/theme/src/index.ts"],
       "@poolse/sdk": ["packages/sdk/src/index.ts"],
       "@poolse/react": ["packages/react/src/index.ts"],
       "@poolse/react-ui": ["packages/react-ui/src/index.ts"],
