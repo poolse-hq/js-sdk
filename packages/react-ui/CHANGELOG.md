@@ -4,6 +4,29 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `PoolseTheme` applies a `@poolse/theme` theme: `theme` takes a built-in id
+  (`coral`, `ocean`, `forest`, `grape`, `slate`, `sunset`, `rose`, `mono`) or a
+  `Theme`, `colorScheme` takes `'light' | 'dark' | 'system'` (default
+  `'system'`, follows the OS live). The theme's `--poolse-*` variables go on
+  the provider's own wrapper (`display: contents`), not `:root`; switching
+  restyles without remounting children. `useTheme()` returns
+  `{ theme: ResolvedTheme | null, colorScheme }`; `useSystemColorScheme()`.
+- Re-exports `BUILT_IN_THEME_IDS`, `DEFAULT_THEME_ID`, `createTheme`,
+  `encodeTheme`, `decodeTheme` and the theme types from `@poolse/theme`.
+- Stylesheet: a `[data-theme='light']` block, so a light-pinned subtree stays
+  light under a dark OS or a dark ancestor.
+
+### Changed
+
+- Bubbles, bubble links and the modal backdrop read the theme-only variables
+  `--poolse-own-bubble(-text)`, `--poolse-other-bubble(-text)`,
+  `--poolse-link`, `--poolse-overlay` and `--poolse-radius-bubble`, falling back
+  to the variables they read before — no visual change without a theme.
+
 ## [3.3.0] - 2026-11-20
 
 ### Added

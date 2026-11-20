@@ -140,6 +140,9 @@ importers:
       '@poolse/sdk':
         specifier: ^3.3.0
         version: link:../sdk
+      '@poolse/theme':
+        specifier: ^3.3.0
+        version: link:../theme
       react-markdown:
         specifier: ^9.0.1
         version: 9.1.0(@types/react@19.2.15)(react@19.2.6)

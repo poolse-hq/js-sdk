@@ -17,7 +17,9 @@ export {
 // the brand kit (`tokens.css`) for the full --poolse-* surface.
 // Override at any level: redefine the variables in your own
 // stylesheet, or set `[data-theme="dark"]` on any ancestor to
-// switch to the warm dark theme.
+// switch to the warm dark theme. Or wrap the UI in
+// `<PoolseTheme theme="ocean" colorScheme="system">` for one of the
+// @poolse/theme themes.
 
 // ── Chat surface (composed conversation view) ─────────────────
 export { ConversationView, type ConversationViewProps } from './ConversationView.js';
@@ -51,6 +53,27 @@ export { AttachmentPreview, type AttachmentPreviewProps } from './AttachmentPrev
 export { UploadQueueStrip } from './UploadQueueStrip.js';
 export { ReactionStrip, ReactionPicker, type ReactionStripProps } from './Reactions.js';
 export { MentionInput, type MentionInputProps } from './MentionInput.js';
+
+// ── Theme ─────────────────────────────────────────────────────
+export {
+  PoolseTheme,
+  useTheme,
+  useSystemColorScheme,
+  type PoolseThemeProps,
+  type PoolseThemeValue,
+} from './PoolseTheme.js';
+export {
+  BUILT_IN_THEME_IDS,
+  DEFAULT_THEME_ID,
+  createTheme,
+  decodeTheme,
+  encodeTheme,
+  type BuiltInThemeId,
+  type ColorScheme,
+  type ColorSchemePreference,
+  type Theme,
+  type ThemeInput,
+} from '@poolse/theme';
 
 // ── Brand chrome ──────────────────────────────────────────────
 export { PoolseIcon, type PoolseIconProps, type IconName } from './PoolseIcon.js';

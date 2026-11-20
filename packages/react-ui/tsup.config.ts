@@ -14,7 +14,7 @@ export default defineConfig({
   sourcemap: true,
   treeshake: true,
   target: 'es2022',
-  external: ['react', 'react-dom', '@poolse/sdk', '@poolse/react'],
+  external: ['react', 'react-dom', '@poolse/sdk', '@poolse/react', '@poolse/theme'],
   onSuccess: async () => {
     // 1. Prepend `'use client'` so RSC frameworks bundle this as a
     //    client component module.

@@ -11,6 +11,13 @@
    stylesheet — no component ejection required. Dark mode is
    handled automatically via [data-theme="dark"] OR the user's
    `prefers-color-scheme` setting (override per-app).
+
+   <PoolseTheme theme="…"> (from this package) sets a @poolse/theme
+   theme's variables on its own wrapper. Tokens these defaults have
+   no name for (--poolse-own-bubble, --poolse-link, --poolse-overlay,
+   --poolse-mention, --poolse-radius-bubble, …) are only set by a
+   theme; the rules below read them with a fallback to the variables
+   here, so overriding these still restyles everything.
    ============================================================ */
 
 :root {
@@ -102,6 +109,38 @@
   --poolse-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
   --poolse-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px -14px rgba(0, 0, 0, 0.7);
   --poolse-shadow-lg: 0 1px 2px rgba(0, 0, 0, 0.5), 0 30px 70px -20px rgba(0, 0, 0, 0.8);
+}
+
+/* Pinned light under a dark ancestor (or a dark OS) — e.g.
+   <PoolseTheme colorScheme="light">. Same values as :root. */
+[data-theme='light'] {
+  --poolse-brand: #ff5436;
+  --poolse-brand-strong: #d63415;
+  --poolse-brand-soft: #ffe9e2;
+  --poolse-on-brand: #fbf7f4;
+
+  --poolse-paper: #fbf7f4;
+  --poolse-surface: #ffffff;
+  --poolse-surface-2: #f4eee9;
+  --poolse-ink: #1c1a19;
+  --poolse-ink-2: #6b6560;
+  --poolse-ink-3: #9a938c;
+  --poolse-border: #eae3dc;
+
+  --poolse-presence: #16c172;
+  --poolse-success: #16a34a;
+  --poolse-warning: #e08c16;
+  --poolse-error: #e5484d;
+  --poolse-info: #3b82f6;
+
+  --poolse-shadow-sm: 0 1px 2px rgba(28, 26, 25, 0.08);
+  --poolse-shadow-md: 0 1px 2px rgba(28, 26, 25, 0.06), 0 10px 30px -12px rgba(28, 26, 25, 0.18);
+  --poolse-shadow-lg: 0 1px 2px rgba(28, 26, 25, 0.06), 0 24px 60px -18px rgba(28, 26, 25, 0.28);
+}
+
+/* <PoolseTheme>'s wrapper: carries variables, takes no part in layout. */
+.poolse-theme {
+  display: contents;
 }
 
 /* Follow the OS automatically when nothing explicit is set. Apps
@@ -481,7 +520,7 @@
   padding: 8px 12px;
   /* Default fully-rounded; the group-position modifiers below swap in
      the asymmetric tail corner for `last` / `standalone`. */
-  border-radius: 18px;
+  border-radius: var(--poolse-radius-bubble, 18px);
   font-size: 14.5px;
   line-height: 1.4;
   word-wrap: break-word;
@@ -496,14 +535,14 @@
 
 .poolse-message--self {
   align-self: flex-end;
-  background: var(--poolse-brand);
-  color: var(--poolse-on-brand);
+  background: var(--poolse-own-bubble, var(--poolse-brand));
+  color: var(--poolse-own-bubble-text, var(--poolse-on-brand));
 }
 
 .poolse-message--other {
   align-self: flex-start;
-  background: var(--poolse-surface);
-  color: var(--poolse-ink);
+  background: var(--poolse-other-bubble, var(--poolse-surface));
+  color: var(--poolse-other-bubble-text, var(--poolse-ink));
   border: 1px solid var(--poolse-border);
 }
 
@@ -734,6 +773,10 @@
 .poolse-message__body a:hover {
   opacity: 0.85;
 }
+/* Own bubbles keep links in the bubble's text colour. */
+.poolse-message--other .poolse-message__body a {
+  color: var(--poolse-link, inherit);
+}
 .poolse-message__body h1,
 .poolse-message__body h2,
 .poolse-message__body h3,
@@ -779,7 +822,7 @@
 }
 
 .poolse-message--self .poolse-message__meta {
-  color: var(--poolse-on-brand);
+  color: var(--poolse-own-bubble-text, var(--poolse-on-brand));
 }
 .poolse-message--other .poolse-message__meta {
   color: var(--poolse-ink-3);
@@ -2821,7 +2864,7 @@
 .poolse-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--poolse-overlay, rgba(0, 0, 0, 0.45));
   display: flex;
   align-items: center;
   justify-content: center;
