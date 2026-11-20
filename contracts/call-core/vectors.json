@@ -7,446 +7,845 @@
     "RECONNECT_BUDGET_MS": 25000
   },
   "vectors": [
-    { "name": "ring push on idle rings", "scenario": "s13",
+    {
+      "name": "ring push on idle rings",
+      "scenario": "s13",
       "given": { "phase": "idle" },
       "event": { "type": "PUSH_RING", "callId": "c1" },
-      "expect": { "phase": "ringing_in", "effects": ["SHOW_RING", "RINGTONE_START"] } },
+      "expect": { "phase": "ringing_in", "effects": ["SHOW_RING", "RINGTONE_START"] }
+    },
 
-    { "name": "socket ring on idle rings (no push yet)", "scenario": "s1",
+    {
+      "name": "socket ring on idle rings (no push yet)",
+      "scenario": "s1",
       "given": { "phase": "idle" },
       "event": { "type": "SOCKET_RING", "callId": "c1" },
-      "expect": { "phase": "ringing_in", "effects": ["SHOW_RING", "RINGTONE_START"] } },
+      "expect": { "phase": "ringing_in", "effects": ["SHOW_RING", "RINGTONE_START"] }
+    },
 
-    { "name": "push after socket ring for same call deduplicates", "scenario": "s13",
+    {
+      "name": "push after socket ring for same call deduplicates",
+      "scenario": "s13",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "PUSH_RING", "callId": "c1" },
-      "expect": { "phase": "ringing_in", "effects": [] } },
+      "expect": { "phase": "ringing_in", "effects": [] }
+    },
 
-    { "name": "stale ring (deadline passed) never surfaces", "scenario": "s14",
+    {
+      "name": "stale ring (deadline passed) never surfaces",
+      "scenario": "s14",
       "given": { "phase": "idle" },
       "event": { "type": "PUSH_RING", "callId": "c1", "stale": true },
-      "expect": { "phase": "idle", "effects": [] } },
+      "expect": { "phase": "idle", "effects": [] }
+    },
 
-    { "name": "answer is optimistic", "scenario": "s1",
+    {
+      "name": "answer is optimistic",
+      "scenario": "s1",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "USER_ANSWER" },
-      "expect": { "phase": "connecting",
-        "effects": ["RINGTONE_STOP", "DISMISS_RING", "HTTP_ANSWER", "CALL_SESSION_START"] } },
+      "expect": {
+        "phase": "connecting",
+        "effects": ["RINGTONE_STOP", "DISMISS_RING", "HTTP_ANSWER", "CALL_SESSION_START"]
+      }
+    },
 
-    { "name": "answer accepted joins media", "scenario": "s1",
+    {
+      "name": "answer accepted joins media",
+      "scenario": "s1",
       "given": { "phase": "connecting", "callId": "c1", "direction": "incoming" },
       "event": { "type": "HTTP_OK" },
-      "expect": { "phase": "connecting", "effects": ["MEDIA_JOIN"] } },
+      "expect": { "phase": "connecting", "effects": ["MEDIA_JOIN"] }
+    },
 
-    { "name": "media up completes the answer", "scenario": "s1",
+    {
+      "name": "media up completes the answer",
+      "scenario": "s1",
       "given": { "phase": "connecting", "callId": "c1" },
       "event": { "type": "MEDIA_CONNECTED" },
-      "expect": { "phase": "active", "effects": [] } },
+      "expect": { "phase": "active", "effects": [] }
+    },
 
-    { "name": "answer on finished call stands down", "scenario": "s14",
+    {
+      "name": "answer on finished call stands down",
+      "scenario": "s14",
       "given": { "phase": "connecting", "callId": "c1" },
       "event": { "type": "HTTP_GONE" },
-      "expect": { "phase": "ended", "reason": "finished",
-        "effects": ["CALL_SESSION_STOP"] } },
+      "expect": { "phase": "ended", "reason": "finished", "effects": ["CALL_SESSION_STOP"] }
+    },
 
-    { "name": "answer HTTP timeout retries once then waits on media", "scenario": "s1",
+    {
+      "name": "answer HTTP timeout retries once then waits on media",
+      "scenario": "s1",
       "given": { "phase": "connecting", "callId": "c1", "httpAttempts": 1 },
       "event": { "type": "HTTP_TIMEOUT" },
-      "expect": { "phase": "connecting", "effects": ["HTTP_ANSWER"] } },
+      "expect": { "phase": "connecting", "effects": ["HTTP_ANSWER"] }
+    },
 
-    { "name": "late HTTP_OK after media already connected is ignored", "scenario": "s1",
+    {
+      "name": "late HTTP_OK after media already connected is ignored",
+      "scenario": "s1",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "HTTP_OK" },
-      "expect": { "phase": "active", "effects": [] } },
+      "expect": { "phase": "active", "effects": [] }
+    },
 
-    { "name": "decline resolves the ring only", "scenario": "s1",
+    {
+      "name": "decline resolves the ring only",
+      "scenario": "s1",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "USER_DECLINE" },
-      "expect": { "phase": "idle",
-        "effects": ["RINGTONE_STOP", "DISMISS_RING", "HTTP_DECLINE"] } },
+      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING", "HTTP_DECLINE"] }
+    },
 
-    { "name": "ring ended: cancelled", "scenario": "s6",
+    {
+      "name": "ring ended: cancelled",
+      "scenario": "s6",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "RING_ENDED", "callId": "c1", "reason": "cancelled" },
-      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] } },
+      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] }
+    },
 
-    { "name": "ring ended: answered elsewhere", "scenario": "s7",
+    {
+      "name": "ring ended: answered elsewhere",
+      "scenario": "s7",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "RING_ENDED", "callId": "c1", "reason": "answered_elsewhere" },
-      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] } },
+      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] }
+    },
 
-    { "name": "ring ended: declined elsewhere", "scenario": "s8",
+    {
+      "name": "ring ended: declined elsewhere",
+      "scenario": "s8",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "RING_ENDED", "callId": "c1", "reason": "declined_elsewhere" },
-      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] } },
+      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] }
+    },
 
-    { "name": "ring ended: call finished mid-ring", "scenario": "s10",
+    {
+      "name": "ring ended: call finished mid-ring",
+      "scenario": "s10",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "RING_ENDED", "callId": "c1", "reason": "finished" },
-      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] } },
+      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] }
+    },
 
-    { "name": "ring deadline stops the surface and records missed", "scenario": "s5",
+    {
+      "name": "ring deadline stops the surface and records missed",
+      "scenario": "s5",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "RING_DEADLINE" },
-      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] } },
+      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] }
+    },
 
-    { "name": "ring teardown for a different call is ignored", "scenario": "s14",
+    {
+      "name": "ring teardown for a different call is ignored",
+      "scenario": "s14",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "RING_ENDED", "callId": "c2", "reason": "cancelled" },
-      "expect": { "phase": "ringing_in", "effects": [] } },
+      "expect": { "phase": "ringing_in", "effects": [] }
+    },
 
-    { "name": "ring while ringing another call auto-busies the newcomer", "scenario": "s9",
+    {
+      "name": "ring while ringing another call auto-busies the newcomer",
+      "scenario": "s9",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "PUSH_RING", "callId": "c2" },
-      "expect": { "phase": "ringing_in", "effects": ["HTTP_DECLINE_BUSY:c2"] } },
+      "expect": { "phase": "ringing_in", "effects": ["HTTP_DECLINE_BUSY:c2"] }
+    },
 
-    { "name": "ring while on an active call waits beside it", "scenario": "s9",
+    {
+      "name": "ring while on an active call waits beside it",
+      "scenario": "s9",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "PUSH_RING", "callId": "c2" },
-      "expect": { "phase": "active", "callId": "c1", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] } },
+      "expect": {
+        "phase": "active",
+        "callId": "c1",
+        "waitingCallId": "c2",
+        "effects": ["SHOW_WAITING"]
+      }
+    },
 
-    { "name": "ring while ringing out waits", "scenario": "s9",
+    {
+      "name": "ring while ringing out waits",
+      "scenario": "s9",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "SOCKET_RING", "callId": "c2" },
-      "expect": { "phase": "ringing_out", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] } },
+      "expect": { "phase": "ringing_out", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] }
+    },
 
-    { "name": "ring while connecting waits", "scenario": "s9",
+    {
+      "name": "ring while connecting waits",
+      "scenario": "s9",
       "given": { "phase": "connecting", "callId": "c1" },
       "event": { "type": "PUSH_RING", "callId": "c2" },
-      "expect": { "phase": "connecting", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] } },
+      "expect": { "phase": "connecting", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] }
+    },
 
-    { "name": "ring while reconnecting waits", "scenario": "s9",
+    {
+      "name": "ring while reconnecting waits",
+      "scenario": "s9",
       "given": { "phase": "reconnecting", "callId": "c1" },
       "event": { "type": "PUSH_RING", "callId": "c2" },
-      "expect": { "phase": "reconnecting", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] } },
+      "expect": { "phase": "reconnecting", "waitingCallId": "c2", "effects": ["SHOW_WAITING"] }
+    },
 
-    { "name": "a stale ring never waits", "scenario": "s14",
+    {
+      "name": "a stale ring never waits",
+      "scenario": "s14",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "PUSH_RING", "callId": "c2", "stale": true },
-      "expect": { "phase": "active", "waitingCallId": null, "effects": [] } },
+      "expect": { "phase": "active", "waitingCallId": null, "effects": [] }
+    },
 
-    { "name": "the waiting ring's push+socket twin is one waiting call", "scenario": "s13",
+    {
+      "name": "the waiting ring's push+socket twin is one waiting call",
+      "scenario": "s13",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "SOCKET_RING", "callId": "c2" },
-      "expect": { "phase": "active", "waitingCallId": "c2", "effects": [] } },
+      "expect": { "phase": "active", "waitingCallId": "c2", "effects": [] }
+    },
 
-    { "name": "a third call while one waits is busy", "scenario": "s9",
+    {
+      "name": "a third call while one waits is busy",
+      "scenario": "s9",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "PUSH_RING", "callId": "c3" },
-      "expect": { "phase": "active", "waitingCallId": "c2", "effects": ["HTTP_DECLINE_BUSY:c3"] } },
+      "expect": { "phase": "active", "waitingCallId": "c2", "effects": ["HTTP_DECLINE_BUSY:c3"] }
+    },
 
-    { "name": "declining the waiting call tells its caller busy", "scenario": "s9",
+    {
+      "name": "declining the waiting call tells its caller busy",
+      "scenario": "s9",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "USER_DECLINE_WAITING" },
-      "expect": { "phase": "active", "callId": "c1", "waitingCallId": null,
-        "effects": ["HTTP_DECLINE_BUSY:c2", "DISMISS_WAITING"] } },
+      "expect": {
+        "phase": "active",
+        "callId": "c1",
+        "waitingCallId": null,
+        "effects": ["HTTP_DECLINE_BUSY:c2", "DISMISS_WAITING"]
+      }
+    },
 
-    { "name": "the waiting caller giving up clears it", "scenario": "s10",
+    {
+      "name": "the waiting caller giving up clears it",
+      "scenario": "s10",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "RING_ENDED", "callId": "c2", "reason": "cancelled" },
-      "expect": { "phase": "active", "callId": "c1", "waitingCallId": null, "effects": ["DISMISS_WAITING"] } },
+      "expect": {
+        "phase": "active",
+        "callId": "c1",
+        "waitingCallId": null,
+        "effects": ["DISMISS_WAITING"]
+      }
+    },
 
-    { "name": "the waiting call finishing clears it", "scenario": "s10",
+    {
+      "name": "the waiting call finishing clears it",
+      "scenario": "s10",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "CALL_FINISHED", "callId": "c2", "reason": "cancelled" },
-      "expect": { "phase": "active", "callId": "c1", "waitingCallId": null, "effects": ["DISMISS_WAITING"] } },
+      "expect": {
+        "phase": "active",
+        "callId": "c1",
+        "waitingCallId": null,
+        "effects": ["DISMISS_WAITING"]
+      }
+    },
 
-    { "name": "the waiting ring's deadline clears it (missed)", "scenario": "s5",
+    {
+      "name": "the waiting ring's deadline clears it (missed)",
+      "scenario": "s5",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "WAITING_DEADLINE" },
-      "expect": { "phase": "active", "callId": "c1", "waitingCallId": null, "effects": ["DISMISS_WAITING"] } },
+      "expect": {
+        "phase": "active",
+        "callId": "c1",
+        "waitingCallId": null,
+        "effects": ["DISMISS_WAITING"]
+      }
+    },
 
-    { "name": "end and answer leaves the call and answers the waiting one", "scenario": "s9",
+    {
+      "name": "end and answer leaves the call and answers the waiting one",
+      "scenario": "s9",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "USER_ANSWER_WAITING" },
-      "expect": { "phase": "connecting", "callId": "c2", "direction": "incoming", "waitingCallId": null,
-        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
-                    "HTTP_ANSWER", "CALL_SESSION_START"] } },
+      "expect": {
+        "phase": "connecting",
+        "callId": "c2",
+        "direction": "incoming",
+        "waitingCallId": null,
+        "effects": [
+          "MEDIA_LEAVE",
+          "HTTP_HANGUP",
+          "CALL_SESSION_STOP",
+          "PROMOTE_WAITING",
+          "HTTP_ANSWER",
+          "CALL_SESSION_START"
+        ]
+      }
+    },
 
-    { "name": "end and answer while ringing out cancels the outgoing call", "scenario": "s9",
+    {
+      "name": "end and answer while ringing out cancels the outgoing call",
+      "scenario": "s9",
       "given": { "phase": "ringing_out", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "USER_ANSWER_WAITING" },
-      "expect": { "phase": "connecting", "callId": "c2", "direction": "incoming", "waitingCallId": null,
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
-                    "HTTP_ANSWER", "CALL_SESSION_START"] } },
+      "expect": {
+        "phase": "connecting",
+        "callId": "c2",
+        "direction": "incoming",
+        "waitingCallId": null,
+        "effects": [
+          "RINGBACK_STOP",
+          "MEDIA_LEAVE",
+          "HTTP_HANGUP",
+          "CALL_SESSION_STOP",
+          "PROMOTE_WAITING",
+          "HTTP_ANSWER",
+          "CALL_SESSION_START"
+        ]
+      }
+    },
 
-    { "name": "end and answer while connecting abandons the attempt", "scenario": "s9",
+    {
+      "name": "end and answer while connecting abandons the attempt",
+      "scenario": "s9",
       "given": { "phase": "connecting", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "USER_ANSWER_WAITING" },
-      "expect": { "phase": "connecting", "callId": "c2", "direction": "incoming", "waitingCallId": null,
-        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
-                    "HTTP_ANSWER", "CALL_SESSION_START"] } },
+      "expect": {
+        "phase": "connecting",
+        "callId": "c2",
+        "direction": "incoming",
+        "waitingCallId": null,
+        "effects": [
+          "MEDIA_LEAVE",
+          "HTTP_HANGUP",
+          "CALL_SESSION_STOP",
+          "PROMOTE_WAITING",
+          "HTTP_ANSWER",
+          "CALL_SESSION_START"
+        ]
+      }
+    },
 
-    { "name": "hanging up with a call waiting rings it", "scenario": "s9",
+    {
+      "name": "hanging up with a call waiting rings it",
+      "scenario": "s9",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "USER_HANGUP" },
-      "expect": { "phase": "ringing_in", "callId": "c2", "direction": "incoming", "waitingCallId": null,
-        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
-                    "SHOW_RING", "RINGTONE_START"] } },
+      "expect": {
+        "phase": "ringing_in",
+        "callId": "c2",
+        "direction": "incoming",
+        "waitingCallId": null,
+        "effects": [
+          "MEDIA_LEAVE",
+          "HTTP_HANGUP",
+          "CALL_SESSION_STOP",
+          "PROMOTE_WAITING",
+          "SHOW_RING",
+          "RINGTONE_START"
+        ]
+      }
+    },
 
-    { "name": "the current call finishing rings the waiting one", "scenario": "s9",
+    {
+      "name": "the current call finishing rings the waiting one",
+      "scenario": "s9",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "CALL_FINISHED", "callId": "c1" },
-      "expect": { "phase": "ringing_in", "callId": "c2", "waitingCallId": null,
-        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP", "PROMOTE_WAITING", "SHOW_RING", "RINGTONE_START"] } },
+      "expect": {
+        "phase": "ringing_in",
+        "callId": "c2",
+        "waitingCallId": null,
+        "effects": [
+          "MEDIA_LEAVE",
+          "CALL_SESSION_STOP",
+          "PROMOTE_WAITING",
+          "SHOW_RING",
+          "RINGTONE_START"
+        ]
+      }
+    },
 
-    { "name": "an outgoing call nobody answered rings the waiting one", "scenario": "s9",
+    {
+      "name": "an outgoing call nobody answered rings the waiting one",
+      "scenario": "s9",
       "given": { "phase": "ringing_out", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "ALL_RINGS_RESOLVED", "outcome": "no_answer" },
-      "expect": { "phase": "ringing_in", "callId": "c2", "waitingCallId": null,
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING",
-                    "SHOW_RING", "RINGTONE_START"] } },
+      "expect": {
+        "phase": "ringing_in",
+        "callId": "c2",
+        "waitingCallId": null,
+        "effects": [
+          "RINGBACK_STOP",
+          "MEDIA_LEAVE",
+          "HTTP_HANGUP",
+          "CALL_SESSION_STOP",
+          "PROMOTE_WAITING",
+          "SHOW_RING",
+          "RINGTONE_START"
+        ]
+      }
+    },
 
-    { "name": "a failed connect rings the waiting one", "scenario": "s12",
+    {
+      "name": "a failed connect rings the waiting one",
+      "scenario": "s12",
       "given": { "phase": "connecting", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "MEDIA_FAILED" },
-      "expect": { "phase": "ringing_in", "callId": "c2", "waitingCallId": null,
-        "effects": ["HTTP_HANGUP", "CALL_SESSION_STOP", "PROMOTE_WAITING", "SHOW_RING", "RINGTONE_START"] } },
+      "expect": {
+        "phase": "ringing_in",
+        "callId": "c2",
+        "waitingCallId": null,
+        "effects": [
+          "HTTP_HANGUP",
+          "CALL_SESSION_STOP",
+          "PROMOTE_WAITING",
+          "SHOW_RING",
+          "RINGTONE_START"
+        ]
+      }
+    },
 
-    { "name": "the call carries on with a call waiting", "scenario": "s11",
+    {
+      "name": "the call carries on with a call waiting",
+      "scenario": "s11",
       "given": { "phase": "active", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "MEDIA_LOST" },
-      "expect": { "phase": "reconnecting", "callId": "c1", "waitingCallId": "c2", "effects": ["HTTP_RECONNECT"] } },
+      "expect": {
+        "phase": "reconnecting",
+        "callId": "c1",
+        "waitingCallId": "c2",
+        "effects": ["HTTP_RECONNECT"]
+      }
+    },
 
-    { "name": "the call connecting keeps the waiting one", "scenario": "s1",
+    {
+      "name": "the call connecting keeps the waiting one",
+      "scenario": "s1",
       "given": { "phase": "connecting", "callId": "c1", "waitingCallId": "c2" },
       "event": { "type": "MEDIA_CONNECTED" },
-      "expect": { "phase": "active", "callId": "c1", "waitingCallId": "c2", "effects": [] } },
+      "expect": { "phase": "active", "callId": "c1", "waitingCallId": "c2", "effects": [] }
+    },
 
-    { "name": "waiting commands with nothing waiting do nothing", "scenario": "s14",
+    {
+      "name": "waiting commands with nothing waiting do nothing",
+      "scenario": "s14",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "USER_ANSWER_WAITING" },
-      "expect": { "phase": "active", "callId": "c1", "effects": [] } },
+      "expect": { "phase": "active", "callId": "c1", "effects": [] }
+    },
 
-    { "name": "declining nothing waiting does nothing", "scenario": "s14",
+    {
+      "name": "declining nothing waiting does nothing",
+      "scenario": "s14",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "USER_DECLINE_WAITING" },
-      "expect": { "phase": "active", "callId": "c1", "effects": [] } },
+      "expect": { "phase": "active", "callId": "c1", "effects": [] }
+    },
 
-    { "name": "a stray waiting deadline does nothing", "scenario": "s14",
+    {
+      "name": "a stray waiting deadline does nothing",
+      "scenario": "s14",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "WAITING_DEADLINE" },
-      "expect": { "phase": "active", "callId": "c1", "effects": [] } },
+      "expect": { "phase": "active", "callId": "c1", "effects": [] }
+    },
 
-    { "name": "place a call", "scenario": "s1",
+    {
+      "name": "place a call",
+      "scenario": "s1",
       "given": { "phase": "idle" },
       "event": { "type": "USER_PLACE", "callId": "c1" },
-      "expect": { "phase": "connecting",
-        "effects": ["HTTP_PLACE", "CALL_SESSION_START"] } },
+      "expect": { "phase": "connecting", "effects": ["HTTP_PLACE", "CALL_SESSION_START"] }
+    },
 
-    { "name": "place accepted: join media and ring back", "scenario": "s1",
+    {
+      "name": "place accepted: join media and ring back",
+      "scenario": "s1",
       "given": { "phase": "connecting", "callId": "c1", "direction": "outgoing" },
       "event": { "type": "HTTP_OK" },
-      "expect": { "phase": "ringing_out", "effects": ["MEDIA_JOIN", "RINGBACK_START"] } },
+      "expect": { "phase": "ringing_out", "effects": ["MEDIA_JOIN", "RINGBACK_START"] }
+    },
 
-    { "name": "place onto an existing live call becomes a join", "scenario": "s16",
+    {
+      "name": "place onto an existing live call becomes a join",
+      "scenario": "s16",
       "given": { "phase": "connecting", "callId": "c1", "direction": "outgoing" },
       "event": { "type": "HTTP_OK", "created": false },
-      "expect": { "phase": "connecting", "direction": "joined", "effects": ["MEDIA_JOIN"] } },
+      "expect": { "phase": "connecting", "direction": "joined", "effects": ["MEDIA_JOIN"] }
+    },
 
-    { "name": "caller media up while still ringing out stays ringing", "scenario": "s1",
+    {
+      "name": "caller media up while still ringing out stays ringing",
+      "scenario": "s1",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "MEDIA_CONNECTED" },
-      "expect": { "phase": "ringing_out", "effects": [] } },
+      "expect": { "phase": "ringing_out", "effects": [] }
+    },
 
-    { "name": "first remote join activates the call", "scenario": "s1",
+    {
+      "name": "first remote join activates the call",
+      "scenario": "s1",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "REMOTE_JOINED" },
-      "expect": { "phase": "active", "effects": ["RINGBACK_STOP"] } },
+      "expect": { "phase": "active", "effects": ["RINGBACK_STOP"] }
+    },
 
-    { "name": "all rings declined ends the outbound call", "scenario": "s4",
+    {
+      "name": "all rings declined ends the outbound call",
+      "scenario": "s4",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "ALL_RINGS_RESOLVED", "outcome": "declined_all" },
-      "expect": { "phase": "ended", "reason": "declined_all",
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "declined_all",
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "everyone busy reads as busy", "scenario": "s9",
+    {
+      "name": "everyone busy reads as busy",
+      "scenario": "s9",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "ALL_RINGS_RESOLVED", "outcome": "busy_all" },
-      "expect": { "phase": "ended", "reason": "busy_all",
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "busy_all",
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "nobody answers reads as no answer", "scenario": "s5",
+    {
+      "name": "nobody answers reads as no answer",
+      "scenario": "s5",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "ALL_RINGS_RESOLVED", "outcome": "no_answer" },
-      "expect": { "phase": "ended", "reason": "no_answer",
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "no_answer",
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "caller cancels the ring", "scenario": "s6",
+    {
+      "name": "caller cancels the ring",
+      "scenario": "s6",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "USER_HANGUP" },
-      "expect": { "phase": "ended", "reason": "cancelled",
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "cancelled",
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "late join of a live call", "scenario": "s2",
+    {
+      "name": "late join of a live call",
+      "scenario": "s2",
       "given": { "phase": "idle" },
       "event": { "type": "USER_JOIN", "callId": "c1" },
-      "expect": { "phase": "connecting",
-        "effects": ["HTTP_JOIN", "CALL_SESSION_START"] } },
+      "expect": { "phase": "connecting", "effects": ["HTTP_JOIN", "CALL_SESSION_START"] }
+    },
 
-    { "name": "join accepted joins media", "scenario": "s2",
+    {
+      "name": "join accepted joins media",
+      "scenario": "s2",
       "given": { "phase": "connecting", "callId": "c1", "direction": "joined" },
       "event": { "type": "HTTP_OK" },
-      "expect": { "phase": "connecting", "effects": ["MEDIA_JOIN"] } },
+      "expect": { "phase": "connecting", "effects": ["MEDIA_JOIN"] }
+    },
 
-    { "name": "join after the call ended", "scenario": "s10",
+    {
+      "name": "join after the call ended",
+      "scenario": "s10",
       "given": { "phase": "connecting", "callId": "c1", "direction": "joined" },
       "event": { "type": "HTTP_GONE" },
-      "expect": { "phase": "ended", "reason": "finished",
-        "effects": ["CALL_SESSION_STOP"] } },
+      "expect": { "phase": "ended", "reason": "finished", "effects": ["CALL_SESSION_STOP"] }
+    },
 
-    { "name": "leaving is not ending", "scenario": "s3",
+    {
+      "name": "leaving is not ending",
+      "scenario": "s3",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "USER_HANGUP" },
-      "expect": { "phase": "ended", "reason": "left",
-        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "left",
+        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "the room finishing ends the call for the connected", "scenario": "s3",
+    {
+      "name": "the room finishing ends the call for the connected",
+      "scenario": "s3",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "CALL_FINISHED", "callId": "c1" },
-      "expect": { "phase": "ended", "reason": "finished",
-        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "finished",
+        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "finish of a different call is ignored", "scenario": "s14",
+    {
+      "name": "finish of a different call is ignored",
+      "scenario": "s14",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "CALL_FINISHED", "callId": "c2" },
-      "expect": { "phase": "active", "effects": [] } },
+      "expect": { "phase": "active", "effects": [] }
+    },
 
-    { "name": "media drop starts reconnecting", "scenario": "s11",
+    {
+      "name": "media drop starts reconnecting",
+      "scenario": "s11",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "MEDIA_LOST" },
-      "expect": { "phase": "reconnecting", "effects": ["HTTP_RECONNECT"] } },
+      "expect": { "phase": "reconnecting", "effects": ["HTTP_RECONNECT"] }
+    },
 
-    { "name": "recovery returns to active", "scenario": "s11",
+    {
+      "name": "recovery returns to active",
+      "scenario": "s11",
       "given": { "phase": "reconnecting", "callId": "c1" },
       "event": { "type": "MEDIA_RECOVERED" },
-      "expect": { "phase": "active", "effects": [] } },
+      "expect": { "phase": "active", "effects": [] }
+    },
 
-    { "name": "reconnect refused: superseded or finished", "scenario": "s17",
+    {
+      "name": "reconnect refused: superseded or finished",
+      "scenario": "s17",
       "given": { "phase": "reconnecting", "callId": "c1" },
       "event": { "type": "HTTP_GONE" },
-      "expect": { "phase": "ended", "reason": "left",
-        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "left",
+        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "reconnect budget exhausted", "scenario": "s11",
+    {
+      "name": "reconnect budget exhausted",
+      "scenario": "s11",
       "given": { "phase": "reconnecting", "callId": "c1", "budgetExhausted": true },
       "event": { "type": "RECONNECT_BUDGET_ELAPSED" },
-      "expect": { "phase": "ended", "reason": "connection_lost",
-        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "connection_lost",
+        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "media failure while connecting fails the attempt", "scenario": "s12",
+    {
+      "name": "media failure while connecting fails the attempt",
+      "scenario": "s12",
       "given": { "phase": "connecting", "callId": "c1" },
       "event": { "type": "MEDIA_FAILED" },
-      "expect": { "phase": "ended", "reason": "failed",
-        "effects": ["HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "failed",
+        "effects": ["HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "ended lingers then resets", "scenario": "s1",
+    {
+      "name": "ended lingers then resets",
+      "scenario": "s1",
       "given": { "phase": "ended", "callId": "c1" },
       "event": { "type": "LINGER_ELAPSED" },
-      "expect": { "phase": "idle", "effects": [] } },
+      "expect": { "phase": "idle", "effects": [] }
+    },
 
-    { "name": "a fresh ring during the linger wins", "scenario": "s1",
+    {
+      "name": "a fresh ring during the linger wins",
+      "scenario": "s1",
       "given": { "phase": "ended", "callId": "c1" },
       "event": { "type": "PUSH_RING", "callId": "c2" },
-      "expect": { "phase": "ringing_in", "callId": "c2",
-        "effects": ["SHOW_RING", "RINGTONE_START"] } },
+      "expect": {
+        "phase": "ringing_in",
+        "callId": "c2",
+        "effects": ["SHOW_RING", "RINGTONE_START"]
+      }
+    },
 
-    { "name": "finish while ringing in dismisses the ring", "scenario": "s10",
+    {
+      "name": "finish while ringing in dismisses the ring",
+      "scenario": "s10",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "cancelled" },
-      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] } },
+      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] }
+    },
 
-    { "name": "finish while ringing out ends with the push's outcome", "scenario": "s5",
+    {
+      "name": "finish while ringing out ends with the push's outcome",
+      "scenario": "s5",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "no_answer" },
-      "expect": { "phase": "ended", "reason": "no_answer",
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "no_answer",
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "finish while ringing out: all declined", "scenario": "s4",
+    {
+      "name": "finish while ringing out: all declined",
+      "scenario": "s4",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "declined_all" },
-      "expect": { "phase": "ended", "reason": "declined_all",
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "declined_all",
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "finish while connecting leaves any joined media", "scenario": "s10",
+    {
+      "name": "finish while connecting leaves any joined media",
+      "scenario": "s10",
       "given": { "phase": "connecting", "callId": "c1" },
       "event": { "type": "CALL_FINISHED", "callId": "c1" },
-      "expect": { "phase": "ended", "reason": "finished",
-        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "finished",
+        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "answer HTTP timeout out of retries fails", "scenario": "s12",
+    {
+      "name": "answer HTTP timeout out of retries fails",
+      "scenario": "s12",
       "given": { "phase": "connecting", "callId": "c1", "httpAttempts": 2 },
       "event": { "type": "HTTP_TIMEOUT" },
-      "expect": { "phase": "ended", "reason": "failed",
-        "effects": ["HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "failed",
+        "effects": ["HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "auth/server refusal while connecting fails (not finished)", "scenario": "s12",
+    {
+      "name": "auth/server refusal while connecting fails (not finished)",
+      "scenario": "s12",
       "given": { "phase": "connecting", "callId": "c1" },
       "event": { "type": "HTTP_FAILED", "code": "grant_spent" },
-      "expect": { "phase": "ended", "reason": "failed",
-        "effects": ["HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "failed",
+        "effects": ["HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "reconnect refused for auth fails", "scenario": "s17",
+    {
+      "name": "reconnect refused for auth fails",
+      "scenario": "s17",
       "given": { "phase": "reconnecting", "callId": "c1" },
       "event": { "type": "HTTP_FAILED", "code": "unauthorized" },
-      "expect": { "phase": "ended", "reason": "failed",
-        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "failed",
+        "effects": ["MEDIA_LEAVE", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "connecting watchdog fails the attempt", "scenario": "s12",
+    {
+      "name": "connecting watchdog fails the attempt",
+      "scenario": "s12",
       "given": { "phase": "connecting", "callId": "c1" },
       "event": { "type": "CONNECT_TIMEOUT" },
-      "expect": { "phase": "ended", "reason": "failed",
-        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "failed",
+        "effects": ["MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "caller media failure while ringing out fails the call", "scenario": "s12",
+    {
+      "name": "caller media failure while ringing out fails the call",
+      "scenario": "s12",
       "given": { "phase": "ringing_out", "callId": "c1" },
       "event": { "type": "MEDIA_FAILED" },
-      "expect": { "phase": "ended", "reason": "failed",
-        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"] } },
+      "expect": {
+        "phase": "ended",
+        "reason": "failed",
+        "effects": ["RINGBACK_STOP", "MEDIA_LEAVE", "HTTP_HANGUP", "CALL_SESSION_STOP"]
+      }
+    },
 
-    { "name": "SFU self-recovery shows reconnecting without rejoining", "scenario": "s11",
+    {
+      "name": "SFU self-recovery shows reconnecting without rejoining",
+      "scenario": "s11",
       "given": { "phase": "active", "callId": "c1" },
       "event": { "type": "MEDIA_RECONNECTING" },
-      "expect": { "phase": "reconnecting", "effects": [] } },
+      "expect": { "phase": "reconnecting", "effects": [] }
+    },
 
-    { "name": "SFU gave up while reconnecting asks the server", "scenario": "s11",
+    {
+      "name": "SFU gave up while reconnecting asks the server",
+      "scenario": "s11",
       "given": { "phase": "reconnecting", "callId": "c1" },
       "event": { "type": "MEDIA_LOST" },
-      "expect": { "phase": "reconnecting", "effects": ["HTTP_RECONNECT"] } },
+      "expect": { "phase": "reconnecting", "effects": ["HTTP_RECONNECT"] }
+    },
 
-    { "name": "rejoined media while reconnecting returns to active", "scenario": "s11",
+    {
+      "name": "rejoined media while reconnecting returns to active",
+      "scenario": "s11",
       "given": { "phase": "reconnecting", "callId": "c1" },
       "event": { "type": "MEDIA_CONNECTED" },
-      "expect": { "phase": "active", "effects": [] } },
+      "expect": { "phase": "active", "effects": [] }
+    },
 
-    { "name": "ring ended: declined (server reason)", "scenario": "s8",
+    {
+      "name": "ring ended: declined (server reason)",
+      "scenario": "s8",
       "given": { "phase": "ringing_in", "callId": "c1" },
       "event": { "type": "RING_ENDED", "callId": "c1", "reason": "declined" },
-      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] } },
+      "expect": { "phase": "idle", "effects": ["RINGTONE_STOP", "DISMISS_RING"] }
+    },
 
-    { "name": "answered_elsewhere echo never ends a call this device answered", "scenario": "s7",
+    {
+      "name": "answered_elsewhere echo never ends a call this device answered",
+      "scenario": "s7",
       "given": { "phase": "connecting", "callId": "c1", "direction": "incoming" },
       "event": { "type": "RING_ENDED", "callId": "c1", "reason": "answered_elsewhere" },
-      "expect": { "phase": "connecting", "effects": [] } },
+      "expect": { "phase": "connecting", "effects": [] }
+    },
 
-    { "name": "a later finish with an outcome corrects a lingering outgoing ended", "scenario": "s4",
+    {
+      "name": "a later finish with an outcome corrects a lingering outgoing ended",
+      "scenario": "s4",
       "given": { "phase": "ended", "callId": "c1", "direction": "outgoing", "reason": "finished" },
       "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "declined_all" },
-      "expect": { "phase": "ended", "reason": "declined_all", "effects": [] } },
+      "expect": { "phase": "ended", "reason": "declined_all", "effects": [] }
+    },
 
-    { "name": "a later finish never rewrites an ended incoming call", "scenario": "s3",
+    {
+      "name": "a later finish never rewrites an ended incoming call",
+      "scenario": "s3",
       "given": { "phase": "ended", "callId": "c1", "direction": "incoming", "reason": "finished" },
       "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "no_answer" },
-      "expect": { "phase": "ended", "reason": "finished", "effects": [] } },
+      "expect": { "phase": "ended", "reason": "finished", "effects": [] }
+    },
 
-    { "name": "a later finish never rewrites a non-generic ended reason", "scenario": "s6",
+    {
+      "name": "a later finish never rewrites a non-generic ended reason",
+      "scenario": "s6",
       "given": { "phase": "ended", "callId": "c1", "direction": "outgoing", "reason": "cancelled" },
       "event": { "type": "CALL_FINISHED", "callId": "c1", "reason": "no_answer" },
-      "expect": { "phase": "ended", "reason": "cancelled", "effects": [] } },
+      "expect": { "phase": "ended", "reason": "cancelled", "effects": [] }
+    },
 
-    { "name": "video ring behaves identically", "scenario": "s18",
+    {
+      "name": "video ring behaves identically",
+      "scenario": "s18",
       "given": { "phase": "idle" },
       "event": { "type": "PUSH_RING", "callId": "c1", "media": "video" },
-      "expect": { "phase": "ringing_in", "effects": ["SHOW_RING", "RINGTONE_START"] } }
+      "expect": { "phase": "ringing_in", "effects": ["SHOW_RING", "RINGTONE_START"] }
+    }
   ]
 }

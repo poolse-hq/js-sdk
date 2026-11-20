@@ -30,7 +30,11 @@ function copyIntoProject(config, file) {
   return withDangerousMod(config, [
     'ios',
     (cfg) => {
-      const target = path.join(cfg.modRequest.platformProjectRoot, cfg.modRequest.projectName, path.basename(file));
+      const target = path.join(
+        cfg.modRequest.platformProjectRoot,
+        cfg.modRequest.projectName,
+        path.basename(file),
+      );
       fs.copyFileSync(sourceOf(cfg, file), target);
       return cfg;
     },
@@ -66,7 +70,14 @@ function copyIntoAndroidRes(config, file) {
   return withDangerousMod(config, [
     'android',
     (cfg) => {
-      const rawDir = path.join(cfg.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'raw');
+      const rawDir = path.join(
+        cfg.modRequest.platformProjectRoot,
+        'app',
+        'src',
+        'main',
+        'res',
+        'raw',
+      );
       fs.mkdirSync(rawDir, { recursive: true });
       fs.copyFileSync(sourceOf(cfg, file), path.join(rawDir, path.basename(file)));
       return cfg;

@@ -10,7 +10,11 @@ declare module 'react' {
     key: string | null;
   }
   export type ComponentType<P = object> = (props: P) => ReactElement | null;
-  export function createElement(type: unknown, props?: unknown, ...children: unknown[]): ReactElement;
+  export function createElement(
+    type: unknown,
+    props?: unknown,
+    ...children: unknown[]
+  ): ReactElement;
 }
 
 declare module 'react-native' {

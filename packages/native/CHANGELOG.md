@@ -2,6 +2,10 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.3.0 — 2026-11-20
+
+- No changes; released with the other `@poolse/*` packages at 3.3.0.
+
 ## 3.2.0 — 2026-11-17
 
 - Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).
