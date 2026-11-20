@@ -29,6 +29,8 @@ export interface MessageBubbleProps {
   maxBodyLength?: number;
   /** Show a colored sender label above other-side bubbles. Only meaningful in group chats. */
   showSenderName?: boolean;
+  /** Makes the sender label (see `showSenderName`) tappable. */
+  onSenderPress?: () => void;
   /** Slot for an actions trigger — typically a chevron rendered by `<MessageRow>`. */
   actionsTrigger?: ReactNode;
   /**
@@ -64,6 +66,7 @@ export function MessageBubble({
   groupPosition = 'standalone',
   maxBodyLength = 0,
   showSenderName = false,
+  onSenderPress,
   actionsTrigger,
   showAttachments = true,
   markdown = true,
@@ -182,9 +185,7 @@ export function MessageBubble({
         }
         pointerEvents="none"
       >
-        {isEdited ? (
-          <Text style={[styles.editedTag, { color, opacity: 0.8 }]}>edited</Text>
-        ) : null}
+        {isEdited ? <Text style={[styles.editedTag, { color, opacity: 0.8 }]}>edited</Text> : null}
         <Text style={[styles.meta, { color, opacity: variant === 'overlay' ? 1 : 0.75 }]}>
           {time}
         </Text>
@@ -202,7 +203,12 @@ export function MessageBubble({
   };
 
   return (
-    <View style={[styles.wrap, { alignSelf: isSelf ? 'flex-end' : 'flex-start', maxWidth: bubbleMaxWidth }]}>
+    <View
+      style={[
+        styles.wrap,
+        { alignSelf: isSelf ? 'flex-end' : 'flex-start', maxWidth: bubbleMaxWidth },
+      ]}
+    >
       <View
         style={[
           jumboCount === 0 && {
@@ -223,6 +229,13 @@ export function MessageBubble({
         (groupPosition === 'first' || groupPosition === 'standalone') ? (
           <Text
             style={[styles.senderName, { color: senderTint, fontFamily: theme.type.fontBody }]}
+            {...(onSenderPress
+              ? {
+                  onPress: onSenderPress,
+                  accessibilityRole: 'button' as const,
+                  suppressHighlighting: true,
+                }
+              : {})}
           >
             {senderLabel}
           </Text>
@@ -286,7 +299,10 @@ export function MessageBubble({
         {hasBody && jumboCount > 0 ? (
           <View style={styles.jumboBlock}>
             <Text
-              style={{ fontSize: emojiFontSize(jumboCount), lineHeight: emojiFontSize(jumboCount) + 8 }}
+              style={{
+                fontSize: emojiFontSize(jumboCount),
+                lineHeight: emojiFontSize(jumboCount) + 8,
+              }}
             >
               {body}
             </Text>

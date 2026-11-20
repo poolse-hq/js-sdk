@@ -26,7 +26,7 @@ export { GroupDetailsSheet, type GroupDetailsSheetProps } from './GroupDetailsSh
 
 // ── Pieces of the chat surface ────────────────────────────────
 export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';
-export { MessageRow, type MessageRowProps } from './MessageRow.js';
+export { MessageRow, type MessageRowProps, type MessageUser } from './MessageRow.js';
 export { CallLogRow, type CallLogRowProps } from './CallLogRow.js';
 export { LiveCallBanner, type LiveCallBannerProps } from './LiveCallBanner.js';
 export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';

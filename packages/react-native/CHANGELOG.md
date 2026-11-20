@@ -4,6 +4,28 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `ConversationView` props: `focusMessageId` (load older pages until the
+  message is there, scroll to it and highlight it) with
+  `onFocusMessageNotFound`; `onSenderPress(user)` and `onAvatarPress(user)`
+  (`MessageUser`, exported); `composer={false}` / `readOnly` hide the
+  composer (and quote-reply and the attachment picker with it).
+- Tapping a quoted message jumps to the original.
+- `MessageRow` `onSenderPress` / `onAvatarPress`, `MessageBubble`
+  `onSenderPress`, `MessageList` `scrollToMessageId` / `scrollRequest`.
+
+### Changed
+
+- `ConversationView` always marks messages read; `readReceipts={false}`
+  now only hides the read ticks. Before, it also stopped marking read, so
+  unread counts never cleared.
+- `onMarkedRead` fires once the server accepts the read (it fired before the
+  request). The badge in every `useConversations()` under the provider is
+  already cleared by then.
+
 ## [3.2.0] — 2026-11-17
 
 Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).

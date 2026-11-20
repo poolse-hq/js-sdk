@@ -21,6 +21,17 @@ import { callLogDisplayFor, useReactions, useUser } from '@poolse/react';
 // use 50–60px; the lower bound feels lighter for one-handed thumb use.
 const SWIPE_REPLY_THRESHOLD = 50;
 
+/** Who sent a message — what `onSenderPress` / `onAvatarPress` receive. */
+export interface MessageUser {
+  /** poolse user id. */
+  userId: Uuid | null;
+  /** Your own user id (`external_id`) — what `userResolver` takes. */
+  externalId: string | null;
+  /** Resolved name, or the fallback shown in its place. */
+  displayName: string;
+  avatarUrl: string | null;
+}
+
 export interface MessageRowProps {
   msg: Message;
   meId: string | null;
@@ -65,6 +76,10 @@ export interface MessageRowProps {
   showAvatar?: boolean;
   /** Avatar resolver — same signature as `<MemberList avatarFor>`. */
   avatarFor?: (externalId: string) => string | null;
+  /** Makes the sender label tappable (other people's messages). */
+  onSenderPress?: (user: MessageUser) => void;
+  /** Makes the avatar tappable (other people's messages). */
+  onAvatarPress?: (user: MessageUser) => void;
   /** Call-log rows: offer "Call back" (see `<CallLogRow onCallBack>`). */
   onCallBack?: (media: 'audio' | 'video') => void;
 }
@@ -110,6 +125,8 @@ function BubbleMessageRow({
   showSenderName = false,
   showAvatar = false,
   avatarFor,
+  onSenderPress,
+  onAvatarPress,
 }: MessageRowProps) {
   const theme = usePoolseTheme();
   const isSelf = meId !== null && msg.sender_id === meId;
@@ -224,7 +241,8 @@ function BubbleMessageRow({
   // Without the useUser fallback, omitting `avatarFor` / `labelFor` on
   // <ConversationView> bypassed the resolver at the row level even
   // when `PoolseConfig.userResolver` was configured.
-  const rowSender = useUser(showAvatarSlot ? msg.sender_external_id : null);
+  const wantsSender = showAvatarSlot || (!isSelf && onSenderPress !== undefined);
+  const rowSender = useUser(wantsSender ? msg.sender_external_id : null);
   const avatarUrl = msg.sender_external_id
     ? (avatarFor?.(msg.sender_external_id) ?? rowSender.profile?.avatarUrl ?? null)
     : null;
@@ -233,6 +251,20 @@ function BubbleMessageRow({
       rowSender.profile?.displayName ??
       msg.sender_external_id)
     : null;
+  const sender: MessageUser = {
+    userId: msg.sender_id,
+    externalId: msg.sender_external_id,
+    displayName: senderLabel ?? 'Unknown',
+    avatarUrl,
+  };
+  const avatar = (
+    <Avatar
+      src={avatarUrl ?? null}
+      name={senderLabel}
+      seed={msg.sender_external_id ?? null}
+      size="sm"
+    />
+  );
 
   return (
     <View
@@ -247,14 +279,18 @@ function BubbleMessageRow({
     >
       {showAvatarSlot ? (
         <View style={styles.avatarSlot}>
-          {showAvatarRender ? (
-            <Avatar
-              src={avatarUrl ?? null}
-              name={senderLabel}
-              seed={msg.sender_external_id ?? null}
-              size="sm"
-            />
-          ) : null}
+          {!showAvatarRender ? null : onAvatarPress ? (
+            <Pressable
+              onPress={() => onAvatarPress(sender)}
+              accessibilityRole="button"
+              accessibilityLabel={sender.displayName}
+              hitSlop={6}
+            >
+              {avatar}
+            </Pressable>
+          ) : (
+            avatar
+          )}
         </View>
       ) : null}
 
@@ -297,6 +333,7 @@ function BubbleMessageRow({
               groupPosition={groupPosition}
               maxBodyLength={maxBodyLength}
               showSenderName={showSenderName}
+              {...(onSenderPress ? { onSenderPress: () => onSenderPress(sender) } : {})}
               showAttachments={attachments}
               markdown={markdown}
               // No actionsTrigger: the always-visible chevron stamped

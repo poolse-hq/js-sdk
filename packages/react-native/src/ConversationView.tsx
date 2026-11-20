@@ -33,9 +33,10 @@ import { LiveCallBanner } from './LiveCallBanner.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageList, type MessageListItem } from './MessageList.js';
-import { MessageRow } from './MessageRow.js';
+import { MessageRow, type MessageUser } from './MessageRow.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
+import { latestMarkableId } from './internal/messageFocus.js';
 import { UploadProvider } from './internal/uploadContext.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
@@ -75,6 +76,10 @@ export interface ConversationViewProps {
   actions?: boolean;
   threads?: boolean;
   quotations?: boolean;
+  /**
+   * Show read ticks on your own messages. Only the ticks: the view
+   * marks messages read either way, so unread counts stay right.
+   */
   readReceipts?: boolean;
   /** Render message bodies as Markdown (links, bold, code). Defaults true. */
   markdown?: boolean;
@@ -86,22 +91,41 @@ export interface ConversationViewProps {
   avatars?: 'auto' | 'always' | 'never';
 
   /**
-   * Fires when auto-mark-read commits a new server-side read cursor.
-   * Receives the conversation id + the message id that was marked
-   * as the last-read. Wire this to `useConversations().markConversationRead(convId, msgId)`
-   * so the sidebar / list view's unread badge clears immediately
-   * instead of waiting for the next conversations refetch.
+   * Fires once the server accepts a new read position (the view marks
+   * the newest message read as it arrives). Receives the conversation
+   * id + the message id marked as last-read. Every
+   * `useConversations()` under the same provider has already cleared
+   * the conversation's badge by then.
    */
   onMarkedRead?: (conversationId: string, messageId: string) => void;
   /**
-   * Fires after every successful message send. Wire to the parent's
-   * `useConversations().refetch()` so the conversation list shows
-   * the fresh `last_message_preview` / `last_message_at` for the
-   * conversation you just sent into. `useConversations` creates
-   * isolated state per call site, so ConversationView can't refresh
-   * a parent hook's state on its own.
+   * Fires after every successful message send — e.g. to refetch
+   * conversations from a list that isn't `useConversations()` (which
+   * gets the new preview over realtime already).
    */
   onSent?: (conversationId: string) => void;
+  /**
+   * Jump to this message: older pages load until it's there, then it
+   * scrolls into view and is highlighted briefly. Set it again (or to
+   * another id) to jump again. When it can't be found — deleted, a
+   * thread reply, or not in this conversation — a short notice shows
+   * and `onFocusMessageNotFound` fires.
+   */
+  focusMessageId?: Uuid | null;
+  /** `focusMessageId` couldn't be found in this conversation. */
+  onFocusMessageNotFound?: (messageId: Uuid) => void;
+  /** Makes the sender label on other people's messages tappable. */
+  onSenderPress?: (user: MessageUser) => void;
+  /** Makes the avatar next to other people's messages tappable. */
+  onAvatarPress?: (user: MessageUser) => void;
+  /**
+   * `false` hides the composer (and with it quote-reply and the
+   * attachment picker) — for an archived conversation or a viewer who
+   * can't post. Defaults to `true`.
+   */
+  composer?: boolean;
+  /** Same as `composer={false}`. */
+  readOnly?: boolean;
   /**
    * keyboardVerticalOffset passed to the internal KeyboardAvoidingView.
    * On iOS this MUST equal the distance from the screen top to the
@@ -151,12 +175,22 @@ export function ConversationView({
   avatars = 'auto',
   onMarkedRead,
   onSent,
+  focusMessageId = null,
+  onFocusMessageNotFound,
+  onSenderPress,
+  onAvatarPress,
+  composer = true,
+  readOnly = false,
   keyboardOffset = 0,
   onCallBack,
   onJoinCall,
   currentCallId = null,
 }: ConversationViewProps) {
   const theme = usePoolseTheme();
+  const showComposer = composer && !readOnly;
+  // Without a composer there's nowhere to quote into or attach to.
+  const canQuote = quotations && showComposer;
+  const canAttach = attachments && showComposer;
   const { me } = useMe();
   const meId = me?.id ?? null;
   // The workspace's read-receipt setting, for this user: hidden means no
@@ -171,6 +205,7 @@ export function ConversationView({
     loading,
     hasMore,
     loadMore,
+    loadUntil,
     send,
     edit,
     delete: deleteMsg,
@@ -239,30 +274,22 @@ export function ConversationView({
   }, [messages]);
 
   // Auto-mark-read: advance the read cursor whenever a confirmed
-  // message lands at the tail. Skip optimistic temp messages
-  // (no `sequence` yet — server hasn't seen the id) to avoid
-  // 404s when send-then-immediately-mark races the round-trip.
-  // Wrapping in try/catch lets us survive any other transient
-  // membership-write failures without breaking the chat.
+  // message lands at the tail — whatever `readReceipts` says, which
+  // only decides whether ticks show. Skips optimistic temp messages
+  // (no server sequence yet) to avoid 404s when send-then-mark races
+  // the round-trip. A failure is retried on the next message.
   const lastMarkedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!readReceipts) return;
-    if (messages.length === 0) return;
-    const latest = messages[messages.length - 1];
-    if (!latest || !latest.id) return;
-    if (latest.id === lastMarkedRef.current) return;
-    // Optimistic temp messages don't have a server-assigned sequence.
-    // Marking them would 404 (server hasn't processed the send yet);
-    // wait for the realtime confirmation to land, which replaces the
-    // temp with a real message carrying a real sequence.
-    if (typeof latest.sequence !== 'number' || latest.sequence <= 0) return;
-    lastMarkedRef.current = latest.id;
-    void markReadUpTo(latest.id).catch(() => {
-      // Reset so we retry on the next message arrival.
-      lastMarkedRef.current = null;
-    });
-    onMarkedRead?.(conversationId, latest.id);
-  }, [messages, meId, readReceipts, markReadUpTo, onMarkedRead, conversationId]);
+    const latestId = latestMarkableId(messages);
+    if (!latestId || latestId === lastMarkedRef.current) return;
+    lastMarkedRef.current = latestId;
+    markReadUpTo(latestId).then(
+      () => onMarkedRead?.(conversationId, latestId),
+      () => {
+        if (lastMarkedRef.current === latestId) lastMarkedRef.current = null;
+      },
+    );
+  }, [messages, markReadUpTo, onMarkedRead, conversationId]);
 
   // Precompute per-message group position (drives the bubble's
   // corner treatment + inter-cluster spacing). Same logic as
@@ -277,6 +304,66 @@ export function ConversationView({
     () => messages.filter((m) => isMessageVisibleTo(m, meId)),
     [messages, meId],
   );
+  // Jump to a message (`focusMessageId`, or a tapped quote): page back
+  // until it's loaded, then scroll the list to it and highlight it.
+  const [jump, setJump] = useState<{ id: Uuid; request: number } | null>(null);
+  const [pendingFocusId, setPendingFocusId] = useState<Uuid | null>(null);
+  const [highlightId, setHighlightId] = useState<Uuid | null>(null);
+  const [focusMissing, setFocusMissing] = useState(false);
+  const onFocusNotFoundRef = useRef(onFocusMessageNotFound);
+  onFocusNotFoundRef.current = onFocusMessageNotFound;
+  const focusMiss = useCallback((id: Uuid, report: boolean) => {
+    setFocusMissing(true);
+    if (report) onFocusNotFoundRef.current?.(id);
+  }, []);
+  const jumpTo = useCallback(
+    (id: Uuid, report: boolean): (() => void) => {
+      let current = true;
+      loadUntil(id)
+        .then((found) => {
+          if (!current) return;
+          if (found) setPendingFocusId(id);
+          else focusMiss(id, report);
+        })
+        .catch(() => {
+          if (current) focusMiss(id, report);
+        });
+      return () => {
+        current = false;
+      };
+    },
+    [loadUntil, focusMiss],
+  );
+  useEffect(() => {
+    setPendingFocusId(null);
+    setFocusMissing(false);
+    if (!focusMessageId || loading) return;
+    return jumpTo(focusMessageId, true);
+    // `loading` flips only while a conversation's first page loads.
+  }, [focusMessageId, conversationId, loading, jumpTo]);
+  useEffect(() => {
+    if (!pendingFocusId) return;
+    setPendingFocusId(null);
+    // Loaded but not shown (a call-log marker meant for someone else).
+    if (!visibleMessages.some((m) => m.id === pendingFocusId)) {
+      focusMiss(pendingFocusId, true);
+      return;
+    }
+    setJump((prev) => ({ id: pendingFocusId, request: (prev?.request ?? 0) + 1 }));
+    setHighlightId(pendingFocusId);
+  }, [pendingFocusId, visibleMessages, focusMiss]);
+  useEffect(() => {
+    if (!highlightId) return;
+    const t = setTimeout(() => setHighlightId(null), 1600);
+    return () => clearTimeout(t);
+  }, [highlightId]);
+  useEffect(() => {
+    if (!focusMissing) return;
+    const t = setTimeout(() => setFocusMissing(false), 4000);
+    return () => clearTimeout(t);
+  }, [focusMissing]);
+  const onQuotedClick = useCallback((id: Uuid) => void jumpTo(id, false), [jumpTo]);
+
   const groupPositionById = useMemo(() => {
     const map = new Map<string, ReturnType<typeof computeGroupPosition>>();
     for (let i = 0; i < visibleMessages.length; i++) {
@@ -317,7 +404,7 @@ export function ConversationView({
         insertedAt: msg.inserted_at,
       });
       const groupPosition = groupPositionById.get(msg.id) ?? 'standalone';
-      return (
+      const row = (
         <MessageRow
           msg={msg}
           meId={meId}
@@ -325,15 +412,18 @@ export function ConversationView({
           attachments={attachments}
           actions={actions}
           threads={threads}
-          quotations={quotations}
+          quotations={canQuote}
           {...(readState ? { readState } : {})}
           isEditing={editingId === msg.id}
           {...(canEdit ? { onStartEdit: () => setEditingId(msg.id) } : {})}
           onDelete={() => deleteMsg(msg.id)}
           {...(threads ? { onOpenThread: () => setThreadRoot(msg) } : {})}
-          {...(quotations ? { onQuote: () => setReplyingTo(msg) } : {})}
+          {...(canQuote ? { onQuote: () => setReplyingTo(msg) } : {})}
+          onQuotedClick={onQuotedClick}
           {...(labelFor ? { labelFor } : {})}
           {...(avatarFor ? { avatarFor } : {})}
+          {...(onSenderPress ? { onSenderPress } : {})}
+          {...(onAvatarPress ? { onAvatarPress } : {})}
           showSenderName={showSenderLabels}
           showAvatar={showAvatars}
           maxBodyLength={maxBodyLength}
@@ -342,12 +432,19 @@ export function ConversationView({
           {...(onCallBack ? { onCallBack } : {})}
         />
       );
+      if (msg.id !== highlightId) return row;
+      return <View style={{ backgroundColor: theme.colors.brandSoft }}>{row}</View>;
     },
     [
       onCallBack,
+      onQuotedClick,
+      onSenderPress,
+      onAvatarPress,
+      highlightId,
+      theme.colors.brandSoft,
+      canQuote,
       renderMessage,
       meId,
-      readReceipts,
       showReadState,
       receiptsVisible,
       members,
@@ -355,7 +452,6 @@ export function ConversationView({
       attachments,
       actions,
       threads,
-      quotations,
       editingId,
       deleteMsg,
       labelFor,
@@ -403,10 +499,6 @@ export function ConversationView({
       ) => {
         await send({ body, ...opts });
         setReplyingTo(null);
-        // Tell the parent so it can refresh ITS useConversations
-        // state. useConversations creates isolated state per call
-        // site, so a refetch from here wouldn't update PoolseInbox's
-        // list — only the parent's own hook instance can.
         onSent?.(conversationId);
       },
       onTyping: signalTyping,
@@ -471,6 +563,17 @@ export function ConversationView({
         keyboardVerticalOffset={keyboardOffset}
       >
         {headerNode}
+        {focusMissing ? (
+          <Text
+            style={[
+              styles.notice,
+              { color: theme.colors.ink2, backgroundColor: theme.colors.surface2 },
+            ]}
+            accessibilityRole="alert"
+          >
+            That message isn't available.
+          </Text>
+        ) : null}
         {onJoinCall ? (
           <JoinBanner
             conversationId={conversationId}
@@ -488,6 +591,8 @@ export function ConversationView({
             hasMore={hasMore}
             onLoadMore={loadMore}
             renderItem={renderItem}
+            scrollToMessageId={jump?.id ?? null}
+            scrollRequest={jump?.request ?? 0}
             ListHeader={
               <View>
                 {visibleStreams.map((stream) =>
@@ -537,13 +642,13 @@ export function ConversationView({
           ) : null}
         </View>
 
-        {mentions ? (
+        {!showComposer ? null : mentions ? (
           <MentionInput conversationId={conversationId} {...composerProps} />
         ) : (
           <MessageComposer {...composerProps} />
         )}
 
-        {attachments ? (
+        {canAttach ? (
           <AttachmentPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} />
         ) : null}
 
@@ -603,6 +708,12 @@ function readStateForMessage(
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  notice: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   streamFailed: {
     fontSize: 12,

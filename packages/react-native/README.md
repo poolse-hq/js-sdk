@@ -65,6 +65,16 @@ function ChatRoot() {
 To show one conversation inside your own navigation, render
 `<ConversationView conversationId={id} keyboardOffset={headerHeight} />`.
 
+`ConversationView` marks messages read as they arrive, which clears the
+conversation's badge in every `useConversations()` / `ConversationList` under
+the same provider; `readReceipts={false}` only hides the ticks. Other props:
+`focusMessageId` (load older pages until the message is there, scroll to it and
+highlight it) with `onFocusMessageNotFound`, `onSenderPress` and
+`onAvatarPress` (receive a `MessageUser`:
+`{ userId, externalId, displayName, avatarUrl }`), and `composer={false}` (or
+`readOnly`) to hide the composer. Tapping a quoted message jumps to the
+original.
+
 ## `useAppStateLifecycle()`
 
 Call it once inside `<PoolseProvider>`. From 3.1 it pauses the socket when

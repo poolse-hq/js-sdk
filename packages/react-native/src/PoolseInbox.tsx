@@ -393,14 +393,13 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
                 // ChatHeader height as the iOS keyboardVerticalOffset.
                 keyboardOffset={keyboardOffset || detailKeyboardOffset}
                 onMarkedRead={(convId) => {
-                  // Optimistic local clear so the badge disappears
-                  // immediately — server-side cursor was advanced
-                  // by ConversationView's markReadUpTo.
+                  // markReadUpTo already cleared the shared badge; a
+                  // no-op unless a custom list passes its own counts.
                   markConversationRead(convId);
                 }}
                 onSent={() => {
-                  // useConversations is per-call-site state — only
-                  // OUR refetch updates the list's preview / timestamps.
+                  // Realtime brings the new preview too; this covers a
+                  // socket that's down.
                   void refetchConversations();
                 }}
                 {...(labelFor ? { labelFor } : {})}

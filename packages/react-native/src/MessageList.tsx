@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 
+import { indexOfMessage } from './internal/messageFocus.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { usePoolseTheme } from './theme/PoolseTheme.js';
 
@@ -49,6 +50,13 @@ export interface MessageListProps {
    * scrolled away from the bottom. Tapping scrolls to the latest.
    */
   meId?: string | null;
+  /**
+   * Scroll this message to the middle of the list (it must already be
+   * in `messages`). Changing `scrollRequest` — e.g. a counter — scrolls
+   * again to the same message.
+   */
+  scrollToMessageId?: string | null;
+  scrollRequest?: number;
 }
 
 // How far above the bottom (in pixels — the list is inverted, so
@@ -75,6 +83,8 @@ export function MessageList({
   ListFooter = null,
   emptyState,
   meId = null,
+  scrollToMessageId = null,
+  scrollRequest = 0,
 }: MessageListProps) {
   const theme = usePoolseTheme();
   const flatListRef = useRef<FlatList<MessageListItem>>(null);
@@ -115,6 +125,38 @@ export function MessageList({
     setAtBottom((prev) => (prev === next ? prev : next));
     if (next) setNewCount(0);
   }, []);
+
+  // Jump to a message. FlatList can only scroll to a row it has
+  // measured; for one further back, `onScrollToIndexFailed` first
+  // scrolls near it by the average row height, then tries again.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const scrollRetriesRef = useRef(0);
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    const index = indexOfMessage(dataRef.current, scrollToMessageId);
+    if (index === -1) return;
+    scrollRetriesRef.current = 0;
+    flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+  }, [scrollToMessageId, scrollRequest]);
+  const onScrollToIndexFailed = useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      flatListRef.current?.scrollToOffset({
+        offset: info.averageItemLength * info.index,
+        animated: false,
+      });
+      if (scrollRetriesRef.current >= 3) return;
+      scrollRetriesRef.current += 1;
+      setTimeout(() => {
+        flatListRef.current?.scrollToIndex({
+          index: info.index,
+          animated: true,
+          viewPosition: 0.5,
+        });
+      }, 120);
+    },
+    [],
+  );
 
   const scrollToBottom = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -165,6 +207,7 @@ export function MessageList({
         renderItem={handleRender}
         onEndReached={hasMore ? onLoadMore : undefined}
         onEndReachedThreshold={0.3}
+        onScrollToIndexFailed={onScrollToIndexFailed}
         onScroll={handleScroll}
         scrollEventThrottle={32}
         // `inverted` flips the list, so FlatList's ListHeaderComponent
