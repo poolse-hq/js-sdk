@@ -3,7 +3,8 @@
 
 import type { PoolseConfig, ResolvedConfig } from './config.js';
 import { resolveConfig } from './config.js';
-import { PoolseRealtime } from './realtime/realtime.js';
+import { PoolseRealtime, type UserChannel } from './realtime/realtime.js';
+import type { AppEvent, Unsubscribe } from './realtime/types.js';
 import { AttachmentsResource } from './resources/attachments.js';
 import { ConversationsResource } from './resources/conversations.js';
 import { DevicesResource } from './resources/devices.js';
@@ -69,6 +70,7 @@ export class Poolse {
 
   private readonly resolved: ResolvedConfig;
   private readonly tokenCache: TokenCache;
+  private readonly appEventListeners = new Set<(evt: AppEvent) => void>();
 
   constructor(config: PoolseConfig) {
     this.resolved = resolveConfig(config);
@@ -97,7 +99,45 @@ export class Poolse {
     this.realtime = new PoolseRealtime(cachedConfig, this.tokenCache, {
       ...(this.resolved.wsUrl !== undefined ? { wsUrl: this.resolved.wsUrl } : {}),
       socketPath: this.resolved.socketPath,
+      onUserChannel: (channel) => this.bindUserChannel(channel),
     });
+  }
+
+  /**
+   * App-defined events sent to the signed-in user (`app:event` on their
+   * `user:<id>` channel) — e.g. the Workspace API's `member:updated`
+   * after someone changes their name or picture, or
+   * `workspace:updated`.
+   *
+   * Registering a handler joins the user channel as soon as the user is
+   * known (after the first `me.show()`), if nothing has yet.
+   *
+   * Whether or not anything listens, `member:updated` drops the
+   * member's cached profile (`users.invalidate(data.external_id)`, or
+   * every profile when the event names nobody), so names and pictures
+   * re-render with the new ones.
+   *
+   *     const off = chat.onAppEvent(({ type, data }) => {
+   *       if (type === 'workspace:updated') reloadWorkspace();
+   *     });
+   */
+  onAppEvent(fn: (evt: AppEvent) => void): Unsubscribe {
+    this.appEventListeners.add(fn);
+    let offMe: (() => void) | null = null;
+    const me = this.me.peek();
+    if (me) {
+      this.realtime.user(me.id);
+    } else {
+      offMe = this.me.onChange((m) => {
+        offMe?.();
+        offMe = null;
+        if (this.appEventListeners.has(fn)) this.realtime.user(m.id);
+      });
+    }
+    return () => {
+      this.appEventListeners.delete(fn);
+      offMe?.();
+    };
   }
 
   /**
@@ -133,5 +173,18 @@ export class Poolse {
    */
   destroy(): void {
     this.realtime.disconnect();
+  }
+
+  private bindUserChannel(channel: UserChannel): void {
+    channel.onAppEvent((evt) => {
+      if (evt?.type === 'member:updated') this.invalidateMember(evt.data);
+      for (const fn of this.appEventListeners) fn(evt);
+    });
+  }
+
+  private invalidateMember(data: Record<string, unknown> | null | undefined): void {
+    const id = data?.['external_id'] ?? data?.['user_external_id'];
+    if (typeof id === 'string' && id !== '') this.users.invalidate(id);
+    else this.users.invalidateAll();
   }
 }

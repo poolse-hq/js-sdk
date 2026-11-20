@@ -163,3 +163,44 @@ describe('ConversationHandle', () => {
     expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/conversations/c-1/members/u-2');
   });
 });
+
+describe('ConversationHandle.membership', () => {
+  const own = { conversation_id: 'c-1', role: 'member', notify: null, muted_until: null };
+
+  it('get → GET /v1/conversations/:id/membership', async () => {
+    const fetchFn = scriptedFetch([jsonResponse(own)]);
+    const chat = buildPoolse(fetchFn);
+
+    const m = await chat.conversations.one('c-1').membership.get();
+
+    expect(m).toEqual(own);
+    expect(fetchFn.calls[0]?.method).toBe('GET');
+    expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/conversations/c-1/membership');
+  });
+
+  it('update → PATCH with notify / muted_until', async () => {
+    const until = '2026-12-01T00:00:00Z';
+    const fetchFn = scriptedFetch([
+      jsonResponse({ ...own, notify: 'mentions', muted_until: until }),
+    ]);
+    const chat = buildPoolse(fetchFn);
+
+    const m = await chat.conversations
+      .one('c-1')
+      .membership.update({ notify: 'mentions', muted_until: until });
+
+    expect(m.notify).toBe('mentions');
+    expect(fetchFn.calls[0]?.method).toBe('PATCH');
+    expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/conversations/c-1/membership');
+    expect(await bodyJson(fetchFn.calls[0]!)).toEqual({ notify: 'mentions', muted_until: until });
+  });
+
+  it('update sends null to follow the default / unmute', async () => {
+    const fetchFn = scriptedFetch([jsonResponse(own)]);
+    const chat = buildPoolse(fetchFn);
+
+    await chat.conversations.one('c-1').membership.update({ notify: null, muted_until: null });
+
+    expect(await bodyJson(fetchFn.calls[0]!)).toEqual({ notify: null, muted_until: null });
+  });
+});

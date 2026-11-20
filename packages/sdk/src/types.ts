@@ -21,6 +21,38 @@ export interface Me {
   updated_at: IsoDateTime;
   /** Where read receipts stand for this user. Absent on older servers (treat as on). */
   read_receipts?: ReadReceiptsState;
+  /** The user's own notification preferences. Absent on older servers. */
+  notifications?: NotificationPreferences;
+}
+
+/**
+ * How a conversation notifies the user: every message, only messages
+ * that mention them, or nothing. Calls ring regardless.
+ */
+export type NotifyLevel = 'all' | 'mentions' | 'none';
+
+/** A daily quiet time in the user's own time zone, e.g. 22:00–07:00. */
+export interface QuietHours {
+  /** `HH:MM`. */
+  start: string;
+  /** `HH:MM`; earlier than `start` means the window wraps past midnight. */
+  end: string;
+  /** IANA time zone, e.g. `Europe/Skopje`. */
+  timezone: string;
+}
+
+/**
+ * The user's own say over message notifications (`Me.notifications`,
+ * set with `me.update({ notifications })`). Per-conversation choices
+ * live on the membership — see {@link OwnMembership}.
+ */
+export interface NotificationPreferences {
+  /** Do-not-disturb: no message notifications until then. Null = not paused. */
+  paused_until: IsoDateTime | null;
+  /** Default for group conversations; null follows the workspace. */
+  groups: 'all' | 'mentions' | null;
+  /** Daily quiet time; null = none. */
+  quiet_hours: QuietHours | null;
 }
 
 /**
@@ -89,6 +121,15 @@ export interface Conversation {
    * conversation is fetched via other paths.
    */
   unread_count?: number;
+  /** How many of the unread messages mention the caller. Absent on older servers. */
+  mention_unread_count?: number;
+  /**
+   * The caller's notification level for this conversation; null follows
+   * their default (`Me.notifications.groups`, then the workspace).
+   */
+  notify?: NotifyLevel | null;
+  /** The caller muted this conversation until then (mentions still notify); null = not muted. */
+  muted_until?: IsoDateTime | null;
   /**
    * Tenant `external_id`s of every member, in no particular order.
    * Populated by code paths that preload the memberships
@@ -155,6 +196,26 @@ export interface Membership {
 
 export interface MembershipList {
   data: Membership[];
+}
+
+/**
+ * The caller's own membership of a conversation —
+ * `GET /v1/conversations/:id/membership` — carrying how that
+ * conversation notifies them.
+ */
+export interface OwnMembership {
+  conversation_id: Uuid;
+  role: MemberRole;
+  /** Per-conversation level; null follows the user's default. */
+  notify: NotifyLevel | null;
+  /** Silent until then, except for mentions; null = not muted. */
+  muted_until: IsoDateTime | null;
+}
+
+/** `PATCH /v1/conversations/:id/membership` — send only what changes. */
+export interface OwnMembershipUpdateRequest {
+  notify?: NotifyLevel | null;
+  muted_until?: IsoDateTime | null;
 }
 
 /**

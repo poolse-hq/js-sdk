@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPoolse, jsonResponse, scriptedFetch } from './_helpers.js';
+import { bodyJson, buildPoolse, jsonResponse, scriptedFetch } from './_helpers.js';
 
 describe('MeResource', () => {
   it('GETs /v1/me and returns the parsed user', async () => {
@@ -36,5 +36,19 @@ describe('MeResource', () => {
     // We can't easily assert identity (fetch wraps it), but presence
     // is enough — the SDK plumbed it through.
     expect(fetchFn.calls[0]?.signal).toBeDefined();
+  });
+});
+
+describe('MeResource.update notifications', () => {
+  it('PATCHes /v1/me with the notifications object', async () => {
+    const prefs = { paused_until: null, groups: 'mentions', quiet_hours: null };
+    const fetchFn = scriptedFetch([jsonResponse({ id: 'u-1', notifications: prefs })]);
+    const chat = buildPoolse(fetchFn);
+
+    const me = await chat.me.update({ notifications: { groups: 'mentions' } });
+
+    expect(me.notifications?.groups).toBe('mentions');
+    expect(fetchFn.calls[0]?.method).toBe('PATCH');
+    expect(await bodyJson(fetchFn.calls[0]!)).toEqual({ notifications: { groups: 'mentions' } });
   });
 });

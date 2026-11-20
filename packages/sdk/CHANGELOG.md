@@ -4,6 +4,27 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `conversations.one(id).membership.get()` / `.update({ notify, muted_until })`
+  (`OwnMembershipHandle`) for the caller's per-conversation notify level and
+  mute; types `OwnMembership`, `OwnMembershipUpdateRequest`, `NotifyLevel`.
+- `Conversation.mention_unread_count`, `notify` and `muted_until`.
+- `Me.notifications` and `me.update({ notifications })`
+  (`NotificationPreferences`: `paused_until`, `groups`, `quiet_hours`).
+- `UserChannel.onConversationRead` (`conversation:read`,
+  `ConversationReadEvent`) and `UserChannel.onAppEvent` (`app:event`,
+  `AppEvent`).
+- `poolse.onAppEvent(fn)`, and `realtime.peekUser()`.
+
+### Changed
+
+- An `app:event` of type `member:updated` drops the member's cached profile
+  (`users.invalidate(data.external_id)`, or `invalidateAll()` when it names
+  nobody).
+
 ## [3.2.0] — 2026-11-17
 
 Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).

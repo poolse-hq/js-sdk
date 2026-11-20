@@ -70,30 +70,49 @@ poolse.destroy();
 
 ## What's in it
 
-| Member                                        | Covers                                                                                                                                              |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `poolse.me`                                   | `show`, `update({ read_receipts })`, `peek`, `onChange`                                                                                             |
-| `poolse.conversations`                        | `list`, `create`, `one(id)` → `show`, `update`, `listMembers`, `addMembers`, `addMember`, `removeMember(userId)`, `messages.list / send / markRead` |
-| `poolse.messages`                             | `one(id)` → `update`, `delete`, `replies`, `addReaction`, `removeReaction`                                                                          |
-| `poolse.attachments`                          | `upload`, `requestUpload`, `one(id)` → `downloadUrl`, `delete`                                                                                      |
-| `poolse.users`                                | Cache over `userResolver`: `get`, `peek`, `subscribe`, `invalidate`, `invalidateAll`                                                                |
-| `poolse.devices`                              | `register`, `unregister` (push tokens)                                                                                                              |
-| `poolse.liveCalls`                            | `get(conversationId)`                                                                                                                               |
-| `poolse.rooms`                                | `start`, `ring`, `leave`                                                                                                                            |
-| `poolse.callTokens`                           | `create(conversationId)`                                                                                                                            |
-| `poolse.call(conversationId, { livekit, … })` | `CallRoom`: call media on the web (pass your `livekit-client` import)                                                                               |
-| `poolse.realtime`                             | `conversation(id)`, `user(id)`, `leave`, `getStatus`, `onStatus`, `connect`, `pause`, `resume`, `disconnect`                                        |
-| `poolse.rest.request({ method, path, … })`    | Any endpoint, with the same auth, retries and idempotency                                                                                           |
+| Member                                        | Covers                                                                                                                                                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `poolse.me`                                   | `show`, `update({ read_receipts })` or `update({ notifications })`, `peek`, `onChange`                                                                                                                  |
+| `poolse.conversations`                        | `list`, `create`, `one(id)` → `show`, `update`, `listMembers`, `addMembers`, `addMember`, `removeMember(userId)`, `messages.list / send / markRead`, `membership.get / update({ notify, muted_until })` |
+| `poolse.messages`                             | `one(id)` → `update`, `delete`, `replies`, `addReaction`, `removeReaction`                                                                                                                              |
+| `poolse.attachments`                          | `upload`, `requestUpload`, `one(id)` → `downloadUrl`, `delete`                                                                                                                                          |
+| `poolse.users`                                | Cache over `userResolver`: `get`, `peek`, `subscribe`, `invalidate`, `invalidateAll`                                                                                                                    |
+| `poolse.devices`                              | `register`, `unregister` (push tokens)                                                                                                                                                                  |
+| `poolse.liveCalls`                            | `get(conversationId)`                                                                                                                                                                                   |
+| `poolse.rooms`                                | `start`, `ring`, `leave`                                                                                                                                                                                |
+| `poolse.callTokens`                           | `create(conversationId)`                                                                                                                                                                                |
+| `poolse.call(conversationId, { livekit, … })` | `CallRoom`: call media on the web (pass your `livekit-client` import)                                                                                                                                   |
+| `poolse.realtime`                             | `conversation(id)`, `user(id)`, `leave`, `getStatus`, `onStatus`, `connect`, `pause`, `resume`, `disconnect`                                                                                            |
+| `poolse.rest.request({ method, path, … })`    | Any endpoint, with the same auth, retries and idempotency                                                                                                                                               |
 
 Conversation channels emit `onMessage`, `onMessageUpdated`,
 `onMessageDeleted`, `onTypingStart`, `onTypingStop`, `onReactionAdded`,
 `onReactionRemoved`, `onMemberRead`, `onCallStarted`, `onCallParticipants`,
 `onCallFinished`, `onPresenceState`, `onPresenceDiff` and `onClosed`, and
 have `sendTyping()` and `getPresenceState()`. The user channel emits
-`onMention`, `onConversationCreated`, `onConversationUpdated`, `onRingEnded`
+`onMention`, `onConversationCreated`, `onConversationUpdated`,
+`onConversationRead` (your read position moved on any of your devices: fresh
+`unread_count` and `mention_unread_count`), `onAppEvent` (`{ type, data }`
+sent by your backend or the Workspace API), `onRingEnded`
 (`RingEndedEvent`: `reason` is `answered_elsewhere`, `declined`,
 `cancelled`, `timeout` or `finished`) and `onCallFinished` (with
 `conversation_id`).
+
+`poolse.onAppEvent(fn)` listens for app events without holding the user
+channel yourself; it joins it once the user is known. A `member:updated`
+event drops that member's cached profile (`data.external_id`, or every
+profile when it names nobody) so names and pictures re-render; call
+`poolse.users.invalidate(externalId)` yourself after a profile change your
+app makes some other way.
+
+## Notification settings
+
+`me.update({ notifications: { paused_until, groups, quiet_hours } })` sets the
+user's own defaults (send only what changes; `null` clears). Per conversation,
+`conversations.one(id).membership.update({ notify, muted_until })` takes
+`notify` `all` / `mentions` / `none` (or `null` to follow the default) and an
+ISO `muted_until` (or `null`). Conversation rows carry the same `notify`,
+`muted_until` and `mention_unread_count` for the caller.
 
 Events sent while the socket is down aren't replayed; reload from REST when
 `onStatus` reports `connected` again. `realtime.pause()` / `resume()` close

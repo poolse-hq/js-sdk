@@ -19,10 +19,12 @@ import type { ResolvedConfig } from '../config.js';
 import { PoolseError } from '../errors.js';
 import type { TokenCache } from '../token-cache.js';
 import type {
+  AppEvent,
   CallFinishedEvent,
   CallParticipantsEvent,
   CallStartedEvent,
   ConversationCreatedEvent,
+  ConversationReadEvent,
   ConversationUpdatedEvent,
   MemberReadEvent,
   MentionEvent,
@@ -54,6 +56,8 @@ interface RealtimeOptions {
    * swapping http(s) → ws(s).
    */
   wsUrl?: string;
+  /** Called once when the `user:<id>` channel handle is created. */
+  onUserChannel?: (channel: UserChannel) => void;
 }
 
 export class PoolseRealtime {
@@ -61,6 +65,7 @@ export class PoolseRealtime {
   private readonly tokenCache: TokenCache;
   private readonly socketPath: string;
   private readonly wsUrl: string;
+  private readonly onUserChannel: ((channel: UserChannel) => void) | undefined;
 
   private socket: Socket | null = null;
   private readonly conversations = new Map<string, ConversationChannel>();
@@ -76,6 +81,12 @@ export class PoolseRealtime {
     this.tokenCache = tokenCache;
     this.socketPath = opts.socketPath ?? '/socket';
     this.wsUrl = opts.wsUrl ?? deriveWsUrl(config.apiUrl);
+    this.onUserChannel = opts.onUserChannel;
+  }
+
+  /** The `user:<id>` handle if something has joined it, else null. Never connects. */
+  peekUser(): UserChannel | null {
+    return this.userChannel;
   }
 
   /** Current connection status. */
@@ -256,6 +267,7 @@ export class PoolseRealtime {
     const handle = new UserChannel(userId, channel);
     this.userChannel = handle;
     handle._join();
+    this.onUserChannel?.(handle);
     return handle;
   }
 
@@ -560,6 +572,23 @@ export class UserChannel {
    */
   onCallFinished(fn: (evt: CallFinishedEvent) => void): Unsubscribe {
     return this.subscribe('call:finished', fn as (p: unknown) => void);
+  }
+
+  /**
+   * Your read position in a conversation moved — on this device or
+   * another one. Carries the fresh `unread_count` and
+   * `mention_unread_count` to show on the conversation's badge.
+   */
+  onConversationRead(fn: (evt: ConversationReadEvent) => void): Unsubscribe {
+    return this.subscribe('conversation:read', fn as (p: unknown) => void);
+  }
+
+  /**
+   * An app-defined event sent to this user (`app:event`) — e.g. the
+   * Workspace API's `member:updated` / `workspace:updated`.
+   */
+  onAppEvent(fn: (evt: AppEvent) => void): Unsubscribe {
+    return this.subscribe('app:event', fn as (p: unknown) => void);
   }
 
   /** @internal */

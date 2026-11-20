@@ -13,6 +13,7 @@ export {
   type AddMemberOptions,
   ConversationHandle,
   ConversationsResource,
+  OwnMembershipHandle,
 } from './resources/conversations.js';
 export { CallTokensResource } from './resources/call-tokens.js';
 export { LiveCallsResource } from './resources/live-calls.js';
@@ -61,7 +62,9 @@ export type {
   CallFinishedEvent,
   CallParticipantsEvent,
   CallStartedEvent,
+  AppEvent,
   ConversationCreatedEvent,
+  ConversationReadEvent,
   ConversationUpdatedEvent,
   MemberReadEvent,
   MentionEvent,
@@ -91,6 +94,11 @@ export type {
   ErrorEnvelope,
   IsoDateTime,
   Me,
+  NotificationPreferences,
+  NotifyLevel,
+  OwnMembership,
+  OwnMembershipUpdateRequest,
+  QuietHours,
   ReadReceiptsState,
   MemberRole,
   Membership,

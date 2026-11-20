@@ -136,6 +136,32 @@ export interface ConversationUpdatedEvent {
   by_user_id: Uuid | null;
 }
 
+/**
+ * `conversation:read` on `user:<id>` — the user's read position in a
+ * conversation moved (they marked it read on some device, or a call
+ * record / system message advanced it). Sent to all of their devices
+ * so every unread badge agrees.
+ */
+export interface ConversationReadEvent {
+  conversation_id: Uuid;
+  last_read_message_id: Uuid | null;
+  last_read_sequence: number | null;
+  unread_count: number;
+  mention_unread_count: number;
+}
+
+/**
+ * `app:event` on `user:<id>` — an event your own backend (or the
+ * Workspace API) sent to the user, e.g. `member:updated` after a
+ * profile change or `workspace:updated`. poolse doesn't interpret
+ * `data`, except that the SDK refreshes cached profiles on
+ * `member:updated` (see `Poolse.onAppEvent`).
+ */
+export interface AppEvent {
+  type: string;
+  data: Record<string, unknown>;
+}
+
 /** Phoenix Presence list shape. */
 export type PresenceSnapshot = Record<
   Uuid,

@@ -1,5 +1,5 @@
 import type { RestClient } from '../rest-client.js';
-import type { Me } from '../types.js';
+import type { Me, NotificationPreferences } from '../types.js';
 
 export interface UpdateMeRequest {
   /**
@@ -9,6 +9,15 @@ export interface UpdateMeRequest {
    * turning it off also hides other people's.
    */
   read_receipts?: boolean;
+  /**
+   * The user's notification preferences; send only the keys that
+   * change (`null` clears one): `paused_until` (do-not-disturb until
+   * then), `groups` (`all` | `mentions` default for group
+   * conversations) and `quiet_hours` (`{ start, end, timezone }`).
+   * Send it on its own — the server applies `read_receipts` alone when
+   * both are present.
+   */
+  notifications?: Partial<NotificationPreferences>;
 }
 
 /**

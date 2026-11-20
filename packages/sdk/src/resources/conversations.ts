@@ -8,8 +8,49 @@ import type {
   MemberRole,
   Membership,
   MembershipList,
+  OwnMembership,
+  OwnMembershipUpdateRequest,
   Uuid,
 } from '../types.js';
+
+/**
+ * The caller's own membership of one conversation —
+ * `/v1/conversations/:id/membership`: how that conversation notifies
+ * them.
+ */
+export class OwnMembershipHandle {
+  constructor(
+    private readonly client: RestClient,
+    public readonly conversationId: Uuid,
+  ) {}
+
+  /** GET — 404 (`ApiError`) when the caller isn't a member. */
+  get(signal?: AbortSignal): Promise<OwnMembership> {
+    return this.client.request<OwnMembership>({
+      method: 'GET',
+      path: `/v1/conversations/${this.conversationId}/membership`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /**
+   * PATCH — set `notify` (`all` | `mentions` | `none`, or null to
+   * follow the user's default) and/or `muted_until` (ISO date-time, or
+   * null to unmute).
+   *
+   * ```ts
+   * await chat.conversations.one(id).membership.update({ notify: 'mentions' });
+   * ```
+   */
+  update(attrs: OwnMembershipUpdateRequest, signal?: AbortSignal): Promise<OwnMembership> {
+    return this.client.request<OwnMembership>({
+      method: 'PATCH',
+      path: `/v1/conversations/${this.conversationId}/membership`,
+      body: attrs,
+      ...(signal ? { signal } : {}),
+    });
+  }
+}
 
 /** Optional knobs accepted by every member-add call. */
 export interface AddMemberOptions {
@@ -27,11 +68,15 @@ export class ConversationHandle {
    */
   public readonly messages: ConversationMessages;
 
+  /** The caller's own membership: per-conversation notify level and mute. */
+  public readonly membership: OwnMembershipHandle;
+
   constructor(
     private readonly client: RestClient,
     public readonly id: Uuid,
   ) {
     this.messages = new ConversationMessages(this.client, this.id);
+    this.membership = new OwnMembershipHandle(this.client, this.id);
   }
 
   show(signal?: AbortSignal): Promise<Conversation> {
