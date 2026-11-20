@@ -69,3 +69,26 @@ export function renderWithProvider(
   }
   return render(ui, { wrapper: Wrapper, ...options });
 }
+
+/**
+ * A fetch that answers by `"METHOD /path"` instead of call order — for
+ * components whose hooks fetch in no fixed order. Unknown routes fail
+ * the request (the hooks treat it as a network error).
+ */
+export function routedFetch(
+  routes: Record<string, (req: Request) => Response>,
+): typeof globalThis.fetch & { calls: Request[] } {
+  const calls: Request[] = [];
+  const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const req = new Request(
+      typeof input === 'string' || input instanceof URL ? input : input.url,
+      init,
+    );
+    calls.push(req);
+    const route = routes[`${req.method} ${new URL(req.url).pathname}`];
+    if (!route) throw new Error(`unexpected ${req.method} ${req.url}`);
+    return route(req);
+  }) as unknown as typeof globalThis.fetch & { calls: Request[] };
+  (fn as unknown as { calls: Request[] }).calls = calls;
+  return fn;
+}

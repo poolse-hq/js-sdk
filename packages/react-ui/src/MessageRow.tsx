@@ -18,6 +18,17 @@ import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
+/** Who sent a message — what `onSenderPress` / `onAvatarPress` receive. */
+export interface MessageUser {
+  /** poolse user id. */
+  userId: Uuid | null;
+  /** Your own user id (`external_id`) — what `userResolver` takes. */
+  externalId: string | null;
+  /** Resolved name, or the fallback shown in its place. */
+  displayName: string;
+  avatarUrl: string | null;
+}
+
 export interface MessageRowProps {
   msg: Message;
   /** Current user's id. Drives self-vs-other styling + edit/delete affordances. */
@@ -68,6 +79,10 @@ export interface MessageRowProps {
    * identity is implicit from the bubble color/side.
    */
   showAvatar?: boolean;
+  /** Makes the sender label a button (other people's messages). */
+  onSenderPress?: (user: MessageUser) => void;
+  /** Makes the avatar a button (other people's messages). */
+  onAvatarPress?: (user: MessageUser) => void;
   /** Call-log rows: offer "Call back" (see `<CallLogRow onCallBack>`). */
   onCallBack?: (media: 'audio' | 'video') => void;
 }
@@ -114,15 +129,24 @@ function BubbleMessageRow({
   markdown = false,
   showSenderName = false,
   showAvatar = false,
+  onSenderPress,
+  onAvatarPress,
 }: MessageRowProps) {
   // Resolve the sender once at the row level so both the avatar slot
   // (rendered here) and the bubble's inline sender label (rendered
   // by `<MessageBubble>` which calls `useUser` itself) hit the same
-  // dedup'd cache.
-  const { profile: senderProfile } = useUser(msg.sender_id);
-  const senderFallbackName = msg.sender_id ? `User ${msg.sender_id.slice(0, 6)}` : 'Unknown';
+  // dedup'd cache — keyed, like every resolver lookup, by external id.
+  const { profile: senderProfile } = useUser(msg.sender_external_id);
+  const senderFallbackName =
+    msg.sender_external_id ?? (msg.sender_id ? `User ${msg.sender_id.slice(0, 6)}` : 'Unknown');
   const senderName = senderProfile?.displayName ?? senderFallbackName;
   const isSelf = meId !== null && msg.sender_id === meId;
+  const sender: MessageUser = {
+    userId: msg.sender_id,
+    externalId: msg.sender_external_id,
+    displayName: senderName,
+    avatarUrl: senderProfile?.avatarUrl ?? null,
+  };
 
   // Single useReactions instance — both the inline strip and the
   // hover-menu emoji picker use addReaction below. Without sharing,
@@ -211,6 +235,7 @@ function BubbleMessageRow({
           groupPosition={groupPosition}
           senderName={senderName}
           avatarUrl={senderProfile?.avatarUrl ?? null}
+          {...(onAvatarPress ? { onAvatarPress: () => onAvatarPress(sender) } : {})}
         >
           <MessageBubble
             message={msg}
@@ -219,6 +244,7 @@ function BubbleMessageRow({
             maxBodyLength={maxBodyLength}
             markdown={markdown}
             showSenderName={showSenderName}
+            {...(onSenderPress ? { onSenderPress: () => onSenderPress(sender) } : {})}
             showAttachments={attachments}
             {...(readState ? { readState } : {})}
             {...(labelFor ? { labelFor } : {})}
@@ -370,6 +396,7 @@ function BubbleWithAvatar({
   groupPosition,
   senderName,
   avatarUrl,
+  onAvatarPress,
   children,
 }: {
   isSelf: boolean;
@@ -377,6 +404,7 @@ function BubbleWithAvatar({
   groupPosition: BubbleGroupPosition;
   senderName: string;
   avatarUrl: string | null;
+  onAvatarPress?: () => void;
   children: ReactNode;
 }) {
   if (isSelf || !showAvatar) return <>{children}</>;
@@ -386,7 +414,18 @@ function BubbleWithAvatar({
   return (
     <div className="poolse-bubble-shell">
       <div className="poolse-bubble-shell__avatar">
-        {isLastOfCluster ? <Avatar src={avatarUrl} name={senderName} size="sm" /> : null}
+        {!isLastOfCluster ? null : onAvatarPress ? (
+          <button
+            type="button"
+            className="poolse-bubble-shell__avatar-button"
+            aria-label={senderName}
+            onClick={onAvatarPress}
+          >
+            <Avatar src={avatarUrl} name={senderName} size="sm" />
+          </button>
+        ) : (
+          <Avatar src={avatarUrl} name={senderName} size="sm" />
+        )}
       </div>
       {children}
     </div>

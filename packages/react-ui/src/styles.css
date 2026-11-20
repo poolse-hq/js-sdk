@@ -614,6 +614,33 @@
   white-space: nowrap;
 }
 
+/* Sender label / avatar as buttons (`onSenderPress` / `onAvatarPress`). */
+.poolse-message__sender--button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.poolse-message__sender--button:hover {
+  text-decoration: underline;
+}
+.poolse-bubble-shell__avatar-button {
+  display: flex;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.poolse-message__sender--button:focus-visible,
+.poolse-bubble-shell__avatar-button:focus-visible {
+  outline: 2px solid var(--poolse-brand, currentColor);
+  outline-offset: 2px;
+}
+
 /* Bubble + avatar shell — flex row, avatar slot to the left,
    bubble to the right. Self bubbles + no-avatar configurations
    bypass this wrapper entirely (Fragment passthrough). */

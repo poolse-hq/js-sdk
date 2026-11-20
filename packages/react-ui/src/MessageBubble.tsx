@@ -66,6 +66,11 @@ export interface MessageBubbleProps {
    */
   showSenderName?: boolean;
   /**
+   * Makes the sender label (see `showSenderName`) a button — e.g. to
+   * open the sender's profile.
+   */
+  onSenderPress?: () => void;
+  /**
    * Slot for a "show actions" affordance — typically a chevron
    * rendered by `<MessageRow>` that toggles the actions popover on
    * desktop click. Positioned absolutely at the top-trailing corner
@@ -101,6 +106,7 @@ export function MessageBubble({
   maxBodyLength = 0,
   markdown = false,
   showSenderName = false,
+  onSenderPress,
   actionsTrigger,
   showAttachments = true,
 }: MessageBubbleProps) {
@@ -153,15 +159,14 @@ export function MessageBubble({
 
   // 1–3 emoji and nothing else → no bubble chrome, big glyphs.
   const jumboCount =
-    hasVisibleBody && !hasAnyAttachment && !message.quoted_message_id
-      ? emojiOnlyCount(rawBody)
-      : 0;
+    hasVisibleBody && !hasAnyAttachment && !message.quoted_message_id ? emojiOnlyCount(rawBody) : 0;
 
   // The timestamp shares the last text line (reserved by an invisible
   // spacer) whenever the body is plain enough that it ends in a plain
   // line box. Markdown block output and the Read-more toggle both own
   // their last line, so those fall back to the meta row.
-  const trimToggleVisible = shouldTrim || (expanded && rawBody.length > maxBodyLength + TRIM_BUFFER);
+  const trimToggleVisible =
+    shouldTrim || (expanded && rawBody.length > maxBodyLength + TRIM_BUFFER);
   const inlineMeta =
     hasVisibleBody &&
     jumboCount === 0 &&
@@ -205,11 +210,21 @@ export function MessageBubble({
   return (
     <div className={className}>
       {actionsTrigger}
-      {renderSenderName && (
-        <div className="poolse-message__sender" style={{ color: senderColorHex }}>
-          {senderName}
-        </div>
-      )}
+      {renderSenderName &&
+        (onSenderPress ? (
+          <button
+            type="button"
+            className="poolse-message__sender poolse-message__sender--button"
+            style={{ color: senderColorHex }}
+            onClick={onSenderPress}
+          >
+            {senderName}
+          </button>
+        ) : (
+          <div className="poolse-message__sender" style={{ color: senderColorHex }}>
+            {senderName}
+          </div>
+        ))}
       {showQuoteCard === 'full' && (
         <QuotedCard
           quoted={message.quoted_message!}

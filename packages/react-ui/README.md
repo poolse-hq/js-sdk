@@ -46,7 +46,16 @@ export function Chat({ conversationId }: { conversationId: string }) {
 `labelFor`, `renderMessage`, `emptyState`, `loadFonts`, `maxBodyLength`
 (200), `groupingWindowMs` (300000), `senderLabels` and `avatars`
 (`'auto' | 'always' | 'never'`), `onMarkedRead`, `onCallBack`,
-`onJoinCall`, `currentCallId`.
+`onJoinCall`, `currentCallId`, `focusMessageId` and
+`onFocusMessageNotFound`, `onSenderPress` and `onAvatarPress` (receive a
+`MessageUser`: `{ userId, externalId, displayName, avatarUrl }`), and
+`composer={false}` (or `readOnly`) to hide the composer.
+
+The view marks the latest message read while it's in view; once the server
+accepts, every `ConversationList` / `useConversations()` under the same
+provider drops that conversation's badge. `focusMessageId` loads older pages
+until the message is there, scrolls to it and flashes it; a message it can't
+find shows a short notice and calls `onFocusMessageNotFound`.
 
 ## Components
 

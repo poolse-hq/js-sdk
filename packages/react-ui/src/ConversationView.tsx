@@ -23,13 +23,21 @@ import {
   useTyping,
   type MessageStream,
 } from '@poolse/react';
-import React, { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { usePoolseFonts } from './fonts.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
 import { LiveCallBanner } from './LiveCallBanner.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
-import { MessageRow } from './MessageRow.js';
+import { MessageRow, type MessageUser } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
@@ -141,12 +149,35 @@ export interface ConversationViewProps {
   avatars?: 'auto' | 'always' | 'never';
 
   /**
-   * Fired once after the caller's auto-mark-read fires for a fresh
-   * message. Useful for clearing a sidebar unread badge before the
-   * `member:read` realtime echo round-trips. Receives the conv id so
-   * a single handler can switch between rooms.
+   * Fired after the view marks the latest message read and the server
+   * accepts it. Every `useConversations()` / `<ConversationList>` under
+   * the same provider has already cleared this conversation's badge by
+   * then; use this for anything else (an app-level badge, say).
+   * Receives the conv id so a single handler can switch between rooms.
    */
   onMarkedRead?: (conversationId: string) => void;
+  /**
+   * Jump to this message: older pages load until it's there, then it
+   * scrolls into view and flashes. Set it again (or to another id) to
+   * jump again. When it can't be found — deleted, a thread reply, or
+   * not in this conversation — a short notice shows and
+   * `onFocusMessageNotFound` fires.
+   */
+  focusMessageId?: Uuid | null;
+  /** `focusMessageId` couldn't be found in this conversation. */
+  onFocusMessageNotFound?: (messageId: Uuid) => void;
+  /** Makes the sender label on other people's messages a button. */
+  onSenderPress?: (user: MessageUser) => void;
+  /** Makes the avatar next to other people's messages a button. */
+  onAvatarPress?: (user: MessageUser) => void;
+  /**
+   * `false` hides the composer (and with it quote-reply and dropping
+   * files) — for an archived conversation or a viewer who can't post.
+   * Defaults to `true`.
+   */
+  composer?: boolean;
+  /** Same as `composer={false}`. */
+  readOnly?: boolean;
   /**
    * Offer "Call back" on call-log rows the viewer missed or declined,
    * or placed with no answer. Receives the call's media; place the call
@@ -186,11 +217,21 @@ export function ConversationView({
   senderLabels = 'auto',
   avatars = 'auto',
   onMarkedRead,
+  focusMessageId = null,
+  onFocusMessageNotFound,
+  onSenderPress,
+  onAvatarPress,
+  composer = TRUE,
+  readOnly = false,
   onCallBack,
   onJoinCall,
   currentCallId = null,
 }: ConversationViewProps) {
   usePoolseFonts(loadFonts);
+  const showComposer = composer && !readOnly;
+  // Without a composer there's nowhere to quote into or drop files.
+  const canQuote = quotations && showComposer;
+  const canDrop = attachments && showComposer;
 
   const { me } = useMe();
   const {
@@ -199,6 +240,7 @@ export function ConversationView({
     error,
     hasMore,
     loadMore,
+    loadUntil,
     send,
     edit,
     delete: deleteMsg,
@@ -375,6 +417,58 @@ export function ConversationView({
     [messages, meIdForFeed],
   );
 
+  // Jump to `focusMessageId`: page back until it's loaded, then let the
+  // effect below scroll to it once its row has rendered.
+  const [pendingFocusId, setPendingFocusId] = useState<Uuid | null>(null);
+  const [focusMissing, setFocusMissing] = useState(false);
+  const onFocusNotFoundRef = useRef(onFocusMessageNotFound);
+  onFocusNotFoundRef.current = onFocusMessageNotFound;
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
+  const focusMiss = useCallback((id: Uuid) => {
+    setFocusMissing(true);
+    onFocusNotFoundRef.current?.(id);
+  }, []);
+  useEffect(() => {
+    setPendingFocusId(null);
+    setFocusMissing(false);
+    if (!focusMessageId || loading) return;
+    const forConversation = conversationId;
+    let current = true;
+    loadUntil(focusMessageId)
+      .then((found) => {
+        if (!current || conversationIdRef.current !== forConversation) return;
+        if (found) setPendingFocusId(focusMessageId);
+        else focusMiss(focusMessageId);
+      })
+      .catch(() => {
+        if (current) focusMiss(focusMessageId);
+      });
+    return () => {
+      current = false;
+    };
+    // `loading` flips only while a conversation's first page loads.
+  }, [focusMessageId, conversationId, loading, loadUntil, focusMiss]);
+
+  useEffect(() => {
+    if (!pendingFocusId) return;
+    const root = listRef.current;
+    const el = root?.querySelector(`[data-message-id="${pendingFocusId}"]`);
+    setPendingFocusId(null);
+    // Loaded but not shown (a call-log marker meant for someone else).
+    if (!(el instanceof HTMLElement)) {
+      focusMiss(pendingFocusId);
+      return;
+    }
+    highlightRow(el);
+  }, [pendingFocusId, visibleMessages, focusMiss]);
+
+  useEffect(() => {
+    if (!focusMissing) return;
+    const t = setTimeout(() => setFocusMissing(false), 4000);
+    return () => clearTimeout(t);
+  }, [focusMissing]);
+
   // Compute the highest message sequence that ANY other member has read.
   // We treat any message with `sequence <= maxReadByOthers` as "read",
   // higher as "sent" (delivered but not yet read).
@@ -433,9 +527,7 @@ export function ConversationView({
     if (!root) return;
     const el = root.querySelector(`[data-message-id="${id}"]`);
     if (!(el instanceof HTMLElement)) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add('poolse-message-row--highlight');
-    setTimeout(() => el.classList.remove('poolse-message-row--highlight'), 1600);
+    highlightRow(el);
   };
 
   // Composer owns the attachment upload queue (paperclip + chip
@@ -454,25 +546,25 @@ export function ConversationView({
     Array.from(e.dataTransfer?.types ?? []).includes('Files');
 
   const onDragEnter = (e: React.DragEvent) => {
-    if (!attachments || !isFileDrag(e)) return;
+    if (!canDrop || !isFileDrag(e)) return;
     e.preventDefault();
     dragDepthRef.current += 1;
     setDragActive(true);
   };
   const onDragOver = (e: React.DragEvent) => {
-    if (!attachments || !isFileDrag(e)) return;
+    if (!canDrop || !isFileDrag(e)) return;
     // Must preventDefault on dragover for drop to fire.
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
   };
   const onDragLeave = (e: React.DragEvent) => {
-    if (!attachments || !isFileDrag(e)) return;
+    if (!canDrop || !isFileDrag(e)) return;
     e.preventDefault();
     dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
     if (dragDepthRef.current === 0) setDragActive(false);
   };
   const onDrop = (e: React.DragEvent) => {
-    if (!attachments || !isFileDrag(e)) return;
+    if (!canDrop || !isFileDrag(e)) return;
     e.preventDefault();
     dragDepthRef.current = 0;
     setDragActive(false);
@@ -512,7 +604,7 @@ export function ConversationView({
         onTyping={signalTyping}
         attachments={attachments}
         {...(labelFor ? { labelFor } : {})}
-        {...(quotations ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
+        {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />
     ) : (
       <MessageComposer
@@ -521,7 +613,7 @@ export function ConversationView({
         onTyping={signalTyping}
         attachments={attachments}
         {...(labelFor ? { labelFor } : {})}
-        {...(quotations ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
+        {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />
     );
 
@@ -552,6 +644,11 @@ export function ConversationView({
             {status === 'connecting' && 'Connecting…'}
             {status === 'reconnecting' && 'Reconnecting…'}
             {status === 'closed' && 'Disconnected'}
+          </div>
+        )}
+        {focusMissing && (
+          <div className="poolse-conversation__status" role="status" aria-live="polite">
+            That message isn't available.
           </div>
         )}
 
@@ -641,12 +738,14 @@ export function ConversationView({
                     attachments={attachments}
                     actions={actions}
                     threads={threads}
-                    quotations={quotations}
+                    quotations={canQuote}
                     groupPosition={groupPosition}
                     maxBodyLength={maxBodyLength}
                     markdown={markdown}
                     showSenderName={showSenderLabelsResolved}
                     showAvatar={showAvatarsResolved}
+                    {...(onSenderPress ? { onSenderPress } : {})}
+                    {...(onAvatarPress ? { onAvatarPress } : {})}
                     {...(readState ? { readState } : {})}
                     {...(labelFor ? { labelFor } : {})}
                     editing={editingId === msg.id}
@@ -725,9 +824,11 @@ export function ConversationView({
             now (text + attachments sent as one message). The drag-drop
             overlay on the conversation pane forwards dropped files
             into it via `composerRef.addFiles`. */}
-        <div className="poolse-conversation__composer-row">
-          <div className="poolse-conversation__composer-flex">{Composer}</div>
-        </div>
+        {showComposer && (
+          <div className="poolse-conversation__composer-row">
+            <div className="poolse-conversation__composer-flex">{Composer}</div>
+          </div>
+        )}
 
         {dragActive && (
           <div className="poolse-conversation__drop-overlay" aria-hidden="true">
@@ -753,6 +854,15 @@ export function ConversationView({
       )}
     </div>
   );
+}
+
+// Scroll a message row into view and flash it.
+function highlightRow(el: HTMLElement): void {
+  if (typeof el.scrollIntoView === 'function') {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  el.classList.add('poolse-message-row--highlight');
+  setTimeout(() => el.classList.remove('poolse-message-row--highlight'), 1600);
 }
 
 // Grouping helpers live in `./grouping.ts` so they're testable in

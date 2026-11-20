@@ -21,6 +21,7 @@ export {
 
 // ── Chat surface (composed conversation view) ─────────────────
 export { ConversationView, type ConversationViewProps } from './ConversationView.js';
+export type { MessageUser } from './MessageRow.js';
 export { ChatHeader, type ChatHeaderProps } from './ChatHeader.js';
 
 // ── Inbox shell (composed list + detail) ──────────────────────

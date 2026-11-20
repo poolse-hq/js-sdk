@@ -4,6 +4,30 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `ConversationView` props: `focusMessageId` (load older pages until the
+  message is there, scroll to it and flash it) with `onFocusMessageNotFound`;
+  `onSenderPress(user)` and `onAvatarPress(user)` (`MessageUser`, exported);
+  `composer={false}` / `readOnly` hide the composer (and quote-reply and
+  file dropping with it).
+- `MessageRow` `onSenderPress` / `onAvatarPress`, `MessageBubble`
+  `onSenderPress`.
+
+### Changed
+
+- After `ConversationView` marks a conversation read, its badge clears in
+  every `ConversationList` under the same provider (shared state in
+  `@poolse/react`), not just through `onMarkedRead`.
+
+### Fixed
+
+- `MessageRow` resolved the avatar's profile by the poolse user id instead of
+  your user id (`external_id`), so avatars next to group messages fell back to
+  initials.
+
 ## [3.2.0] — 2026-11-17
 
 Stable release of everything in the 3.2.0 prereleases below (streaming agent replies, screen sharing, full screen, the redesigned call screen, screen sharing from iOS).
