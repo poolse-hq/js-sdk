@@ -53,7 +53,12 @@ export {
 export {
   POOLSE_SERVICE_IDENTITY_PREFIX,
   applyLiveSegment,
+  captureErrorMessage,
+  captureLabel,
   describeRecordingNotice,
+  findInText,
+  groupTranscript,
+  speakerName,
   formatRecordingNoticePreview,
   isServiceParticipant,
   parseRecordingNotice,
@@ -62,6 +67,7 @@ export {
   type LiveTranscriptSegment,
   type RecordingNotice,
   type RecordingNoticeDisplay,
+  type TranscriptBlock,
 } from './recording.js';
 export { RoomsResource, type RoomSession } from './resources/rooms.js';
 export { CallRoom } from './voice/call-room.js';

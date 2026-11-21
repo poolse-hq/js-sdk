@@ -270,3 +270,29 @@ describe('CallRoom and consent', () => {
     expect(seen).toEqual([true]);
   });
 });
+
+describe('transcript helpers', () => {
+  it('finds text ignoring case and accents', async () => {
+    const { findInText, groupTranscript } = await import('../src/recording.js');
+    expect(findInText('Café au lait, CAFE noir', 'cafe')).toEqual([
+      [0, 4],
+      [14, 18],
+    ]);
+    expect(findInText('anything', '  ')).toEqual([]);
+    const s = (speaker: string, start: number) => ({
+      speaker,
+      speaker_user_id: null,
+      speaker_name: null,
+      text: 'x',
+      start_ms: start,
+      end_ms: start + 100,
+      language: null,
+    });
+    const blocks = groupTranscript([s('a', 0), s('a', 200), s('b', 400), s('a', 600)]);
+    expect(blocks.map((b) => [b.speaker, b.segments.length, b.name])).toEqual([
+      ['a', 2, 'Speaker'],
+      ['b', 1, 'Speaker'],
+      ['a', 1, 'Speaker'],
+    ]);
+  });
+});

@@ -129,6 +129,22 @@ export function formatRecordingNoticePreview(
   return notice ? describeRecordingNotice(notice, currentUserId).summary : null;
 }
 
+/**
+ * What a banner or consent prompt calls the capture going on:
+ * "Recording", "Recording audio", "Transcribing", "Recording and
+ * transcribing". Null when nothing is captured.
+ */
+export function captureLabel(
+  recording: boolean,
+  transcribing: boolean,
+  mode?: RecordingMode | null,
+): string | null {
+  if (recording && transcribing) return 'Recording and transcribing';
+  if (recording) return mode === 'audio' ? 'Recording audio' : 'Recording';
+  if (transcribing) return 'Transcribing';
+  return null;
+}
+
 /** The identity prefix of poolse's own call participants (`poolse:assistant:<call_id>`). */
 export const POOLSE_SERVICE_IDENTITY_PREFIX = 'poolse:';
 
@@ -185,4 +201,122 @@ export function applyLiveSegment(
     interims.push(segment);
   }
   return [...finals, ...interims];
+}
+
+/** Consecutive segments of one speaker, as a transcript shows them. */
+export interface TranscriptBlock<S extends TranscriptSegment = TranscriptSegment> {
+  speaker: string;
+  /** The name to show ("Speaker" when unknown — never the raw key). */
+  name: string;
+  startMs: number;
+  segments: S[];
+}
+
+/** The name to show for a segment's speaker. */
+export function speakerName(segment: Pick<TranscriptSegment, 'speaker_name'>): string {
+  const name = segment.speaker_name?.trim();
+  return name ? name : 'Speaker';
+}
+
+/**
+ * Group segments into speaker blocks: a new block when the speaker
+ * changes or after `gapMs` of silence (default 60 s).
+ */
+export function groupTranscript<S extends TranscriptSegment>(
+  segments: readonly S[],
+  gapMs = 60_000,
+): TranscriptBlock<S>[] {
+  const blocks: TranscriptBlock<S>[] = [];
+  let last: S | null = null;
+  for (const s of segments) {
+    const block = blocks[blocks.length - 1];
+    if (block && last && block.speaker === s.speaker && s.start_ms - last.end_ms < gapMs) {
+      block.segments.push(s);
+    } else {
+      blocks.push({ speaker: s.speaker, name: speakerName(s), startMs: s.start_ms, segments: [s] });
+    }
+    last = s;
+  }
+  return blocks;
+}
+
+/**
+ * Where `query` occurs in `text` (case- and accent-insensitive), as
+ * `[start, end)` ranges — for highlighting search hits.
+ */
+export function findInText(text: string, query: string): Array<[number, number]> {
+  const q = fold(query.trim());
+  if (!q) return [];
+  // Folding keeps one char per char for the scripts that matter here
+  // (NFD + dropping marks only removes combining characters).
+  const folded = foldWithMap(text);
+  const out: Array<[number, number]> = [];
+  let from = 0;
+  for (;;) {
+    const i = folded.text.indexOf(q, from);
+    if (i < 0) break;
+    const end = i + q.length;
+    out.push([folded.map[i]!, end < folded.map.length ? folded.map[end]! : text.length]);
+    from = i + q.length;
+  }
+  return out;
+}
+
+function fold(s: string): string {
+  return s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+
+function foldWithMap(s: string): { text: string; map: number[] } {
+  let text = '';
+  const map: number[] = [];
+  let i = 0;
+  for (const ch of s) {
+    const f = fold(ch);
+    for (let k = 0; k < f.length; k++) map.push(i);
+    text += f;
+    i += ch.length;
+  }
+  return { text, map };
+}
+
+/**
+ * Plain-language text for a recording, consent or transcript failure
+ * (an `ApiError`'s or `ChannelReplyError`'s code), for a toast or an
+ * inline error.
+ */
+export function captureErrorMessage(err: unknown): string {
+  const e = err as { code?: unknown; reason?: unknown; message?: unknown } | null;
+  const code = typeof e?.code === 'string' ? e.code : typeof e?.reason === 'string' ? e.reason : '';
+  switch (code) {
+    case 'recording_unavailable':
+      return 'Recording isn’t set up on this server.';
+    case 'recording_disabled':
+      return 'Recording is turned off for this workspace.';
+    case 'not_allowed':
+      return 'You can’t record this conversation.';
+    case 'call_finished':
+      return 'This call has ended.';
+    case 'not_recording':
+      return 'This call isn’t being recorded.';
+    case 'not_ready':
+      return 'The recording is still being saved. Try again in a moment.';
+    case 'egress_failed':
+      return 'The recording couldn’t start. Try again once everyone is connected.';
+    case 'invalid_mode':
+      return 'That recording mode isn’t supported.';
+    case 'transcription_unavailable':
+      return 'Transcription isn’t set up on this server.';
+    case 'transcription_disabled':
+      return 'Live transcripts are turned off for this workspace.';
+    case 'not_in_call':
+      return 'Only someone in the call can do that.';
+    case 'not_transcribing':
+      return 'The transcript is already off.';
+    case 'rate_limited':
+      return 'Too many tries. Wait a minute and try again.';
+    case 'forbidden':
+      return 'You don’t have access to this.';
+    default:
+      return 'Something went wrong. Try again.';
+  }
 }

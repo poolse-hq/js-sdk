@@ -153,7 +153,12 @@ export {
 export { applyCaptureEvent, type CaptureState, type CaptureEvent } from './capture-state.js';
 export {
   applyLiveSegment,
+  captureErrorMessage,
+  captureLabel,
   describeRecordingNotice,
+  findInText,
+  groupTranscript,
+  speakerName,
   formatRecordingNoticePreview,
   isServiceParticipant,
   parseRecordingNotice,
@@ -173,6 +178,7 @@ export type {
   RecordingNotice,
   RecordingNoticeDisplay,
   RecordingStatus,
+  TranscriptBlock,
   Transcript,
   TranscriptSegment,
   TranscriptSpeaker,
