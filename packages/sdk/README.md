@@ -70,23 +70,25 @@ poolse.destroy();
 
 ## What's in it
 
-| Member                                        | Covers                                                                                                                                                                                                  |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `poolse.me`                                   | `show`, `update({ read_receipts })` or `update({ notifications })`, `peek`, `onChange`                                                                                                                  |
-| `poolse.conversations`                        | `list`, `create`, `one(id)` → `show`, `update`, `listMembers`, `addMembers`, `addMember`, `removeMember(userId)`, `messages.list / send / markRead`, `membership.get / update({ notify, muted_until })` |
-| `poolse.messages`                             | `one(id)` → `update`, `delete`, `replies`, `addReaction`, `removeReaction`                                                                                                                              |
-| `poolse.attachments`                          | `upload`, `requestUpload`, `one(id)` → `downloadUrl`, `delete`                                                                                                                                          |
-| `poolse.users`                                | Cache over `userResolver`: `get`, `peek`, `subscribe`, `invalidate`, `invalidateAll`                                                                                                                    |
-| `poolse.devices`                              | `register`, `unregister` (push tokens)                                                                                                                                                                  |
-| `poolse.liveCalls`                            | `get(conversationId)`                                                                                                                                                                                   |
-| `poolse.rooms`                                | `start`, `ring`, `leave`                                                                                                                                                                                |
-| `poolse.callTokens`                           | `create(conversationId)`                                                                                                                                                                                |
-| `poolse.call(conversationId, { livekit, … })` | `CallRoom`: call media on the web (pass your `livekit-client` import)                                                                                                                                   |
-| `poolse.realtime`                             | `conversation(id)`, `user(id)`, `leave`, `getStatus`, `onStatus`, `connect`, `pause`, `resume`, `disconnect`                                                                                            |
-| `poolse.rest.request({ method, path, … })`    | Any endpoint, with the same auth, retries and idempotency                                                                                                                                               |
+| Member                                        | Covers                                                                                                                                                                                                                                                                   |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `poolse.me`                                   | `show`, `update({ read_receipts })` or `update({ notifications })`, `peek`, `onChange`                                                                                                                                                                                   |
+| `poolse.conversations`                        | `list({ cursor, limit })` → `next_cursor`, `listAll()` (async iterator), `create`, `one(id)` → `show`, `update`, `listMembers`, `addMembers`, `addMember`, `removeMember(userId)`, `messages.list / send / markRead`, `membership.get / update({ notify, muted_until })` |
+| `poolse.messages`                             | `get(id)`, `edits(id)`, `update(id, { body?, remove_link_previews? })`, `one(id)` → `get`, `edits`, `update`, `delete`, `replies({ include_deleted? })`, `addReaction`, `removeReaction`                                                                                 |
+| `poolse.presence`                             | `get({ userIds?, externalIds? })`, `subscribe(ids, fn)`, `peek(id)`, `setActivity('active' \| 'idle')`, `getActivity`, `trackActivity()`                                                                                                                                 |
+| `poolse.notificationActions`                  | `reply({ token, text, id? })`, `read({ token })` with a push's `reply_grant` (also `createNotificationActions({ apiUrl })`, no session)                                                                                                                                  |
+| `poolse.attachments`                          | `upload`, `requestUpload`, `one(id)` → `downloadUrl`, `delete`                                                                                                                                                                                                           |
+| `poolse.users`                                | Cache over `userResolver`: `get`, `peek`, `subscribe`, `invalidate`, `invalidateAll`                                                                                                                                                                                     |
+| `poolse.devices`                              | `register`, `unregister` (push tokens)                                                                                                                                                                                                                                   |
+| `poolse.liveCalls`                            | `get(conversationId)`                                                                                                                                                                                                                                                    |
+| `poolse.rooms`                                | `start`, `ring`, `leave`                                                                                                                                                                                                                                                 |
+| `poolse.callTokens`                           | `create(conversationId)`                                                                                                                                                                                                                                                 |
+| `poolse.call(conversationId, { livekit, … })` | `CallRoom`: call media on the web (pass your `livekit-client` import)                                                                                                                                                                                                    |
+| `poolse.realtime`                             | `conversation(id)`, `user(id)`, `leave`, `getStatus`, `onStatus`, `connect`, `pause`, `resume`, `disconnect`                                                                                                                                                             |
+| `poolse.rest.request({ method, path, … })`    | Any endpoint, with the same auth, retries and idempotency                                                                                                                                                                                                                |
 
 Conversation channels emit `onMessage`, `onMessageUpdated`,
-`onMessageDeleted`, `onTypingStart`, `onTypingStop`, `onReactionAdded`,
+`onMessageDeleted`, `onThreadUpdated`, `onTypingStart`, `onTypingStop`, `onReactionAdded`,
 `onReactionRemoved`, `onMemberRead`, `onCallStarted`, `onCallParticipants`,
 `onCallFinished`, `onPresenceState`, `onPresenceDiff` and `onClosed`, and
 have `sendTyping()` and `getPresenceState()`. The user channel emits
@@ -95,8 +97,30 @@ have `sendTyping()` and `getPresenceState()`. The user channel emits
 `unread_count` and `mention_unread_count`), `onAppEvent` (`{ type, data }`
 sent by your backend or the Workspace API), `onRingEnded`
 (`RingEndedEvent`: `reason` is `answered_elsewhere`, `declined`,
-`cancelled`, `timeout` or `finished`) and `onCallFinished` (with
-`conversation_id`).
+`cancelled`, `timeout` or `finished`), `onCallFinished` (with
+`conversation_id`) and `onPresenceChanged`, and has `setPresence(state)`,
+`getPresence({ user_ids } | { external_ids })`, `onJoined` and `isJoined`.
+
+## Presence
+
+`poolse.presence.subscribe(['ana', 'ben'], (p) => …)` keeps users' presence
+(`online`, `away`, `in_call`, `offline`, plus `last_seen_at`, `dnd_until`,
+`do_not_disturb`) live: lookups from every caller in the same tick go out as
+one request (200 ids at a time), over the socket while the user channel is
+joined, and `presence:changed` updates the cache (`peek(id)`). Report the
+device's own state with `setActivity('active' | 'idle')` — `trackActivity()`
+does it in a browser (hidden, blurred or 5 minutes without input → idle).
+
+## Message actions
+
+`messages.get(id)` returns one message, or its tombstone (`deleted_at` set,
+`body: null`) once deleted; `messages.edits(id)` its earlier versions;
+`include_deleted: true` on `list` / `replies` adds tombstones. Messages carry
+`link_previews` (filled in after the send and announced by `message:updated`;
+remove with `messages.update(id, { remove_link_previews: [url] | true })`)
+and a thread summary (`reply_count`, `last_reply_at`, `thread_participants`,
+updated by `thread:updated`). `mergeMessage`, `toTombstone`,
+`applyThreadUpdate` and `markQuoteDeleted` apply those events to a local list.
 
 `poolse.onAppEvent(fn)` listens for app events without holding the user
 channel yourself; it joins it once the user is known. A `member:updated`
@@ -131,7 +155,8 @@ import { PoolseError, ApiError, AuthError, RateLimitedError, NetworkError } from
 ```
 
 `ApiError` (any non-2xx) carries `status`, `code`, `docUrl` and `details`.
-`AuthError` is a 401 after one refresh, `RateLimitedError` a 429 after
+`code` is typed `ApiErrorCode` (`quoted_message_deleted`, `message_deleted`,
+`device_signed_out`, …, or any other string). `AuthError` is a 401 after one refresh, `RateLimitedError` a 429 after
 retries (with `retryAfterMs`), `NetworkError` a failed `fetch` (with
 `cause`). Aborted requests reject with the `AbortError` `DOMException`.
 
