@@ -9,7 +9,14 @@
 // MessageActions + ReactionStrip + AttachmentPreview + ThreadView —
 // directly. ConversationView is just the canonical wiring.
 
-import type { Citation, LiveCall, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
+import type {
+  Citation,
+  LiveCall,
+  MeetingMoment,
+  Message,
+  MessageCreateRequest,
+  Uuid,
+} from '@poolse/sdk';
 import { MessageQueuedError, safeUuid } from '@poolse/sdk';
 import {
   ApiError,
@@ -316,11 +323,11 @@ export interface ConversationViewProps {
    */
   onOpenCitation?: (citation: Citation, message: Message) => void;
   /**
-   * A point in a call was pressed — a summary's moment or a clip
-   * (RT6, RT9): open its recording or transcript at `startMs` (ms since
-   * the transcript started). Without it they are plain text.
+   * A point in a call was pressed — a line or moment of a summary (RT6):
+   * open its recording at `moment.recordingMs` (with `recordingId`) or
+   * its transcript at `moment.startMs`. Without it they are plain text.
    */
-  onOpenMoment?: (callId: string, startMs: number) => void;
+  onOpenMoment?: (moment: MeetingMoment) => void;
   /**
    * Keep an unsent draft per conversation — the composer's text and the
    * message being quoted (not files) — across conversation switches

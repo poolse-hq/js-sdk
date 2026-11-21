@@ -207,6 +207,42 @@ and renames speakers for people who were in the call (others get an
 explanation). The recording notice in the chat is a centred line like a call
 log, naming people through `MessageRow`'s `nameForUserId`.
 
+## Agents and meetings
+
+```tsx
+<ConversationView
+  conversationId={id}
+  onOpenCitation={(c, msg) => …} // message sources here are focused by default
+  onOpenMoment={(callId, startMs) => openRecording(callId, startMs)}
+/>
+<ApprovalList />                          // everything waiting for your answer
+<AskMeetings onOpenMoment={openRecording} />
+<RecordingPlayer ref={player} recording={rec} startMs={momentMs} />
+```
+
+- **Agent badge (AG1).** `<AgentBadge>`; `<Avatar agent>` (rounded square,
+  "(agent)" in its label); `UserName`, member rows, mention suggestions,
+  sender labels and a DM's header add it by themselves for anyone the server
+  marked `is_agent`.
+- **Approvals (AG4).** `agent_approval` messages render as `<ApprovalCard>`:
+  summary, details (first 4, "Show all"), Approve / Deny, an optional reason,
+  then Approved / Denied / Expired. The card follows the shared store, so
+  `<ApprovalList>` and other devices stay in step.
+- **Sources (AG5).** `<MessageCitations>` under an assistant's answer, numbered
+  links (meeting sources show their time).
+- **Summaries (RT6).** `call_summary` messages render as `<SummaryCard>`:
+  decisions, action items with the assignee's name and due date, open
+  questions, and key moments that call `onOpenMoment`.
+- **Clips (RT9).** Attachments with `clip` play inline in `<ClipPlayer>`; or
+  `<ClipPlayer clip={{ recordingId, startMs, endMs }}>` plays that range of a
+  recording.
+- **Playback (RT13).** `<RecordingPlayer recording>` — HTML5 media, 1× / 1.25× /
+  1.5× / 2×, "Skip silence" when the recording lists silences, chapters, and
+  the transcript scrolling along (tap a line to play from it). Expired links
+  renew by themselves. `ref.seek(ms)` takes transcript time.
+- Custom layouts wrap rows in `<MessageExtrasProvider value={{ onOpenCitation,
+  onOpenMoment, nameForUserId, externalIdForUserId }}>`.
+
 ## Theming
 
 Wrap the UI in `PoolseTheme` to use one of the eight built-in themes from

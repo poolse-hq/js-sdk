@@ -11,12 +11,19 @@
 // read receipts and the accent bar on messages that mention the viewer.
 
 import type { Attachment } from '@poolse/sdk';
-import { citationsOf, clipOf, messageAgent, useReactions, useUser } from '@poolse/react';
+import {
+  approvalIdOf,
+  citationsOf,
+  clipOf,
+  messageAgent,
+  useReactions,
+  useUser,
+} from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AgentBadge } from './AgentBadge.js';
-import { MessageCitations } from './Agents.js';
+import { MessageApproval, MessageCitations } from './Agents.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { ClipPlayer } from './Meetings.js';
 import { hasLinkPreviews, MessageLinkPreviews } from './LinkPreviewCard.js';
@@ -195,6 +202,7 @@ export function FlatMessageRow({
   const clips = attachmentList.filter((a) => !!clipOf(a));
   const files = attachmentList.filter((a) => !isImageContentType(a.content_type) && !clipOf(a));
   const citations = citationsOf(msg);
+  const approvalId = approvalIdOf(msg);
   const attachmentsEl =
     images.length > 0 || files.length > 0 ? (
       <div className="poolse-row__attachments">
@@ -298,6 +306,9 @@ export function FlatMessageRow({
       ))}
       {citations.length > 0 && !editing ? (
         <MessageCitations message={msg} citations={citations} />
+      ) : null}
+      {approvalId && !editing ? (
+        <MessageApproval approvalId={approvalId} agentName={senderName} />
       ) : null}
       {linkPreviews && !editing && hasLinkPreviews(msg) ? (
         <MessageLinkPreviews message={msg} canRemove={isSelf} />

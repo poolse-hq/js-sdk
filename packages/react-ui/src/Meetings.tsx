@@ -2,34 +2,37 @@
 // (RT8), clips (RT9) and the recording player (RT13). Same props in
 // @poolse/react-native (which plays media through an adapter).
 //
-//     <SummaryCard summary={parseCallSummary(msg)!} onOpenMoment={seek} />
-//     <AskMeetings onOpenMoment={openCall} />
-//     <ClipPlayer attachment={att} />
-//     <RecordingPlayer recording={rec} />
+//     <SummaryCard summary={parseCallSummary(msg)!} onOpenMoment={open} />
+//     <AskMeetings onOpenMoment={open} />
+//     <ClipPlayer attachment={att} />  or  <ClipPlayer clipId={id} />
+//     <RecordingPlayer recordingId={id} startMs={moment.recordingMs} />
 
-import type { Attachment, CallSummary, Message, Recording } from '@poolse/sdk';
+import type { Attachment, CallSummary, MeetingMoment, Message, SummaryItem } from '@poolse/sdk';
 import {
   ASK_QUESTION_MAX,
   PLAYBACK_RATES,
   activeSegmentIndex,
   chapterIndexAt,
-  chaptersOf,
   clipOf,
   formatClock,
   formatDue,
   formatTimeRange,
   meetingsErrorMessage,
+  momentOf,
   parseCallSummary,
+  silencesFromSegments,
   silencesOf,
   skipSilenceTarget,
   speakerName,
+  summaryStatusText,
   summaryStyleLabel,
-  transcriptOffsetMs,
   useAskMeetings,
   useAttachmentUrl,
+  useCallSummary,
+  useClip,
   useMembers,
+  useRecordingPlayback,
   useRecordingUrl,
-  useTranscript,
   useUser,
   type PlaybackRate,
 } from '@poolse/react';
@@ -51,29 +54,41 @@ import { UserName } from './UserName.js';
 // ── Summary card ─────────────────────────────────────────────────────────
 
 export interface SummaryCardProps {
+  /** From `parseCallSummary(message)` or `meetings.summary(callId)`. */
   summary: CallSummary;
   /**
-   * A moment was pressed: open the call's recording or transcript there
-   * (ms since the transcript started). Defaults to the
-   * `MessageExtrasProvider`'s `onOpenMoment`; without one, moments are
-   * plain text.
+   * A point of the call was pressed: open its recording (`recordingId` +
+   * `recordingMs`) or transcript (`startMs`). Defaults to the
+   * `MessageExtrasProvider`'s; without one, times are plain text.
    */
-  onOpenMoment?: (callId: string, startMs: number) => void;
+  onOpenMoment?: (moment: MeetingMoment) => void;
   /** A poolse user id → name, for assignees. Defaults to the provider's, then the conversation's members. */
   nameForUserId?: (userId: string) => string | null | undefined;
+  /**
+   * Fetch the full summary when this copy is `shortened`, and follow
+   * `summary:ready` (regenerated, failed, deleted). Defaults to true.
+   */
+  live?: boolean;
   className?: string;
 }
 
 /**
- * A call's summary: decisions, action items (with who and when), open
- * questions and key moments, each moment a link to its point in the
- * recording. Empty sections are left out.
+ * A call's summary: overview, decisions, action items (who and when),
+ * open questions, the style's own sections and key moments — every line
+ * the model tied to a moment links to it. Empty sections are left out.
  */
-export function SummaryCard({ summary, onOpenMoment, nameForUserId, className }: SummaryCardProps) {
+export function SummaryCard({
+  summary: initial,
+  onOpenMoment,
+  nameForUserId,
+  live = true,
+  className,
+}: SummaryCardProps) {
   const extras = useMessageExtras();
+  const followed = useCallSummary(live ? initial.callId : null, initial);
+  const summary = (live ? followed.summary : null) ?? initial;
   const open = onOpenMoment ?? extras.onOpenMoment;
   const nameFor = nameForUserId ?? extras.nameForUserId;
-  // Without a mapping from the provider, look assignees up among the members.
   const needsMembers =
     !extras.externalIdForUserId && summary.actionItems.some((a) => a.assigneeUserId);
   const { members } = useMembers(needsMembers ? (summary.conversationId ?? '') : '');
@@ -83,107 +98,172 @@ export function SummaryCard({ summary, onOpenMoment, nameForUserId, className }:
     null;
 
   const style = summaryStyleLabel(summary.style);
+  const status = summaryStatusText(summary);
   const empty =
     !summary.overview &&
     summary.decisions.length === 0 &&
     summary.actionItems.length === 0 &&
     summary.openQuestions.length === 0 &&
-    summary.moments.length === 0;
+    summary.moments.length === 0 &&
+    summary.sections.length === 0;
+
+  const time = (item: SummaryItem) => (
+    <ItemTime summary={summary} item={item} {...(open ? { onOpen: open } : {})} />
+  );
+  const plain = (list: SummaryItem[]) => (
+    <ul className="poolse-summary__list">
+      {list.map((d, i) => (
+        <li key={i} className="poolse-summary__item">
+          <span className="poolse-summary__item-text">{d.text}</span>
+          {time(d)}
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
     <section
       className={['poolse-summary', className].filter(Boolean).join(' ')}
-      aria-label={style === 'Call summary' ? 'Call summary' : `Call summary, ${style}`}
+      aria-label={style === 'Meeting' ? 'Call summary' : `Call summary, ${style}`}
     >
       <header className="poolse-summary__head">
         <PoolseIcon name="pulse" size={16} label={null} />
         <span className="poolse-summary__title">Call summary</span>
-        {style !== 'Call summary' && <span className="poolse-summary__style">{style}</span>}
+        {style !== 'Meeting' && <span className="poolse-summary__style">{style}</span>}
       </header>
-      {summary.overview && <p className="poolse-summary__overview">{summary.overview}</p>}
-      {empty && <p className="poolse-summary__empty">Nothing to report from this call.</p>}
+      {status ? (
+        <p className="poolse-summary__empty">{status}</p>
+      ) : (
+        <>
+          {summary.overview && <p className="poolse-summary__overview">{summary.overview}</p>}
+          {empty && <p className="poolse-summary__empty">Nothing to report from this call.</p>}
 
-      {summary.decisions.length > 0 && (
-        <SummarySection title="Decisions">
-          <ul className="poolse-summary__list">
-            {summary.decisions.map((d, i) => (
-              <li key={i}>{d}</li>
-            ))}
-          </ul>
-        </SummarySection>
-      )}
+          {summary.decisions.length > 0 && (
+            <SummarySection title="Decisions">{plain(summary.decisions)}</SummarySection>
+          )}
 
-      {summary.actionItems.length > 0 && (
-        <SummarySection title="Action items">
-          <ul className="poolse-summary__list poolse-summary__list--tasks">
-            {summary.actionItems.map((a, i) => {
-              const due = formatDue(a.due);
-              const resolved = a.assigneeUserId ? (nameFor?.(a.assigneeUserId) ?? null) : null;
-              const ext = a.assigneeUserId && !resolved ? extFor(a.assigneeUserId) : null;
-              return (
-                <li key={i} className="poolse-summary__task">
-                  <span className="poolse-summary__task-box" aria-hidden="true" />
-                  <span className="poolse-summary__task-body">
-                    <span className="poolse-summary__task-text">{a.text}</span>
-                    {(resolved || ext || due) && (
-                      <span className="poolse-summary__task-meta">
-                        {resolved ? (
-                          <span className="poolse-summary__assignee">{resolved}</span>
-                        ) : ext ? (
-                          <UserName externalId={ext} className="poolse-summary__assignee" />
-                        ) : null}
-                        {(resolved || ext) && due ? ' · ' : null}
-                        {due}
+          {summary.actionItems.length > 0 && (
+            <SummarySection title="Action items">
+              <ul className="poolse-summary__list poolse-summary__list--tasks">
+                {summary.actionItems.map((a, i) => {
+                  const due = formatDue(a.dueDate, a.dueText);
+                  const resolved = a.assigneeUserId ? (nameFor?.(a.assigneeUserId) ?? null) : null;
+                  const ext = a.assigneeUserId && !resolved ? extFor(a.assigneeUserId) : null;
+                  const said = !resolved && !ext ? a.assigneeName : null;
+                  return (
+                    <li key={a.id ?? i} className="poolse-summary__task">
+                      <span className="poolse-summary__task-box" aria-hidden="true" />
+                      <span className="poolse-summary__task-body">
+                        <span className="poolse-summary__task-text">{a.text}</span>
+                        {(resolved || ext || said || due) && (
+                          <span className="poolse-summary__task-meta">
+                            {resolved || said ? (
+                              <span className="poolse-summary__assignee">{resolved ?? said}</span>
+                            ) : ext ? (
+                              <UserName externalId={ext} className="poolse-summary__assignee" />
+                            ) : null}
+                            {(resolved || ext || said) && due ? ' · ' : null}
+                            {due}
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </SummarySection>
-      )}
+                      {time(a)}
+                    </li>
+                  );
+                })}
+              </ul>
+            </SummarySection>
+          )}
 
-      {summary.openQuestions.length > 0 && (
-        <SummarySection title="Open questions">
-          <ul className="poolse-summary__list">
-            {summary.openQuestions.map((q, i) => (
-              <li key={i}>{q}</li>
-            ))}
-          </ul>
-        </SummarySection>
-      )}
+          {summary.openQuestions.length > 0 && (
+            <SummarySection title="Open questions">{plain(summary.openQuestions)}</SummarySection>
+          )}
 
-      {summary.moments.length > 0 && (
-        <SummarySection title="Key moments">
-          <ul className="poolse-summary__moments">
-            {summary.moments.map((m, i) => (
-              <li key={i}>
-                {open ? (
-                  <button
-                    type="button"
-                    className="poolse-summary__moment"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      open(summary.callId, m.startMs);
-                    }}
-                    aria-label={`Play from ${formatClock(m.startMs)}: ${m.label}`}
-                  >
-                    <span className="poolse-summary__time">{formatClock(m.startMs)}</span>
-                    <span className="poolse-summary__moment-label">{m.label}</span>
-                  </button>
-                ) : (
-                  <span className="poolse-summary__moment poolse-summary__moment--static">
-                    <span className="poolse-summary__time">{formatClock(m.startMs)}</span>
-                    <span className="poolse-summary__moment-label">{m.label}</span>
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </SummarySection>
+          {summary.sections.map((sec, i) => (
+            <SummarySection key={`${sec.title}-${i}`} title={sec.title}>
+              {plain(sec.items)}
+            </SummarySection>
+          ))}
+
+          {summary.moments.length > 0 && (
+            <SummarySection title="Key moments">
+              <ul className="poolse-summary__moments">
+                {summary.moments.map((m, i) => {
+                  const moment = momentOf(summary, m);
+                  const inner = (
+                    <>
+                      <span className="poolse-summary__time">
+                        {m.startMs !== null ? formatClock(m.startMs) : '–'}
+                      </span>
+                      <span className="poolse-summary__moment-label">
+                        {m.title}
+                        {m.speakerName ? (
+                          <span className="poolse-summary__speaker"> · {m.speakerName}</span>
+                        ) : null}
+                      </span>
+                    </>
+                  );
+                  return (
+                    <li key={i}>
+                      {open && m.startMs !== null ? (
+                        <button
+                          type="button"
+                          className="poolse-summary__moment"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            open(moment);
+                          }}
+                          aria-label={`Play from ${formatClock(m.startMs)}: ${m.title}`}
+                        >
+                          {inner}
+                        </button>
+                      ) : (
+                        <span className="poolse-summary__moment poolse-summary__moment--static">
+                          {inner}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </SummarySection>
+          )}
+          {summary.truncated && (
+            <p className="poolse-summary__note">
+              The meeting was long: this covers its first part.
+            </p>
+          )}
+        </>
       )}
     </section>
+  );
+}
+
+function ItemTime({
+  summary,
+  item,
+  onOpen,
+}: {
+  summary: CallSummary;
+  item: SummaryItem;
+  onOpen?: (moment: MeetingMoment) => void;
+}) {
+  if (item.startMs === null) return null;
+  const label = formatClock(item.startMs);
+  return onOpen ? (
+    <button
+      type="button"
+      className="poolse-summary__item-time"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen(momentOf(summary, item));
+      }}
+      aria-label={`Play from ${label}`}
+    >
+      {label}
+    </button>
+  ) : (
+    <span className="poolse-summary__item-time poolse-summary__item-time--static">{label}</span>
   );
 }
 
@@ -207,14 +287,13 @@ export function SummaryMessageRow({ msg, nameForUserId }: SummaryMessageRowProps
   const summary = useMemo(() => parseCallSummary(msg), [msg]);
   const { profile, agent } = useUser(msg.sender_external_id);
   if (!summary) return null;
-  const isAgent = !!agent || msg.is_agent === true;
+  const isAgent = !!agent || msg.sender_is_agent === true;
+  const name = profile?.displayName ?? agent?.name ?? null;
   return (
     <div className="poolse-card-row" data-message-id={msg.id} role="article" tabIndex={-1}>
-      {msg.sender_external_id && (
+      {name && (
         <div className="poolse-card-row__sender">
-          <span className="poolse-card-row__name">
-            {profile?.displayName ?? msg.agent?.name ?? 'Note-taker'}
-          </span>
+          <span className="poolse-card-row__name">{name}</span>
           {isAgent && <AgentBadge size="xs" />}
         </div>
       )}
@@ -228,8 +307,10 @@ export function SummaryMessageRow({ msg, nameForUserId }: SummaryMessageRowProps
 export interface AskMeetingsProps {
   /** Ask about one call; omit for all of them. */
   callId?: string | null;
-  /** A link in the answer was pressed. Defaults to the provider's `onOpenMoment`. */
-  onOpenMoment?: (callId: string, startMs: number) => void;
+  /** Ask about one conversation's meetings. */
+  conversationId?: string | null;
+  /** A source in the answer was pressed. Defaults to the provider's `onOpenMoment`. */
+  onOpenMoment?: (moment: MeetingMoment) => void;
   placeholder?: string;
   className?: string;
 }
@@ -239,19 +320,24 @@ export interface AskMeetingsProps {
  * answer, with links to the moments it comes from. Only meetings the
  * viewer could see are searched.
  */
-export function AskMeetings({ callId, onOpenMoment, placeholder, className }: AskMeetingsProps) {
+export function AskMeetings({
+  callId,
+  conversationId,
+  onOpenMoment,
+  placeholder,
+  className,
+}: AskMeetingsProps) {
   const extras = useMessageExtras();
   const open = onOpenMoment ?? extras.onOpenMoment;
   const { answer, question, loading, error, ask, reset } = useAskMeetings({
     callId: callId ?? null,
+    conversationId: conversationId ?? null,
   });
   const [draft, setDraft] = useState('');
+  const label = callId ? 'Ask about this meeting' : 'Ask your meetings';
 
   return (
-    <section
-      className={['poolse-ask', className].filter(Boolean).join(' ')}
-      aria-label={callId ? 'Ask about this meeting' : 'Ask your meetings'}
-    >
+    <section className={['poolse-ask', className].filter(Boolean).join(' ')} aria-label={label}>
       <form
         className="poolse-ask__form"
         role="search"
@@ -267,10 +353,9 @@ export function AskMeetings({ callId, onOpenMoment, placeholder, className }: As
           onChange={(e) => setDraft(e.target.value)}
           maxLength={ASK_QUESTION_MAX}
           placeholder={
-            placeholder ??
-            (callId ? 'Ask about this meeting' : 'Ask your meetings, e.g. what did we decide?')
+            placeholder ?? (callId ? label : 'Ask your meetings, e.g. what did we decide?')
           }
-          aria-label={callId ? 'Ask about this meeting' : 'Ask your meetings'}
+          aria-label={label}
         />
         <button type="submit" className="poolse-ask__btn" disabled={loading || !draft.trim()}>
           {loading ? 'Asking…' : 'Ask'}
@@ -287,25 +372,28 @@ export function AskMeetings({ callId, onOpenMoment, placeholder, className }: As
           <>
             {question && <p className="poolse-ask__question">{question}</p>}
             <p className="poolse-ask__answer">
-              {answer.answer || 'Nothing in your meetings answers that.'}
+              {answer.answer ?? 'Nothing in your meetings answers that.'}
             </p>
-            {answer.links.length > 0 && (
-              <ul className="poolse-ask__links" aria-label="Moments">
-                {answer.links.map((l, i) => {
+            {answer.citations.length > 0 && (
+              <ol className="poolse-ask__links" aria-label="Sources">
+                {answer.citations.map((c, i) => {
+                  const at = c.startMs !== null ? formatClock(c.startMs) : null;
+                  const text =
+                    [c.speakerName, c.text].filter(Boolean).join(': ') || 'In the meeting';
                   const inner = (
                     <>
-                      <span className="poolse-summary__time">{formatClock(l.startMs)}</span>
-                      <span className="poolse-ask__snippet">{l.snippet || 'In the meeting'}</span>
+                      <span className="poolse-summary__time">{at ?? c.ref ?? i + 1}</span>
+                      <span className="poolse-ask__snippet">{text}</span>
                     </>
                   );
                   return (
-                    <li key={`${l.callId}-${l.startMs}-${i}`}>
-                      {open ? (
+                    <li key={`${c.callId}-${c.startMs}-${i}`}>
+                      {open && (c.startMs !== null || c.recordingMs !== null) ? (
                         <button
                           type="button"
                           className="poolse-summary__moment"
-                          onClick={() => open(l.callId, l.startMs)}
-                          aria-label={`Play from ${formatClock(l.startMs)}${l.snippet ? `: ${l.snippet}` : ''}`}
+                          onClick={() => open(c)}
+                          aria-label={`${at ? `Play from ${at}` : 'Open'}: ${text}`}
                         >
                           {inner}
                         </button>
@@ -317,7 +405,7 @@ export function AskMeetings({ callId, onOpenMoment, placeholder, className }: As
                     </li>
                   );
                 })}
-              </ul>
+              </ol>
             )}
             <button
               type="button"
@@ -339,40 +427,49 @@ export function AskMeetings({ callId, onOpenMoment, placeholder, className }: As
 // ── Clips ────────────────────────────────────────────────────────────────
 
 export interface ClipPlayerProps {
-  /** A clip attachment (it carries `clip`) — plays its own file. */
+  /** A clip shared in chat (an attachment) — plays its own file. */
   attachment?: Attachment | null;
-  /**
-   * Or a range of a recording, without a cut file: plays the recording
-   * from `startMs` and stops at `endMs`.
-   */
+  /** A clip by id (`meetings.createClip`) — shows "Cutting…" until `clip:ready`. */
+  clipId?: string | null;
+  /** Or a range of a recording, without a cut: plays it from `startMs` to `endMs`. */
   clip?: { recordingId: string; startMs: number; endMs: number } | null;
-  /** "Open the recording" — at the clip's start. */
+  /** "Open the recording" — at the clip's start (recording time). */
   onOpenRecording?: (recordingId: string, startMs: number) => void;
   /** A slimmer layout, inside a message. */
   compact?: boolean;
   className?: string;
 }
 
-/** A short piece of a call's recording, shared in chat. */
+/** A short piece of a call's recording. */
 export function ClipPlayer({
   attachment,
+  clipId,
   clip: rangeClip,
   onOpenRecording,
   compact = false,
   className,
 }: ClipPlayerProps) {
-  const fromAttachment = attachment ? clipOf(attachment) : null;
-  const info = fromAttachment ?? rangeClip ?? null;
-  const fileUrl = useAttachmentUrl(attachment?.id ?? null);
-  const recUrl = useRecordingUrl(!attachment && rangeClip ? rangeClip.recordingId : null);
-  const url = attachment ? fileUrl.url : recUrl.url;
-  const error = attachment ? fileUrl.error : recUrl.error;
+  const mode = attachment ? 'file' : clipId ? 'clip' : rangeClip ? 'range' : 'none';
+  const fileUrl = useAttachmentUrl(mode === 'file' ? attachment!.id : null);
+  const cut = useClip(mode === 'clip' ? clipId! : null);
+  const recUrl = useRecordingUrl(mode === 'range' ? rangeClip!.recordingId : null);
   const media = useRef<HTMLMediaElement | null>(null);
-  const isVideo = attachment ? attachment.content_type.startsWith('video/') : false;
-  const ranged = !attachment && !!rangeClip;
 
+  const info =
+    mode === 'file'
+      ? clipOf(attachment)
+      : mode === 'clip' && cut.clip
+        ? { recordingId: cut.clip.recordingId, startMs: cut.clip.startMs, endMs: cut.clip.endMs }
+        : (rangeClip ?? null);
+  const url = mode === 'file' ? fileUrl.url : mode === 'clip' ? cut.url : recUrl.url;
+  const error = mode === 'file' ? fileUrl.error : mode === 'clip' ? cut.error : recUrl.error;
+  const contentType =
+    mode === 'file' ? attachment!.content_type : mode === 'clip' ? cut.clip?.contentType : null;
+  const isVideo = !!contentType?.startsWith('video/');
+  const ranged = mode === 'range';
   const label = info ? formatTimeRange(info.startMs, info.endMs) : null;
-  const length = info ? formatClock(info.endMs - info.startMs) : null;
+  const title = mode === 'clip' ? cut.clip?.title : null;
+  const status = mode === 'clip' ? cut.clip?.status : null;
 
   const props = {
     ref: (el: HTMLMediaElement | null) => {
@@ -392,7 +489,8 @@ export function ClipPlayer({
       }
     },
     onError: () => {
-      if (!attachment) recUrl.refresh();
+      if (mode === 'range') recUrl.refresh();
+      if (mode === 'clip') cut.refresh();
     },
   };
 
@@ -405,12 +503,22 @@ export function ClipPlayer({
     >
       <figcaption className="poolse-clip__head">
         <PoolseIcon name="video" size={14} label={null} />
-        <span className="poolse-clip__title">Clip</span>
+        <span className="poolse-clip__title">{title ?? 'Clip'}</span>
         {label && <span className="poolse-clip__range">{label}</span>}
-        {length && <span className="poolse-clip__length">{length}</span>}
+        {info && (
+          <span className="poolse-clip__length">{formatClock(info.endMs - info.startMs)}</span>
+        )}
       </figcaption>
-      {error ? (
-        <p className="poolse-clip__error">The clip couldn’t be loaded.</p>
+      {status === 'queued' || status === 'cutting' ? (
+        <div className="poolse-clip__loading" aria-busy="true">
+          Cutting the clip…
+        </div>
+      ) : status === 'failed' || status === 'deleted' ? (
+        <p className="poolse-clip__error">
+          {status === 'deleted' ? 'This clip was deleted.' : 'The clip couldn’t be cut.'}
+        </p>
+      ) : error ? (
+        <p className="poolse-clip__error">{meetingsErrorMessage(error)}</p>
       ) : !url ? (
         <div className="poolse-clip__loading" aria-busy="true">
           Loading…
@@ -436,43 +544,48 @@ export function ClipPlayer({
 // ── Recording player ─────────────────────────────────────────────────────
 
 export interface RecordingPlayerProps {
-  /** A recording from `useRecordings(conversationId)`. */
-  recording: Recording;
+  /** The recording (`useRecordings(conversationId)` items carry `id`). */
+  recordingId: string;
   /** The transcript beside it, following playback. Defaults to true. */
   showTranscript?: boolean;
-  /** Start here (ms since the transcript started, like summary moments); a new value seeks. */
+  /** Start here (recording ms — a moment's `recordingMs`); a new value seeks. */
   startMs?: number | null;
-  /** Skip silence starts on (when the recording has silence ranges). Defaults to false. */
+  /** Skip silence starts on. Defaults to false. */
   defaultSkipSilence?: boolean;
   className?: string;
 }
 
 /** Control the player from outside (e.g. a citation seeking it). */
 export interface RecordingPlayerHandle {
-  /** Seek to transcript time `ms` and play. */
+  /** Seek to recording time `ms` and play. */
   seek: (ms: number) => void;
+  /** Seek to transcript time `ms` (a summary item's `startMs`) and play. */
+  seekTranscript: (ms: number) => void;
   play: () => void;
   pause: () => void;
 }
 
 /**
- * A finished recording: play at 1×, 1.25×, 1.5× or 2×, skip silence
- * (when the recording lists its silences), jump by chapter, and read
- * the transcript as it scrolls along — press a line to play from there.
+ * A finished recording (`GET /v1/recordings/:id/playback`): play at 1×,
+ * 1.25×, 1.5× or 2×, skip silence (the recording's silences, else the
+ * gaps between transcript lines), jump by chapter, and read the
+ * transcript as it scrolls along — press a line to play from there.
  * Expired links (they last five minutes) are renewed by themselves.
  */
 export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayerProps>(
   function RecordingPlayer(
-    { recording, showTranscript = true, startMs, defaultSkipSilence = false, className },
+    { recordingId, showTranscript = true, startMs, defaultSkipSilence = false, className },
     ref,
   ) {
-    const ready = recording.status === 'ready';
-    const { url, error, refresh } = useRecordingUrl(ready ? recording.id : null);
-    const { transcript } = useTranscript(showTranscript && ready ? recording.call_id : null);
-    const offset = transcriptOffsetMs(recording.started_at, transcript?.started_at);
-    const chapters = useMemo(() => chaptersOf(recording), [recording]);
-    const silences = useMemo(() => silencesOf(recording), [recording]);
-    const segments = useMemo(() => transcript?.segments ?? [], [transcript]);
+    const { playback, error, refresh } = useRecordingPlayback(recordingId);
+    const url = playback?.url || null;
+    const segments = useMemo(() => playback?.transcript?.segments ?? [], [playback]);
+    const offset = playback?.transcript?.offsetMs ?? 0;
+    const chapters = playback?.chapters ?? [];
+    const silences = useMemo(() => {
+      const listed = silencesOf(playback?.recording);
+      return listed.length > 0 ? listed : silencesFromSegments(segments);
+    }, [playback, segments]);
 
     const media = useRef<HTMLMediaElement | null>(null);
     const [posMs, setPosMs] = useState(0);
@@ -496,15 +609,15 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
     };
 
     useImperativeHandle(ref, () => ({
-      seek: (ms) => seekMedia(ms - offset, true),
+      seek: (ms) => seekMedia(ms, true),
+      seekTranscript: (ms) => seekMedia(ms + offset, true),
       play: () => void media.current?.play().catch(() => undefined),
       pause: () => media.current?.pause(),
     }));
 
     useEffect(() => {
-      if (typeof startMs === 'number') seekMedia(startMs - offset, false);
-      // Only a new start point seeks; the offset settling doesn't.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (typeof startMs === 'number') seekMedia(startMs, false);
+      // Only a new start point seeks.
     }, [startMs]);
 
     useEffect(() => {
@@ -513,7 +626,7 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
 
     // The transcript line under the playhead, kept in view unless the
     // viewer scrolled the transcript themselves in the last few seconds.
-    const active = activeSegmentIndex(segments, posMs + offset);
+    const active = activeSegmentIndex(segments, posMs);
     const list = useRef<HTMLOListElement>(null);
     const userScrolledAt = useRef(0);
     const autoScrolling = useRef(false);
@@ -528,7 +641,8 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
     }, [active]);
 
     const chapterIdx = chapterIndexAt(chapters, posMs);
-    const isAudio = recording.mode === 'audio';
+    const isAudio =
+      playback?.recording?.mode === 'audio' || !!playback?.contentType?.startsWith('audio/');
 
     const mediaProps = {
       ref: (el: HTMLMediaElement | null) => {
@@ -583,13 +697,7 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
         aria-label="Recording"
       >
         <div className="poolse-player__stage">
-          {!ready ? (
-            <p className="poolse-player__note">
-              {recording.status === 'failed'
-                ? 'This recording couldn’t be saved.'
-                : 'The recording is still being saved.'}
-            </p>
-          ) : error && !url ? (
+          {error && !url ? (
             <p className="poolse-player__note" role="alert">
               {meetingsErrorMessage(error)}
             </p>
@@ -664,11 +772,9 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
                   className={i === active ? 'poolse-player__line is-active' : 'poolse-player__line'}
                   aria-current={i === active ? 'true' : undefined}
                 >
-                  <button type="button" onClick={() => seekMedia(s.start_ms - offset, true)}>
+                  <button type="button" onClick={() => seekMedia(s.start_ms, true)}>
                     {newSpeaker && <span className="poolse-player__speaker">{speakerName(s)}</span>}
-                    <span className="poolse-player__time">
-                      {formatClock(Math.max(0, s.start_ms - offset))}
-                    </span>
+                    <span className="poolse-player__time">{formatClock(s.start_ms)}</span>
                     <span className="poolse-player__text">{s.text}</span>
                   </button>
                 </li>

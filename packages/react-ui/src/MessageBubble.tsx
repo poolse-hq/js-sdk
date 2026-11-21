@@ -1,11 +1,11 @@
 import type { Attachment, Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
-import { citationsOf, clipOf, messageAgent, useUser } from '@poolse/react';
+import { approvalIdOf, citationsOf, clipOf, messageAgent, useUser } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AgentBadge } from './AgentBadge.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
-import { MessageCitations } from './Agents.js';
+import { MessageApproval, MessageCitations } from './Agents.js';
 import { ClipPlayer } from './Meetings.js';
 import { useEditHistory } from './EditedLabel.js';
 import { hasLinkPreviews, MessageLinkPreviews } from './LinkPreviewCard.js';
@@ -186,6 +186,8 @@ export function MessageBubble({
   const hasAnyAttachment =
     imageAttachments.length > 0 || fileAttachments.length > 0 || clipAttachments.length > 0;
   const citations = citationsOf(message);
+  // An agent waiting for a yes (AG4): its card, for the person asked.
+  const approvalId = approvalIdOf(message);
   const hasVisibleBody = !message.deleted_at && rawBody.length > 0;
   // Image-only (no body, no file cards) → meta floats over the
   // bottom-right of the last image as a pill overlay (WhatsApp style).
@@ -210,6 +212,7 @@ export function MessageBubble({
     hasVisibleBody &&
     !showPreviews &&
     citations.length === 0 &&
+    !approvalId &&
     jumboCount === 0 &&
     !trimToggleVisible &&
     (!markdown || !hasMarkdown(displayBody));
@@ -420,6 +423,9 @@ export function MessageBubble({
             {renderSlot(slots?.body, slotContext, body)}
             {citations.length > 0 ? (
               <MessageCitations message={message} citations={citations} />
+            ) : null}
+            {approvalId ? (
+              <MessageApproval approvalId={approvalId} agentName={isSelf ? null : senderName} />
             ) : null}
             {showPreviews ? <MessageLinkPreviews message={message} canRemove={isSelf} /> : null}
             <span className={metaClass}>{metaContent}</span>

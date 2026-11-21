@@ -16,7 +16,6 @@ import type { Message, Uuid } from '@poolse/sdk';
 import {
   callLogDisplayFor,
   messageAgent,
-  parseApproval,
   parseCallSummary,
   recordingNoticeDisplayFor,
   useReactions,
@@ -24,7 +23,6 @@ import {
 } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
-import { ApprovalMessageRow } from './Agents.js';
 import { CallLogRow } from './CallLogRow.js';
 import { SummaryMessageRow } from './Meetings.js';
 import { RecordingNoticeRow } from './Recording.js';
@@ -168,11 +166,7 @@ export function MessageRow(props: MessageRowProps) {
       />
     ) : null;
   }
-  // An agent asking before it acts (AG4), and a call's summary (RT6):
-  // full-width cards with the sender above them.
-  if (parseApproval(props.msg)) {
-    return <ApprovalMessageRow msg={props.msg} meId={props.meId} />;
-  }
+  // A call's summary (RT6): a full-width card with the sender above it.
   if (parseCallSummary(props.msg)) {
     return (
       <SummaryMessageRow

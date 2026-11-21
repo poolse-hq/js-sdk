@@ -1,9 +1,10 @@
 // Agents in chat: the approval card (AG4) and the sources under an
 // assistant's answer (AG5). Same props in @poolse/react-native.
 //
-//     <ApprovalCard approval={a} />          // approve / deny, with a reason
-//     <ApprovalList />                       // everything waiting for you
-//     <MessageCitations message={msg} />     // links under an answer
+//     <ApprovalCard approval={a} />            // approve / deny, with a reason
+//     <MessageApproval approvalId={id} />      // under the agent message that asked
+//     <ApprovalList />                         // everything waiting for you
+//     <MessageCitations message={msg} />       // numbered links under an answer
 
 import type { AgentApproval, Citation, Message } from '@poolse/sdk';
 import {
@@ -13,19 +14,17 @@ import {
   citationLabel,
   citationsOf,
   formatClock,
-  parseApproval,
   useApproval,
   useApprovals,
-  useUser,
 } from '@poolse/react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { AgentBadge } from './AgentBadge.js';
 import { useMessageExtras } from './messageExtras.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
 export interface ApprovalCardProps {
-  /** The request — from `parseApproval(message)` or `useApprovals()`. */
+  /** The request — from `useApprovals()` or `useApproval(id)`. */
   approval: AgentApproval;
   /** The agent's name when the request leaves it out (e.g. the message's sender). */
   agentName?: string | null;
@@ -175,20 +174,28 @@ export function ApprovalCard({
   );
 }
 
-export interface ApprovalMessageRowProps {
-  msg: Message;
-  meId: string | null;
+export interface MessageApprovalProps {
+  /** `approvalIdOf(message)`. */
+  approvalId: string;
+  /** The asking agent's name (the message's sender) when the directory doesn't know it. */
+  agentName?: string | null;
+  className?: string;
 }
 
-/** A `kind: "agent_approval"` message in a list: the card, full width. */
-export function ApprovalMessageRow({ msg }: ApprovalMessageRowProps) {
-  const approval = useMemo(() => parseApproval(msg), [msg]);
-  const { profile } = useUser(approval?.agent?.name ? null : msg.sender_external_id);
+/**
+ * The approval an agent's message waits for (`agent_meta.approval_id`),
+ * loaded and kept live. Nothing shows for someone else's approval —
+ * only the person asked can see and answer it.
+ */
+export function MessageApproval({ approvalId, agentName, className }: MessageApprovalProps) {
+  const { approval } = useApproval(approvalId);
   if (!approval) return null;
   return (
-    <div className="poolse-card-row" data-message-id={msg.id} role="article" tabIndex={-1}>
-      <ApprovalCard approval={approval} agentName={profile?.displayName ?? null} />
-    </div>
+    <ApprovalCard
+      approval={approval}
+      {...(agentName !== undefined ? { agentName } : {})}
+      className={['poolse-approval--inline', className].filter(Boolean).join(' ')}
+    />
   );
 }
 
@@ -256,7 +263,7 @@ export function MessageCitations({
           const content = (
             <>
               <span className="poolse-citations__num" aria-hidden="true">
-                {i + 1}
+                {c.n || i + 1}
               </span>
               <PoolseIcon name={CITATION_ICON[c.type]} size={13} label={null} />
               <span className="poolse-citations__text">{citationLabel(c)}</span>
@@ -291,8 +298,20 @@ export function MessageCitations({
   );
 }
 
-const CITATION_ICON = { message: 'message', file: 'attachment', transcript: 'mic' } as const;
-const CITATION_KIND = { message: 'Message', file: 'File', transcript: 'Meeting' } as const;
+const CITATION_ICON = {
+  message: 'message',
+  file: 'attachment',
+  transcript: 'mic',
+  summary: 'pulse',
+  memory: 'pin',
+} as const;
+const CITATION_KIND = {
+  message: 'Message',
+  file: 'File',
+  transcript: 'Meeting',
+  summary: 'Meeting summary',
+  memory: 'What we know',
+} as const;
 
 /** True once a pending approval's `expiresAt` has passed (re-checked each 30 s). */
 function useExpired(a: AgentApproval): boolean {

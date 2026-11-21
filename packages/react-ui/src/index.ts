@@ -88,11 +88,11 @@ export { AgentBadge, type AgentBadgeProps } from './AgentBadge.js';
 export {
   ApprovalCard,
   ApprovalList,
-  ApprovalMessageRow,
+  MessageApproval,
   MessageCitations,
   type ApprovalCardProps,
   type ApprovalListProps,
-  type ApprovalMessageRowProps,
+  type MessageApprovalProps,
   type MessageCitationsProps,
 } from './Agents.js';
 export {

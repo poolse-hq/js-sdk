@@ -4,7 +4,7 @@
 // it from their props; a custom layout wraps its rows in
 // `<MessageExtrasProvider>` itself.
 
-import type { Citation, Message } from '@poolse/sdk';
+import type { Citation, MeetingMoment, Message } from '@poolse/sdk';
 import { createContext, useContext, type ReactNode } from 'react';
 
 export interface MessageExtrasHandlers {
@@ -16,11 +16,11 @@ export interface MessageExtrasHandlers {
    */
   onOpenCitation?: (citation: Citation, message: Message) => void;
   /**
-   * A point in a call was pressed (a summary moment, an answer's link,
-   * a clip's "Open the recording"): open its recording or transcript at
-   * `startMs` (ms since the transcript started).
+   * A point in a call was pressed (a summary line or moment, a source of
+   * an answer): open its recording at `recordingMs` (when `recordingId`
+   * is set) or its transcript at `startMs`.
    */
-  onOpenMoment?: (callId: string, startMs: number) => void;
+  onOpenMoment?: (moment: MeetingMoment) => void;
   /** A poolse user id → display name (assignees in summaries). Unknown: null. */
   nameForUserId?: (userId: string) => string | null | undefined;
   /**

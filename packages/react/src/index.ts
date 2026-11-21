@@ -209,6 +209,7 @@ export {
   agentFromWire,
   agentMetaOf,
   approvalErrorMessage,
+  approvalFromWire,
   approvalIdOf,
   approvalStatusLabel,
   citationLabel,
