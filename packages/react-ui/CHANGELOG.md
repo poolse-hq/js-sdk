@@ -28,6 +28,11 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   sender gets a × that hides the card and calls
   `messages.update(id, { remove_link_previews: [url] })` (the card returns if
   that fails). Only `http(s)` links are drawn.
+- Thread summaries: `<ThreadSummary message onOpen? maxAvatars?>` — up to three
+  stacked avatars of the people who replied (`thread_participants`) and
+  "N replies · last reply 5m ago" (`last_reply_at`). It replaces the reply
+  count under thread roots in every layout (same classes and accessible name)
+  and opens the `ThreadView`; `thread:updated` keeps it live.
 - `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
   `getText()`, `setText(text)` and `focus()`.
 - `ConversationView` shows a notice when a send is refused because the quoted

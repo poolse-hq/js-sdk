@@ -50,6 +50,7 @@ export { MessageComposer, type MessageComposerProps } from './MessageComposer.js
 export { MessageActions, type MessageActionsProps } from './MessageActions.js';
 export { TypingIndicator, type TypingIndicatorProps } from './TypingIndicator.js';
 export { ThreadView, type ThreadViewProps } from './ThreadView.js';
+export { ThreadSummary, type ThreadSummaryProps } from './ThreadSummary.js';
 export { Avatar, type AvatarProps } from './Avatar.js';
 export {
   PresenceBadge,

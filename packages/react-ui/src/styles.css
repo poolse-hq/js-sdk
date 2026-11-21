@@ -4588,3 +4588,47 @@
     opacity: 1;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   ThreadSummary — "N replies · last reply 5m ago" with stacked
+   participant avatars. Rides on .poolse-thread-pill (bubbles) or
+   .poolse-row__thread (list / compact).
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-thread-summary {
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.poolse-thread-summary__avatars {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.poolse-thread-summary__avatars .poolse-avatar {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+  box-shadow: 0 0 0 2px var(--poolse-paper);
+}
+
+.poolse-thread-summary__avatars .poolse-avatar + .poolse-avatar {
+  margin-left: -5px;
+}
+
+.poolse-thread-summary__count {
+  white-space: nowrap;
+}
+
+.poolse-thread-summary__last {
+  font-weight: 400;
+  color: var(--poolse-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poolse-row__thread.poolse-thread-summary:hover .poolse-thread-summary__last {
+  text-decoration: none;
+}

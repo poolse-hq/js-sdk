@@ -30,6 +30,7 @@ import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { InlineReactions, useRowActions } from './rowParts.js';
+import { ThreadSummary } from './ThreadSummary.js';
 
 /** Who sent a message — what `onSenderPress` / `onAvatarPress` receive. */
 export interface MessageUser {
@@ -317,19 +318,13 @@ function BubbleMessageRow({
         slots?.thread,
         slotContext,
         showThreadPill ? (
-          <button
-            type="button"
+          <ThreadSummary
+            message={msg}
             className={`poolse-thread-pill ${
               isSelf ? 'poolse-thread-pill--right' : 'poolse-thread-pill--left'
             }`}
-            onClick={onOpenThread}
-            aria-label={`View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
-          >
-            <PoolseIcon name="messages" size={12} label={null} />
-            <span>
-              {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
-            </span>
-          </button>
+            {...(onOpenThread ? { onOpen: onOpenThread } : {})}
+          />
         ) : null,
       )}
 

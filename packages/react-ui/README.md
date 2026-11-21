@@ -90,6 +90,8 @@ message, pass `slots={{ header, body, attachments, reactions, thread, actions }}
 - **Link previews** show under the text in every layout (`linkPreviews`,
   default on); the sender can remove one with its ×. `<LinkPreviewCard
 preview>` draws one on its own.
+- **Thread summaries** under thread roots: stacked participant avatars, "N
+  replies · last reply 5m ago"; click opens the thread (`<ThreadSummary>`).
 - **Deleted messages** read "This message was deleted" and keep their thread
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.

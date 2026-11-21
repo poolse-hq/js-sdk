@@ -26,6 +26,7 @@ import { ImageMosaic, isImageContentType, QuotedCard, QuotedPlaceholder } from '
 import type { MessageRowProps, MessageUser } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { InlineReactions, useRowActions } from './rowParts.js';
+import { ThreadSummary } from './ThreadSummary.js';
 import { userColor } from './userColor.js';
 
 const TRIM_BUFFER = 40;
@@ -226,17 +227,11 @@ export function FlatMessageRow({
     ) : null;
 
   const threadEl = showThreadLink ? (
-    <button
-      type="button"
+    <ThreadSummary
+      message={msg}
       className="poolse-row__thread"
-      onClick={onOpenThread}
-      aria-label={`View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
-    >
-      <PoolseIcon name="messages" size={14} label={null} />
-      <span>
-        {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
-      </span>
-    </button>
+      {...(onOpenThread ? { onOpen: onOpenThread } : {})}
+    />
   ) : null;
 
   const toolbar = showActions ? (
