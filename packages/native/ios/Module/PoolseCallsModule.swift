@@ -127,6 +127,8 @@ public class PoolseCallsModule: Module {
     Function("stopScreenShare") { onCore { $0.setScreenShare(false) } }
     Function("setSpeaker") { (on: Bool) in onCore { $0.setSpeaker(on) } }
     Function("setAudioOutput") { (id: String) in onCore { $0.setAudioOutput(id) } }
+    // Recording consent accepted: mic and camera back as they were.
+    Function("republish") { onCore { $0.republish() } }
 
     // Picture-in-picture: armed while a video call shows someone; the
     // <CallVideoView pictureInPicture> on screen is what it grows out of.
