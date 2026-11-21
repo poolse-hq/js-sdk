@@ -8,6 +8,12 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ### Added
 
+- Conversation list paging: `useConversations().loadMore()`, `hasMore` and
+  `loadingMore`. The first page loads as before; `loadMore()` appends the
+  next (deduped by id, one request at a time; a failure rejects and keeps the
+  cursor). A quiet reload (remount, reconnect) refreshes the first page and
+  keeps rows of later pages already loaded.
+
 - Re-exported `LinkPreview`, `LinkPreviewType`, `ThreadParticipant`,
   `ThreadUpdatedEvent`, `MessageEdit`, `MessageEditList`,
   `MessageUpdateRequest`, `ApiErrorCode`, and the helpers `isTombstone`,
