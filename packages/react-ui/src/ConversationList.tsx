@@ -12,6 +12,7 @@ import type { Conversation, Uuid } from '@poolse/sdk';
 import {
   filterConversations,
   formatCallLogPreview,
+  formatRecordingNoticePreview,
   useConversations,
   useMe,
   useUser,
@@ -390,6 +391,7 @@ function DefaultRow({
   // "Voice call · 3:12" / "Missed call" instead.
   const preview =
     formatCallLogPreview(conv.last_message_preview, meId) ??
+    formatRecordingNoticePreview(conv.last_message_preview, meId) ??
     conv.last_message_preview ??
     (conv.last_sequence > 0
       ? `${conv.last_sequence} message${conv.last_sequence === 1 ? '' : 's'}`

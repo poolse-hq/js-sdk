@@ -417,6 +417,17 @@ export function ConversationView({
   const { members, loading: membersLoading } = useMembers(membersOn ? conversationId : '');
   const chat = usePoolse();
 
+  // System lines that name people by poolse id (the recording notice):
+  // the resolver's name, else the app's label. Unknown: left out.
+  const nameForUserId = useCallback(
+    (userId: string): string | null => {
+      const ext = members.find((m) => m.user_id === userId)?.external_id;
+      if (!ext) return null;
+      return chat.users.peek(ext)?.displayName ?? labelFor?.(ext) ?? null;
+    },
+    [members, chat, labelFor],
+  );
+
   // Group-chat heuristic: 3+ members triggers per-bubble sender
   // identification (label + avatar) under the `'auto'` setting.
   // `'always'` forces them on, `'never'` forces off.
@@ -1328,6 +1339,7 @@ export function ConversationView({
                       }
                     : {})}
                   {...(onCallBack ? { onCallBack } : {})}
+                  nameForUserId={nameForUserId}
                   {...layoutProps}
                   mentionsMe={mentionsViewer(msg, me?.id ?? null)}
                 />

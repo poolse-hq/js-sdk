@@ -66,6 +66,23 @@ export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';
 export { CallLogRow, type CallLogRowProps } from './CallLogRow.js';
 export { LiveCallBanner, type LiveCallBannerProps } from './LiveCallBanner.js';
 export { RoomJoinBar, RoomStage, type RoomJoinBarProps, type RoomStageProps } from './Room.js';
+// Recording, consent and transcripts.
+export {
+  ConsentPrompt,
+  RecordingBanner,
+  RecordingIndicator,
+  RecordingNoticeRow,
+  type ConsentPromptProps,
+  type RecordingBannerProps,
+  type RecordingIndicatorProps,
+  type RecordingNoticeRowProps,
+} from './Recording.js';
+export {
+  LiveTranscriptPanel,
+  TranscriptViewer,
+  type LiveTranscriptPanelProps,
+  type TranscriptViewerProps,
+} from './Transcript.js';
 export { EditedLabel, useEditHistory, type EditedLabelProps } from './EditedLabel.js';
 export { EditableMessageBubble, type EditableMessageBubbleProps } from './EditableMessageBubble.js';
 export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';

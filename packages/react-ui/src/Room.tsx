@@ -8,13 +8,14 @@
 //     <RoomJoinBar room={room} />                       // in the header
 //     {room.joined && <RoomStage room={room} title="Design review" />}
 
-import type { UseRoom } from '@poolse/react';
+import { captureErrorMessage, useRecording, type UseRoom } from '@poolse/react';
 import type { CallDeviceKind } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CallControlButton, CallDeviceMenu } from './CallControls.js';
 import { CallVideoGrid } from './CallVideoGrid.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { ConsentPrompt, RecordingBanner, RecordingIndicator } from './Recording.js';
 import { useFullscreen } from './useFullscreen.js';
 
 export interface RoomJoinBarProps {
@@ -107,6 +108,14 @@ export interface RoomStageProps {
   title?: string;
   labelFor?: (userId: string) => string;
   className?: string;
+  /**
+   * Show recording and transcript state: the banner, and the consent
+   * prompt for anyone who hasn't accepted (late joiners too). Defaults
+   * to true.
+   */
+  capture?: boolean;
+  /** A Record / Stop recording control in the bar, where the server can record. Defaults to false. */
+  allowRecord?: boolean;
 }
 
 /**
@@ -116,8 +125,25 @@ export interface RoomStageProps {
  * screen sharing where the browser and the workspace allow it, and Leave. Fills its container: give it the
  * space your layout has for the stage.
  */
-export function RoomStage({ room, title, labelFor, className }: RoomStageProps) {
+export function RoomStage({
+  room,
+  title,
+  labelFor,
+  className,
+  capture = true,
+  allowRecord = false,
+}: RoomStageProps) {
   const media = room.media;
+  const live = room.live;
+  const rec = useRecording(
+    capture || allowRecord ? (live?.id ?? null) : null,
+    live?.conversation_id ?? null,
+    live,
+  );
+  // Declining closes the prompt; "Change" on the banner reopens it.
+  const [consentDismissed, setConsentDismissed] = useState(false);
+  const transcribing = !!rec.transcription?.active;
+  const starter = rec.recording?.started_by_user_id;
   const stage = useRef<HTMLElement>(null);
   const fullscreen = useFullscreen(stage);
   const [menu, setMenu] = useState<CallDeviceKind | null>(null);
@@ -156,6 +182,14 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
                 {elapsed}
               </span>
             )}
+            {capture && (
+              <RecordingIndicator
+                recording={rec.active}
+                transcribing={transcribing}
+                mode={rec.recording?.mode ?? null}
+                className="poolse-room__chip"
+              />
+            )}
             <span className="poolse-room__chip" aria-label={`${count} in the room`}>
               <PoolseIcon name="users" size={14} label={null} />
               {count}
@@ -178,6 +212,19 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
           </button>
         )}
       </header>
+
+      {capture && (
+        <RecordingBanner
+          className="poolse-room__rec"
+          recording={rec.active}
+          transcribing={transcribing}
+          mode={rec.recording?.mode ?? null}
+          consentRequired={rec.consentRequired}
+          myConsent={rec.myConsent}
+          onChangeConsent={() => setConsentDismissed(false)}
+          pending={rec.pending}
+        />
+      )}
 
       <div className="poolse-room__stage">
         {count > 0 ? (
@@ -202,6 +249,20 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
       )}
 
       {room.error && <p className="poolse-room__error">{room.error.message}</p>}
+      {rec.error && <p className="poolse-room__error">{captureErrorMessage(rec.error)}</p>}
+
+      {capture && rec.needsConsent && !(consentDismissed && rec.myConsent === 'declined') && (
+        <ConsentPrompt
+          recording={rec.active}
+          transcribing={transcribing}
+          mode={rec.recording?.mode ?? null}
+          startedByName={starter ? (labelFor?.(starter) ?? null) : null}
+          onAnswer={rec.consent}
+          onAccepted={() => void media.republish()}
+          onDeclined={() => setConsentDismissed(true)}
+          pending={rec.pending}
+        />
+      )}
 
       <div className="poolse-room__bar">
         <span className="callsheet__control">
@@ -271,6 +332,16 @@ export function RoomStage({ room, title, labelFor, className }: RoomStageProps) 
               />
             )}
           </span>
+        )}
+
+        {allowRecord && rec.available && (
+          <CallControlButton
+            icon="presence"
+            highlight={rec.active}
+            label={rec.active ? 'Stop recording' : 'Record'}
+            onClick={() => void (rec.active ? rec.stop() : rec.start())}
+            disabled={rec.pending || media.status !== 'connected'}
+          />
         )}
 
         <CallControlButton

@@ -5213,3 +5213,467 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Recording, consent and transcripts ─────────────────────────────── */
+
+/* The recording dot: a red light, pulsing while live. */
+.poolse-rec-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--poolse-error);
+  animation: poolse-rec-pulse 1.6s ease-in-out infinite;
+}
+
+.poolse-rec-dot--off {
+  background: var(--poolse-ink-3);
+  animation: none;
+}
+
+@keyframes poolse-rec-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poolse-rec-dot {
+    animation: none;
+  }
+}
+
+/* A strip across a captured call. */
+.poolse-rec-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  color: var(--poolse-ink);
+  background: color-mix(in srgb, var(--poolse-error) 12%, var(--poolse-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--poolse-error) 30%, var(--poolse-border));
+}
+
+.poolse-rec-banner__text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.poolse-rec-banner__title {
+  font: 600 13px / 1.3 var(--poolse-font-body);
+  white-space: nowrap;
+}
+
+.poolse-rec-banner__meta {
+  min-width: 0;
+  font: 500 12px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-rec-banner__btn {
+  flex: none;
+  padding: 4px 12px;
+  font: 600 12px / 1.2 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  cursor: pointer;
+}
+
+.poolse-rec-banner__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.poolse-rec-banner__btn:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 1px;
+}
+
+/* Inside the (always dark) room. */
+.poolse-room {
+  position: relative;
+}
+
+.poolse-room .poolse-rec-banner {
+  margin: 4px 14px 0;
+  color: #fff;
+  background: rgba(229, 72, 77, 0.18);
+  border: 1px solid rgba(229, 72, 77, 0.4);
+  border-radius: var(--poolse-radius-md);
+}
+
+.poolse-room .poolse-rec-banner__meta {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.poolse-room .poolse-rec-banner__btn {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.poolse-rec-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font: 700 11px / 1.4 var(--poolse-font-body);
+  letter-spacing: 0.04em;
+  color: var(--poolse-error);
+  background: color-mix(in srgb, var(--poolse-error) 12%, transparent);
+  border-radius: var(--poolse-radius-pill);
+  white-space: nowrap;
+}
+
+.poolse-room .poolse-rec-indicator {
+  color: #fff;
+}
+
+/* The consent prompt: a card over a scrim filling the call. */
+.poolse-consent-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(12, 13, 16, 0.6);
+}
+
+.poolse-consent {
+  width: 100%;
+  max-width: 380px;
+  padding: 18px 18px 16px;
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-lg);
+  box-shadow: var(--poolse-shadow-lg);
+}
+
+.poolse-consent__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.poolse-consent__title {
+  margin: 0;
+  font: 700 16px / 1.3 var(--poolse-font-body);
+  overflow-wrap: anywhere;
+}
+
+.poolse-consent__body {
+  margin: 8px 0 16px;
+  font: 400 14px / 1.45 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.poolse-consent__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.poolse-consent__btn {
+  padding: 8px 16px;
+  font: 600 14px / 1.2 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: var(--poolse-surface-2);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  cursor: pointer;
+}
+
+.poolse-consent__btn--primary {
+  color: var(--poolse-on-brand);
+  background: var(--poolse-brand);
+  border-color: var(--poolse-brand);
+}
+
+.poolse-consent__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.poolse-consent__btn:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 2px;
+}
+
+.poolse-consent__error {
+  margin: 10px 0 0;
+  font: 500 13px / 1.4 var(--poolse-font-body);
+  color: var(--poolse-error);
+}
+
+/* Transcripts: the live panel and the stored viewer. */
+.poolse-transcript {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  font-family: var(--poolse-font-body);
+}
+
+.poolse-transcript__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--poolse-border);
+}
+
+.poolse-transcript__heading {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.poolse-transcript__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  font: 600 14px / 1.3 var(--poolse-font-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poolse-transcript__meta {
+  font: 500 12px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.poolse-transcript__btn {
+  flex: none;
+  padding: 4px 12px;
+  font: 600 12px / 1.2 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: var(--poolse-surface-2);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  cursor: pointer;
+}
+
+.poolse-transcript__icon-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--poolse-ink-2);
+  background: none;
+  border: none;
+  border-radius: var(--poolse-radius-sm);
+  cursor: pointer;
+}
+
+.poolse-transcript__icon-btn:hover:not(:disabled) {
+  background: var(--poolse-surface-2);
+}
+
+.poolse-transcript__icon-btn:disabled,
+.poolse-transcript__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.poolse-transcript__btn:focus-visible,
+.poolse-transcript__icon-btn:focus-visible,
+.poolse-transcript__time--link:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 1px;
+}
+
+.poolse-transcript__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 12px 0;
+  padding: 4px 4px 4px 10px;
+  color: var(--poolse-ink-3);
+  background: var(--poolse-surface-2);
+  border-radius: var(--poolse-radius-md);
+}
+
+.poolse-transcript__search input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  font: 400 14px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.poolse-transcript__count {
+  flex: none;
+  font: 500 12px / 1 var(--poolse-font-body);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.poolse-transcript__speakers {
+  padding: 8px 12px 0;
+}
+
+.poolse-transcript__speakers ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.poolse-transcript__speaker {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px 2px 2px 10px;
+  font: 500 12px / 1.3 var(--poolse-font-body);
+  background: var(--poolse-surface-2);
+  border-radius: var(--poolse-radius-pill);
+}
+
+.poolse-transcript__speaker-name {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-transcript__rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.poolse-transcript__rename input {
+  width: 180px;
+  max-width: 100%;
+  padding: 3px 8px;
+  font: 400 13px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-sm);
+}
+
+.poolse-transcript__rename button {
+  padding: 3px 8px;
+  font: 600 12px / 1.2 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: none;
+  border: none;
+  border-radius: var(--poolse-radius-sm);
+  cursor: pointer;
+}
+
+.poolse-transcript__rename button[type='submit'] {
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-transcript__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+}
+
+.poolse-transcript__empty {
+  margin: 24px 0;
+  text-align: center;
+  font: 400 14px / 1.4 var(--poolse-font-body);
+  color: var(--poolse-ink-3);
+}
+
+.poolse-transcript__block {
+  padding: 6px 0;
+}
+
+.poolse-transcript__who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.poolse-transcript__name {
+  min-width: 0;
+  font: 600 13px / 1.3 var(--poolse-font-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-transcript__time {
+  flex: none;
+  font: 500 11px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.poolse-transcript__time--link {
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.poolse-transcript__text {
+  margin: 2px 0 0;
+  font: 400 14px / 1.5 var(--poolse-font-body);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.poolse-transcript__interim {
+  color: var(--poolse-ink-3);
+}
+
+.poolse-transcript__hit {
+  color: inherit;
+  background: color-mix(in srgb, var(--poolse-warning) 30%, transparent);
+  border-radius: 2px;
+}
+
+.poolse-transcript__hit--current {
+  background: color-mix(in srgb, var(--poolse-warning) 65%, transparent);
+}
+
+.poolse-transcript__error {
+  margin: 6px 12px;
+  font: 500 13px / 1.4 var(--poolse-font-body);
+  color: var(--poolse-error);
+}

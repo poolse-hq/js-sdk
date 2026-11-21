@@ -13,10 +13,11 @@
 // and the same `slots`.
 
 import type { Message, Uuid } from '@poolse/sdk';
-import { callLogDisplayFor, useReactions, useUser } from '@poolse/react';
+import { callLogDisplayFor, recordingNoticeDisplayFor, useReactions, useUser } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { CallLogRow } from './CallLogRow.js';
+import { RecordingNoticeRow } from './Recording.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { FlatMessageRow } from './FlatMessageRow.js';
 import {
@@ -109,6 +110,11 @@ export interface MessageRowProps {
   onAvatarPress?: (user: MessageUser) => void;
   /** Call-log rows: offer "Call back" (see `<CallLogRow onCallBack>`). */
   onCallBack?: (media: 'audio' | 'video') => void;
+  /**
+   * A poolse user id → display name, for system lines that name people
+   * by internal id (the recording notice). Unknown: the name is left out.
+   */
+  nameForUserId?: (userId: Uuid) => string | null | undefined;
   /** `'bubbles'` (default), `'list'` or `'compact'` — see `ChatLayout`. */
   layout?: ChatLayout;
   /** `'12h'`, `'24h'` or a formatter for timestamps. Defaults to the locale's. */
@@ -132,6 +138,16 @@ export function MessageRow(props: MessageRowProps) {
   // `null` = a call log hidden for this viewer (someone else's
   // missed-call marker). Split into its own component so the bubble
   // row's hooks never run conditionally.
+  // Recording notices (`{"kind":"recording"}`): the same compact line.
+  if (recordingNoticeDisplayFor(props.msg, props.meId)) {
+    return (
+      <RecordingNoticeRow
+        msg={props.msg}
+        meId={props.meId}
+        {...(props.nameForUserId ? { nameFor: props.nameForUserId } : {})}
+      />
+    );
+  }
   const callLog = callLogDisplayFor(props.msg, props.meId);
   if (callLog !== undefined) {
     return callLog ? (
