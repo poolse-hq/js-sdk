@@ -2,7 +2,7 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
-## [Unreleased]
+## 3.7.0 — 2026-11-21
 
 - Custom incoming ringtone. Plugin option `ringtone` (a file path, or
   `{ ios, android }`) ships the sound in both apps; `configure({ ringtone })`
