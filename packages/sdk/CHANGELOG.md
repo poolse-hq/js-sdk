@@ -4,6 +4,10 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.4.0] - 2026-11-21
+
+- No changes; released with the other `@poolse/*` packages at 3.4.0.
+
 ## [3.3.0] - 2026-11-20
 
 ### Added

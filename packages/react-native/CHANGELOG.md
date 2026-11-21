@@ -4,7 +4,7 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
-## [Unreleased]
+## [3.4.0] - 2026-11-21
 
 ### Added
 
