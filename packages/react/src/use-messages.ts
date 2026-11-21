@@ -1,5 +1,6 @@
-import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
+import type { Message, MessageCreateRequest, OutboxEntry, Poolse, Uuid } from '@poolse/sdk';
 import {
+  MessageQueuedError,
   applyThreadUpdate,
   markQuoteDeleted,
   mergeMessage,
@@ -18,8 +19,24 @@ interface UseMessagesState {
   hasMore: boolean;
   /** Load an older page (lower sequence numbers). Idempotent if no older messages exist. */
   loadMore: () => Promise<void>;
-  /** Optimistically append + POST. Replaces the optimistic row with the server response on success. */
+  /**
+   * Optimistically append + POST. Replaces the optimistic row with the
+   * server response on success.
+   *
+   * With the client's outbox on (the default), a send that can't reach
+   * the server stays in the list as `local_status: 'queued'` and goes
+   * out by itself on reconnect (same id, so never twice); the promise
+   * rejects with `MessageQueuedError`, which is not a failure to show.
+   * A send the server refuses stays as `local_status: 'failed'` (with
+   * `local_error`) until `retry(id)` or `discard(id)`; the promise
+   * rejects with the server's error. With `outbox: false` a failed
+   * send is removed from the list and rejects, as before.
+   */
   send: (attrs: MessageCreateRequest) => Promise<Message>;
+  /** Send a queued or failed message again now (the Retry on a failed row). */
+  retry: (messageId: Uuid) => Promise<void>;
+  /** Remove a queued or failed message that hasn't been sent (the Delete on a failed row). */
+  discard: (messageId: Uuid) => void;
   /**
    * Edit a message you previously sent. Optimistically updates the
    * local row, rolls back on server error. Server enforces
@@ -50,6 +67,11 @@ interface UseMessagesState {
    * the user's devices).
    */
   markReadUpTo: (messageId: Uuid) => Promise<void>;
+  /**
+   * The messages shown came from the local cache and the server hasn't
+   * answered yet (or can't be reached: offline).
+   */
+  fromCache: boolean;
   /**
    * Re-fetch the newest page (PAGE_SIZE) and replace the cached
    * messages. Useful when the app returns from background or the
@@ -82,15 +104,27 @@ const PAGE_SIZE = 50;
  *
  * Re-mounting with the same `conversationId` reuses the underlying
  * channel — no extra socket traffic.
+ *
+ * The newest messages of every conversation opened are kept in the
+ * client's warm cache (`chat.cache`): opening it again — or switching
+ * back to its workspace — shows them at once while the page refetches
+ * quietly. With `config.storage` they are also stored, so the history
+ * is readable offline and right after a restart. Unsent messages from
+ * the outbox show at the end with their `local_status`.
  */
 export function useMessages(conversationId: string): UseMessagesState {
   const chat = usePoolse();
   const conversationsStore = useConversationsStore();
   const { me } = useMe();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState<Message[]>(
+    () => initialRows(chat, conversationId) ?? [],
+  );
+  const [loading, setLoading] = useState(() => !initialRows(chat, conversationId));
   const [error, setError] = useState<Error | null>(null);
   const [hasMore, setHasMore] = useState(true);
+  const [fromCache, setFromCache] = useState(() => !!chat.cache.peekMessages(conversationId));
+  // The conversation the rows in state belong to (cache writes check it).
+  const rowsForRef = useRef<string | null>(null);
 
   // Cursor for `loadMore` — the lowest sequence currently in state.
   const oldestSequenceRef = useRef<number | null>(null);
@@ -114,13 +148,45 @@ export function useMessages(conversationId: string): UseMessagesState {
   const meExternalIdRef = useRef<string | null>(me?.external_id ?? null);
   meExternalIdRef.current = me?.external_id ?? null;
 
+  // Keep the warm cache in step with what's shown. Declared before the
+  // loading effect so that, in the commit that switches conversations,
+  // it still sees the old rows paired with the old id and skips.
+  useEffect(() => {
+    if (rowsForRef.current !== conversationId) return;
+    if (messages.some((m) => m.conversation_id !== conversationId)) return;
+    if (loading) return;
+    chat.cache.setMessages(conversationId, messages);
+  }, [chat, conversationId, messages, loading]);
+
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setMessages([]);
+    let fresh = false;
+    const cached = chat.cache.peekMessages(conversationId);
+    rowsForRef.current = conversationId;
     setError(null);
     setHasMore(true);
-    oldestSequenceRef.current = null;
+    if (cached) {
+      setMessages(withOutbox(cached, chat, conversationId));
+      setLoading(false);
+      setFromCache(true);
+      oldestSequenceRef.current = cached[0]?.sequence ?? null;
+      chat.timings._once('cachedMessages');
+    } else {
+      setLoading(true);
+      setMessages(withOutbox([], chat, conversationId));
+      setFromCache(false);
+      oldestSequenceRef.current = null;
+      // A stored copy (previous session, offline) while the page loads.
+      void chat.cache.loadMessages(conversationId).then((stored) => {
+        if (cancelled || fresh || !stored || stored.length === 0) return;
+        setMessages(withOutbox(stored, chat, conversationId));
+        setLoading(false);
+        setError(null);
+        setFromCache(true);
+        oldestSequenceRef.current = stored[0]?.sequence ?? null;
+        chat.timings._once('cachedMessages');
+      });
+    }
 
     const handle = chat.conversations.one(conversationId).messages;
 
@@ -128,15 +194,22 @@ export function useMessages(conversationId: string): UseMessagesState {
       .list({ limit: PAGE_SIZE })
       .then((page) => {
         if (cancelled) return;
+        fresh = true;
         // Wire is newest-first; flip for natural reading order.
         const ordered = [...page.data].reverse();
-        setMessages(ordered);
+        setMessages((prev) => keepLocal(ordered, prev));
         setHasMore(page.data.length === PAGE_SIZE);
         oldestSequenceRef.current = ordered[0]?.sequence ?? null;
         setLoading(false);
+        setFromCache(false);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        // Offline with cached rows: show those, not an error.
+        if (chat.cache.peekMessages(conversationId)) {
+          setLoading(false);
+          return;
+        }
         setError(err instanceof Error ? err : new Error(String(err)));
         setLoading(false);
       });
@@ -144,10 +217,24 @@ export function useMessages(conversationId: string): UseMessagesState {
     refetchRef.current = async () => {
       const page = await handle.list({ limit: PAGE_SIZE });
       const ordered = [...page.data].reverse();
-      setMessages(ordered);
+      setMessages((prev) => keepLocal(ordered, prev));
       setHasMore(page.data.length === PAGE_SIZE);
       oldestSequenceRef.current = ordered[0]?.sequence ?? null;
+      setFromCache(false);
     };
+
+    // Unsent messages: follow the outbox (queued → failed, a retry, a
+    // discard), and swap in the server's row once one is delivered.
+    const syncOutbox = () => {
+      if (cancelled) return;
+      const entries = chat.outbox.entries(conversationId);
+      setMessages((prev) => applyOutbox(prev, entries));
+    };
+    const offOutbox = chat.outbox.subscribe(syncOutbox);
+    const offSent = chat.outbox.onSent((entry, sent) => {
+      if (cancelled || entry.conversationId !== conversationId) return;
+      setMessages((prev) => upsertById(prev, sent));
+    });
 
     // Realtime listeners.
     const conv = chat.realtime.conversation(conversationId);
@@ -219,7 +306,10 @@ export function useMessages(conversationId: string): UseMessagesState {
       handle
         .list({ limit: PAGE_SIZE })
         .then((page) => {
-          if (!cancelled) setMessages((prev) => mergeLatest(prev, page.data));
+          if (!cancelled) {
+            setMessages((prev) => mergeLatest(prev, page.data));
+            setFromCache(false);
+          }
         })
         .catch(() => {
           // The next reconnect or an explicit refetch() tries again.
@@ -233,6 +323,8 @@ export function useMessages(conversationId: string): UseMessagesState {
       offDeleted();
       offThread();
       offStatus();
+      offOutbox();
+      offSent();
       // Don't leave the channel — another component may still be reading
       // this conversation. The Poolse.destroy() at provider-unmount
       // tears everything down.
@@ -329,6 +421,15 @@ export function useMessages(conversationId: string): UseMessagesState {
         updated_at: new Date().toISOString(),
       };
 
+      if (chat.outboxEnabled) {
+        setMessages((prev) => upsertById(prev, { ...tempMsg, local_status: 'sending' }));
+        // Queued (offline) or refused: the row stays, following the
+        // outbox; the rejection tells the caller which.
+        const sent = await chat.outbox.send(conversationId, { ...attrs, id }, tempMsg);
+        setMessages((prev) => upsertById(prev, sent));
+        return sent;
+      }
+
       setMessages((prev) => [...prev, tempMsg]);
 
       try {
@@ -414,6 +515,27 @@ export function useMessages(conversationId: string): UseMessagesState {
     [chat, conversationId, conversationsStore],
   );
 
+  const retry = useCallback(
+    async (messageId: Uuid): Promise<void> => {
+      try {
+        await chat.outbox.retry(messageId);
+      } catch (err) {
+        // Still offline: it stays queued. A refusal stays as failed.
+        if (err instanceof MessageQueuedError) return;
+        throw err;
+      }
+    },
+    [chat],
+  );
+
+  const discard = useCallback(
+    (messageId: Uuid): void => {
+      chat.outbox.remove(messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId || !m.local_status));
+    },
+    [chat],
+  );
+
   const refetch = useCallback(async (): Promise<void> => {
     const fn = refetchRef.current;
     if (!fn) return;
@@ -428,11 +550,49 @@ export function useMessages(conversationId: string): UseMessagesState {
     loadMore,
     loadUntil,
     send,
+    retry,
+    discard,
     edit,
     delete: deleteMessage,
     markReadUpTo,
+    fromCache,
     refetch,
   };
+}
+
+// The rows to show before anything loads: the warm cache (plus unsent).
+function initialRows(chat: Poolse, conversationId: string): Message[] | null {
+  const cached = chat.cache.peekMessages(conversationId);
+  return cached ? withOutbox(cached, chat, conversationId) : null;
+}
+
+function withOutbox(rows: Message[], chat: Poolse, conversationId: string): Message[] {
+  return applyOutbox(rows, chat.outbox.entries(conversationId));
+}
+
+/**
+ * Bring the unsent rows in line with the outbox: each entry's row
+ * (added, or updated while it's still the local copy), and local rows
+ * whose entry is gone (sent — the server row replaces it — or
+ * discarded) removed.
+ */
+function applyOutbox(prev: Message[], entries: ReadonlyArray<OutboxEntry>): Message[] {
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  let next = prev.filter((m) => !m.local_status || byId.has(m.id));
+  for (const entry of entries) {
+    const idx = next.findIndex((m) => m.id === entry.id);
+    // The server's row arrived (realtime echo): it wins.
+    if (idx !== -1 && !next[idx]!.local_status) continue;
+    if (idx !== -1 && next[idx] === entry.message) continue;
+    next = upsertById(next, entry.message);
+  }
+  return next.length === prev.length && next.every((m, i) => m === prev[i]) ? prev : next;
+}
+
+/** A fresh page, plus the unsent rows that aren't in it. */
+function keepLocal(page: Message[], prev: Message[]): Message[] {
+  const local = prev.filter((m) => m.local_status && !page.some((p) => p.id === m.id));
+  return local.length === 0 ? page : [...page, ...local];
 }
 
 function patchById(prev: Message[], id: Uuid, fn: (m: Message) => Message): Message[] {

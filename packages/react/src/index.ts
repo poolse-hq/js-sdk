@@ -5,6 +5,16 @@
 // owns one Poolse instance for its mount lifetime.
 
 export { PoolseProvider, usePoolse, type PoolseProviderProps } from './provider.js';
+export {
+  useUnreadTotals,
+  useUnreadQueue,
+  orderUnread,
+  type UseUnreadTotals,
+  type UseUnreadQueue,
+  type UseUnreadQueueOptions,
+} from './use-unread.js';
+export { useOutbox, type UseOutbox } from './use-outbox.js';
+export { useClientTimings } from './use-timings.js';
 export { useMe } from './use-me.js';
 export { useConversation } from './use-conversation.js';
 export { useConversations } from './use-conversations.js';
@@ -55,6 +65,7 @@ export type {
   OwnMembershipUpdateRequest,
   LinkPreview,
   LinkPreviewType,
+  LocalMessageStatus,
   Message,
   MessageCreateRequest,
   MessageEdit,
@@ -72,8 +83,25 @@ export type {
   ThreadUpdatedEvent,
   TrackActivityOptions,
   Uuid,
+  DestroyOptions,
+  OutboxEntry,
+  PoolseStorage,
+  TimingEvent,
+  UnreadTotals,
+  UnreadSummary,
 } from '@poolse/sdk';
-export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from '@poolse/sdk';
+export {
+  ApiError,
+  AuthError,
+  PoolseError,
+  NetworkError,
+  RateLimitedError,
+  MessageQueuedError,
+  MessageDiscardedError,
+  Poolse,
+  createIndexedDbStorage,
+  memoryStorage,
+} from '@poolse/sdk';
 export { isTombstone, mergeMessage, toTombstone } from '@poolse/sdk';
 
 // Call-log system messages — shared parser + display helpers.

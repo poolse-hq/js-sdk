@@ -12,6 +12,11 @@
 // `conversation:updated` and `conversation:read`. With its last
 // subscriber gone it stops listening and keeps the rows it had; the next
 // subscriber sees them at once while a quiet refetch catches up.
+//
+// One store per client (`chat.scoped`), so it outlives a provider that
+// unmounts and never mixes two workspaces' rows. Rows are also handed
+// to the client's warm cache (shown at once on the next start, and
+// offline, when the client has a storage) and to its unread totals.
 
 import type {
   Conversation,
@@ -50,7 +55,22 @@ export class ConversationsStore {
   /** Whether rows beyond the first page are held. */
   private pagedBeyondFirst = false;
 
-  constructor(private readonly chat: Poolse) {}
+  private destroyed = false;
+  private hydrating: Promise<void> | null = null;
+
+  constructor(private readonly chat: Poolse) {
+    const cached = chat.cache.peekConversations();
+    if (cached && cached.length > 0) {
+      this.state = { ...this.state, conversations: cached, loading: false };
+    }
+  }
+
+  /** Called by `chat.destroy()`. @internal */
+  destroy(): void {
+    this.destroyed = true;
+    this.deactivate();
+    this.listeners.clear();
+  }
 
   getSnapshot(): ConversationsSnapshot {
     return this.state;
@@ -113,6 +133,7 @@ export class ConversationsStore {
 
   /** Zero a conversation's unread and mention counts. */
   markRead(conversationId: Uuid): void {
+    this.chat.unread.apply(conversationId, 0, 0);
     this.setConversations((prev) =>
       patchRow(prev, conversationId, (c) =>
         c.unread_count === 0 && !c.mention_unread_count
@@ -144,9 +165,12 @@ export class ConversationsStore {
   }
 
   private activate(): void {
+    if (this.destroyed) return;
     // Rows are kept while nobody listens, but may be stale: refetch
     // quietly when there's something to show meanwhile.
-    void this.load(!this.loaded).catch(() => {});
+    const showing = this.state.conversations.length > 0;
+    void this.load(!this.loaded && !showing).catch(() => {});
+    if (!this.loaded && !showing) this.hydrate();
 
     let off: (() => void) | null = null;
     let boundId: Uuid | null = null;
@@ -163,6 +187,17 @@ export class ConversationsStore {
       offMe();
       off?.();
     };
+  }
+
+  // Show the stored list (a previous session's) while the first fetch
+  // is out — or instead of it, offline.
+  private hydrate(): void {
+    this.hydrating ??= this.chat.cache.loadConversations().then((rows) => {
+      if (this.destroyed || this.loaded || !rows || rows.length === 0) return;
+      if (this.state.conversations.length > 0) return;
+      this.chat.timings._once('cachedConversations');
+      this.set({ ...this.state, conversations: rows, loading: false });
+    });
   }
 
   private deactivate(): void {
@@ -203,6 +238,7 @@ export class ConversationsStore {
       .list()
       .then(
         (list) => {
+          if (this.destroyed) return;
           this.loaded = true;
           let conversations = list.data;
           if (this.pagedBeyondFirst) {
@@ -224,6 +260,7 @@ export class ConversationsStore {
           });
         },
         (err: unknown) => {
+          if (this.destroyed) return;
           this.set({
             ...this.state,
             loading: false,
@@ -244,6 +281,10 @@ export class ConversationsStore {
   }
 
   private set(state: ConversationsSnapshot): void {
+    if (state.conversations !== this.state.conversations) {
+      this.chat.unread.observe(state.conversations);
+      if (this.loaded) this.chat.cache.setConversations(state.conversations);
+    }
     this.state = state;
     for (const l of this.listeners) l();
   }

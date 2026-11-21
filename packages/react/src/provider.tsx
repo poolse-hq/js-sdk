@@ -2,6 +2,11 @@ import { Poolse, type PoolseConfig, type TrackActivityOptions } from '@poolse/sd
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { ConversationsStore } from './conversations-store.js';
 
+/** The conversation-list store of a client — one per client, kept with it. */
+export function conversationsStoreOf(chat: Poolse): ConversationsStore {
+  return chat.scoped('react:conversations', (c) => new ConversationsStore(c));
+}
+
 interface PoolseContextValue {
   chat: Poolse;
   /** The conversation list every `useConversations()` shares. */
@@ -11,6 +16,24 @@ interface PoolseContextValue {
 const PoolseContext = createContext<PoolseContextValue | null>(null);
 
 export interface PoolseProviderProps {
+  /**
+   * A client you created yourself (`new Poolse(config)`) — for several
+   * workspaces, keep one client per workspace outside React and hand
+   * each to its own provider. Providers side by side never share
+   * state. The provider does NOT destroy a client it was given: it
+   * stays connected and warm while its provider is unmounted or hidden,
+   * so switching back is a view change. Destroy it yourself on
+   * sign-out (`client.destroy({ clearStorage: true })`).
+   *
+   * Takes precedence over `config`.
+   */
+  client?: Poolse;
+  /**
+   * Put the client in the background while `true` (socket closed,
+   * reconnects when it turns `false`) — for a workspace that isn't on
+   * screen on a phone. See `Poolse.setBackground`.
+   */
+  background?: boolean;
   /**
    * SDK configuration. The provider builds the `Poolse` instance ONCE
    * per mount and reads `getToken` (and the other function-typed
@@ -23,7 +46,7 @@ export interface PoolseProviderProps {
    * after mount is a no-op (the values are captured at construction
    * time); dev mode logs a warning when this happens.
    */
-  config: PoolseConfig;
+  config?: PoolseConfig;
   /**
    * Report this device `active` / `idle` for presence from the browser
    * (`poolse.presence.trackActivity`): idle while the page is hidden,
@@ -47,10 +70,31 @@ export interface PoolseProviderProps {
  * </PoolseProvider>
  * ```
  *
- * The `Poolse` instance is destroyed on unmount — closes the WebSocket
- * and drops every joined channel.
+ * A `Poolse` instance the provider built from `config` is destroyed on
+ * unmount — closes the WebSocket and drops every joined channel. One
+ * passed as `client` is left running.
+ *
+ * Several workspaces, side by side:
+ *
+ * ```tsx
+ * const acme = new Poolse({ apiUrl: 'https://chat.acme.example', getToken: acmeToken });
+ * const beta = new Poolse({ apiUrl: 'https://chat.beta.example', getToken: betaToken });
+ *
+ * <PoolseProvider client={acme}><Workspace /></PoolseProvider>
+ * <PoolseProvider client={beta}><Workspace /></PoolseProvider>
+ * ```
  */
-export function PoolseProvider({ config, trackActivity = true, children }: PoolseProviderProps) {
+export function PoolseProvider({
+  client,
+  config: configProp,
+  background,
+  trackActivity = true,
+  children,
+}: PoolseProviderProps) {
+  if (!client && !configProp) {
+    throw new Error('<PoolseProvider>: pass `client` or `config`.');
+  }
+  const config = configProp ?? ({ getToken: () => null } as PoolseConfig);
   // Hold the latest config in a ref so the SDK reads current callbacks
   // without us rebuilding the client. Without this, the standard call
   // site `<Provider config={{apiUrl, getToken}}>` re-creates `Poolse`
@@ -68,7 +112,11 @@ export function PoolseProvider({ config, trackActivity = true, children }: Pools
     socketPath: string | undefined;
   } | null>(null);
 
-  const chat = useMemo(() => {
+  // Whether a client was handed in, fixed at mount (switching between
+  // `client` and `config` needs a remount, like any connection change).
+  const externalRef = useRef(client !== undefined);
+  const ownChat = useMemo(() => {
+    if (externalRef.current) return null;
     const initial = configRef.current;
     initialConnectionRef.current = {
       apiUrl: initial.apiUrl,
@@ -107,6 +155,9 @@ export function PoolseProvider({ config, trackActivity = true, children }: Pools
     // subscriptions, so it MUST be stable for the life of the mount.
     // Changing `apiUrl` / `wsUrl` / `socketPath` requires a remount.
   }, []);
+  const chat = client ?? ownChat;
+  if (!chat)
+    throw new Error('<PoolseProvider>: `client` was removed after mount; remount instead.');
 
   // Surface mistakes early in dev: connection-shaped fields are
   // captured at construction time, so changing them after mount has
@@ -131,11 +182,18 @@ export function PoolseProvider({ config, trackActivity = true, children }: Pools
     }, [config.apiUrl, config.wsUrl, config.socketPath]);
   }
 
+  // Only a client this provider built is its to tear down.
   useEffect(() => {
+    if (!ownChat) return;
     return () => {
-      chat.destroy();
+      void ownChat.destroy();
     };
-  }, [chat]);
+  }, [ownChat]);
+
+  useEffect(() => {
+    if (background === undefined) return;
+    chat.setBackground(background);
+  }, [chat, background]);
 
   // Read at mount: the options object may be a fresh literal each render.
   const trackActivityRef = useRef(trackActivity);
@@ -145,7 +203,9 @@ export function PoolseProvider({ config, trackActivity = true, children }: Pools
     return chat.presence.trackActivity(opts === true ? {} : opts);
   }, [chat]);
 
-  const value = useMemo(() => ({ chat, conversations: new ConversationsStore(chat) }), [chat]);
+  // The store lives with the client, not this mount: a provider
+  // remounted around the same client finds the list already loaded.
+  const value = useMemo(() => ({ chat, conversations: conversationsStoreOf(chat) }), [chat]);
 
   return <PoolseContext.Provider value={value}>{children}</PoolseContext.Provider>;
 }
@@ -167,6 +227,16 @@ export function usePoolse(): Poolse {
  */
 export function useConversationsStore(): ConversationsStore {
   return usePoolseContext('useConversations').conversations;
+}
+
+/**
+ * The client of the nearest provider, or null outside one — for hooks
+ * that also take an explicit client (`useUnreadTotals(client)`).
+ *
+ * @internal
+ */
+export function useOptionalPoolse(): Poolse | null {
+  return useContext(PoolseContext)?.chat ?? null;
 }
 
 function usePoolseContext(hook: string): PoolseContextValue {

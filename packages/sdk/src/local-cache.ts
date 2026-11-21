@@ -64,6 +64,8 @@ export class LocalCache {
   setMessages(conversationId: Uuid, messages: ReadonlyArray<Message>): void {
     if (this.destroyed) return;
     const kept = messages.filter((m) => !m.local_status).slice(-this.perConversation);
+    // Nothing to show isn't worth caching (and mustn't hide a stored copy).
+    if (kept.length === 0) return;
     this.remember(conversationId, kept);
     this.queueWrite(messagesKey(conversationId), kept);
   }
