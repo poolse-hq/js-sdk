@@ -379,6 +379,17 @@ export function ConversationView({
 
   const wantsMembers = mentions || senderLabels === 'auto' || avatars === 'auto';
   const { members } = useMembers(wantsMembers ? conversationId : '');
+
+  // System lines that name people by poolse id (the recording notice):
+  // the resolver's name, else the app's label. Unknown: left out.
+  const nameForUserId = useCallback(
+    (userId: string): string | null => {
+      const ext = members.find((m) => m.user_id === userId)?.external_id;
+      if (!ext) return null;
+      return chat.users.peek(ext)?.displayName ?? labelFor?.(ext) ?? null;
+    },
+    [members, chat, labelFor],
+  );
   const isGroupChat = members.length > 2;
   const showSenderLabels = senderLabels === 'always' || (senderLabels === 'auto' && isGroupChat);
   const showAvatars =
@@ -754,6 +765,7 @@ export function ConversationView({
           groupPosition={groupPosition}
           markdown={markdown}
           {...(onCallBack ? { onCallBack } : {})}
+          nameForUserId={nameForUserId}
           {...layoutProps}
           mentionsMe={mentionsViewer(msg, meId)}
         />
@@ -794,6 +806,7 @@ export function ConversationView({
       markUnread,
       markMessageUnread,
       removeLinkPreview,
+      nameForUserId,
     ],
   );
 

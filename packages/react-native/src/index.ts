@@ -41,6 +41,23 @@ export type {
 } from './layout.js';
 export { CallLogRow, type CallLogRowProps } from './CallLogRow.js';
 export { LiveCallBanner, type LiveCallBannerProps } from './LiveCallBanner.js';
+// Recording, consent and transcripts.
+export {
+  ConsentPrompt,
+  RecordingBanner,
+  RecordingIndicator,
+  RecordingNoticeRow,
+  type ConsentPromptProps,
+  type RecordingBannerProps,
+  type RecordingIndicatorProps,
+  type RecordingNoticeRowProps,
+} from './Recording.js';
+export {
+  LiveTranscriptPanel,
+  TranscriptViewer,
+  type LiveTranscriptPanelProps,
+  type TranscriptViewerProps,
+} from './Transcript.js';
 export {
   MessageComposer,
   type MessageComposerProps,

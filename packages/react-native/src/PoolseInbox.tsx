@@ -1,6 +1,7 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
 import {
   formatCallLogPreview,
+  formatRecordingNoticePreview,
   useConversations,
   useMe,
   useUser,
@@ -569,6 +570,7 @@ function DefaultConversationRow({
         </Text>
         <Text style={[styles.rowSubtitle, { color: theme.colors.textSubtle }]} numberOfLines={1}>
           {formatCallLogPreview(conv.last_message_preview, meId) ??
+            formatRecordingNoticePreview(conv.last_message_preview, meId) ??
             conv.last_message_preview ??
             (isDirect ? (otherExtId ?? '') : `${(conv.member_external_ids ?? []).length} members`)}
         </Text>

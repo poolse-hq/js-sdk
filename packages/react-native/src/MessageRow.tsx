@@ -10,6 +10,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import { Avatar } from './primitives/Avatar.js';
 import { CallLogRow } from './CallLogRow.js';
+import { RecordingNoticeRow } from './Recording.js';
 import { canShowEditHistory, EditHistorySheet } from './EditHistorySheet.js';
 import { EmojiPicker } from './EmojiPicker.js';
 import { FlatMessageRow } from './FlatMessageRow.js';
@@ -29,7 +30,13 @@ import { messageA11yLabel } from './internal/a11y.js';
 import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
 import { useTheme } from './theme/PoolseTheme.js';
-import { callLogDisplayFor, isTombstone, useReactions, useUser } from '@poolse/react';
+import {
+  callLogDisplayFor,
+  isTombstone,
+  recordingNoticeDisplayFor,
+  useReactions,
+  useUser,
+} from '@poolse/react';
 
 // Swipe-to-reply triggers at this much horizontal pull. iOS / WhatsApp
 // use 50–60px; the lower bound feels lighter for one-handed thumb use.
@@ -96,6 +103,11 @@ export interface MessageRowProps {
   onAvatarPress?: (user: MessageUser) => void;
   /** Call-log rows: offer "Call back" (see `<CallLogRow onCallBack>`). */
   onCallBack?: (media: 'audio' | 'video') => void;
+  /**
+   * A poolse user id → display name, for system lines that name people
+   * by internal id (the recording notice). Unknown: the name is left out.
+   */
+  nameForUserId?: (userId: string) => string | null | undefined;
   /** `'bubbles'` (default), `'list'` or `'compact'` — see `ChatLayout`. */
   layout?: ChatLayout;
   /** `'comfortable'` (default) or `'compact'` spacing. */
@@ -234,6 +246,16 @@ export function MessageRow(props: MessageRowProps) {
   // call log; `null` = a call log hidden for this viewer (someone
   // else's missed-call marker). Split into its own component so the
   // bubble row's hooks never run conditionally.
+  // Recording notices (`{"kind":"recording"}`): the same compact line.
+  if (recordingNoticeDisplayFor(props.msg, props.meId)) {
+    return (
+      <RecordingNoticeRow
+        msg={props.msg}
+        meId={props.meId}
+        {...(props.nameForUserId ? { nameFor: props.nameForUserId } : {})}
+      />
+    );
+  }
   const callLog = callLogDisplayFor(props.msg, props.meId);
   if (callLog !== undefined) {
     return callLog ? (

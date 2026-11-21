@@ -2,6 +2,7 @@ import type { Conversation, Uuid } from '@poolse/sdk';
 import {
   filterConversations,
   formatCallLogPreview,
+  formatRecordingNoticePreview,
   useConversations,
   useMe,
   useUser,
@@ -319,7 +320,9 @@ function ConversationRow({
       : (conv.avatar_url ?? null);
   const avatarSeed = isDirect ? (otherExtId ?? conv.id) : conv.id;
   const preview = conv.last_message_preview
-    ? (formatCallLogPreview(conv.last_message_preview, meId) ?? conv.last_message_preview)
+    ? (formatCallLogPreview(conv.last_message_preview, meId) ??
+      formatRecordingNoticePreview(conv.last_message_preview, meId) ??
+      conv.last_message_preview)
     : null;
   const when = relativeTime(conv.last_message_at, Date.now(), 'short');
   const bold = unread > 0;
