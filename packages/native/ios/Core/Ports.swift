@@ -121,9 +121,16 @@ public struct RingContext: Equatable {
   public var media: String
   public var grant: String
   public var ringDeadlineEpochMs: Int64
+  /// The server (workspace) the ring came from — the host's id from
+  /// `addServer`, resolved from the push's `tenant_id`. Its answer and
+  /// decline go to that server. nil: the default server.
+  public var serverId: String?
+  /// The push's `workspace_name`, for "Ana · Acme" when several servers are signed in.
+  public var workspaceName: String?
 
   public init(callId: String, conversationId: String, conversationName: String?, callerName: String?,
-              media: String, grant: String, ringDeadlineEpochMs: Int64) {
+              media: String, grant: String, ringDeadlineEpochMs: Int64,
+              serverId: String? = nil, workspaceName: String? = nil) {
     self.callId = callId
     self.conversationId = conversationId
     self.conversationName = conversationName
@@ -131,6 +138,8 @@ public struct RingContext: Equatable {
     self.media = media
     self.grant = grant
     self.ringDeadlineEpochMs = ringDeadlineEpochMs
+    self.serverId = serverId
+    self.workspaceName = workspaceName
   }
 }
 

@@ -23,6 +23,8 @@ sourceSets {
       include("dev/poolse/callcore/CallMachine.kt")
       include("dev/poolse/callcore/CallCoreRuntime.kt")
       include("dev/poolse/callcore/Ports.kt")
+      include("dev/poolse/callcore/RoutedHttpPort.kt")
+      include("dev/poolse/callcore/CallServers.kt")
     }
   }
 }
