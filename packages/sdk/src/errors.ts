@@ -2,7 +2,7 @@
 // decide whether to retry, prompt the user to re-login, etc. — the
 // alternative (parsing error.message strings) is brittle.
 
-import type { ErrorEnvelope } from './types.js';
+import type { ApiErrorCode, ErrorEnvelope } from './types.js';
 
 /** Base for any error originating in the SDK. */
 export class PoolseError extends Error {
@@ -33,7 +33,7 @@ export class NetworkError extends PoolseError {
 export class ApiError extends PoolseError {
   public override readonly name: string = 'ApiError';
   public readonly status: number;
-  public readonly code: string;
+  public readonly code: ApiErrorCode;
   public readonly docUrl: string;
   public readonly details: Record<string, unknown> | undefined;
 

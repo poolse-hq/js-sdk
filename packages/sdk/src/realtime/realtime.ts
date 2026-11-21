@@ -36,6 +36,7 @@ import type {
   ReactionEvent,
   RealtimeStatus,
   RingEndedEvent,
+  ThreadUpdatedEvent,
   TypingEvent,
   Unsubscribe,
 } from './types.js';
@@ -346,9 +347,17 @@ export class ConversationChannel {
     return this.subscribe('message:updated', fn as (p: unknown) => void);
   }
 
-  /** Tombstone for a soft-deleted message. */
+  /** Tombstone for a soft-deleted message (`thread_root_id` says which thread it was in). */
   onMessageDeleted(fn: (evt: MessageDeletedEvent) => void): Unsubscribe {
     return this.subscribe('message:deleted', fn as (p: unknown) => void);
+  }
+
+  /**
+   * A thread's summary changed (`thread:updated`): a reply was posted
+   * or deleted. Merge it into the root with `applyThreadUpdate`.
+   */
+  onThreadUpdated(fn: (evt: ThreadUpdatedEvent) => void): Unsubscribe {
+    return this.subscribe('thread:updated', fn as (p: unknown) => void);
   }
 
   /** An AI agent's reply as it's written (`message:stream`); see `MessageStreamEvent`. */

@@ -74,6 +74,7 @@ export type {
   MessageNewEvent,
   MessageUpdatedEvent,
   PresenceSnapshot,
+  ThreadUpdatedEvent,
   ReactionEvent,
   RealtimeStatus,
   TypingEvent,
@@ -81,6 +82,7 @@ export type {
 } from './realtime/types.js';
 
 export type {
+  ApiErrorCode,
   Attachment,
   AttachmentDownloadResponse,
   AttachmentStatus,
@@ -89,10 +91,14 @@ export type {
   Conversation,
   ConversationCreateRequest,
   ConversationList,
+  ConversationListOptions,
   ConversationType,
   ConversationUpdateRequest,
   ErrorEnvelope,
+  IncludeDeletedOption,
   IsoDateTime,
+  LinkPreview,
+  LinkPreviewType,
   Me,
   NotificationPreferences,
   NotifyLevel,
@@ -106,6 +112,8 @@ export type {
   MembershipList,
   Message,
   MessageCreateRequest,
+  MessageEdit,
+  MessageEditList,
   MessageList,
   MessageType,
   MessageUpdateRequest,
@@ -113,8 +121,18 @@ export type {
   QuotedMessagePreview,
   ReactionRequest,
   ReadRequest,
+  ThreadParticipant,
   Uuid,
 } from './types.js';
+
+// Keeping a local message list in step with server events.
+export {
+  applyThreadUpdate,
+  isTombstone,
+  markQuoteDeleted,
+  mergeMessage,
+  toTombstone,
+} from './message-state.js';
 
 // ── Calling ──────────────────────────────────────────────────────────
 // Phones ring and carry calls in the native call core

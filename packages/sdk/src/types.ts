@@ -145,6 +145,20 @@ export interface Conversation {
 
 export interface ConversationList {
   data: Conversation[];
+  /**
+   * Opaque cursor for the next page — pass it as `cursor` to
+   * `conversations.list()`. Null on the last page; absent on servers
+   * that don't page the list.
+   */
+  next_cursor?: string | null;
+}
+
+/** Query for `conversations.list()` — `GET /v1/conversations`. */
+export interface ConversationListOptions {
+  /** `next_cursor` of the previous page; omit for the first page. */
+  cursor?: string | null;
+  /** Page size, 1–100 (server default 50). */
+  limit?: number;
 }
 
 export interface ConversationCreateRequest {
@@ -256,12 +270,16 @@ export interface Message {
   reply_to_id: Uuid | null;
   thread_root_id: Uuid | null;
   /**
-   * Number of replies in the thread rooted at this message. Server
-   * populates on REST list + initial fetch; defaults to 0 for new
-   * messages broadcast over realtime. SDK increments locally when a
-   * new reply lands so the thread pill ("💬 N replies") updates live.
+   * Number of live replies in the thread rooted at this message. Every
+   * top-level message carries it (REST and events); `thread:updated`
+   * keeps it current. The React hooks also bump it locally when a reply
+   * lands so older servers still update the thread pill.
    */
   reply_count?: number;
+  /** When the thread's newest live reply was posted; null without replies. */
+  last_reply_at?: IsoDateTime | null;
+  /** Who replied in the thread, most recent first, at most 10. */
+  thread_participants?: ThreadParticipant[];
   /**
    * Quote reply (WhatsApp-style): id of the message being quoted.
    * Independent of `reply_to_id` (which drives thread promotion).
@@ -284,11 +302,68 @@ export interface Message {
    * resolve them).
    */
   attachments?: Attachment[];
+  /**
+   * Previews of the first links in `body`, fetched by the server after
+   * the send or edit; the message then arrives again as
+   * `message:updated`. Empty until fetched, on tombstones, and when the
+   * workspace turned previews off. Absent on older servers.
+   */
+  link_previews?: LinkPreview[];
   edited_at: IsoDateTime | null;
+  /**
+   * Set on a tombstone: a deleted message keeps its id, sequence, sender
+   * and thread fields, with `body: null`, no quote, mentions, reactions,
+   * attachments or link previews. See {@link isTombstone}.
+   */
   deleted_at: IsoDateTime | null;
   sequence: number;
   inserted_at: IsoDateTime;
   updated_at: IsoDateTime;
+}
+
+/** One person who replied in a thread (`Message.thread_participants`). */
+export interface ThreadParticipant {
+  user_id: Uuid;
+  external_id: string | null;
+}
+
+/** `LinkPreview.type`: a web page, or a link straight to an image. */
+export type LinkPreviewType = 'website' | 'image';
+
+/**
+ * A link's preview (`Message.link_previews`). Images are not proxied:
+ * load `image_url` / `favicon_url` directly.
+ */
+export interface LinkPreview {
+  /** Exactly as written in the message body — match on it. */
+  url: string;
+  type: LinkPreviewType;
+  title?: string | null;
+  description?: string | null;
+  site_name?: string | null;
+  image_url?: string | null;
+  favicon_url?: string | null;
+}
+
+/** An earlier version of an edited message (`messages.edits(id)`). */
+export interface MessageEdit {
+  /** 1 is the original text. */
+  version: number;
+  body: string | null;
+  /** When this version was written (sent or edited). */
+  written_at: IsoDateTime;
+  /** When the next version replaced it. */
+  replaced_at: IsoDateTime;
+  editor_id: Uuid | null;
+}
+
+/** `GET /v1/messages/:id/edits`. */
+export interface MessageEditList {
+  /** Earlier versions, oldest first. */
+  data: MessageEdit[];
+  /** The version the message is at now (`data.length + 1`). */
+  current_version: number;
+  edited_at: IsoDateTime | null;
 }
 
 /**
@@ -372,8 +447,25 @@ export interface MessageCreateRequest {
   id?: Uuid;
 }
 
+/**
+ * `PATCH /v1/messages/:id` — sender only. Send `body` to edit, and/or
+ * `remove_link_previews` to drop previews: a list of their `url`s
+ * (at most 10) or `true` for all of them (none is fetched for the
+ * message again). Removed links stay removed through later edits.
+ */
 export interface MessageUpdateRequest {
-  body: string;
+  body?: string;
+  remove_link_previews?: string[] | true;
+}
+
+/** History options for `messages.list()` and `messages.one(id).replies()`. */
+export interface IncludeDeletedOption {
+  /**
+   * Return deleted messages as tombstones. Without it, history only
+   * shows deleted messages that still root live replies, and replies
+   * leave deleted ones out.
+   */
+  include_deleted?: boolean;
 }
 
 export interface ReadRequest {
@@ -430,9 +522,38 @@ export interface AttachmentDownloadResponse {
 
 // ── canonical error envelope ─────────────────────────────────────────────
 
+/**
+ * Error codes the server answers with (`ApiError.code`). Not
+ * exhaustive — any other string may arrive too.
+ */
+export type ApiErrorCode =
+  | 'unauthorized'
+  | 'invalid_user_token'
+  | 'forbidden'
+  | 'not_found'
+  | 'validation_failed'
+  | 'rate_limited'
+  | 'message_not_found'
+  | 'message_deleted'
+  | 'quoted_message_deleted'
+  | 'quoted_message_not_found'
+  | 'quoted_message_wrong_conversation'
+  | 'reply_parent_not_found'
+  | 'send_failed'
+  | 'edit_failed'
+  | 'reaction_failed'
+  | 'user_scope_required'
+  | 'read_receipts_fixed'
+  | 'device_signed_out'
+  | 'user_blocked'
+  | 'mau_cap_exceeded'
+  | 'unknown_error'
+  // Keeps autocomplete for the codes above while accepting any string.
+  | (string & {});
+
 export interface ErrorEnvelope {
   error: {
-    code: string;
+    code: ApiErrorCode;
     message: string;
     doc_url: string;
     details?: Record<string, unknown>;

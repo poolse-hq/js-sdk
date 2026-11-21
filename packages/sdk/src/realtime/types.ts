@@ -1,7 +1,7 @@
 // Wire-shape mirror of the Phoenix-channel payloads poolse pushes.
 // See poolse/apps/caas_realtime/lib/caas_realtime_web/channels/*.
 
-import type { Conversation, Message, Uuid } from '../types.js';
+import type { Conversation, Message, ThreadParticipant, Uuid } from '../types.js';
 
 /** `message:new` / `message:updated` push payloads. */
 export type MessageNewEvent = Message;
@@ -11,7 +11,22 @@ export type MessageUpdatedEvent = Message;
 export interface MessageDeletedEvent {
   id: Uuid;
   conversation_id: Uuid;
+  /** The thread the deleted message replied in; null for a top-level one. Absent on older servers. */
+  thread_root_id?: Uuid | null;
   deleted_at: string | null;
+}
+
+/**
+ * `thread:updated` — a thread's summary after a reply was posted or
+ * deleted, so a feed showing the root updates its count and avatars.
+ */
+export interface ThreadUpdatedEvent {
+  /** The thread's root message. */
+  message_id: Uuid;
+  conversation_id: Uuid;
+  reply_count: number;
+  last_reply_at: string | null;
+  thread_participants: ThreadParticipant[];
 }
 
 /**

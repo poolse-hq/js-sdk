@@ -4,6 +4,33 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Message actions: `messages.get(id)` / `messages.one(id).get()` (a deleted
+  message comes back as its tombstone), `messages.edits(id)` /
+  `messages.one(id).edits()` (`MessageEditList`, `MessageEdit`), and the
+  `messages.update(id, attrs)` shortcut.
+- `include_deleted` on `conversations.one(id).messages.list()` and
+  `messages.one(id).replies()` (`IncludeDeletedOption`).
+- Link previews: `Message.link_previews` (`LinkPreview`, `LinkPreviewType`)
+  and `MessageUpdateRequest.remove_link_previews` (`string[] | true`).
+- Thread summaries: `Message.last_reply_at`, `Message.thread_participants`
+  (`ThreadParticipant`); `ConversationChannel.onThreadUpdated`
+  (`thread:updated`, `ThreadUpdatedEvent`); `MessageDeletedEvent.thread_root_id`.
+- Helpers for keeping a local message list in step: `isTombstone`,
+  `toTombstone`, `mergeMessage`, `applyThreadUpdate`, `markQuoteDeleted`.
+- `ApiErrorCode` — the known error codes (`quoted_message_deleted`,
+  `quoted_message_not_found`, `quoted_message_wrong_conversation`,
+  `reply_parent_not_found`, `message_deleted`, `device_signed_out`, …);
+  `ApiError.code` is typed with it (still any string).
+
+### Changed
+
+- `MessageUpdateRequest.body` is optional (an update may only remove link
+  previews).
+
 ## [3.3.0] - 2026-11-20
 
 ### Added
