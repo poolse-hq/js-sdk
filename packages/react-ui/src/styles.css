@@ -283,6 +283,78 @@
   border: 2.5px solid var(--poolse-surface);
 }
 
+.poolse-avatar--xs {
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+}
+
+/* ── PresenceBadge — online / away / in a call / do not disturb ── */
+
+.poolse-presence-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--poolse-surface);
+  box-sizing: content-box;
+  flex-shrink: 0;
+  color: var(--poolse-surface);
+}
+
+.poolse-presence-badge svg {
+  width: 70%;
+  height: 70%;
+}
+
+.poolse-presence-badge--online {
+  background: var(--poolse-success);
+}
+
+.poolse-presence-badge--away {
+  background: var(--poolse-warning);
+}
+
+.poolse-presence-badge--in_call {
+  background: var(--poolse-accent, var(--poolse-brand));
+  color: var(--poolse-accent-text, var(--poolse-on-brand));
+}
+
+.poolse-presence-badge--dnd {
+  background: var(--poolse-surface);
+  color: var(--poolse-ink-2);
+}
+
+.poolse-presence-badge--dnd svg {
+  width: 100%;
+  height: 100%;
+}
+
+.poolse-presence-badge--xs {
+  width: 7px;
+  height: 7px;
+  border-width: 1.5px;
+}
+
+.poolse-presence-badge--sm {
+  width: 9px;
+  height: 9px;
+}
+
+.poolse-presence-badge--lg {
+  width: 14px;
+  height: 14px;
+  border-width: 3px;
+}
+
+.poolse-avatar__badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+}
+
 /* ─────────────────────────────────────────────────────────────
    ConversationView container
    ───────────────────────────────────────────────────────────── */

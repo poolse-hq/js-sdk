@@ -92,6 +92,11 @@ export interface MessageRowProps {
    * identity is implicit from the bubble color/side.
    */
   showAvatar?: boolean;
+  /**
+   * Presence badges on the sender avatars (see `showAvatar`). Defaults
+   * to `false`.
+   */
+  showPresence?: boolean;
   /** Makes the sender label a button (other people's messages). */
   onSenderPress?: (user: MessageUser) => void;
   /** Makes the avatar a button (other people's messages). */
@@ -156,6 +161,7 @@ function BubbleMessageRow({
   markdown = false,
   showSenderName = false,
   showAvatar = false,
+  showPresence = false,
   onSenderPress,
   onAvatarPress,
   timeFormat,
@@ -244,6 +250,7 @@ function BubbleMessageRow({
           groupPosition={groupPosition}
           senderName={senderName}
           avatarUrl={senderProfile?.avatarUrl ?? null}
+          presenceId={showPresence ? msg.sender_external_id : null}
           {...(onAvatarPress ? { onAvatarPress: () => onAvatarPress(sender) } : {})}
         >
           <MessageBubble
@@ -375,6 +382,7 @@ function BubbleWithAvatar({
   groupPosition,
   senderName,
   avatarUrl,
+  presenceId,
   onAvatarPress,
   children,
 }: {
@@ -383,12 +391,21 @@ function BubbleWithAvatar({
   groupPosition: BubbleGroupPosition;
   senderName: string;
   avatarUrl: string | null;
+  presenceId: string | null;
   onAvatarPress?: () => void;
   children: ReactNode;
 }) {
   if (isSelf || !showAvatar) return <>{children}</>;
 
   const isLastOfCluster = groupPosition === 'last' || groupPosition === 'standalone';
+  const avatar = (
+    <Avatar
+      src={avatarUrl}
+      name={senderName}
+      size="sm"
+      {...(presenceId ? { presence: true as const, userId: presenceId } : {})}
+    />
+  );
 
   return (
     <div className="poolse-bubble-shell">
@@ -400,10 +417,10 @@ function BubbleWithAvatar({
             aria-label={senderName}
             onClick={onAvatarPress}
           >
-            <Avatar src={avatarUrl} name={senderName} size="sm" />
+            {avatar}
           </button>
         ) : (
-          <Avatar src={avatarUrl} name={senderName} size="sm" />
+          avatar
         )}
       </div>
       {children}

@@ -4,6 +4,34 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Presence: `<PresenceBadge state doNotDisturb? size?>` — online (`--poolse-success`),
+  away (`--poolse-warning`), in a call (`--poolse-accent`, with a phone glyph),
+  do not disturb (a moon); offline draws nothing. `Avatar presence` takes a
+  state, a `Presence`, or `true` to look it up with `useUserPresence(userId)`
+  (new `Avatar userId`); `Avatar size="xs"` (20px). Helpers `presenceText`
+  ("Online", "Away", "In a call", "Last seen 5m ago"), `presenceStateLabel`,
+  `formatRelativeTime`.
+- `showPresence` on `ConversationList` (direct rows, default `true`),
+  `MemberList` (badge and state under each name, default `true`), `ChatHeader`
+  (direct chats: badge and state as the subtitle, default `true`) and
+  `ConversationView` / `MessageRow` (message avatars, default `false`).
+
+### Changed
+
+- `MemberList` reads each member's presence with `usePresenceMany` (online /
+  away / in a call / last seen) instead of who has the conversation open;
+  `onlineExternalIds` still gives the old green dot.
+- `ChatHeader` takes a direct chat's subtitle from the other person's presence,
+  falling back to "Online" while they have the conversation open.
+
+### Deprecated
+
+- `Avatar online` — use `presence="online"`.
+
 ## [3.5.0] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.5.0.

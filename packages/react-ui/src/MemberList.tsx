@@ -1,11 +1,13 @@
 // MemberList — roster panel for a conversation. Renders members
 // with avatars, role badges, and an optional remove action.
 
-import type { MemberRole, Membership, Uuid } from '@poolse/sdk';
-import { useMembers, usePresence } from '@poolse/react';
+import type { MemberRole, Membership, Presence, Uuid } from '@poolse/sdk';
+import { useMembers, usePresenceMany } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { presenceText } from './PresenceBadge.js';
+import { useNow } from './relativeTime.js';
 import { useDisplayName } from './UserName.js';
 
 export interface MemberListProps {
@@ -22,14 +24,17 @@ export interface MemberListProps {
    */
   avatarFor?: (externalId: string) => string | null;
   /**
-   * Override the online set with a caller-supplied source of
-   * `external_id`s. By default MemberList wires
-   * `usePresence(conversationId).online` itself, so the presence dots
-   * light up out-of-the-box. Pass an explicit `Set` when you want to
-   * merge presence with other signals (typing, focus, etc), or an
-   * empty `new Set()` to disable the dots entirely.
+   * Override presence with a caller-supplied set of online
+   * `external_id`s (a plain green dot, "online" / "offline"). By
+   * default each member's presence (online / away / in a call /
+   * offline, do not disturb) comes from `usePresenceMany`.
    */
   onlineExternalIds?: Set<string>;
+  /**
+   * Presence badges on the avatars and the state ("Online", "Away",
+   * "In a call", "Last seen 5m ago") under each name. Defaults to `true`.
+   */
+  showPresence?: boolean;
   /**
    * If provided, surfaces a "remove" icon next to each member that
    * the caller is allowed to remove. The caller is responsible for
@@ -47,19 +52,21 @@ export function MemberList({
   labelFor,
   avatarFor,
   onlineExternalIds,
+  showPresence = true,
   canRemove,
   renderItem,
   emptyState,
 }: MemberListProps) {
   const { members, loading, error, removeMember } = useMembers(conversationId);
-  // Auto-wire presence when no caller-supplied set was passed. The hook
-  // joins the conversation channel idempotently; if ConversationView is
-  // mounted alongside MemberList (the common case) they share the same
-  // channel subscription, so this is free.
-  const { online: presenceOnline } = usePresence(
-    onlineExternalIds === undefined ? conversationId : '',
+  // A caller-supplied online set keeps the old green dots; otherwise
+  // every member's presence comes from the one presence store (a
+  // single batched lookup for the whole roster, live after that).
+  const legacy = onlineExternalIds !== undefined;
+  const presences = usePresenceMany(
+    showPresence && !legacy ? members.map((m) => m.external_id) : NO_IDS,
   );
-  const effectiveOnline = onlineExternalIds ?? presenceOnline;
+  // Keeps "Last seen 5m ago" current.
+  const now = useNow();
 
   if (loading && members.length === 0) {
     return <div className="poolse-list poolse-list--placeholder">Loading members…</div>;
@@ -93,7 +100,14 @@ export function MemberList({
           <DefaultMemberRow
             membership={m}
             avatarUrl={avatarFor?.(m.external_id) ?? null}
-            online={effectiveOnline.has(m.external_id)}
+            presence={
+              !showPresence
+                ? null
+                : legacy
+                  ? onlineExternalIds.has(m.external_id)
+                  : (presences[m.external_id] ?? null)
+            }
+            now={now}
             removable={canRemove?.(m) ?? false}
             onRemove={() => {
               // SDK exposes removeMember by external_id (was user_id);
@@ -113,17 +127,22 @@ export function MemberList({
   );
 }
 
+const NO_IDS: string[] = [];
+
 function DefaultMemberRow({
   membership,
   avatarUrl,
-  online,
+  presence,
+  now,
   removable,
   onRemove,
   labelFor,
 }: {
   membership: Membership;
   avatarUrl: string | null;
-  online: boolean;
+  /** `boolean` from `onlineExternalIds`, a `Presence`, or null (hidden / unknown). */
+  presence: boolean | Presence | null;
+  now: number;
   removable: boolean;
   onRemove: () => void;
   labelFor?: (externalId: string) => string;
@@ -131,10 +150,18 @@ function DefaultMemberRow({
   const name = useDisplayName(membership.external_id, labelFor);
   return (
     <div className="poolse-member-row">
-      <Avatar src={avatarUrl} name={name} online={online} size="md" />
+      {typeof presence === 'boolean' ? (
+        <Avatar src={avatarUrl} name={name} online={presence} size="md" />
+      ) : (
+        <Avatar src={avatarUrl} name={name} presence={presence} size="md" />
+      )}
       <div className="poolse-member-row__body">
         <div className="poolse-member-row__name">{name}</div>
-        <div className="poolse-member-row__sub">{online ? 'online' : 'offline'}</div>
+        {typeof presence === 'boolean' ? (
+          <div className="poolse-member-row__sub">{presence ? 'online' : 'offline'}</div>
+        ) : presence ? (
+          <div className="poolse-member-row__sub">{presenceText(presence, now)}</div>
+        ) : null}
       </div>
       <RoleBadge role={membership.role} />
       {removable && (

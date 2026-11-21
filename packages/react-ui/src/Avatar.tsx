@@ -1,36 +1,93 @@
 // Avatar — circular profile picture or initials fallback, optional
-// presence dot. The initials gradient (brand → brand-strong) keeps
+// presence badge. The initials gradient (brand → brand-strong) keeps
 // even no-image users visually anchored to the brand identity.
+
+import type { Presence, PresenceState } from '@poolse/sdk';
+import { useUserPresence } from '@poolse/react';
+import { PresenceBadge } from './PresenceBadge.js';
 
 export interface AvatarProps {
   /** URL to a profile image. Renders initials fallback when omitted or load fails. */
   src?: string | null;
   /** Used for initials and as the image alt text. */
   name?: string | null;
-  /** Show a green presence dot in the bottom-right corner. */
+  /**
+   * Show a green presence dot in the bottom-right corner.
+   * @deprecated Use `presence` (`presence="online"`).
+   */
   online?: boolean;
-  /** Size variant; defaults to `md` (40px). */
-  size?: 'sm' | 'md' | 'lg';
+  /**
+   * A presence badge in the bottom-right corner (see `<PresenceBadge>`):
+   * a state (`'online' | 'away' | 'in_call' | 'offline'`), a `Presence`
+   * (also shows do-not-disturb), or `true` to look it up live with
+   * `useUserPresence(userId)`. Offline draws nothing.
+   */
+  presence?: PresenceState | Presence | true | null;
+  /**
+   * Whose avatar this is — a poolse user id or an `external_id`. Needed
+   * by `presence={true}`.
+   */
+  userId?: string | null;
+  /** Size variant; defaults to `md` (40px). `xs` is 20px. */
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
 
-export function Avatar({ src, name, online, size = 'md', className }: AvatarProps) {
+export function Avatar({
+  src,
+  name,
+  online,
+  presence,
+  userId,
+  size = 'md',
+  className,
+}: AvatarProps) {
   const initials = computeInitials(name);
 
-  const classes = [
-    'poolse-avatar',
-    size === 'sm' ? 'poolse-avatar--sm' : null,
-    size === 'lg' ? 'poolse-avatar--lg' : null,
-    className,
-  ]
+  const classes = ['poolse-avatar', size !== 'md' ? `poolse-avatar--${size}` : null, className]
     .filter(Boolean)
     .join(' ');
+
+  const badge =
+    presence === true ? (
+      userId ? (
+        <LivePresenceBadge userId={userId} size={size} />
+      ) : null
+    ) : presence ? (
+      typeof presence === 'string' ? (
+        <PresenceBadge state={presence} size={size} className="poolse-avatar__badge" />
+      ) : (
+        <PresenceBadge
+          state={presence.state}
+          doNotDisturb={!!presence.do_not_disturb}
+          size={size}
+          className="poolse-avatar__badge"
+        />
+      )
+    ) : online ? (
+      <span className="poolse-avatar__presence" aria-hidden="true" />
+    ) : null;
 
   return (
     <span className={classes} aria-label={name ?? 'avatar'} role="img">
       {src ? <img src={src} alt={name ?? ''} /> : <span aria-hidden="true">{initials}</span>}
-      {online ? <span className="poolse-avatar__presence" aria-hidden="true" /> : null}
+      {badge}
     </span>
+  );
+}
+
+// Own component so the presence subscription exists only for avatars
+// that asked for it (and Avatar keeps working outside a provider).
+function LivePresenceBadge({ userId, size }: { userId: string; size: AvatarProps['size'] }) {
+  const presence = useUserPresence(userId);
+  if (!presence) return null;
+  return (
+    <PresenceBadge
+      state={presence.state}
+      doNotDisturb={!!presence.do_not_disturb}
+      {...(size ? { size } : {})}
+      className="poolse-avatar__badge"
+    />
   );
 }
 

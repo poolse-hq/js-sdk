@@ -78,6 +78,16 @@ message, pass `slots={{ header, body, attachments, reactions, thread, actions }}
 — each is `(props) => ReactNode` and gets the default rendering as `children`.
 `renderMessage(msg, meId, { layout, renderDefault })` replaces whole rows.
 
+## Chat features
+
+- **Presence.** `<Avatar presence>` takes a state (`'online' | 'away' |
+'in_call' | 'offline'`), a `Presence`, or `true` with `userId` to look it up
+  live; `<PresenceBadge state doNotDisturb>` is the badge alone. Direct rows in
+  `ConversationList`, `ChatHeader` (with "Online" / "Away" / "In a call" /
+  "Last seen …") and `MemberList` show it; turn it off with
+  `showPresence={false}`. `ConversationView showPresence` adds it to message
+  avatars (off by default).
+
 ## Components
 
 - Composed: `PoolseInbox` (with a ref: `open`, `openDirect`, `openGroup`,
@@ -92,7 +102,7 @@ message, pass `slots={{ header, body, attachments, reactions, thread, actions }}
 - Reactions: `ReactionStrip`, `ReactionPicker`.
 - Rooms and calls: `RoomJoinBar`, `RoomStage` (both take `useRoom()` from
   `@poolse/react`), `CallVideoGrid`, `CallControlButton`, `CallDeviceMenu`.
-- Identity and brand: `Avatar`, `UserName`, `useDisplayName`, `PoolseIcon`,
+- Identity and brand: `Avatar`, `PresenceBadge`, `UserName`, `useDisplayName`, `PoolseIcon`,
   `PoolseLogo`, `PoolseFonts`, `usePoolseFonts`.
 - Theme: `PoolseTheme`, `useTheme`, `useSystemColorScheme`.
 

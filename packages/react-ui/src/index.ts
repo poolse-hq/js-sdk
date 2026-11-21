@@ -51,6 +51,13 @@ export { MessageActions, type MessageActionsProps } from './MessageActions.js';
 export { TypingIndicator, type TypingIndicatorProps } from './TypingIndicator.js';
 export { ThreadView, type ThreadViewProps } from './ThreadView.js';
 export { Avatar, type AvatarProps } from './Avatar.js';
+export {
+  PresenceBadge,
+  presenceStateLabel,
+  presenceText,
+  type PresenceBadgeProps,
+} from './PresenceBadge.js';
+export { formatRelativeTime } from './relativeTime.js';
 export { UserName, useDisplayName, type UserNameProps } from './UserName.js';
 
 // ── Conversation + member panels ──────────────────────────────

@@ -1,7 +1,13 @@
 import { fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MemberList } from '../src/MemberList.js';
-import { jsonResponse, noContent, renderWithProvider, scriptedFetch } from './_helpers.js';
+import {
+  jsonResponse,
+  noContent,
+  renderWithProvider,
+  routedFetch,
+  scriptedFetch,
+} from './_helpers.js';
 
 // 2.0 wire format: every membership carries `external_id` alongside
 // the internal `user_id`. Tests pass external_id explicitly so the
@@ -62,21 +68,23 @@ describe('<MemberList>', () => {
   });
 
   it('clicking remove triggers the DELETE request keyed by internal user_id', async () => {
-    const fetchFn = scriptedFetch([
-      jsonResponse({ data: [member('alice', 'admin')] }),
-      noContent(),
-    ]);
+    const fetchFn = routedFetch({
+      'GET /v1/conversations/c-1/members': () => jsonResponse({ data: [member('alice', 'admin')] }),
+      'DELETE /v1/conversations/c-1/members/uid-alice': () => noContent(),
+      'GET /v1/me': () => jsonResponse({ id: 'u-me', external_id: 'me' }),
+      'GET /v1/presence': () => jsonResponse({ data: [] }),
+    });
     const { container } = renderWithProvider(
       <MemberList conversationId="c-1" canRemove={() => true} />,
       fetchFn,
     );
     await waitFor(() => expect(container.querySelectorAll('.poolse-list__item')).toHaveLength(1));
     fireEvent.click(container.querySelector('.poolse-icon-btn--danger')!);
-    await waitFor(() => expect(fetchFn.calls.length).toBe(2));
-    expect(fetchFn.calls[1]?.method).toBe('DELETE');
+    const deleted = () => fetchFn.calls.find((r) => r.method === 'DELETE');
+    await waitFor(() => expect(deleted()).toBeDefined());
     // SDK translates external_id ('alice') → internal user_id ('uid-alice')
     // before hitting the DELETE endpoint. The consumer never sees the
     // uuid; the API still uses it.
-    expect(fetchFn.calls[1]?.url).toBe('https://chat.test/v1/conversations/c-1/members/uid-alice');
+    expect(deleted()?.url).toBe('https://chat.test/v1/conversations/c-1/members/uid-alice');
   });
 });

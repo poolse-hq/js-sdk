@@ -90,6 +90,11 @@ export interface ConversationViewProps {
    * `avatars` (others' messages in group chats). Overrides `avatars`.
    */
   showAvatars?: boolean;
+  /**
+   * Presence badges (online, away, in a call, do not disturb) on the
+   * avatars next to messages, where avatars show. Defaults to `false`.
+   */
+  showPresence?: boolean;
   /** `'12h'`, `'24h'` or a formatter. Defaults to the locale's. */
   timeFormat?: TimeFormat;
   /**
@@ -265,6 +270,7 @@ export function ConversationView({
   layout = 'bubbles',
   density = 'comfortable',
   showAvatars,
+  showPresence = false,
   timeFormat,
   slots,
   daySeparators = TRUE,
@@ -342,6 +348,7 @@ export function ConversationView({
   // Props every row gets, whatever the layout.
   const layoutProps = {
     layout,
+    showPresence,
     ...(timeFormat ? { timeFormat } : {}),
     ...(slots ? { slots } : {}),
   };

@@ -52,6 +52,7 @@ export function FlatMessageRow({
   maxBodyLength = 0,
   markdown = false,
   showAvatar = layout === 'list',
+  showPresence = false,
   onSenderPress,
   onAvatarPress,
   timeFormat,
@@ -96,6 +97,16 @@ export function FlatMessageRow({
 
   // Others' avatar / name become buttons when the host asks; your own never do.
   const avatarSize = compact ? 'sm' : 'md';
+  const avatarEl = (
+    <Avatar
+      src={sender.avatarUrl}
+      name={senderName}
+      size={avatarSize}
+      {...(showPresence && msg.sender_external_id
+        ? { presence: true as const, userId: msg.sender_external_id }
+        : {})}
+    />
+  );
   const avatar = !showAvatar ? null : onAvatarPress && !isSelf ? (
     <button
       type="button"
@@ -103,10 +114,10 @@ export function FlatMessageRow({
       aria-label={senderName}
       onClick={() => onAvatarPress(sender)}
     >
-      <Avatar src={sender.avatarUrl} name={senderName} size={avatarSize} />
+      {avatarEl}
     </button>
   ) : (
-    <Avatar src={sender.avatarUrl} name={senderName} size={avatarSize} />
+    avatarEl
   );
 
   const nameStyle = compact

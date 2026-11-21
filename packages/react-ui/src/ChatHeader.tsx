@@ -4,10 +4,12 @@
 // for groups. Renders a back button when `onBack` is provided so a
 // composed inbox can navigate back to its list.
 
-import { useConversation, useMe, useMembers, usePresence } from '@poolse/react';
+import { useConversation, useMe, useMembers, usePresence, useUserPresence } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { presenceText } from './PresenceBadge.js';
+import { useNow } from './relativeTime.js';
 
 export interface ChatHeaderProps {
   /** Conversation id — used to fetch the row + members for the title / presence dot. */
@@ -27,6 +29,12 @@ export interface ChatHeaderProps {
   onMembersPress?: () => void;
   /** Custom right-side slot rendered after the members button. */
   rightSlot?: ReactNode;
+  /**
+   * Direct chats: the other person's presence badge on the avatar and
+   * their state as the subtitle ("Online", "Away", "In a call", "Last
+   * seen 5m ago"). Defaults to `true`.
+   */
+  showPresence?: boolean;
 }
 
 export function ChatHeader({
@@ -37,16 +45,15 @@ export function ChatHeader({
   onPress,
   onMembersPress,
   rightSlot,
+  showPresence = true,
 }: ChatHeaderProps) {
   const { me } = useMe();
   const meId = me?.id ?? null;
   const { conversation: conv } = useConversation(conversationId);
   const { members } = useMembers(conversationId);
-  // Presence powers the green dot under the avatar for direct chats —
-  // matches the RN ChatHeader behavior. usePresence joins the
-  // conversation channel and returns a Set of external_ids currently
-  // online.
-  const { online } = usePresence(conversationId);
+  // Who has this conversation open (the conversation channel) — the
+  // fallback "Online" until the user's presence is known.
+  const { online } = usePresence(showPresence ? conversationId : '');
 
   const isDirect = conv?.type === 'direct';
   const otherMember = isDirect ? members.find((m) => m.user_id !== meId) : null;
@@ -60,19 +67,31 @@ export function ChatHeader({
 
   const avatarUrl = isDirect && otherExtId ? (avatarFor?.(otherExtId) ?? null) : null;
 
-  const otherOnline = isDirect && otherExtId ? online.has(otherExtId) : false;
+  const presence = useUserPresence(showPresence && isDirect ? otherExtId : null);
+  const now = useNow();
+  const otherOnline =
+    showPresence && isDirect && otherExtId ? !presence && online.has(otherExtId) : false;
 
   const subtitle = isDirect
-    ? otherOnline
-      ? 'Online'
-      : null
+    ? !showPresence
+      ? null
+      : presence
+        ? presenceText(presence, now)
+        : otherOnline
+          ? 'Online'
+          : null
     : `${members.length} member${members.length === 1 ? '' : 's'}`;
 
   const isPressable = typeof onPress === 'function';
 
   const titleContent = (
     <>
-      <Avatar src={avatarUrl} name={title} online={otherOnline} size="md" />
+      <Avatar
+        src={avatarUrl}
+        name={title}
+        presence={presence ?? (otherOnline ? 'online' : null)}
+        size="md"
+      />
       <div className="poolse-chat-header__titles">
         <div className="poolse-chat-header__title">{title}</div>
         {subtitle ? <div className="poolse-chat-header__subtitle">{subtitle}</div> : null}

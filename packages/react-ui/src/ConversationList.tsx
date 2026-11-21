@@ -50,6 +50,11 @@ export interface ConversationListProps {
   labelFor?: (externalId: string) => string;
   /** Avatar URL resolver — same role as `labelFor`, for the direct-chat avatar. */
   avatarFor?: (externalId: string) => string | null;
+  /**
+   * Direct chats: the other person's presence badge (online, away, in a
+   * call, do not disturb) on the row's avatar. Defaults to `true`.
+   */
+  showPresence?: boolean;
 }
 
 export function ConversationList({
@@ -63,6 +68,7 @@ export function ConversationList({
   unreadCounts,
   labelFor,
   avatarFor,
+  showPresence = true,
 }: ConversationListProps) {
   const auto = useConversations();
   const { me } = useMe();
@@ -111,6 +117,7 @@ export function ConversationList({
             unread={unread}
             meExternalId={meExternalId}
             meId={meId}
+            showPresence={showPresence}
             {...(labelFor ? { labelFor } : {})}
             {...(avatarFor ? { avatarFor } : {})}
           />
@@ -145,6 +152,7 @@ function DefaultRow({
   unread,
   meExternalId,
   meId = null,
+  showPresence,
   labelFor,
   avatarFor,
 }: {
@@ -153,6 +161,7 @@ function DefaultRow({
   unread: number;
   meExternalId: string | null;
   meId?: string | null;
+  showPresence: boolean;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
 }) {
@@ -195,7 +204,12 @@ function DefaultRow({
 
   return (
     <>
-      <Avatar src={avatarUrl} name={title} size="md" />
+      <Avatar
+        src={avatarUrl}
+        name={title}
+        size="md"
+        {...(showPresence && otherExtId ? { presence: true as const, userId: otherExtId } : {})}
+      />
       <div className="poolse-list__body">
         <div className="poolse-list__head">
           <span className={`poolse-list__title${hasUnread ? ' poolse-list__title--unread' : ''}`}>
