@@ -481,8 +481,11 @@ export function QuotedCard({
   labelFor?: (externalId: string) => string;
   onClick?: (quotedMessageId: Uuid) => void;
 }) {
+  const { profile: quotedSender } = useUser(quoted.sender_external_id ?? null);
   const senderLabel = quoted.sender_external_id
-    ? (labelFor?.(quoted.sender_external_id) ?? quoted.sender_external_id)
+    ? (labelFor?.(quoted.sender_external_id) ??
+      quotedSender?.displayName ??
+      quoted.sender_external_id)
     : 'Unknown';
   const isDeleted = !!quoted.deleted_at;
   const handleClick = onClick ? () => onClick(quoted.id) : undefined;

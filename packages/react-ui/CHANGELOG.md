@@ -4,6 +4,14 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.6.1] - 2026-11-21
+
+### Fixed
+
+- A direct chat in `ConversationList` and the sender of a quoted message
+  show the provider's resolved display name, not the external id, when no
+  `labelFor` is passed.
+
 ## [3.6.0] - 2026-11-21
 
 ### Added

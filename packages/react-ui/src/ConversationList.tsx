@@ -9,7 +9,7 @@
 // sends a message into an existing one (no refetch).
 
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { formatCallLogPreview, useConversations, useMe } from '@poolse/react';
+import { formatCallLogPreview, useConversations, useMe, useUser } from '@poolse/react';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 
@@ -316,15 +316,18 @@ function DefaultRow({
       ? (conv.member_external_ids ?? []).find((x) => x !== meExternalId)
       : null;
 
+  // Without resolvers, the provider's userResolver names the other person.
+  const { profile: other } = useUser(isDirect && otherExtId ? otherExtId : null);
+
   const title = isDirect
     ? otherExtId
-      ? (labelFor?.(otherExtId) ?? otherExtId)
+      ? (labelFor?.(otherExtId) ?? other?.displayName ?? otherExtId)
       : (conv.name ?? 'Direct chat')
     : (conv.name ?? 'Untitled group');
 
   const avatarUrl = isDirect
     ? otherExtId
-      ? (avatarFor?.(otherExtId) ?? null)
+      ? (avatarFor?.(otherExtId) ?? other?.avatarUrl ?? null)
       : (conv.avatar_url ?? null)
     : (conv.avatar_url ?? null);
 
