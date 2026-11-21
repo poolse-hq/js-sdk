@@ -1,6 +1,7 @@
-import { Text } from 'react-native';
-import { useUser } from '@poolse/react';
+import { Text, View } from 'react-native';
+import { useAgent, useUser } from '@poolse/react';
 
+import { AgentBadge } from './AgentBadge.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 export interface UserNameProps {
@@ -10,16 +11,33 @@ export interface UserNameProps {
   fallback?: string;
   /** Caller-supplied label override; if it returns a string, it wins. */
   labelFor?: (externalId: string) => string;
+  /** The Agent badge after an agent's name (AG1). Defaults to `true`. */
+  agentBadge?: boolean;
 }
 
 /**
  * Display name for a user, looked up via the SDK's `userResolver`
  * with caller-overridable + fallback fallbacks. Renders a `<Text>`.
  */
-export function UserName({ externalId, fallback, labelFor }: UserNameProps) {
+export function UserName({ externalId, fallback, labelFor, agentBadge = true }: UserNameProps) {
   const theme = useTheme();
-  const name = useDisplayName(externalId, labelFor) ?? fallback ?? externalId ?? '';
-  return <Text style={{ color: theme.colors.text, fontFamily: theme.fonts.body }}>{name}</Text>;
+  const name = useDisplayName(externalId, labelFor) || fallback || externalId || '';
+  const isAgent = !!useAgent(agentBadge ? externalId : null);
+  const text = (
+    <Text
+      style={{ color: theme.colors.text, fontFamily: theme.fonts.body, flexShrink: 1 }}
+      numberOfLines={1}
+    >
+      {name}
+    </Text>
+  );
+  if (!isAgent) return text;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      {text}
+      <AgentBadge size="xs" />
+    </View>
+  );
 }
 
 /**

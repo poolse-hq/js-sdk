@@ -1,4 +1,4 @@
-import type { LiveCall, Message, Uuid } from '@poolse/sdk';
+import type { Citation, LiveCall, Message, Uuid } from '@poolse/sdk';
 import { MessageQueuedError, safeUuid } from '@poolse/sdk';
 import {
   canEditOwnMessage,
@@ -20,6 +20,11 @@ import {
   type GroupPosition,
   type MessageStream,
 } from '@poolse/react';
+import {
+  MessageExtrasProvider,
+  type MessageExtrasHandlers,
+  type RenderMedia,
+} from './messageExtras.js';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   AppState,
@@ -214,6 +219,22 @@ export interface ConversationViewProps {
    * (the viewer is in the room, or ringing out as its caller).
    */
   currentCallId?: string | null;
+  /**
+   * A source under an assistant's answer was pressed (AG5). Without it,
+   * message sources in this conversation are focused here.
+   */
+  onOpenCitation?: (citation: Citation, message: Message) => void;
+  /**
+   * A point in a call was pressed — a summary's moment or a clip (RT6,
+   * RT9): open its recording or transcript at `startMs`.
+   */
+  onOpenMoment?: (callId: string, startMs: number) => void;
+  /**
+   * Plays clips in chat (RT9): your media adapter (expo-video,
+   * expo-audio…) — see `RenderMedia` and the README. Without it a clip
+   * shows its time range only.
+   */
+  renderMedia?: RenderMedia;
 
   /** Presence badges on message avatars (where avatars show). Defaults to `false`. */
   showPresence?: boolean;
@@ -290,6 +311,9 @@ export function ConversationView({
   onCallBack,
   onJoinCall,
   currentCallId = null,
+  onOpenCitation,
+  onOpenMoment,
+  renderMedia,
   layout = 'bubbles',
   density = 'comfortable',
   showAvatars: showAvatarsProp,
@@ -564,6 +588,24 @@ export function ConversationView({
       };
     },
     [loadUntil, focusMiss],
+  );
+  // Sources, moments, assignees and clips in agent and summary messages.
+  const extras = useMemo<MessageExtrasHandlers>(
+    () => ({
+      onOpenCitation:
+        onOpenCitation ??
+        ((c: Citation) => {
+          if (c.type === 'message' && (!c.conversationId || c.conversationId === conversationId)) {
+            jumpTo(c.id, false);
+          }
+        }),
+      ...(onOpenMoment ? { onOpenMoment } : {}),
+      ...(renderMedia ? { renderMedia } : {}),
+      nameForUserId,
+      externalIdForUserId: (userId: string) =>
+        members.find((m) => m.user_id === userId)?.external_id ?? null,
+    }),
+    [onOpenCitation, onOpenMoment, renderMedia, conversationId, jumpTo, nameForUserId, members],
   );
   useEffect(() => {
     setPendingFocusId(null);
@@ -943,179 +985,181 @@ export function ConversationView({
     );
 
   return (
-    <UploadProvider>
-      <KeyboardAvoidingView
-        // iOS uses `padding` (the height behavior is documented as
-        // only working on absolute-positioned children and is
-        // basically a no-op inside flex:1 chains like ours).
-        // Padding mode REQUIRES the right keyboardVerticalOffset —
-        // the distance from the screen top to the KAV's top.
-        // PoolseInbox computes this from the safe-area top + its own
-        // ChatHeader height and passes it through; standalone
-        // consumers must pass it themselves.
-        //
-        // Android uses `height` — works there because the layout
-        // recomputes from the Android window resize.
-        style={[styles.root, { backgroundColor: theme.colors.background }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={keyboardOffset}
-      >
-        {headerNode}
-        {notice ? (
-          <Text
-            style={[
-              styles.notice,
-              { color: theme.colors.textMuted, backgroundColor: theme.colors.surfaceAlt },
-            ]}
-            accessibilityRole="alert"
-          >
-            {notice}
-          </Text>
-        ) : null}
-        {onJoinCall ? (
-          <JoinBanner
-            conversationId={conversationId}
-            meId={meId}
-            currentCallId={currentCallId}
-            onJoin={onJoinCall}
-          />
-        ) : null}
-        <View style={styles.listWrap}>
-          <MessageList
-            messages={visibleMessages}
-            items={listItems}
-            meId={meId}
-            loading={loading}
-            hasMore={hasMore}
-            onLoadMore={loadMore}
-            renderItem={renderItem}
-            scrollToMessageId={jump?.id ?? null}
-            scrollRequest={jump?.request ?? 0}
-            onVisibleItemsChange={onVisibleItemsChange}
-            ListHeader={
-              <View>
-                {visibleStreams.map((stream) =>
-                  stream.status === 'failed' ? (
-                    <Text
-                      key={stream.id}
-                      style={[styles.streamFailed, { color: theme.colors.textSubtle }]}
-                      accessibilityRole="alert"
-                    >
-                      {stream.error
-                        ? `The agent couldn't reply: ${stream.error}`
-                        : "The agent couldn't reply."}
-                    </Text>
-                  ) : (
-                    <MessageRow
-                      key={stream.id}
-                      msg={streamingMessage(stream)}
-                      meId={meId}
-                      reactions={false}
-                      attachments={false}
-                      actions={false}
-                      threads={false}
-                      quotations={false}
-                      {...(labelFor ? { labelFor } : {})}
-                      {...(avatarFor ? { avatarFor } : {})}
-                      showSenderName={showSenderLabels}
-                      showAvatar={showAvatars}
-                      markdown={markdown}
-                      {...layoutProps}
-                    />
-                  ),
-                )}
-                <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
-              </View>
-            }
-            emptyState={
-              emptyState !== undefined ? (
-                emptyState
-              ) : (
-                <EmptyState
-                  title="No messages yet"
-                  {...(showComposer
-                    ? { hint: 'Write the first message below — everyone here will see it.' }
-                    : {})}
-                />
-              )
-            }
-          />
-          {unreadPending ? (
-            <Pressable
-              onPress={jumpToUnread}
+    <MessageExtrasProvider value={extras}>
+      <UploadProvider>
+        <KeyboardAvoidingView
+          // iOS uses `padding` (the height behavior is documented as
+          // only working on absolute-positioned children and is
+          // basically a no-op inside flex:1 chains like ours).
+          // Padding mode REQUIRES the right keyboardVerticalOffset —
+          // the distance from the screen top to the KAV's top.
+          // PoolseInbox computes this from the safe-area top + its own
+          // ChatHeader height and passes it through; standalone
+          // consumers must pass it themselves.
+          //
+          // Android uses `height` — works there because the layout
+          // recomputes from the Android window resize.
+          style={[styles.root, { backgroundColor: theme.colors.background }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={keyboardOffset}
+        >
+          {headerNode}
+          {notice ? (
+            <Text
               style={[
-                styles.unreadPill,
-                { backgroundColor: theme.colors.accent, borderRadius: theme.radii.pill },
-                theme.shadows.sm,
+                styles.notice,
+                { color: theme.colors.textMuted, backgroundColor: theme.colors.surfaceAlt },
               ]}
-              accessibilityRole="button"
-              accessibilityLabel="Jump to first unread message"
+              accessibilityRole="alert"
             >
-              <PoolseIcon
-                name="chevron-up"
-                size={14}
-                color={theme.colors.accentText}
-                label={null}
-              />
-              <Text style={[styles.unreadPillText, { color: theme.colors.accentText }]}>
-                {seekingUnread ? 'Loading…' : 'New messages'}
-              </Text>
-              <Pressable
-                onPress={() => setDividerSeen(true)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss"
-              >
-                <PoolseIcon name="close" size={12} color={theme.colors.accentText} label={null} />
-              </Pressable>
-            </Pressable>
+              {notice}
+            </Text>
           ) : null}
-          {/* WhatsApp-style dim while editing: the overlay covers
+          {onJoinCall ? (
+            <JoinBanner
+              conversationId={conversationId}
+              meId={meId}
+              currentCallId={currentCallId}
+              onJoin={onJoinCall}
+            />
+          ) : null}
+          <View style={styles.listWrap}>
+            <MessageList
+              messages={visibleMessages}
+              items={listItems}
+              meId={meId}
+              loading={loading}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
+              renderItem={renderItem}
+              scrollToMessageId={jump?.id ?? null}
+              scrollRequest={jump?.request ?? 0}
+              onVisibleItemsChange={onVisibleItemsChange}
+              ListHeader={
+                <View>
+                  {visibleStreams.map((stream) =>
+                    stream.status === 'failed' ? (
+                      <Text
+                        key={stream.id}
+                        style={[styles.streamFailed, { color: theme.colors.textSubtle }]}
+                        accessibilityRole="alert"
+                      >
+                        {stream.error
+                          ? `The agent couldn't reply: ${stream.error}`
+                          : "The agent couldn't reply."}
+                      </Text>
+                    ) : (
+                      <MessageRow
+                        key={stream.id}
+                        msg={streamingMessage(stream)}
+                        meId={meId}
+                        reactions={false}
+                        attachments={false}
+                        actions={false}
+                        threads={false}
+                        quotations={false}
+                        {...(labelFor ? { labelFor } : {})}
+                        {...(avatarFor ? { avatarFor } : {})}
+                        showSenderName={showSenderLabels}
+                        showAvatar={showAvatars}
+                        markdown={markdown}
+                        {...layoutProps}
+                      />
+                    ),
+                  )}
+                  <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
+                </View>
+              }
+              emptyState={
+                emptyState !== undefined ? (
+                  emptyState
+                ) : (
+                  <EmptyState
+                    title="No messages yet"
+                    {...(showComposer
+                      ? { hint: 'Write the first message below — everyone here will see it.' }
+                      : {})}
+                  />
+                )
+              }
+            />
+            {unreadPending ? (
+              <Pressable
+                onPress={jumpToUnread}
+                style={[
+                  styles.unreadPill,
+                  { backgroundColor: theme.colors.accent, borderRadius: theme.radii.pill },
+                  theme.shadows.sm,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Jump to first unread message"
+              >
+                <PoolseIcon
+                  name="chevron-up"
+                  size={14}
+                  color={theme.colors.accentText}
+                  label={null}
+                />
+                <Text style={[styles.unreadPillText, { color: theme.colors.accentText }]}>
+                  {seekingUnread ? 'Loading…' : 'New messages'}
+                </Text>
+                <Pressable
+                  onPress={() => setDividerSeen(true)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss"
+                >
+                  <PoolseIcon name="close" size={12} color={theme.colors.accentText} label={null} />
+                </Pressable>
+              </Pressable>
+            ) : null}
+            {/* WhatsApp-style dim while editing: the overlay covers
               the scroll surface but the row being edited renders
               above it (MessageRow elevates itself when isEditing).
               Tap-outside cancels. */}
-          {editingId ? (
-            <Pressable
-              style={[styles.editBackdrop, { backgroundColor: theme.colors.overlay }]}
-              onPress={() => setEditingId(null)}
-              accessibilityLabel="Cancel editing"
+            {editingId ? (
+              <Pressable
+                style={[styles.editBackdrop, { backgroundColor: theme.colors.overlay }]}
+                onPress={() => setEditingId(null)}
+                accessibilityLabel="Cancel editing"
+              />
+            ) : null}
+          </View>
+
+          {!showComposer ? null : mentions ? (
+            <MentionInput conversationId={conversationId} {...composerProps} />
+          ) : (
+            <MessageComposer {...composerProps} />
+          )}
+
+          {canAttach ? (
+            <AttachmentPicker
+              visible={pickerOpen}
+              onClose={() => setPickerOpen(false)}
+              onError={setNotice}
+              {...(maxFileSize !== undefined ? { maxFileSize } : {})}
+              {...(acceptedFileTypes ? { acceptedTypes: acceptedFileTypes } : {})}
             />
           ) : null}
-        </View>
 
-        {!showComposer ? null : mentions ? (
-          <MentionInput conversationId={conversationId} {...composerProps} />
-        ) : (
-          <MessageComposer {...composerProps} />
-        )}
-
-        {canAttach ? (
-          <AttachmentPicker
-            visible={pickerOpen}
-            onClose={() => setPickerOpen(false)}
-            onError={setNotice}
-            {...(maxFileSize !== undefined ? { maxFileSize } : {})}
-            {...(acceptedFileTypes ? { acceptedTypes: acceptedFileTypes } : {})}
-          />
-        ) : null}
-
-        {threads && threadRoot ? (
-          <ThreadView
-            visible
-            onClose={() => setThreadRoot(null)}
-            conversationId={conversationId}
-            rootMessage={threadRoot}
-            {...(labelFor ? { labelFor } : {})}
-            {...(avatarFor ? { avatarFor } : {})}
-            layout={layout}
-            {...(timeFormat ? { timeFormat } : {})}
-            density={density}
-            showPresence={showPresence}
-            linkPreviews={linkPreviews}
-          />
-        ) : null}
-      </KeyboardAvoidingView>
-    </UploadProvider>
+          {threads && threadRoot ? (
+            <ThreadView
+              visible
+              onClose={() => setThreadRoot(null)}
+              conversationId={conversationId}
+              rootMessage={threadRoot}
+              {...(labelFor ? { labelFor } : {})}
+              {...(avatarFor ? { avatarFor } : {})}
+              layout={layout}
+              {...(timeFormat ? { timeFormat } : {})}
+              density={density}
+              showPresence={showPresence}
+              linkPreviews={linkPreviews}
+            />
+          ) : null}
+        </KeyboardAvoidingView>
+      </UploadProvider>
+    </MessageExtrasProvider>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   mentionedUserIds,
   type MentionQuery,
 } from './internal/mentions.js';
+import { AgentBadge } from './AgentBadge.js';
 import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import {
@@ -177,6 +178,7 @@ function MentionRow({
   const theme = useTheme();
   const resolved = useUser(externalId);
   const name = resolved.profile?.displayName ?? label;
+  const agent = !!resolved.agent;
   return (
     <Pressable
       onPress={onPress}
@@ -185,15 +187,22 @@ function MentionRow({
         { backgroundColor: pressed ? theme.colors.surfaceAlt : 'transparent' },
       ]}
       accessibilityRole="menuitem"
-      accessibilityLabel={`Mention ${name}`}
+      accessibilityLabel={`Mention ${name}${agent ? ' (agent)' : ''}`}
     >
-      <Avatar src={resolved.profile?.avatarUrl ?? null} name={name} seed={externalId} size="sm" />
+      <Avatar
+        src={resolved.profile?.avatarUrl ?? null}
+        name={name}
+        seed={externalId}
+        size="sm"
+        agent={agent}
+      />
       <Text
         style={[styles.rowText, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
         numberOfLines={1}
       >
         {name}
       </Text>
+      {agent ? <AgentBadge size="xs" /> : null}
     </Pressable>
   );
 }

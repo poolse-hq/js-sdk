@@ -3,6 +3,7 @@ import { useMembers, usePresence, useUser } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AgentBadge } from './AgentBadge.js';
 import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { useTheme } from './theme/PoolseTheme.js';
@@ -128,6 +129,8 @@ function MemberRow({
   const resolved = useUser(externalId);
   const name = labelFor?.(externalId) ?? resolved.profile?.displayName ?? externalId;
   const avatarUrl = avatarFor?.(externalId) ?? resolved.profile?.avatarUrl ?? null;
+  // useMembers tells the registry which members are agents (AG1).
+  const agent = !!resolved.agent;
   return (
     <View style={styles.row}>
       <Avatar
@@ -136,14 +139,18 @@ function MemberRow({
         seed={externalId}
         {...(livePresence ? { presence: true as const } : { online })}
         size="md"
+        agent={agent}
       />
       <View style={styles.body}>
-        <Text
-          style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
-          numberOfLines={1}
-        >
-          {name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text
+            style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
+            numberOfLines={1}
+          >
+            {name}
+          </Text>
+          {agent ? <AgentBadge size="xs" /> : null}
+        </View>
         <Text style={[styles.role, { color: theme.colors.textSubtle }]}>{role}</Text>
       </View>
       {onRemove ? (
@@ -177,7 +184,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 1,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 0,
+  },
   name: {
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: '500',
   },

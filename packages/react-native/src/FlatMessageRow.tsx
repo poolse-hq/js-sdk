@@ -11,10 +11,20 @@
 // attachments, read ticks and the accent bar on messages that mention
 // the viewer work the same in both.
 
-import { isTombstone, useReactions, useUser } from '@poolse/react';
+import {
+  citationsOf,
+  clipOf,
+  isTombstone,
+  messageAgent,
+  useReactions,
+  useUser,
+} from '@poolse/react';
 import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { AgentBadgeInline } from './AgentBadge.js';
+import { MessageCitations } from './Agents.js';
+import { ClipPlayer } from './Meetings.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { canShowEditHistory } from './EditHistorySheet.js';
 import { ImageMosaic } from './ImageMosaic.js';
@@ -94,6 +104,7 @@ export function FlatMessageRow({
 
   // Same priority as the bubble row: explicit prop > userResolver > external id.
   const resolved = useUser(msg.sender_external_id);
+  const senderIsAgent = !!resolved.agent || !!messageAgent(msg);
   const ext = msg.sender_external_id;
   const senderName = ext
     ? (labelFor?.(ext) ?? resolved.profile?.displayName ?? ext)
@@ -127,6 +138,7 @@ export function FlatMessageRow({
       name={senderName}
       seed={ext}
       size={compact ? 'xs' : 'md'}
+      agent={senderIsAgent}
       {...(showPresence && ext ? { presence: true as const } : {})}
     />
   ) : null;
@@ -162,6 +174,8 @@ export function FlatMessageRow({
         : {})}
     >
       {senderName}
+      {senderIsAgent ? '  ' : ''}
+      {senderIsAgent ? <AgentBadgeInline /> : null}
     </Text>
   );
   // `dim` is the time in the avatar gutter (later messages of a run): one
@@ -195,11 +209,13 @@ export function FlatMessageRow({
       : [];
   const files =
     attachments && !deleted
-      ? (msg.attachments ?? []).filter((a) => !isImageContentType(a.content_type))
+      ? (msg.attachments ?? []).filter((a) => !isImageContentType(a.content_type) && !clipOf(a))
       : [];
+  const clips = attachments && !deleted ? (msg.attachments ?? []).filter((a) => !!clipOf(a)) : [];
+  const citations = citationsOf(msg);
   const mediaWidth = Math.min(screenWidth - GUTTER - 48, 320);
   const attachmentsEl =
-    images.length > 0 || files.length > 0 ? (
+    images.length > 0 || files.length > 0 || clips.length > 0 ? (
       <View style={styles.attachments}>
         {images.length > 0 ? (
           <ImageMosaic
@@ -211,6 +227,9 @@ export function FlatMessageRow({
         ) : null}
         {files.map((att) => (
           <AttachmentPreview key={att.id} attachment={att} maxWidth={mediaWidth} />
+        ))}
+        {clips.map((att) => (
+          <ClipPlayer key={att.id} attachment={att} compact />
         ))}
       </View>
     ) : null;
@@ -353,6 +372,7 @@ export function FlatMessageRow({
       {quote}
       {renderSlot(slots?.attachments, ctx, attachmentsEl)}
       {renderSlot(slots?.body, ctx, body)}
+      {citations.length > 0 ? <MessageCitations message={msg} citations={citations} /> : null}
       {renderSlot(slots?.reactions, ctx, reactionsEl)}
       {renderSlot(slots?.thread, ctx, threadEl)}
       <SendStatus

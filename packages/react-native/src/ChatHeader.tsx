@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AgentBadge } from './AgentBadge.js';
 import { Avatar } from './primitives/Avatar.js';
 import { GroupDetailsSheet } from './GroupDetailsSheet.js';
 import { presenceText } from './internal/presence.js';
@@ -77,6 +78,8 @@ export function ChatHeader({
   // useUser is safe with null — short-circuits to no-op state. Keeps the
   // hook unconditional regardless of conversation type.
   const otherUser = useUser(otherExtId);
+  // A DM with an agent says so (AG1).
+  const otherIsAgent = isDirect && (!!otherUser.agent || otherMember?.is_agent === true);
   // Workspace-wide presence of the other person (online / away / in a
   // call / last seen). The conversation's own presence list (who has
   // it open) stays as the fallback for servers without it.
@@ -164,14 +167,18 @@ export function ChatHeader({
               }
             : { online: isOnline })}
           size="md"
+          agent={otherIsAgent}
         />
         <View style={styles.titleCol}>
-          <Text
-            style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.display }]}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text
+              style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.display }]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+            {otherIsAgent ? <AgentBadge size="xs" /> : null}
+          </View>
           {subtitle ? (
             <Text style={[styles.subtitle, { color: theme.colors.textSubtle }]} numberOfLines={1}>
               {subtitle}
@@ -205,6 +212,7 @@ export function ChatHeader({
 }
 
 const styles = StyleSheet.create({
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
   root: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -218,6 +226,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: '600',
   },

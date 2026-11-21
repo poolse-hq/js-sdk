@@ -1,8 +1,11 @@
 import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
-import { useUser } from '@poolse/react';
+import { citationsOf, clipOf, messageAgent, useUser } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { AgentBadgeInline } from './AgentBadge.js';
+import { MessageCitations } from './Agents.js';
+import { ClipPlayer } from './Meetings.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { ImageMosaic } from './ImageMosaic.js';
 import { LinkPreviewCard } from './LinkPreviewCard.js';
@@ -127,6 +130,7 @@ export function MessageBubble({
   const mediaWidth = Math.min(bubbleMaxWidth - 6, 420);
 
   const sender = useUser(!isSelf ? message.sender_external_id : null);
+  const senderIsAgent = !isSelf && (!!sender.agent || !!messageAgent(message));
   const senderFallbackName = message.sender_external_id ?? 'Unknown';
   const senderLabel =
     sender.profile?.displayName ??
@@ -164,10 +168,14 @@ export function MessageBubble({
       : [];
   const files =
     showAttachments && !isDeleted
-      ? (message.attachments ?? []).filter((a) => !isImageContentType(a.content_type))
+      ? (message.attachments ?? []).filter((a) => !isImageContentType(a.content_type) && !clipOf(a))
       : [];
+  // Clips cut from a recording (RT9) play inline instead of a file card.
+  const clips =
+    showAttachments && !isDeleted ? (message.attachments ?? []).filter((a) => !!clipOf(a)) : [];
+  const citations = citationsOf(message);
   const hasMedia = images.length > 0;
-  const hasFiles = files.length > 0;
+  const hasFiles = files.length > 0 || clips.length > 0;
   const hasBody = !isDeleted && body.length > 0;
   const previews = linkPreviews && !isDeleted ? (message.link_previews ?? []) : [];
   const hasPreviews = previews.length > 0;
@@ -191,6 +199,7 @@ export function MessageBubble({
     jumboCount === 0 &&
     !trimmable &&
     !hasPreviews &&
+    citations.length === 0 &&
     (!markdown || !hasMarkdown(truncated));
 
   const sectionAbove = hasMedia || hasFiles || !!message.quoted_message || isDeleted;
@@ -303,6 +312,8 @@ export function MessageBubble({
                 : {})}
             >
               {senderLabel}
+              {senderIsAgent ? '  ' : ''}
+              {senderIsAgent ? <AgentBadgeInline /> : null}
             </Text>
           ) : null,
         )}
@@ -346,6 +357,9 @@ export function MessageBubble({
                       maxWidth={bubbleMaxWidth - 12}
                       tone={isSelf ? 'onBrand' : 'default'}
                     />
+                  ))}
+                  {clips.map((att) => (
+                    <ClipPlayer key={att.id} attachment={att} compact />
                   ))}
                 </View>
               ) : null}
@@ -456,6 +470,14 @@ export function MessageBubble({
             ) : null}
           </>,
         )}
+
+        {citations.length > 0 ? (
+          <MessageCitations
+            message={message}
+            citations={citations}
+            tone={isSelf ? 'onBrand' : 'default'}
+          />
+        ) : null}
 
         {hasPreviews ? (
           // A fixed width, like media: a card squeezed into the width of

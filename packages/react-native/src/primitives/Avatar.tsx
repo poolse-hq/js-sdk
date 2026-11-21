@@ -27,6 +27,11 @@ export interface AvatarProps {
   userId?: string | null;
   /** Size variant. `md` → 40px, `sm` → 28px, `xs` → 20px, `lg` → 56px. */
   size?: 'xs' | 'sm' | 'md' | 'lg';
+  /**
+   * An agent, not a person (AG1): a rounded-square avatar with a small
+   * agent mark, and "(agent)" in its label. Pass `useUser(id).agent`.
+   */
+  agent?: boolean;
 }
 
 const SIZES = { xs: 20, sm: 28, md: 40, lg: 56 } as const;
@@ -40,6 +45,7 @@ export function Avatar({
   doNotDisturb,
   userId,
   size = 'md',
+  agent = false,
 }: AvatarProps) {
   const theme = useTheme();
   const dim = SIZES[size];
@@ -49,6 +55,7 @@ export function Avatar({
   const badgeSize = Math.max(8, Math.round(dim * 0.32));
   const badgeStyle = { position: 'absolute' as const, bottom: -1, right: -1 };
   const lookupId = presence === true ? (userId ?? seed ?? null) : null;
+  const radius = agent ? Math.round(dim * 0.28) : dim / 2;
 
   return (
     <View
@@ -57,17 +64,17 @@ export function Avatar({
         {
           width: dim,
           height: dim,
-          borderRadius: dim / 2,
-          backgroundColor: tint,
+          borderRadius: radius,
+          backgroundColor: agent ? theme.colors.info : tint,
         },
       ]}
       accessibilityRole="image"
-      accessibilityLabel={name ?? 'avatar'}
+      accessibilityLabel={agent ? `${name ?? 'Agent'} (agent)` : (name ?? 'avatar')}
     >
       {src ? (
         <Image
           source={{ uri: src }}
-          style={{ width: dim, height: dim, borderRadius: dim / 2 }}
+          style={{ width: dim, height: dim, borderRadius: radius }}
           accessible={false}
         />
       ) : (
@@ -82,6 +89,19 @@ export function Avatar({
           {initials}
         </Text>
       )}
+      {agent && size !== 'xs' ? (
+        <View
+          style={[
+            styles.agentMark,
+            {
+              width: Math.max(8, Math.round(dim * 0.28)),
+              height: Math.max(8, Math.round(dim * 0.28)),
+              backgroundColor: theme.colors.info,
+              borderColor: theme.colors.surface,
+            },
+          ]}
+        />
+      ) : null}
       {lookupId ? (
         <LivePresenceBadge id={lookupId} size={badgeSize} style={badgeStyle} />
       ) : presence && presence !== true ? (
@@ -147,6 +167,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
+  },
+  agentMark: {
+    position: 'absolute',
+    left: -2,
+    bottom: -2,
+    borderRadius: 3,
+    borderWidth: 2,
   },
   presence: {
     position: 'absolute',

@@ -9,7 +9,9 @@ import { useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 
 import { Avatar } from './primitives/Avatar.js';
+import { ApprovalMessageRow } from './Agents.js';
 import { CallLogRow } from './CallLogRow.js';
+import { SummaryMessageRow } from './Meetings.js';
 import { RecordingNoticeRow } from './Recording.js';
 import { canShowEditHistory, EditHistorySheet } from './EditHistorySheet.js';
 import { EmojiPicker } from './EmojiPicker.js';
@@ -34,6 +36,9 @@ import {
   callLogDisplayFor,
   isTombstone,
   recordingNoticeDisplayFor,
+  messageAgent,
+  parseApproval,
+  parseCallSummary,
   useReactions,
   useUser,
 } from '@poolse/react';
@@ -266,6 +271,20 @@ export function MessageRow(props: MessageRowProps) {
       />
     ) : null;
   }
+  // An agent asking before it acts (AG4), and a call's summary (RT6):
+  // full-width cards with the sender above them.
+  if (parseApproval(props.msg)) {
+    return <ApprovalMessageRow msg={props.msg} meId={props.meId} />;
+  }
+  if (parseCallSummary(props.msg)) {
+    return (
+      <SummaryMessageRow
+        msg={props.msg}
+        meId={props.meId}
+        {...(props.nameForUserId ? { nameForUserId: props.nameForUserId } : {})}
+      />
+    );
+  }
   if (props.layout === 'list' || props.layout === 'compact') {
     return <FlatMessageRow {...props} layout={props.layout} />;
   }
@@ -455,6 +474,7 @@ function BubbleMessageRow({
       name={senderLabel}
       seed={msg.sender_external_id ?? null}
       size="sm"
+      agent={!!rowSender.agent || !!messageAgent(msg)}
       {...(showPresence && msg.sender_external_id ? { presence: true as const } : {})}
     />
   );
