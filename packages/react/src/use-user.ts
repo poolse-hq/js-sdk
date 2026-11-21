@@ -92,7 +92,21 @@ function sameAgent(prev: AgentInfo | null, next: AgentInfo | null): AgentInfo | 
   return next;
 }
 
-/** Whether `externalId` is an agent, live (AG1): its `AgentInfo`, or null for a person. */
+/**
+ * Whether `externalId` is an agent, live (AG1): its `AgentInfo`, or null
+ * for a person. Reads only what is known — it never calls the resolver.
+ */
 export function useAgent(externalId: string | null | undefined): AgentInfo | null {
-  return useUser(externalId).agent;
+  const chat = usePoolse();
+  const [agent, setAgent] = useState<AgentInfo | null>(() => chat.users.agentOf(externalId));
+  useEffect(() => {
+    if (!externalId) {
+      setAgent(null);
+      return;
+    }
+    const read = () => setAgent((prev) => sameAgent(prev, chat.users.agentOf(externalId)));
+    read();
+    return chat.users.subscribe(externalId, read);
+  }, [chat, externalId]);
+  return agent;
 }
