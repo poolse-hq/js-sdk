@@ -32,6 +32,9 @@ protocol MediaEvents: AnyObject {
   /// Our own link to the SFU (`good` | `poor` | `lost` | `unknown`), and
   /// whether incoming video is paused to keep the audio going.
   func onNetwork(quality: String, videoPaused: Bool)
+  /// Whether the server lets us publish (false: recording consent not
+  /// given yet, docs/RECORDING.md §5). Sent on every change.
+  func onCanPublish(_ allowed: Bool)
 }
 
 /// Step-by-step trace of the audio path, in the device log as
@@ -93,6 +96,11 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private var mutedWanted = false
   private var cameraWanted: Bool?
   private var joinedCallId: String?
+  /// The server lets us publish. False while it holds our media back for
+  /// consent: the mic/camera choices above are kept, nothing is published
+  /// (LiveKit unpublished what was live), and they come back as they were
+  /// once permission returns.
+  private var canPublish = true
 
   /// Our own link to the SFU, as last reported.
   private var localQuality = "unknown"
@@ -267,9 +275,14 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       }
       let muted = await MainActor.run { self.mutedWanted }
       let activeNow = await MainActor.run { self.audioActive }
-      pcTrace("connected; publishing mic muted=\(muted) audioActive=\(activeNow)")
-      do { try await r.localParticipant.setMicrophone(enabled: !muted) } catch {
-        NSLog("[PoolseCalls] microphone publish failed: %@", "\(error)")
+      // The token may say listen-only (consent required, not yet given):
+      // publish nothing then — the permission update brings it back.
+      let allowed = await MainActor.run { self.updateCanPublish(r) }
+      pcTrace("connected; publishing mic muted=\(muted) audioActive=\(activeNow) canPublish=\(allowed)")
+      if allowed {
+        do { try await r.localParticipant.setMicrophone(enabled: !muted) } catch {
+          NSLog("[PoolseCalls] microphone publish failed: %@", "\(error)")
+        }
       }
       // Connected and publishing: make sure nothing changed the session
       pcTrace("mic published enabled=\(r.localParticipant.isMicrophoneEnabled()) \(pcSessionDescription())")
@@ -280,7 +293,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
         self.ensureAudioActivated(r, attempt: 0)
       }
       let camera = await MainActor.run { self.cameraWanted ?? wantsVideo }
-      if camera { await self.enableCamera(r, true) }
+      if camera && allowed { await self.enableCamera(r, true) }
       await MainActor.run {
         self.reportLocalCamera(r)
         self.refreshVideo()
@@ -294,7 +307,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     connectedRoom = ObjectIdentifier(r)
     if outputWanted != nil { applyRoute() }
     events?.onConnected()
-    if !r.remoteParticipants.isEmpty { events?.onRemoteJoined() }
+    if !people(r).isEmpty { events?.onRemoteJoined() }
     emit(r)
     refreshVideo()
   }
@@ -326,6 +339,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   private func resetWanted() {
     mutedWanted = false
     cameraWanted = nil
+    canPublish = true
     outputWanted = nil
     pauseWork?.cancel()
     resumeWork?.cancel()
@@ -369,7 +383,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   /// broadcast ends, from here or from the status bar), so the snapshot
   /// follows the real state rather than the request.
   func setScreenShare(_ on: Bool) {
-    guard let r = room, connectedRoom == ObjectIdentifier(r) else { return }
+    guard let r = room, connectedRoom == ObjectIdentifier(r), canPublish || !on else { return }
     if !on, BroadcastManager.shared.isBroadcasting { BroadcastManager.shared.requestStop() }
     Task { [weak self] in
       do { _ = try await r.localParticipant.setScreenShare(enabled: on) } catch {
@@ -389,17 +403,67 @@ final class LiveKitMediaPort: NSObject, MediaPort {
 
   func setMuted(_ muted: Bool) {
     mutedWanted = muted
-    guard let r = room, connectedRoom == ObjectIdentifier(r) else { return }
+    // Not allowed to publish: only remembered, applied on republish.
+    guard let r = room, connectedRoom == ObjectIdentifier(r), canPublish else { return }
     Task { _ = try? await r.localParticipant.setMicrophone(enabled: !muted) }
   }
 
   func setCamera(_ on: Bool) {
     cameraWanted = on
-    guard let r = room, connectedRoom == ObjectIdentifier(r) else { return }
+    guard let r = room, connectedRoom == ObjectIdentifier(r), canPublish else { return }
     Task { [weak self] in
       await self?.enableCamera(r, on)
       await MainActor.run {
         guard let self = self, self.room === r else { return }
+        self.reportLocalCamera(r)
+        self.refreshVideo()
+      }
+    }
+  }
+
+  // MARK: - publish permission (recording consent)
+
+  /// Reads the local participant's permission; reports a change. Returns it.
+  @discardableResult
+  private func updateCanPublish(_ r: Room) -> Bool {
+    guard room === r else { return canPublish }
+    let now = r.localParticipant.permissions.canPublish
+    if now != canPublish {
+      canPublish = now
+      pcTrace("canPublish=\(now)")
+      events?.onCanPublish(now)
+    }
+    return now
+  }
+
+  /// The server changed what we may do. Revoked: LiveKit has unpublished
+  /// our tracks itself — nothing to do but say so. Back: publish the mic
+  /// and camera the way the user last had them.
+  fileprivate func permissionsChanged(_ r: Room) {
+    guard room === r, connectedRoom == ObjectIdentifier(r) else { return }
+    let was = canPublish
+    if updateCanPublish(r) && !was { republish() }
+  }
+
+  /// Mic and camera as the user last had them — after consent (the app
+  /// calls this from its consent prompt; the permission update does it
+  /// too). A no-op while the server still says listen-only.
+  func republish() {
+    guard let r = room, connectedRoom == ObjectIdentifier(r), updateCanPublish(r) else { return }
+    let muted = mutedWanted
+    let camera = cameraWanted ?? (media == "video")
+    pcTrace("republish muted=\(muted) camera=\(camera)")
+    Task { [weak self] in
+      if r.localParticipant.isMicrophoneEnabled() != !muted {
+        do { try await r.localParticipant.setMicrophone(enabled: !muted) } catch {
+          NSLog("[PoolseCalls] microphone republish failed: %@", "\(error)")
+        }
+      }
+      guard let self = self else { return }
+      let cameraLive = await MainActor.run { self.room === r && self.localCameraTrack(r) != nil }
+      if camera && !cameraLive { await self.enableCamera(r, true) }
+      await MainActor.run {
+        guard self.room === r else { return }
         self.reportLocalCamera(r)
         self.refreshVideo()
       }
@@ -640,7 +704,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     guard let r = room else { return nil }
     if local { return localCameraTrack(r) }
     guard let id = participantId,
-          let p = r.remoteParticipants.values.first(where: { $0.identity?.stringValue == id }) else { return nil }
+          let p = people(r).first(where: { $0.identity?.stringValue == id }) else { return nil }
     return remoteCamera(p)
   }
 
@@ -662,7 +726,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
       return pub.track as? VideoTrack
     }
     guard let id = participantId,
-          let p = r.remoteParticipants.values.first(where: { $0.identity?.stringValue == id }) else { return nil }
+          let p = people(r).first(where: { $0.identity?.stringValue == id }) else { return nil }
     return remoteScreen(p)
   }
 
@@ -698,7 +762,8 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     case .disconnected:
       events?.onLost()
     case .participantJoined:
-      events?.onRemoteJoined()
+      // The transcript assistant or the recorder joining is nobody answering.
+      if !people(r).isEmpty { events?.onRemoteJoined() }
       emit(r)
       refreshVideo()
     case .tracksChanged:
@@ -712,6 +777,8 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     case .quality:
       qualityChanged(r)
       emit(r)
+    case .permissions:
+      permissionsChanged(r)
     }
   }
 
@@ -765,7 +832,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   }
 
   private func hasRemoteVideo(_ r: Room) -> Bool {
-    r.remoteParticipants.values.contains { p in p.trackPublications.values.contains { $0.source == .camera } }
+    people(r).contains { p in p.trackPublications.values.contains { $0.source == .camera } }
   }
 
   private func setVideoPaused(_ r: Room, _ paused: Bool) {
@@ -793,9 +860,27 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     events?.onNetwork(quality: localQuality, videoPaused: videoPaused)
   }
 
+  /// The remote PEOPLE: poolse's transcript assistant and LiveKit Egress's
+  /// recorder are in the room but are not someone in the call — never in
+  /// the roster, the count that ends a call left alone, or a video tile.
+  /// Phone (SIP) participants are people.
+  private func people(_ r: Room) -> [RemoteParticipant] {
+    r.remoteParticipants.values.filter { p in
+      !ServiceParticipants.isService(identity: p.identity?.stringValue ?? "", kind: Self.kindName(p.kind))
+    }
+  }
+
+  /// The kinds `ServiceParticipants` tells apart; nil for the rest.
+  static func kindName(_ k: Participant.Kind) -> String? {
+    if k == .agent { return "agent" }
+    if k == .egress { return "egress" }
+    if k == .sip { return "sip" }
+    return nil
+  }
+
   /// The REMOTE roster — the local participant is never included.
   private func emit(_ r: Room) {
-    let roster = r.remoteParticipants.values.map { p -> SnapshotParticipant in
+    let roster = people(r).map { p -> SnapshotParticipant in
       let identity = p.identity?.stringValue ?? ""
       return SnapshotParticipant(
         userId: identity,
@@ -822,7 +907,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
 
 /// LiveKit's delegate → main-thread room events for the port.
 final class RoomObserver: NSObject, RoomDelegate, @unchecked Sendable {
-  enum Kind { case connected, reconnecting, reconnected, disconnected, participantJoined, tracksChanged, rosterChanged, quality }
+  enum Kind { case connected, reconnecting, reconnected, disconnected, participantJoined, tracksChanged, rosterChanged, quality, permissions }
 
   private weak var port: LiveKitMediaPort?
   private weak var room: Room?
@@ -855,4 +940,8 @@ final class RoomObserver: NSObject, RoomDelegate, @unchecked Sendable {
   func room(_ room: Room, participant: Participant, didUpdateMetadata metadata: String?) { send(room, .rosterChanged) }
   func room(_ room: Room, participant: Participant, didUpdateAttributes attributes: [String: String]) { send(room, .rosterChanged) }
   func room(_ room: Room, participant: Participant, didUpdateConnectionQuality quality: ConnectionQuality) { send(room, .quality) }
+  // Only ever the local participant's (LiveKit's own LocalParticipant sends it).
+  func room(_ room: Room, participant: Participant, didUpdatePermissions permissions: ParticipantPermissions) {
+    if participant is LocalParticipant { send(room, .permissions) }
+  }
 }

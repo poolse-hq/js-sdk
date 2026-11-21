@@ -174,6 +174,7 @@ internal class CallHttpClient(
           livekitToken = livekit.getString("token"),
           controlToken = root.optStringOrNull("control_token") ?: current.controlToken,
           ringing = 0,
+          // recording / transcription: the current bundle's stand.
         )
       }
       return CallSessionBundle(
@@ -190,6 +191,8 @@ internal class CallHttpClient(
         ringing = call.optJSONObject("ring_states")?.let { states ->
           states.keys().asSequence().count { states.optString(it) == "ringing" }
         } ?: 0,
+        recording = call.optJSONObject("recording")?.toString() ?: current?.recording,
+        transcription = call.optJSONObject("transcription")?.toString() ?: current?.transcription,
       )
     }
 

@@ -191,6 +191,8 @@ final class CallCore {
   private var audioOutputId: String?
   private var connectionQuality = "unknown"
   private var videoPaused = false
+  /// False while the server holds our media back (recording consent).
+  private var canPublish = true
 
   /// ring_ended reasons seen per call — the CallKit end reason.
   private var ringEndReasons: [String: String] = [:]
@@ -384,6 +386,10 @@ final class CallCore {
   /// Not optimistic: the adapter reports the route once iOS has moved it.
   func setAudioOutput(_ id: String) { runtime.setAudioOutput(id) }
 
+  /// Consent given: publish the mic and camera again as the user last had
+  /// them. Also happens by itself once the server lets us publish.
+  func republish() { runtime.republish() }
+
   /// The current call's id and control token (main thread).
   var control: (callId: String, controlToken: String)? { runtime.control }
 
@@ -445,7 +451,10 @@ final class CallCore {
       waiting: runtime.waitingRing,
       connectionQuality: connectionQuality,
       videoPaused: videoPaused,
-      screenSharing: screenSharing
+      screenSharing: screenSharing,
+      canPublish: canPublish,
+      recording: runtime.capture.recording,
+      transcription: runtime.capture.transcription
     )
     let snapWithServer = snap.map { withServers($0, state: state) }
     snapshotLock.lock(); lastSnapshot = snapWithServer; snapshotLock.unlock()
@@ -496,6 +505,7 @@ final class CallCore {
     audioOutputId = nil
     connectionQuality = "unknown"
     videoPaused = false
+    canPublish = true
   }
 
   /// CallKit follows the FINAL state of each dispatch.
@@ -621,6 +631,10 @@ final class CallCore {
     runtime.post { [weak self] in self?.screenSharing = on }
     runtime.reemit()
   }
+  fileprivate func publishAllowed(_ allowed: Bool) {
+    runtime.post { [weak self] in self?.canPublish = allowed }
+    runtime.reemit()
+  }
 }
 
 // MARK: - CallKit actions
@@ -721,6 +735,7 @@ private final class EventsAdapter: MediaEvents {
   func onLocalScreen(_ on: Bool) { core?.localScreen(on) }
   func onAudioOutputs(_ outputs: [AudioOutput], selectedId: String?) { core?.outputs(outputs, selected: selectedId) }
   func onNetwork(quality: String, videoPaused: Bool) { core?.network(quality: quality, videoPaused: videoPaused) }
+  func onCanPublish(_ allowed: Bool) { core?.publishAllowed(allowed) }
 }
 
 /// Host-facing entry points.

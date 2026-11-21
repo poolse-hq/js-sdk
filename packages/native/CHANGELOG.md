@@ -2,6 +2,21 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## [Unreleased]
+
+- Recording and transcripts (server docs/RECORDING.md). poolse's transcript
+  assistant (`poolse:…`, LiveKit kind agent) and LiveKit Egress's recorder
+  (`EG_…`, kind egress) are no longer reported as people: they are left out of
+  `participants`, video tiles, "someone answered" and the count that ends a
+  call left alone (SIP participants stay).
+- Snapshots carry `canPublish`, `recording` and `transcription` (the
+  CallSummary's objects from answer / join / place / reconnect; `null` from a
+  server without them). New types `CallRecordingState`, `CallTranscriptionState`.
+- Recording consent: when the server revokes publishing, the core stops
+  publishing without errors and keeps the mic / camera choices; when it comes
+  back it republishes them. `republish()` (for ConsentPrompt's `onAccepted`)
+  and `onCanPublishChange(cb)`.
+
 ## 3.8.0 — 2026-11-21
 
 - Several workspaces (servers) at once:

@@ -115,6 +115,12 @@ public final class CallCoreRuntime {
   /// `room` or `call`, once the server's bundle says; nil before. Runtime thread only.
   public var callKind: String? { bundle?.kind }
 
+  /// The bundle's capture state (`recording`, `transcription` as JSON
+  /// text), as of the last answer/join/place/reconnect. Runtime thread only.
+  public var capture: (recording: String?, transcription: String?) {
+    (bundle?.recording, bundle?.transcription)
+  }
+
   /// The current call's id and control token — what authorizes acting on
   /// the call itself (ringing more people in). Nil with no session yet.
   public var control: (callId: String, controlToken: String)? {
@@ -279,6 +285,8 @@ public final class CallCoreRuntime {
   public func switchCamera() { post { [self] in media.switchCamera() } }
   public func setSpeaker(_ on: Bool) { post { [self] in media.setSpeaker(on) } }
   public func setAudioOutput(_ id: String) { post { [self] in media.setAudioOutput(id) } }
+  /// Consent given: publish the mic/camera again (a no-op until the server allows it).
+  public func republish() { post { [self] in media.republish() } }
 
   /// Re-emit the current state (the bridge's roster/route changed).
   public func reemit() { post { [self] in if state.phase != .idle { sink.emit(state: state) } } }

@@ -89,6 +89,8 @@ class CallCore private constructor(context: Context) {
   private var audioOutputId: String? = null
   private var connectionQuality = "unknown"
   private var videoPaused = false
+  /** False while the server holds our media back (recording consent). */
+  private var canPublish = true
 
   /** Last snapshot emitted; read by the bridge's getCallState from any thread. */
   @Volatile private var lastSnapshot: Map<String, Any?>? = null
@@ -276,6 +278,12 @@ class CallCore private constructor(context: Context) {
    */
   fun setAudioOutput(id: String) = runtime.setAudioOutput(id)
 
+  /**
+   * Consent given: publish the mic and camera again as the user last had
+   * them. Also happens by itself once the server lets us publish.
+   */
+  fun republish() = runtime.republish()
+
   /** The current call's id and control token. Any thread. */
   val control: Pair<String, String>? get() = runtime.control
 
@@ -340,6 +348,9 @@ class CallCore private constructor(context: Context) {
       connectionQuality = connectionQuality,
       videoPaused = videoPaused,
       screenSharing = screenSharing,
+      canPublish = canPublish,
+      recording = runtime.capture.first,
+      transcription = runtime.capture.second,
     )
     val withServers = snap?.let { withServers(it, state) }
     lastSnapshot = withServers
@@ -390,6 +401,7 @@ class CallCore private constructor(context: Context) {
     audioOutputId = null
     connectionQuality = "unknown"
     videoPaused = false
+    canPublish = true
   }
 
   /**
@@ -454,6 +466,10 @@ class CallCore private constructor(context: Context) {
     }
     override fun onLocalCamera(on: Boolean, facing: String?) {
       runtime.post { cameraOn = on; cameraFacing = facing }
+      runtime.reemit()
+    }
+    override fun onCanPublish(allowed: Boolean) {
+      runtime.post { canPublish = allowed }
       runtime.reemit()
     }
     override fun onLocalScreen(on: Boolean) {
@@ -726,6 +742,11 @@ interface MediaEvents {
    * whether incoming video is paused to keep the audio going.
    */
   fun onNetwork(quality: String, videoPaused: Boolean) {}
+  /**
+   * Whether the server lets us publish (false: recording consent not
+   * given yet, docs/RECORDING.md §5). Sent on every change.
+   */
+  fun onCanPublish(allowed: Boolean) {}
 }
 
 /** One place call audio can play — a snapshot `audioOutputs[]` entry. */

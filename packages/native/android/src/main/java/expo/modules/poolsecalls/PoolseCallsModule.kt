@@ -187,6 +187,8 @@ class PoolseCallsModule : Module() {
     Function("switchCamera") { core()?.switchCamera() }
     Function("setSpeaker") { on: Boolean -> core()?.setSpeaker(on) }
     Function("setAudioOutput") { id: String -> core()?.setAudioOutput(id) }
+    // Recording consent accepted: mic and camera back as they were.
+    Function("republish") { core()?.republish() }
 
     // What authorizes acting on the call itself (ringing people in).
     AsyncFunction("callControl") {

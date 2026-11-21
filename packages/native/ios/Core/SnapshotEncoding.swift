@@ -68,6 +68,13 @@ public extension Direction {
   var wire: String { rawValue.lowercased() }
 }
 
+/// JSON object text → a dictionary for the bridge; NSNull when absent or not an object.
+private func jsonObject(_ text: String?) -> Any {
+  guard let text = text, let data = text.data(using: .utf8),
+        let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return NSNull() }
+  return obj
+}
+
 public extension MachineState {
   /// The one place a MachineState becomes the contract's `Snapshot`
   /// (CALL_CONTRACT.md §8; mirrors SnapshotJson.kt and src/index.ts). Returns nil
@@ -86,7 +93,10 @@ public extension MachineState {
                   waiting: RingContext? = nil,
                   connectionQuality: String = "unknown",
                   videoPaused: Bool = false,
-                  screenSharing: Bool = false) -> [String: Any]? {
+                  screenSharing: Bool = false,
+                  canPublish: Bool = true,
+                  recording: String? = nil,
+                  transcription: String? = nil) -> [String: Any]? {
     if phase == .idle { return nil }
     var out: [String: Any] = [
       "cv": 1,
@@ -106,6 +116,12 @@ public extension MachineState {
       "connectionQuality": connectionQuality,
       "videoPaused": videoPaused,
       "screenSharing": screenSharing,
+      // false while the server holds our media back (recording consent
+      // not given yet, docs/RECORDING.md §5): listen-only until it lets go.
+      "canPublish": canPublish,
+      // The CallSummary's capture state, as of joining (null: not known).
+      "recording": jsonObject(recording),
+      "transcription": jsonObject(transcription),
     ]
     // The call waiting beside this one: null when none.
     if let w = self.waiting {

@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import com.twilio.audioswitch.AudioDevice
 import dev.poolse.callcore.CallSessionBundle
 import dev.poolse.callcore.MediaPort
+import dev.poolse.callcore.ServiceParticipants
 import dev.poolse.callcore.android.AudioOutput
 import dev.poolse.callcore.android.CallVideoSource
 import dev.poolse.callcore.android.CallVideoSurface
@@ -24,6 +25,8 @@ import io.livekit.android.events.collect
 import io.livekit.android.room.Room
 import io.livekit.android.room.participant.ConnectionQuality
 import io.livekit.android.room.participant.Participant
+import io.livekit.android.room.participant.ParticipantPermission
+import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.CameraPosition
 import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.RemoteTrackPublication
@@ -88,6 +91,14 @@ class LiveKitMediaPort(
   private var cameraWanted: Boolean? = null
   private var joinedCallId: String? = null
 
+  /**
+   * The server lets us publish. False while it holds our media back for
+   * consent (docs/RECORDING.md §5): the choices above are kept, nothing
+   * is published (LiveKit unpublished what was live), and they come back
+   * as they were once permission returns.
+   */
+  private var canPublish = true
+
   /** Our own link to the SFU, as last reported. */
   private var localQuality = "unknown"
 
@@ -140,10 +151,15 @@ class LiveKitMediaPort(
         }
       }.isSuccess
       if (!connected || room !== newRoom) return@launch
+      // The token may say listen-only (consent required, not yet given):
+      // publish nothing then — the permission update brings it back.
+      val allowed = updateCanPublish(newRoom)
       // Publishing failures must not fail the call: audio-only is a call.
-      runCatching { newRoom.localParticipant.setMicrophoneEnabled(!mutedWanted) }
-        .onFailure { Log.w(TAG, "microphone publish failed", it) }
-      if (cameraWanted ?: wantsVideo) enableCamera(newRoom, true)
+      if (allowed) {
+        runCatching { newRoom.localParticipant.setMicrophoneEnabled(!mutedWanted) }
+          .onFailure { Log.w(TAG, "microphone publish failed", it) }
+      }
+      if (allowed && (cameraWanted ?: wantsVideo)) enableCamera(newRoom, true)
       reportLocalCamera(newRoom)
       refreshVideo()
     }
@@ -177,6 +193,7 @@ class LiveKitMediaPort(
   private fun resetWanted() {
     mutedWanted = false
     cameraWanted = null
+    canPublish = true
     outputWanted = null
     pauseJob?.cancel()
     resumeJob?.cancel()
@@ -216,12 +233,15 @@ class LiveKitMediaPort(
 
   override fun setMuted(muted: Boolean) {
     mutedWanted = muted
+    // Not allowed to publish: only remembered, applied on republish.
+    if (!canPublish) return
     val r = room ?: return
     scope.launch { runCatching { r.localParticipant.setMicrophoneEnabled(!muted) } }
   }
 
   override fun setCamera(on: Boolean) {
     cameraWanted = on
+    if (!canPublish) return
     val r = room ?: return
     scope.launch {
       enableCamera(r, on)
@@ -239,12 +259,49 @@ class LiveKitMediaPort(
    */
   override fun setScreenShare(on: Boolean, permission: Intent?) {
     val r = room ?: return
+    if (on && !canPublish) return
     if (on && permission == null) return
     scope.launch {
       runCatching { r.localParticipant.setScreenShareEnabled(on, if (on) permission else null) }
         .onFailure { Log.w(TAG, "screen share ${if (on) "start" else "stop"} failed", it) }
       if (room !== r) return@launch
       reportLocalScreen(r)
+      refreshVideo()
+    }
+  }
+
+  // ── publish permission (recording consent) ──────────────────────────
+
+  /** Reads the local participant's permission; reports a change. Returns it. */
+  private fun updateCanPublish(r: Room): Boolean {
+    if (room !== r) return canPublish
+    val perms: ParticipantPermission? = r.localParticipant.permissions
+    val now = perms?.canPublish ?: true
+    if (now != canPublish) {
+      canPublish = now
+      Log.i(TAG, "canPublish=$now")
+      events.onCanPublish(now)
+    }
+    return now
+  }
+
+  /**
+   * Mic and camera as the user last had them — after consent (the app
+   * calls this from its consent prompt; the permission update does it
+   * too). A no-op while the server still says listen-only.
+   */
+  override fun republish() {
+    val r = room ?: return
+    if (r.state != Room.State.CONNECTED || !updateCanPublish(r)) return
+    val camera = cameraWanted ?: (media == "video")
+    scope.launch {
+      if (r.localParticipant.isMicrophoneEnabled() == mutedWanted) {
+        runCatching { r.localParticipant.setMicrophoneEnabled(!mutedWanted) }
+          .onFailure { Log.w(TAG, "microphone republish failed", it) }
+      }
+      if (camera && localCameraTrack(r) == null) enableCamera(r, true)
+      if (room !== r) return@launch
+      reportLocalCamera(r)
       refreshVideo()
     }
   }
@@ -289,7 +346,7 @@ class LiveKitMediaPort(
   internal fun cameraTrack(participantId: String?, local: Boolean): VideoTrack? {
     val r = room ?: return null
     if (local) return localCameraTrack(r)
-    val p = r.remoteParticipants.values.firstOrNull { it.identity?.value == participantId } ?: return null
+    val p = people(r).firstOrNull { it.identity?.value == participantId } ?: return null
     return remoteCamera(p)
   }
 
@@ -309,7 +366,7 @@ class LiveKitMediaPort(
   internal fun screenTrack(participantId: String?, local: Boolean): VideoTrack? {
     val r = room ?: return null
     if (local) return localScreenTrack(r)
-    val p = r.remoteParticipants.values.firstOrNull { it.identity?.value == participantId } ?: return null
+    val p = people(r).firstOrNull { it.identity?.value == participantId } ?: return null
     return remoteScreen(p)
   }
 
@@ -471,7 +528,7 @@ class LiveKitMediaPort(
           events.onConnected()
           // Somebody may already be in (a late join, or a callee who
           // answered before our media came up): they will not "connect".
-          if (room.remoteParticipants.isNotEmpty()) events.onRemoteJoined()
+          if (people(room).isNotEmpty()) events.onRemoteJoined()
           emit(room)
           refreshVideo()
         }
@@ -485,7 +542,19 @@ class LiveKitMediaPort(
         is RoomEvent.Disconnected -> {
           if (event.reason != DisconnectReason.CLIENT_INITIATED) events.onLost()
         }
-        is RoomEvent.ParticipantConnected -> { events.onRemoteJoined(); emit(room); refreshVideo() }
+        // The transcript assistant or the recorder joining is nobody answering.
+        is RoomEvent.ParticipantConnected -> {
+          if (!isService(event.participant)) events.onRemoteJoined()
+          emit(room)
+          refreshVideo()
+        }
+        // Only ever ours: the server turned publishing off (consent) or back on.
+        is RoomEvent.ParticipantPermissionsChanged -> {
+          if (event.participant === room.localParticipant) {
+            val was = canPublish
+            if (updateCanPublish(room) && !was) republish()
+          }
+        }
         // Anything that can make a camera appear, vanish or freeze:
         // update the roster's cameraOn, the local camera state, and
         // rebind every video view.
@@ -518,10 +587,28 @@ class LiveKitMediaPort(
     }
   }
 
+  /**
+   * The remote PEOPLE: poolse's transcript assistant and LiveKit Egress's
+   * recorder are in the room but are not someone in the call — never in
+   * the roster, the count that ends a call left alone, or a video tile.
+   * Phone (SIP) participants are people.
+   */
+  private fun people(r: Room): List<RemoteParticipant> = r.remoteParticipants.values.filterNot(::isService)
+
+  private fun isService(p: Participant): Boolean {
+    val kind = when (p.kind) {
+      Participant.Kind.AGENT -> "agent"
+      Participant.Kind.EGRESS -> "egress"
+      Participant.Kind.SIP -> "sip"
+      else -> null
+    }
+    return ServiceParticipants.isService(p.identity?.value ?: "", kind)
+  }
+
   /** The REMOTE roster — the local participant is never included. */
   private fun emit(room: Room) {
     events.onParticipants(
-      room.remoteParticipants.values.map {
+      people(room).map {
         val identity = it.identity?.value ?: ""
         MediaParticipant(
           identity = identity,
@@ -578,7 +665,7 @@ class LiveKitMediaPort(
   }
 
   private fun hasRemoteVideo(r: Room) =
-    r.remoteParticipants.values.any { it.getTrackPublication(Track.Source.CAMERA) != null }
+    people(r).any { it.getTrackPublication(Track.Source.CAMERA) != null }
 
   private fun setVideoPaused(r: Room, paused: Boolean) {
     Log.i(TAG, "incoming video ${if (paused) "paused" else "resumed"} quality=$localQuality")

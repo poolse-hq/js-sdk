@@ -36,6 +36,7 @@ final class FakeMedia: MediaPort {
   func setCamera(_ on: Bool) { log.append("camera:\(on)") }
   func switchCamera() { log.append("switch") }
   func setSpeaker(_ on: Bool) { log.append("speaker:\(on)") }
+  func republish() { log.append("republish") }
 }
 
 final class FakeSurface: RingSurfacePort {
@@ -318,6 +319,19 @@ final class RuntimeTests: XCTestCase {
     XCTAssertEqual(r.runtime.currentState().phase, .ended)
     XCTAssertEqual(r.runtime.currentState().reason, .left)
     XCTAssertEqual(r.session.log.last, "stop")
+  }
+
+  func testRepublishReachesTheMediaAndCaptureComesFromTheBundle() {
+    let r = Rig()
+    XCTAssertNil(r.runtime.capture.recording)
+    r.runtime.place(conversationId: "conv-c1", media: "audio", sessionToken: "sess-token")
+    var b = bundle("c1", created: false)
+    b.recording = #"{"active":true}"#
+    r.http.lastCb!(.ok(b))
+    XCTAssertEqual(r.runtime.capture.recording, #"{"active":true}"#)
+    XCTAssertNil(r.runtime.capture.transcription)
+    r.runtime.republish()
+    XCTAssertEqual(r.media.log.last, "republish")
   }
 
   // ── alone in a call: ask the server ─────────────────────────────────
@@ -717,6 +731,51 @@ final class HttpAndSnapshotTests: XCTestCase {
     XCTAssertTrue(b.created)
     XCTAssertEqual(b.media, "audio")
     XCTAssertNil(b.conversationName)
+  }
+
+  func testCaptureStateIsCarriedToTheSnapshot() {
+    let p = """
+    {"call":{"id":"c1","conversation_id":"v",
+      "recording":{"available":true,"active":true,"id":"rec1","consent_required":true,
+                   "consent":{"accepted":["u1"],"declined":[]}},
+      "transcription":{"available":false,"active":false,"id":null}},
+     "livekit":{"url":"u","token":"t"},"control_token":"x"}
+    """
+    guard case let .ok(b) = CallHttpClient.classify(code: 200, payload: p) else { return XCTFail() }
+    XCTAssertNotNil(b.recording)
+    let snap = MachineState(phase: .active, callId: "c1", conversationId: "v")
+      .toSnapshot(canPublish: false, recording: b.recording, transcription: b.transcription)!
+    let rec = snap["recording"] as? [String: Any]
+    XCTAssertEqual(rec?["id"] as? String, "rec1")
+    XCTAssertEqual(rec?["consent_required"] as? Bool, true)
+    XCTAssertEqual((rec?["consent"] as? [String: Any])?["accepted"] as? [String], ["u1"])
+    XCTAssertEqual((snap["transcription"] as? [String: Any])?["available"] as? Bool, false)
+    XCTAssertEqual(snap["canPublish"] as? Bool, false)
+    XCTAssertTrue(JSONSerialization.isValidJSONObject(snap))
+
+    // A legacy reconnect refresh keeps the current bundle's state.
+    guard case let .ok(r) = CallHttpClient.classify(code: 200, payload: #"{"livekit":{"token":"t2"}}"#, current: b)
+    else { return XCTFail() }
+    XCTAssertEqual(r.recording, b.recording)
+
+    // An older server: null, and publishing allowed.
+    guard case let .ok(old) = CallHttpClient.classify(code: 200, payload: full) else { return XCTFail() }
+    XCTAssertNil(old.recording)
+    let plain = MachineState(phase: .active, callId: "c1", conversationId: "v").toSnapshot()!
+    XCTAssertTrue(plain["recording"] is NSNull)
+    XCTAssertTrue(plain["transcription"] is NSNull)
+    XCTAssertEqual(plain["canPublish"] as? Bool, true)
+  }
+
+  func testServiceParticipantsAreNotPeople() {
+    XCTAssertTrue(ServiceParticipants.isService(identity: "poolse:assistant:c1", kind: "agent"))
+    XCTAssertTrue(ServiceParticipants.isService(identity: "poolse:assistant:c1", kind: nil))
+    XCTAssertTrue(ServiceParticipants.isService(identity: "EG_abc123", kind: "standard"))
+    XCTAssertTrue(ServiceParticipants.isService(identity: "anything", kind: "egress"))
+    XCTAssertTrue(ServiceParticipants.isService(identity: "bot-1", kind: "agent"))
+    XCTAssertFalse(ServiceParticipants.isService(identity: "sip_+38970123456", kind: "sip"))
+    XCTAssertFalse(ServiceParticipants.isService(identity: "8c1f0e5e-user", kind: "standard"))
+    XCTAssertFalse(ServiceParticipants.isService(identity: "8c1f0e5e-user", kind: nil))
   }
 
   func testLegacyReconnectShapeAppliesOntoCurrent() {

@@ -144,6 +144,12 @@ class CallCoreRuntime(
   val callKind: String? get() = bundle?.kind
 
   /**
+   * The bundle's capture state (`recording`, `transcription` as JSON
+   * text), as of the last answer/join/place/reconnect. Runtime thread only.
+   */
+  val capture: Pair<String?, String?> get() = bundle?.recording to bundle?.transcription
+
+  /**
    * The current call's id and control token — what authorizes acting on
    * the call itself (ringing more people in). Null with no session yet.
    * Safe from any thread.
@@ -301,6 +307,8 @@ class CallCoreRuntime(
   fun switchCamera() = post { media.switchCamera() }
   fun setSpeaker(on: Boolean) = post { media.setSpeaker(on) }
   fun setAudioOutput(id: String) = post { media.setAudioOutput(id) }
+  /** Consent given: publish the mic/camera again (a no-op until the server allows it). */
+  fun republish() = post { media.republish() }
 
   /** Re-emit the current state (the bridge's roster/route changed). */
   fun reemit() = post { if (state.phase != Phase.IDLE) sink.emit(state) }

@@ -3,6 +3,8 @@ package dev.poolse.callcore.android
 import dev.poolse.callcore.Direction
 import dev.poolse.callcore.MachineState
 import dev.poolse.callcore.Phase
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * The one place a [MachineState] becomes the contract's `Snapshot`
@@ -32,6 +34,11 @@ internal fun MachineState.toSnapshot(
   videoPaused: Boolean = false,
   /** We are sharing our screen. */
   screenSharing: Boolean = false,
+  /** False while the server holds our media back (recording consent not given yet). */
+  canPublish: Boolean = true,
+  /** The CallSummary's `recording` / `transcription` objects, JSON text (null: not known). */
+  recording: String? = null,
+  transcription: String? = null,
 ): Map<String, Any?>? {
   if (phase == Phase.IDLE) return null
   return buildMap {
@@ -42,6 +49,11 @@ internal fun MachineState.toSnapshot(
     put("screenSharing", screenSharing)
     put("audioOutputs", audioOutputs)
     put("audioOutputId", audioOutputId)
+    // false: listen-only until the server lets go (docs/RECORDING.md §5).
+    put("canPublish", canPublish)
+    // The capture state as of joining; null when not known.
+    put("recording", jsonMap(recording))
+    put("transcription", jsonMap(transcription))
     // Optional in the contract: present only while a camera is published.
     if (cameraFacing != null) put("cameraFacing", cameraFacing)
     // The call waiting beside this one: null when none.
@@ -81,6 +93,17 @@ private fun MachineState.snapshotCore(
     "mutedSelf" to mutedSelf,
     "cameraOn" to cameraOn,
   )
+}
+
+/** JSON object text → plain maps/lists for the bridge; null when absent or not an object. */
+private fun jsonMap(text: String?): Map<String, Any?>? =
+  text?.let { runCatching { plain(JSONObject(it)) as Map<String, Any?> }.getOrNull() }
+
+private fun plain(v: Any?): Any? = when (v) {
+  is JSONObject -> v.keys().asSequence().associateWith { plain(v.opt(it)) }
+  is JSONArray -> (0 until v.length()).map { plain(v.opt(it)) }
+  JSONObject.NULL -> null
+  else -> v
 }
 
 private val Phase.wire: String
