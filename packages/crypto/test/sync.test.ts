@@ -192,6 +192,33 @@ describe('encrypted blob store', () => {
     expect((await st6.list()).blobs.map((b) => b.key)).toEqual([await st6.blobKey('a')]);
   });
 
+  it('has a change feed (memory transport) filtered by keyPrefix', async () => {
+    const transport = new MemoryBlobTransport();
+    const accountKey = await AccountKey.generate();
+    const store = new EncryptedBlobStore({ transport, accountKey, keyPrefix: 'st6.' });
+    const other = new EncryptedBlobStore({ transport, accountKey, keyPrefix: 'nt.' });
+    await store.put('a', enc('1'));
+    await other.put('a', enc('2'));
+    const first = await store.changes();
+    expect(first.changes.map((c) => c.key)).toEqual([await store.blobKey('a')]);
+    await store.purge('a');
+    const next = await store.changes({ cursor: first.cursor });
+    expect(next.changes).toMatchObject([{ key: await store.blobKey('a'), deleted: true }]);
+    await expectCryptoError(
+      new EncryptedBlobStore({
+        transport: {
+          ...transport,
+          get: transport.get,
+          put: transport.put,
+          delete: transport.delete,
+          list: transport.list,
+        },
+        accountKey,
+      }).changes(),
+      'unavailable',
+    );
+  });
+
   it('validates names', async () => {
     const { a } = await twoDevices();
     await expectCryptoError(a.put('', enc('x')), 'malformed');

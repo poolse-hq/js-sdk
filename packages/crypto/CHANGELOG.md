@@ -32,6 +32,12 @@ All notable changes to `@poolse/crypto` are documented here. Format follows
 - `EncryptedBlobStore` over a pluggable `BlobTransport` (`get`, `put`,
   `delete`, `update`, JSON variants, `list`, `getByKey`, tombstones, `purge`),
   with If-Match conflicts (`BlobConflictError`) and rollback detection
-  (`RevisionStore`); `MemoryBlobTransport`.
+  (`RevisionStore`); `MemoryBlobTransport`. `list` passes `prefix`, and
+  `changes` reads a change feed (writes and deletions since a cursor).
+- `createHttpBlobTransport({ apiUrl, getToken, fetch? })` for the poolse
+  server's `/v1/me/blobs` and `/v1/me/blob-changes` (ETag versions, If-Match /
+  If-None-Match, 412/409 → `BlobConflictError`); `BlobTransportError` with
+  codes `too_large`, `quota_exceeded`, `sync_disabled`, `rate_limited`
+  (`retryAfterMs`), `invalid_key`, `unauthorized`, …; `isValidBlobKey`.
 - Versioned envelope format 1 with algorithm ids, `inspectEnvelope`,
   `PoolseCryptoError` codes, `checkCryptoSupport`, base64url/base32/hex helpers.

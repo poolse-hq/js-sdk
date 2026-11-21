@@ -227,22 +227,59 @@ await store.updateJson<string[]>('pinned', (pins) => [...(pins ?? []), channelId
 
 #### The transport
 
-`EncryptedBlobStore` talks to the server through a `BlobTransport` the app
-passes in (`MemoryBlobTransport` is an in-memory one for tests):
+Against a poolse server, use the HTTP transport (plain `fetch`, no
+`@poolse/sdk` needed):
 
 ```ts
-interface BlobTransport {
-  get(key): Promise<{ data: Uint8Array; version: string } | null>; // 404 → null
-  put(key, data, { ifMatch?, ifNoneMatch?: '*' }): Promise<{ version: string }>; // 412/409 → BlobConflictError
-  delete(key, { ifMatch? }): Promise<void>; // 412 → BlobConflictError
-  list({ cursor?, limit? }): Promise<{ blobs: BlobInfo[]; cursor: string | null }>;
+import { createHttpBlobTransport, EncryptedBlobStore } from '@poolse/crypto';
+
+const transport = createHttpBlobTransport({
+  apiUrl: 'https://chat.example.com', // the poolse server, without /v1
+  getToken: () => client.getToken(), // the signed-in user's token (Bearer)
+  // fetch: customFetch,             // defaults to globalThis.fetch
+});
+const store = new EncryptedBlobStore({
+  transport,
+  accountKey,
+  namespace: 'settings',
+  keyPrefix: 'st6.',
+});
+
+// Pick up other devices' changes: keep the cursor between runs.
+const { changes, cursor } = await store.changes({ cursor: saved });
+for (const c of changes) {
+  const blob = await store.getByKey(c.key); // null when deleted
 }
 ```
 
-It maps onto the poolse server's per-user blob store: `GET`, `PUT` and `DELETE
-/v1/me/blobs/:key` with the version as the `ETag` / `If-Match`
-(`If-None-Match: *` to create), and a cursor-paged list. Blob keys the store
-makes are 32 lowercase base32 characters, plus your `keyPrefix`.
+| Call                   | Request                                                                        | Result                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `get(key)`             | `GET /v1/me/blobs/:key`                                                        | bytes and the `ETag` version; `404` → `null`                                                                                  |
+| `put(key, data, cond)` | `PUT /v1/me/blobs/:key`, octet-stream, `If-Match: "<v>"` or `If-None-Match: *` | the new version (`ETag`, else the JSON `version`); `412`/`409` → `BlobConflictError`                                          |
+| `delete(key, cond)`    | `DELETE /v1/me/blobs/:key`, `If-Match` if given                                | `204`; `412`/`409` → `BlobConflictError`; `404` → done without `If-Match`, `BlobConflictError` with it                        |
+| `list(opts)`           | `GET /v1/me/blobs?prefix=&cursor=&limit=`                                      | `{blobs, cursor, limits}` (`cursor` `null` on the last page)                                                                  |
+| `changes(opts)`        | `GET /v1/me/blob-changes?cursor=&limit=`                                       | `{changes: [{key, version, size, updatedAt, deleted}], cursor}` oldest first; the cursor comes back even when nothing changed |
+
+Versions are the `ETag` without quotes. Any other failure throws
+`BlobTransportError` with a `code`: `too_large` / `quota_exceeded` (413),
+`sync_disabled` (403, the workspace turned encrypted sync off), `forbidden`
+(other 403), `rate_limited` (429, with `retryAfterMs` from `Retry-After`),
+`invalid_key` (422, or refused before sending), `unauthorized` (401 even after
+asking `getToken` once more), `not_found`, `server` (5xx), `network` (no
+response), `bad_response`, `http`; plus `status`, `serverCode` and
+`retryable`. Nothing is retried automatically except that one new token after a 401.
+
+Keys are 1–128 of `a–z 0–9 .`, not starting or ending with `.`, no `..`
+(`isValidBlobKey`). The store's keys are 32 lowercase base32 characters plus
+your `keyPrefix`, so keep the prefix to those characters too. The server allows
+25 MiB per blob, 1 GiB and 10 000 blobs per user by default (`list().limits`).
+
+In a browser or webview on another origin, the server must expose `ETag`
+(`Access-Control-Expose-Headers`), or `get` fails with `bad_response`.
+
+Any other backend works too: implement `BlobTransport` (`get`, `put`,
+`delete`, `list`, optional `changes`). `MemoryBlobTransport` is an in-memory
+one for tests.
 
 ## Format
 

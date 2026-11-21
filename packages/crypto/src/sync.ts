@@ -40,10 +40,22 @@ import { IV_LENGTH, aesDecrypt, aesEncrypt, hkdf, hmac, label, randomBytes } fro
 /** One blob as the server lists it. */
 export interface BlobInfo {
   key: string;
-  /** Opaque version for `If-Match` (the server's ETag). */
+  /** Opaque version for `If-Match` (the server's ETag, unquoted). */
   version: string;
   size?: number;
   updatedAt?: string;
+}
+
+/** One entry of the change feed: a blob written or deleted. */
+export interface BlobChange extends BlobInfo {
+  deleted: boolean;
+}
+
+/** The server's limits, as it reports them with a listing. */
+export interface BlobLimits {
+  maxBlobBytes?: number;
+  maxUserBytes?: number;
+  maxBlobs?: number;
 }
 
 /**
@@ -56,28 +68,48 @@ export interface BlobPrecondition {
   ifNoneMatch?: '*';
 }
 
+export interface BlobListOptions {
+  cursor?: string;
+  limit?: number;
+  /** Only keys starting with this. */
+  prefix?: string;
+}
+
+export interface BlobListPage {
+  blobs: BlobInfo[];
+  /** Pass back for the next page; `null` on the last one. */
+  cursor: string | null;
+  limits?: BlobLimits;
+}
+
+export interface BlobChangesPage {
+  changes: BlobChange[];
+  /** Keep it and pass it next time — returned even when nothing changed. */
+  cursor: string;
+}
+
 /**
- * How the store reaches the server. Implement it over the SDK's REST client
- * (or `fetch`); `MemoryBlobTransport` is an in-memory one for tests.
+ * How the store reaches the server. `createHttpBlobTransport` talks to the
+ * poolse server; `MemoryBlobTransport` is an in-memory one for tests.
  *
  * `put` and `delete` must throw `BlobConflictError` when a precondition
  * fails (HTTP 412, or 409 for a create that found the key taken); `get`
- * returns `null` for a missing blob (404).
+ * returns `null` for a missing blob (404). `changes` is optional: a feed of
+ * writes and deletions since a cursor, oldest first.
  */
 export interface BlobTransport {
   get(key: string): Promise<{ data: Uint8Array; version: string } | null>;
   put(key: string, data: Uint8Array, precondition: BlobPrecondition): Promise<{ version: string }>;
   delete(key: string, precondition: BlobPrecondition): Promise<void>;
-  list(options: {
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ blobs: BlobInfo[]; cursor: string | null }>;
+  list(options: BlobListOptions): Promise<BlobListPage>;
+  changes?(options: { cursor?: string; limit?: number }): Promise<BlobChangesPage>;
 }
 
 /** An in-memory BlobTransport with the server's If-Match semantics. */
 export class MemoryBlobTransport implements BlobTransport {
   readonly blobs = new Map<string, { data: Uint8Array; version: string; updatedAt: string }>();
   private counter = 0;
+  private readonly log: BlobChange[] = [];
 
   private check(key: string, precondition: BlobPrecondition): void {
     const current = this.blobs.get(key);
@@ -96,23 +128,24 @@ export class MemoryBlobTransport implements BlobTransport {
   async put(key: string, data: Uint8Array, precondition: BlobPrecondition) {
     this.check(key, precondition);
     const version = `v${++this.counter}`;
-    this.blobs.set(key, {
-      data: new Uint8Array(data),
-      version,
-      updatedAt: new Date().toISOString(),
-    });
+    const updatedAt = new Date().toISOString();
+    this.blobs.set(key, { data: new Uint8Array(data), version, updatedAt });
+    this.log.push({ key, version, size: data.length, updatedAt, deleted: false });
     return { version };
   }
 
   async delete(key: string, precondition: BlobPrecondition) {
     this.check(key, precondition);
-    this.blobs.delete(key);
+    if (!this.blobs.delete(key)) return;
+    const version = `v${++this.counter}`;
+    this.log.push({ key, version, size: 0, updatedAt: new Date().toISOString(), deleted: true });
   }
 
-  async list(options: { cursor?: string; limit?: number }) {
+  async list(options: BlobListOptions) {
     const limit = options.limit ?? 100;
     const keys = [...this.blobs.keys()]
       .sort()
+      .filter((k) => options.prefix === undefined || k.startsWith(options.prefix))
       .filter((k) => options.cursor === undefined || k > options.cursor);
     const page = keys.slice(0, limit);
     return {
@@ -122,6 +155,12 @@ export class MemoryBlobTransport implements BlobTransport {
       }),
       cursor: keys.length > limit ? (page[page.length - 1] ?? null) : null,
     };
+  }
+
+  async changes(options: { cursor?: string; limit?: number }) {
+    const from = options.cursor === undefined ? 0 : Number(options.cursor);
+    const page = this.log.slice(from, from + (options.limit ?? 100));
+    return { changes: page.map((c) => ({ ...c })), cursor: String(from + page.length) };
   }
 }
 
@@ -383,13 +422,31 @@ export class EncryptedBlobStore {
     return result;
   }
 
-  /** One page of this user's blobs (all namespaces). Read each with `getByKey`. */
-  async list(
-    options: { cursor?: string; limit?: number } = {},
-  ): Promise<{ blobs: BlobInfo[]; cursor: string | null }> {
-    const page = await this.transport.list(options);
+  /**
+   * One page of this user's blobs (under `keyPrefix`, if set). Read each with
+   * `getByKey`.
+   */
+  async list(options: { cursor?: string; limit?: number } = {}): Promise<BlobListPage> {
+    const page = await this.transport.list(
+      this.keyPrefix ? { ...options, prefix: this.keyPrefix } : options,
+    );
     if (!this.keyPrefix) return page;
     return { ...page, blobs: page.blobs.filter((b) => b.key.startsWith(this.keyPrefix)) };
+  }
+
+  /**
+   * What changed since `cursor` (writes and deletions, oldest first), under
+   * `keyPrefix` if set. Keep the returned cursor; read changed blobs with
+   * `getByKey` (a deleted one reads as `null`). Needs a transport with
+   * `changes` (the HTTP one has it).
+   */
+  async changes(options: { cursor?: string; limit?: number } = {}): Promise<BlobChangesPage> {
+    if (!this.transport.changes) {
+      throw new PoolseCryptoError('unavailable', 'This blob transport has no change feed');
+    }
+    const page = await this.transport.changes(options);
+    if (!this.keyPrefix) return page;
+    return { ...page, changes: page.changes.filter((c) => c.key.startsWith(this.keyPrefix)) };
   }
 
   private async write(

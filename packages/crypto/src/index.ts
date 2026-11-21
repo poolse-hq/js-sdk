@@ -109,6 +109,11 @@ export {
 
 export {
   type BlobInfo,
+  type BlobChange,
+  type BlobLimits,
+  type BlobListOptions,
+  type BlobListPage,
+  type BlobChangesPage,
   type BlobPrecondition,
   type BlobTransport,
   type RevisionStore,
@@ -118,3 +123,11 @@ export {
   MemoryBlobTransport,
   EncryptedBlobStore,
 } from './sync';
+
+export {
+  type BlobTransportErrorCode,
+  type HttpBlobTransportOptions,
+  BlobTransportError,
+  createHttpBlobTransport,
+  isValidBlobKey,
+} from './http';
