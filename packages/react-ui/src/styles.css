@@ -4848,3 +4848,17 @@
   right: 0;
   z-index: 20;
 }
+
+.poolse-mention-menu__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-mention-menu__handle {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+  white-space: nowrap;
+}

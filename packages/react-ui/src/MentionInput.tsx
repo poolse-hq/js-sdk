@@ -1,24 +1,28 @@
 // MentionInput — drop-in replacement for `MessageComposer` that
-// pops a member dropdown when the user types `@`. Selecting a
-// member inserts `@display-name` into the text and records the
-// `user_id` in the mentions array that gets POSTed with the send.
+// pops a member dropdown when the user types `@`. Members match on
+// their display name (`labelFor`, else the SDK's `userResolver`) or
+// their external id; the viewer isn't offered. Selecting one inserts
+// `@display-name` and records their `user_id` in the `mentions` sent
+// with the message — dropped again if the `@name` is deleted first.
 
 import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import { useAttachmentUpload, useMembers } from '@poolse/react';
+import { useAttachmentUpload, useMembers, usePoolse, useUser } from '@poolse/react';
 import {
   forwardRef,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
+  useReducer,
   useRef,
   useState,
   type KeyboardEvent,
 } from 'react';
+import { Avatar } from './Avatar.js';
 import { ComposerEmojiButton, insertAtCaret } from './composerParts.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
-import { UserName } from './UserName.js';
 import { useAutogrow } from './useAutogrow.js';
 import type { MessageComposerHandle } from './MessageComposer.js';
 
@@ -58,6 +62,9 @@ export interface MentionInputProps {
   emojiPicker?: boolean;
 }
 
+/** Most suggestions shown at once. */
+const MAX_SUGGESTIONS = 8;
+
 interface MentionState {
   /** Position of the active `@` in the textarea. */
   start: number;
@@ -81,14 +88,18 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     },
     ref,
   ) {
+    const chat = usePoolse();
     const { members } = useMembers(conversationId);
     const [value, setValue] = useState('');
     const [sending, setSending] = useState(false);
     const [mention, setMention] = useState<MentionState | null>(null);
     const [activeIdx, setActiveIdx] = useState(0);
-    // user_ids that have been selected via the mention picker (the
-    // payload we ship in MessageCreateRequest.mentions).
-    const selectedMentions = useRef<Set<Uuid>>(new Set());
+    const menuId = useId();
+    // Re-render when a member's profile resolves (names to match on).
+    const [, bumpProfiles] = useReducer((n: number) => n + 1, 0);
+    // Members picked from the menu → the name inserted for them. Sent
+    // as `mentions` only while `@name` is still in the text.
+    const selectedMentions = useRef<Map<Uuid, string>>(new Map());
     const taRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     useAutogrow(taRef, value);
@@ -130,13 +141,37 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       [addFiles],
     );
 
-    const label = labelFor ?? ((id: string) => id);
+    const label = (id: string) => labelFor?.(id) ?? chat.users.peek(id)?.displayName ?? id;
+    const meId = chat.me.peek()?.id ?? null;
 
-    // Filter the member list to the current query.
+    // Resolve members' names once the menu opens, so typing a display
+    // name finds them even before their messages were rendered.
+    const menuOpen = mention !== null;
+    useEffect(() => {
+      if (!menuOpen || labelFor) return;
+      let live = true;
+      for (const m of members) {
+        if (chat.users.peek(m.external_id) !== undefined) continue;
+        void chat.users
+          .get(m.external_id)
+          .then(() => {
+            if (live) bumpProfiles();
+          })
+          .catch(() => undefined);
+      }
+      return () => {
+        live = false;
+      };
+    }, [menuOpen, members, chat, labelFor]);
+
+    // Candidates for the current query: name or external id contains
+    // it, names that start with it first; never the viewer.
     const filtered = mention
-      ? members.filter((m) =>
-          label(m.external_id).toLowerCase().includes(mention.query.toLowerCase()),
-        )
+      ? rankMembers(
+          members.filter((m) => m.user_id !== meId),
+          mention.query.toLowerCase(),
+          label,
+        ).slice(0, MAX_SUGGESTIONS)
       : [];
 
     // Reset active selection whenever the candidate list changes.
@@ -151,7 +186,9 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       if ((!trimmed && !hasReady) || sending || uploading) return;
       setSending(true);
       try {
-        const mentions = Array.from(selectedMentions.current);
+        const mentions = [...selectedMentions.current]
+          .filter(([, name]) => trimmed.includes(`@${name}`))
+          .map(([id]) => id);
         await onSend({
           body: trimmed,
           ...(mentions.length > 0 ? { mentions } : {}),
@@ -159,7 +196,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
           ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
         });
         setValue('');
-        selectedMentions.current = new Set();
+        selectedMentions.current = new Map();
         for (const it of ready) removeUpload(it.localId);
       } finally {
         setSending(false);
@@ -177,7 +214,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       const after = value.slice(mention.start + 1 + mention.query.length);
       const inserted = `@${name} `;
       const next = `${before}${inserted}${after}`;
-      selectedMentions.current.add(m.user_id);
+      selectedMentions.current.set(m.user_id, name);
       setValue(next);
       setMention(null);
       // Move caret to right after the inserted mention.
@@ -347,10 +384,10 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
             aria-label={placeholder}
             role="combobox"
             aria-expanded={Boolean(mention && filtered.length > 0)}
-            aria-controls="poolse-mention-menu"
+            aria-controls={menuId}
             aria-autocomplete="list"
             {...(mention && filtered.length > 0
-              ? { 'aria-activedescendant': `poolse-mention-opt-${activeIdx}` }
+              ? { 'aria-activedescendant': `${menuId}-opt-${activeIdx}` }
               : {})}
           />
           {emojiPicker && (
@@ -371,19 +408,15 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
         </div>
 
         {mention && filtered.length > 0 && (
-          <div
-            id="poolse-mention-menu"
-            className="poolse-mention-menu"
-            role="listbox"
-            aria-label="Members"
-          >
+          <div id={menuId} className="poolse-mention-menu" role="listbox" aria-label="Members">
             {filtered.map((m, i) => (
               <div
                 key={m.id}
-                id={`poolse-mention-opt-${i}`}
+                id={`${menuId}-opt-${i}`}
                 role="option"
                 aria-selected={i === activeIdx}
                 className={`poolse-mention-menu__item${i === activeIdx ? ' poolse-mention-menu__item--active' : ''}`}
+                onMouseEnter={() => setActiveIdx(i)}
                 onMouseDown={(e) => {
                   // Use mousedown so the textarea doesn't lose focus
                   // before the insert lands.
@@ -391,13 +424,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
                   insertMention(m);
                 }}
               >
-                {/* Display via the shared 3-tier chain so the customer's
-                  userResolver lights up names here. Filter still runs
-                  against the sync `labelFor` / userId slice (line 70)
-                  because we don't have a guarantee names are resolved
-                  in time to filter against. */}
-                <span>@</span>
-                <UserName externalId={m.external_id} {...(labelFor ? { labelFor } : {})} />
+                <MentionOption member={m} name={label(m.external_id)} />
               </div>
             ))}
           </div>
@@ -406,3 +433,43 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     );
   },
 );
+
+// One suggestion: avatar, display name, and the external id when it
+// differs from the name.
+function MentionOption({ member, name }: { member: Membership; name: string }) {
+  const { profile } = useUser(member.external_id);
+  return (
+    <>
+      <Avatar src={profile?.avatarUrl ?? null} name={name} size="xs" />
+      <span className="poolse-mention-menu__name">{name}</span>
+      {name !== member.external_id ? (
+        <span className="poolse-mention-menu__handle">{member.external_id}</span>
+      ) : null}
+    </>
+  );
+}
+
+function rankMembers(
+  members: Membership[],
+  query: string,
+  label: (externalId: string) => string,
+): Membership[] {
+  const scored: { m: Membership; score: number; name: string }[] = [];
+  for (const m of members) {
+    const name = label(m.external_id).toLowerCase();
+    const ext = m.external_id.toLowerCase();
+    const score =
+      query === ''
+        ? 1
+        : name.startsWith(query)
+          ? 3
+          : name.split(/\s+/).some((w) => w.startsWith(query))
+            ? 2
+            : name.includes(query) || ext.includes(query)
+              ? 1
+              : 0;
+    if (score > 0) scored.push({ m, score, name });
+  }
+  scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  return scored.map((s) => s.m);
+}

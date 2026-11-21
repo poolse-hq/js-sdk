@@ -57,6 +57,12 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ### Changed
 
+- `MentionInput` suggestions match a member's resolved display name
+  (`labelFor`, else the SDK's `userResolver`, resolved when the menu opens) or
+  their external id, best matches first, at most 8; each shows an avatar and
+  the external id. The viewer isn't offered. Hovering moves the selection. A
+  picked member whose `@name` is deleted before sending is no longer sent in
+  `mentions`. The listbox ids are unique per input (`useId`).
 - Deleted messages (tombstones) read "This message was deleted" (muted, italic)
   in every layout, with no actions, reactions, quote or attachments, and keep
   their thread link while the thread has replies. A quote of a deleted message
