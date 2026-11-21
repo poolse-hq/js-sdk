@@ -185,3 +185,47 @@ describe('user channel events', () => {
     c.destroy();
   });
 });
+
+describe('transcript channel', () => {
+  const build = () =>
+    new Poolse({
+      apiUrl: 'https://chat.example',
+      getToken: () => 'tok',
+      fetch: vi.fn() as unknown as typeof globalThis.fetch,
+    });
+  const channelOf = (handle: unknown) =>
+    (handle as { channel: { trigger(e: string, p: unknown): void } }).channel;
+
+  it('shares one handle per call and leaves after the last release', () => {
+    const c = build();
+    const a = c.realtime.transcript('call-1');
+    const b = c.realtime.transcript('call-1');
+    expect(b).toBe(a);
+    a.release();
+    expect(a.closed).toBe(false);
+    b.release();
+    expect(a.closed).toBe(true);
+    expect(c.realtime.transcript('call-1')).not.toBe(a);
+    c.destroy();
+  });
+
+  it('streams segments; recording events reach the conversation', () => {
+    const c = build();
+    const t = c.realtime.transcript('call-1');
+    const segs = vi.fn();
+    t.onSegment(segs);
+    channelOf(t).trigger('transcript:segment', { call_id: 'call-1', text: 'Hi', final: false });
+    expect(segs).toHaveBeenCalledWith({ call_id: 'call-1', text: 'Hi', final: false });
+
+    const conv = c.realtime.conversation('c-1');
+    const started = vi.fn();
+    const consent = vi.fn();
+    conv.onRecordingStarted(started);
+    conv.onRecordingConsent(consent);
+    channelOf(conv).trigger('recording:started', { call_id: 'call-1', notice: 'banner' });
+    channelOf(conv).trigger('recording:consent', { call_id: 'call-1', decision: 'declined' });
+    expect(started).toHaveBeenCalledWith({ call_id: 'call-1', notice: 'banner' });
+    expect(consent).toHaveBeenCalledOnce();
+    c.destroy();
+  });
+});
