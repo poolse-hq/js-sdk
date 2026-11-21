@@ -4,6 +4,14 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- `useMessages().loadMore()` no longer inserts a page twice when it overlaps
+  another `loadMore()` or `loadUntil()` (e.g. scrolling up while jumping to
+  the first unread).
+
 ## [3.5.0] - 2026-11-21
 
 ### Added
