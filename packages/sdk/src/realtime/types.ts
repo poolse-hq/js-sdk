@@ -163,6 +163,19 @@ export interface ConversationReadEvent {
   last_read_sequence: number | null;
   unread_count: number;
   mention_unread_count: number;
+  /** The account's totals after this read (newer servers). */
+  totals?: UnreadTotalsEvent;
+}
+
+/**
+ * `unread:totals` on `user:<id>` — the account's unread totals, pushed
+ * once after a join that opted in (`unread_totals: true`) and whenever
+ * they change (at most once a second). Same shape as `GET /v1/me/unread`.
+ */
+export interface UnreadTotalsEvent {
+  unread_total: number;
+  mention_total: number;
+  conversations_with_unread: number;
 }
 
 /**

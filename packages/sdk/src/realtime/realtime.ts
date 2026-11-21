@@ -40,6 +40,7 @@ import type {
   RingEndedEvent,
   ThreadUpdatedEvent,
   TypingEvent,
+  UnreadTotalsEvent,
   Unsubscribe,
 } from './types.js';
 
@@ -643,6 +644,20 @@ export class UserChannel {
    */
   onConversationRead(fn: (evt: ConversationReadEvent) => void): Unsubscribe {
     return this.subscribe('conversation:read', fn as (p: unknown) => void);
+  }
+
+  /**
+   * The account's unread totals changed (`unread:totals`). Pushed only
+   * to a socket that joined with `unread_totals: true` — `poolse.unread`
+   * opts in while it has subscribers.
+   */
+  onUnreadTotals(fn: (evt: UnreadTotalsEvent) => void): Unsubscribe {
+    return this.subscribe('unread:totals', fn as (p: unknown) => void);
+  }
+
+  /** Ask for the unread totals now (`unread:totals`; 60/min per socket). */
+  requestUnreadTotals(): Promise<UnreadTotalsEvent> {
+    return this.request('unread:totals', {});
   }
 
   /**

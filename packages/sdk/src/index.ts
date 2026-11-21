@@ -91,6 +91,7 @@ export type {
   AppEvent,
   ConversationCreatedEvent,
   ConversationReadEvent,
+  UnreadTotalsEvent,
   ConversationUpdatedEvent,
   MemberReadEvent,
   MentionEvent,

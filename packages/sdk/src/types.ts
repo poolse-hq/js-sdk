@@ -596,6 +596,9 @@ export type ApiErrorCode =
   | 'device_signed_out'
   | 'user_blocked'
   | 'mau_cap_exceeded'
+  // A send's client `id` is already taken by another message (sender,
+  // conversation or tenant): permanent, never retried.
+  | 'message_id_conflict'
   | 'unknown_error'
   // Keeps autocomplete for the codes above while accepting any string.
   | (string & {});

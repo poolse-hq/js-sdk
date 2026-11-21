@@ -167,6 +167,11 @@ export class UnreadResource {
     if (changed || this.serverSupported === false) this.recomputeLocal();
   }
 
+  /** Whether the user channel should opt in to `unread:totals`. @internal */
+  _wantsLive(): boolean {
+    return this.listeners.size > 0 && !this.destroyed;
+  }
+
   /** Refresh if anything is subscribed. @internal */
   _poke(): void {
     if (this.listeners.size > 0) void this.refresh();
@@ -277,9 +282,20 @@ export class UnreadResource {
 
   private bindUser(meId: Uuid): () => void {
     const user = this.realtime.user(meId);
-    const offRead = user.onConversationRead((evt) =>
-      this.apply(evt.conversation_id, evt.unread_count, evt.mention_unread_count ?? 0),
-    );
+    // Newer servers push the totals themselves (`unread:totals`, and
+    // `totals` on `conversation:read`): those win over local folding.
+    const offTotals = user.onUnreadTotals((t) => this.applyServer(t));
+    const offRead = user.onConversationRead((evt) => {
+      this.apply(evt.conversation_id, evt.unread_count, evt.mention_unread_count ?? 0);
+      if (evt.totals) this.applyServer(evt.totals);
+    });
+    // Joined before we subscribed (so without the opt-in): ask once.
+    if (user.isJoined()) {
+      void user.requestUnreadTotals().then(
+        (t) => this.applyServer(t),
+        () => undefined,
+      );
+    }
     const offUpdated = user.onConversationUpdated(({ conversation, by_user_id }) => {
       if (typeof conversation.unread_count === 'number') {
         this.apply(
@@ -296,9 +312,25 @@ export class UnreadResource {
       else if (this.serverSupported) this.scheduleRefetch();
     });
     return () => {
+      offTotals();
       offRead();
       offUpdated();
     };
+  }
+
+  private applyServer(s: UnreadSummary | null | undefined): void {
+    if (!s || this.destroyed || typeof s.unread_total !== 'number') return;
+    this.serverSupported = true;
+    if (this.refetchTimer) clearTimeout(this.refetchTimer);
+    this.refetchTimer = null;
+    this.set({
+      unread: num(s.unread_total),
+      mentions: num(s.mention_total),
+      conversations: num(s.conversations_with_unread),
+      source: 'server',
+      loading: false,
+      error: null,
+    });
   }
 
   private set(totals: UnreadTotals): void {

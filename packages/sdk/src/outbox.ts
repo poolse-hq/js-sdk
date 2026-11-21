@@ -380,7 +380,8 @@ export function isRetryable(err: unknown): boolean {
 }
 
 function describe(err: unknown): string {
-  if (err instanceof ApiError) return err.message.replace(/^\[\d+\]\s*/, '');
+  // `[422] code: message` → `message`.
+  if (err instanceof ApiError) return err.message.replace(/^\[\d+\]\s*[^:]*:\s*/, '');
   if (err instanceof Error) return err.message;
   return String(err);
 }

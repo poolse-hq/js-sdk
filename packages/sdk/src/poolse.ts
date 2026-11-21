@@ -181,7 +181,10 @@ export class Poolse {
       ...(this.resolved.wsUrl !== undefined ? { wsUrl: this.resolved.wsUrl } : {}),
       socketPath: this.resolved.socketPath,
       onUserChannel: (channel) => this.bindUserChannel(channel),
-      userJoinParams: () => this.presence._joinParams(),
+      userJoinParams: () => ({
+        ...this.presence._joinParams(),
+        ...(this.unread._wantsLive() ? { unread_totals: true } : {}),
+      }),
       onOpen: () => this.onSocketOpen(),
     });
     this.presence = new PresenceResource(this.rest, this.realtime, this.me);

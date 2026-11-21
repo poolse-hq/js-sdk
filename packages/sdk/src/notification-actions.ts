@@ -68,6 +68,12 @@ export interface MessagePushData {
   actions: string;
   /** `"1"`: show a plain "New message" with nothing identifying. */
   private?: '1';
+  /** The tenant (workspace) the push is from — route a tap to that workspace's client. */
+  tenant_id?: Uuid;
+  /** The workspace's name for the notification ("Acme"); `""` until set. */
+  workspace_name?: string;
+  /** The workspace's icon URL; `""` until set. */
+  workspace_icon_url?: string;
 }
 
 /**
@@ -81,6 +87,12 @@ export interface MessageReadPushData {
   event: 'read';
   conversation_id: Uuid;
   unread_total: number | string;
+  /** The tenant (workspace) the push is from — route a tap to that workspace's client. */
+  tenant_id?: Uuid;
+  /** The workspace's name for the notification ("Acme"); `""` until set. */
+  workspace_name?: string;
+  /** The workspace's icon URL; `""` until set. */
+  workspace_icon_url?: string;
 }
 
 /** The actions a push's `actions` field lists (unknown names dropped). */

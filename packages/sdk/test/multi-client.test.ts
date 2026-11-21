@@ -258,6 +258,35 @@ describe('unread totals', () => {
     await c.destroy();
   });
 
+  it('takes pushed unread:totals and conversation:read totals as they come', async () => {
+    const fetchFn = routedFetch((_m, path) =>
+      path === '/v1/me/unread'
+        ? json({ unread_total: 1, mention_total: 0, conversations_with_unread: 1 })
+        : json({ id: 'u-1' }),
+    );
+    const c = client({}, fetchFn);
+    c.unread.subscribe(() => {});
+    await vi.waitFor(() => expect(c.realtime.peekUser()).not.toBeNull());
+    await vi.waitFor(() => expect(c.unread.get().loading).toBe(false));
+    const user = c.realtime.peekUser();
+    trigger(user, 'unread:totals', {
+      unread_total: 9,
+      mention_total: 3,
+      conversations_with_unread: 4,
+    });
+    expect(c.unread.get()).toMatchObject({ unread: 9, mentions: 3, conversations: 4 });
+    trigger(user, 'conversation:read', {
+      conversation_id: 'c-x',
+      last_read_message_id: 'm',
+      last_read_sequence: 1,
+      unread_count: 0,
+      mention_unread_count: 0,
+      totals: { unread_total: 5, mention_total: 1, conversations_with_unread: 3 },
+    });
+    expect(c.unread.get()).toMatchObject({ unread: 5, mentions: 1, conversations: 3 });
+    await c.destroy();
+  });
+
   it('sums the loaded conversations on a server without the endpoint', async () => {
     const fetchFn = routedFetch((_m, path) =>
       path === '/v1/me/unread' ? apiError(404, 'not_found') : json({ id: 'u-1' }),
@@ -332,6 +361,20 @@ describe('outbox', () => {
     await c.outbox.send('c-1', request('m-2'), msg('m-2')).catch(() => {});
     c.outbox.remove('m-2');
     expect(c.outbox.entries()).toEqual([]);
+    await c.destroy();
+  });
+
+  it('a 409 message_id_conflict is a permanent failure', async () => {
+    const fetchFn = routedFetch(() => apiError(409, 'message_id_conflict'));
+    const c = client({}, fetchFn);
+    await c.outbox.send('c-1', request('m-1'), msg('m-1')).catch(() => {});
+    expect(c.outbox.entries()[0]).toMatchObject({
+      status: 'failed',
+      errorCode: 'message_id_conflict',
+      error: 'message id conflict',
+    });
+    await c.outbox.flush();
+    expect(fetchFn.calls.filter((r) => r.method === 'POST')).toHaveLength(1);
     await c.destroy();
   });
 
