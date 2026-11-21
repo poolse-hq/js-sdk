@@ -120,6 +120,9 @@ public class PoolseCallsModule: Module {
     Function("takeNotificationActions") { () -> [[String: Any]] in
       MessageNotifications.takePending()
     }
+    Function("observeNotificationActions") { (on: Bool) in
+      DispatchQueue.main.async { MessageNotifications.actionsObserved = on }
+    }
 
     // Android-only: CallKit owns the lock screen on iOS.
     Function("setShowOnLockscreen") { (_: Bool) in }

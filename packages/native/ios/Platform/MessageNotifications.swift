@@ -36,6 +36,9 @@ final class MessageNotifications: NSObject, NotificationDelegate {
 
   /// The bridge's subscriber for finished notification actions; main thread.
   static var actionListener: (([String: Any]) -> Void)?
+  /// True while JS has an `onNotificationAction` subscriber; until then
+  /// results queue, even with the bridge observing other events. Main thread.
+  static var actionsObserved = false
 
   private static let defaults = UserDefaults(suiteName: "dev.poolse.callcore") ?? .standard
   private static let pendingKey = "notificationActions"
@@ -238,7 +241,7 @@ final class MessageNotifications: NSObject, NotificationDelegate {
     var event = event
     event["at"] = Int(Date().timeIntervalSince1970 * 1000)
     DispatchQueue.main.async {
-      if let listener = Self.actionListener {
+      if Self.actionsObserved, let listener = Self.actionListener {
         listener(event)
         return
       }

@@ -181,6 +181,7 @@ class PoolseCallsModule : Module() {
     Function("takeNotificationActions") {
       context?.let(MessageNotifications::takePendingActions) ?: emptyList()
     }
+    Function("observeNotificationActions") { on: Boolean -> MessageNotifications.actionsObserved = on }
 
     // While a call rings or runs the app may sit over the lock screen.
     Function("setShowOnLockscreen") { enabled: Boolean ->

@@ -60,6 +60,12 @@ object MessageNotifications {
   /** The bridge's subscriber for finished Reply / Mark as read actions. */
   @Volatile var actionListener: ((Map<String, Any?>) -> Unit)? = null
 
+  /**
+   * True while JS has an `onNotificationAction` subscriber; until then
+   * results queue, even with the bridge observing other events.
+   */
+  @Volatile var actionsObserved = false
+
   /** A `type: "message", event: "new"` push. */
   fun onNew(context: Context, data: Map<String, String>, smallIcon: Int) {
     val conversationId = data["conversation_id"] ?: return
@@ -167,7 +173,7 @@ object MessageNotifications {
   /** A finished action, to JS: live when the bridge listens, else queued on disk. */
   internal fun report(context: Context, event: Map<String, Any?>) {
     val full = event + ("at" to System.currentTimeMillis())
-    val listener = actionListener
+    val listener = actionListener.takeIf { actionsObserved }
     if (listener != null && runCatching { listener(full) }.isSuccess) return
     val p = context.applicationContext.getSharedPreferences(ACTIONS_PREFS, Context.MODE_PRIVATE)
     synchronized(this) {
