@@ -61,6 +61,13 @@ final class CallCore {
     config?.apnsEnvironment ?? defaults.string(forKey: "apnsEnvironment") ?? readConfigFile()?.apnsEnvironment
   }
 
+  /// The configured API origin, restored from disk when the app was
+  /// launched without JS (a notification action, a push). Any thread.
+  static func persistedApiBaseUrl() -> String? {
+    restoreConfig()
+    return config?.apiBaseUrl
+  }
+
   private static func restoreConfig() {
     guard config == nil else { return }
     let restored: CallCoreConfig
