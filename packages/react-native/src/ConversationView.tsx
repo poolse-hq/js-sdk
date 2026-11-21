@@ -4,6 +4,7 @@ import {
   computeGroupPosition,
   formatDayLabel,
   isMessageVisibleTo,
+  isTombstone,
   receiptsOf,
   sameDay,
   useMe,
@@ -12,6 +13,8 @@ import {
   useMessages,
   useRealtimeStatus,
   useLiveCall,
+  useConversations,
+  usePoolse,
   useTyping,
   type GroupPosition,
   type MessageStream,
@@ -35,9 +38,18 @@ import { MentionInput } from './MentionInput.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageList, type MessageListItem } from './MessageList.js';
 import { MessageRow, type MessageUser } from './MessageRow.js';
+import { NewMessagesDivider } from './NewMessagesDivider.js';
+import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
 import { latestMarkableId } from './internal/messageFocus.js';
+import { sharedDraftStore, type ConversationDraft, type DraftStorage } from './internal/drafts.js';
+import { isQuoteGone, sendErrorNotice } from './internal/errors.js';
+import {
+  firstUnreadSequence,
+  needsOlderForUnread,
+  newMessagesDividerId,
+} from './internal/unread.js';
 import {
   mentionsViewer,
   type ChatDensity,
@@ -200,6 +212,48 @@ export interface ConversationViewProps {
    * (the viewer is in the room, or ringing out as its caller).
    */
   currentCallId?: string | null;
+
+  /** Presence badges on message avatars (where avatars show). Defaults to `false`. */
+  showPresence?: boolean;
+  /**
+   * Link previews (`message.link_previews`) as cards under the text,
+   * with "Remove preview" in the sender's long-press sheet. Defaults to `true`.
+   */
+  linkPreviews?: boolean;
+  /**
+   * A "New messages" line above the first message that was unread when
+   * the conversation opened, and a pill that jumps to it (loading older
+   * pages as needed) while it's off screen. Defaults to `true`.
+   */
+  newMessagesDivider?: boolean;
+  /**
+   * Unsent text and the quote target are kept per conversation in
+   * memory, across conversation switches, always. With a `draftStorage`
+   * they are also written there, so they survive a restart; set
+   * `persistDrafts={false}` to keep them in memory only. Defaults to
+   * `true` when `draftStorage` is given.
+   */
+  persistDrafts?: boolean;
+  /**
+   * Where drafts persist — `{ get, set, remove }` over string values
+   * (MMKV, AsyncStorage, …); each may return a promise. Keys are
+   * `poolse:draft:<conversationId>`.
+   */
+  draftStorage?: DraftStorage;
+  /** An emoji button in the composer. Defaults to `true`. */
+  emojiPicker?: boolean;
+  /** Largest attachment accepted, in bytes; larger picks show an error. */
+  maxFileSize?: number;
+  /** Accepted attachment types: MIME types, wildcards (`'image/*'`) or extensions (`'.pdf'`). */
+  acceptedFileTypes?: string[];
+  /**
+   * Long-press → "Mark unread" on other people's messages. Defaults to
+   * `true`. The view then stops marking messages read until you send
+   * one or reopen the conversation.
+   */
+  markUnread?: boolean;
+  /** Fires after "Mark unread" succeeded (the unread counts follow over realtime). */
+  onMarkedUnread?: (conversationId: string, messageId: string) => void;
 }
 
 export function ConversationView({
@@ -241,8 +295,20 @@ export function ConversationView({
   groupWindowMinutes = GROUP_WINDOW_MINUTES,
   daySeparators = true,
   slots,
+  showPresence = false,
+  linkPreviews = true,
+  newMessagesDivider = true,
+  persistDrafts,
+  draftStorage,
+  emojiPicker = true,
+  maxFileSize,
+  acceptedFileTypes,
+  markUnread = true,
+  onMarkedUnread,
 }: ConversationViewProps) {
   const theme = useTheme();
+  const chat = usePoolse();
+  const storage = (persistDrafts ?? !!draftStorage) ? draftStorage : undefined;
   const showComposer = composer && !readOnly;
   // Without a composer there's nowhere to quote into or attach to.
   const canQuote = quotations && showComposer;
@@ -327,7 +393,80 @@ export function ConversationView({
     [layout, density, timeFormat, slots],
   );
 
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  // Drafts: the composer text and quote target, per conversation.
+  // `draftFor` says which conversation the state belongs to, so a
+  // switch never saves one conversation's text under another's id.
+  const [draftFor, setDraftFor] = useState(conversationId);
+  const [draftText, setDraftText] = useState(
+    () => sharedDraftStore.peek(conversationId)?.text ?? '',
+  );
+  const [replyingTo, setReplyingTo] = useState<Message | null>(
+    () => sharedDraftStore.peek(conversationId)?.quote ?? null,
+  );
+  const touchedRef = useRef(false);
+  // Until the stored draft has been read, nothing is written back —
+  // the empty initial state would otherwise remove it.
+  const [storedDraftRead, setStoredDraftRead] = useState(false);
+  useEffect(() => {
+    let live = true;
+    touchedRef.current = false;
+    const inMemory = sharedDraftStore.peek(conversationId);
+    setDraftFor(conversationId);
+    setDraftText(inMemory?.text ?? '');
+    setReplyingTo(inMemory?.quote ?? null);
+    if (!inMemory && storage) {
+      setStoredDraftRead(false);
+      void sharedDraftStore.load(conversationId, storage).then((d) => {
+        if (!live) return;
+        setStoredDraftRead(true);
+        // Typed something already? Theirs wins over the stored draft.
+        if (!d || touchedRef.current) return;
+        setDraftText(d.text);
+        setReplyingTo(d.quote);
+      });
+    } else {
+      setStoredDraftRead(true);
+    }
+    return () => {
+      live = false;
+    };
+    // `storage` is read once per conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
+  const pendingDraftRef = useRef<{ id: string; draft: ConversationDraft } | null>(null);
+  useEffect(() => {
+    if (draftFor !== conversationId) return;
+    const draft = { text: draftText, quote: replyingTo };
+    sharedDraftStore.save(conversationId, draft);
+    if (!storage || !storedDraftRead) return;
+    // Storage writes are debounced; the memory copy is immediate.
+    pendingDraftRef.current = { id: conversationId, draft };
+    const t = setTimeout(() => {
+      pendingDraftRef.current = null;
+      sharedDraftStore.save(conversationId, draft, storage);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [draftFor, conversationId, draftText, replyingTo, storage, storedDraftRead]);
+  // Flush a pending storage write when the view goes away.
+  const storageRef = useRef(storage);
+  storageRef.current = storage;
+  useEffect(
+    () => () => {
+      const pending = pendingDraftRef.current;
+      if (pending) sharedDraftStore.save(pending.id, pending.draft, storageRef.current);
+    },
+    [],
+  );
+
+  // One line of feedback above the list: a send that failed, a jump
+  // target that's gone, a refused attachment.
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [threadRoot, setThreadRoot] = useState<Message | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -351,7 +490,13 @@ export function ConversationView({
   // (no server sequence yet) to avoid 404s when send-then-mark races
   // the round-trip. A failure is retried on the next message.
   const lastMarkedRef = useRef<string | null>(null);
+  // "Mark unread" pauses this until the viewer sends or reopens.
+  const [autoReadPaused, setAutoReadPaused] = useState(false);
   useEffect(() => {
+    setAutoReadPaused(false);
+  }, [conversationId]);
+  useEffect(() => {
+    if (autoReadPaused) return;
     const latestId = latestMarkableId(messages);
     if (!latestId || latestId === lastMarkedRef.current) return;
     lastMarkedRef.current = latestId;
@@ -361,7 +506,7 @@ export function ConversationView({
         if (lastMarkedRef.current === latestId) lastMarkedRef.current = null;
       },
     );
-  }, [messages, markReadUpTo, onMarkedRead, conversationId]);
+  }, [messages, markReadUpTo, onMarkedRead, conversationId, autoReadPaused]);
 
   // Precompute per-message group position (drives the bubble's
   // corner treatment + inter-cluster spacing). Same logic as
@@ -381,11 +526,10 @@ export function ConversationView({
   const [jump, setJump] = useState<{ id: Uuid; request: number } | null>(null);
   const [pendingFocusId, setPendingFocusId] = useState<Uuid | null>(null);
   const [highlightId, setHighlightId] = useState<Uuid | null>(null);
-  const [focusMissing, setFocusMissing] = useState(false);
   const onFocusNotFoundRef = useRef(onFocusMessageNotFound);
   onFocusNotFoundRef.current = onFocusMessageNotFound;
   const focusMiss = useCallback((id: Uuid, report: boolean) => {
-    setFocusMissing(true);
+    setNotice("That message isn't available.");
     if (report) onFocusNotFoundRef.current?.(id);
   }, []);
   const jumpTo = useCallback(
@@ -408,7 +552,6 @@ export function ConversationView({
   );
   useEffect(() => {
     setPendingFocusId(null);
-    setFocusMissing(false);
     if (!focusMessageId || loading) return;
     return jumpTo(focusMessageId, true);
     // `loading` flips only while a conversation's first page loads.
@@ -429,11 +572,70 @@ export function ConversationView({
     const t = setTimeout(() => setHighlightId(null), 1600);
     return () => clearTimeout(t);
   }, [highlightId]);
+
+  // The "New messages" line: where unread started when the
+  // conversation opened, from the shared conversation list's counts
+  // (snapshotted once, before this view marks anything read).
+  const { conversations: conversationRows } = useConversations();
+  const [unreadFromSeq, setUnreadFromSeq] = useState<number | null>(null);
+  const unreadSnapshotRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusMissing) return;
-    const t = setTimeout(() => setFocusMissing(false), 4000);
-    return () => clearTimeout(t);
-  }, [focusMissing]);
+    if (unreadSnapshotRef.current === conversationId) return;
+    const row = conversationRows.find((c) => c.id === conversationId);
+    if (!row) {
+      setUnreadFromSeq(null);
+      return;
+    }
+    unreadSnapshotRef.current = conversationId;
+    setUnreadFromSeq(firstUnreadSequence(row));
+  }, [conversationRows, conversationId]);
+  const dividerId = newMessagesDivider
+    ? newMessagesDividerId(visibleMessages, unreadFromSeq, meId)
+    : null;
+  // Pill: shown until the line has been on screen once.
+  const [dividerSeen, setDividerSeen] = useState(false);
+  useEffect(() => setDividerSeen(false), [unreadFromSeq, conversationId]);
+  const onVisibleItemsChange = useCallback((keys: string[]) => {
+    if (keys.includes(NEW_MESSAGES_KEY)) setDividerSeen(true);
+  }, []);
+  const unreadPending =
+    newMessagesDivider &&
+    unreadFromSeq !== null &&
+    !dividerSeen &&
+    (dividerId !== null || (hasMore && needsOlderForUnread(visibleMessages, unreadFromSeq)));
+  const [seekingUnread, setSeekingUnread] = useState(false);
+  const [seekTick, setSeekTick] = useState(0);
+  const seekBusyRef = useRef(false);
+  const seekPagesRef = useRef(0);
+  useEffect(() => {
+    if (!seekingUnread || seekBusyRef.current) return;
+    if (dividerId) {
+      setSeekingUnread(false);
+      setJump((prev) => ({ id: dividerId, request: (prev?.request ?? 0) + 1 }));
+      return;
+    }
+    if (
+      !hasMore ||
+      seekPagesRef.current >= 20 ||
+      !needsOlderForUnread(visibleMessages, unreadFromSeq)
+    ) {
+      setSeekingUnread(false);
+      return;
+    }
+    seekBusyRef.current = true;
+    seekPagesRef.current += 1;
+    loadMore()
+      .catch(() => setSeekingUnread(false))
+      .finally(() => {
+        seekBusyRef.current = false;
+        // Re-run even if the page changed nothing visible.
+        setSeekTick((n) => n + 1);
+      });
+  }, [seekingUnread, dividerId, hasMore, visibleMessages, unreadFromSeq, loadMore, seekTick]);
+  const jumpToUnread = useCallback(() => {
+    seekPagesRef.current = 0;
+    setSeekingUnread(true);
+  }, []);
   const onQuotedClick = useCallback((id: Uuid) => void jumpTo(id, false), [jumpTo]);
 
   const groupPositionById = useMemo(() => {
@@ -447,6 +649,38 @@ export function ConversationView({
     }
     return map;
   }, [visibleMessages, groupWindowMinutes]);
+
+  const onMarkedUnreadRef = useRef(onMarkedUnread);
+  onMarkedUnreadRef.current = onMarkedUnread;
+  const markMessageUnread = useCallback(
+    (msg: Message) => {
+      setAutoReadPaused(true);
+      chat.conversations
+        .one(conversationId)
+        .markUnread(msg.id)
+        .then(
+          () => {
+            // The line moves to the message marked unread.
+            setUnreadFromSeq(msg.sequence);
+            onMarkedUnreadRef.current?.(conversationId, msg.id);
+          },
+          () => {
+            setAutoReadPaused(false);
+            setNotice("Couldn't mark it unread. Try again.");
+          },
+        );
+    },
+    [chat, conversationId],
+  );
+  const removeLinkPreview = useCallback(
+    (messageId: Uuid, url: string) => {
+      // The updated message comes back over realtime (message:updated).
+      chat.messages
+        .update(messageId, { remove_link_previews: [url] })
+        .catch(() => setNotice("Couldn't remove the preview. Try again."));
+    },
+    [chat],
+  );
 
   const defaultRow = useCallback(
     (msg: Message, groupPosition: GroupPosition): ReactElement => {
@@ -470,10 +704,24 @@ export function ConversationView({
         readState,
         insertedAt: msg.inserted_at,
       });
+      const tombstone = isTombstone(msg);
+      const markable =
+        markUnread &&
+        !isSelf &&
+        !tombstone &&
+        typeof msg.sequence === 'number' &&
+        msg.sequence > 0 &&
+        msg.sequence !== Number.MAX_SAFE_INTEGER;
       const row = (
         <MessageRow
           msg={msg}
           meId={meId}
+          showPresence={showPresence}
+          linkPreviews={linkPreviews}
+          {...(markable ? { onMarkUnread: () => markMessageUnread(msg) } : {})}
+          {...(linkPreviews && isSelf && !tombstone && (msg.link_previews?.length ?? 0) > 0
+            ? { onRemoveLinkPreview: (url: string) => removeLinkPreview(msg.id, url) }
+            : {})}
           reactions={reactions}
           attachments={attachments}
           actions={actions}
@@ -484,7 +732,7 @@ export function ConversationView({
           {...(canEdit ? { onStartEdit: () => setEditingId(msg.id) } : {})}
           onDelete={() => deleteMsg(msg.id)}
           {...(threads ? { onOpenThread: () => setThreadRoot(msg) } : {})}
-          {...(canQuote ? { onQuote: () => setReplyingTo(msg) } : {})}
+          {...(canQuote && !tombstone ? { onQuote: () => setReplyingTo(msg) } : {})}
           onQuotedClick={onQuotedClick}
           {...(labelFor ? { labelFor } : {})}
           {...(avatarFor ? { avatarFor } : {})}
@@ -529,6 +777,11 @@ export function ConversationView({
       sequenceByMessageId,
       markdown,
       layoutProps,
+      showPresence,
+      linkPreviews,
+      markUnread,
+      markMessageUnread,
+      removeLinkPreview,
     ],
   );
 
@@ -571,11 +824,14 @@ export function ConversationView({
           node: <DaySeparator label={label} variant={layout === 'bubbles' ? 'pill' : 'rule'} />,
         });
       }
+      if (msg.id === dividerId) {
+        out.push({ kind: 'separator', id: NEW_MESSAGES_KEY, node: <NewMessagesDivider /> });
+      }
       out.push({ kind: 'msg', msg });
       prev = msg;
     }
     return out;
-  }, [visibleMessages, daySeparators, layout]);
+  }, [visibleMessages, daySeparators, layout, dividerId]);
 
   const composerProps = useMemo(
     () => ({
@@ -583,10 +839,25 @@ export function ConversationView({
         body: string,
         opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[]; mentions?: Uuid[] },
       ) => {
-        await send({ body, ...opts });
+        try {
+          await send({ body, ...opts });
+        } catch (err) {
+          // Back into the composer (unless they've typed on), and why.
+          setDraftText((now) => (now ? now : body));
+          if (isQuoteGone(err)) setReplyingTo(null);
+          setNotice(sendErrorNotice(err));
+          throw err;
+        }
         setReplyingTo(null);
+        setAutoReadPaused(false);
         onSent?.(conversationId);
       },
+      value: draftText,
+      onChangeText: (text: string) => {
+        touchedRef.current = true;
+        setDraftText(text);
+      },
+      emojiPicker,
       onTyping: signalTyping,
       ...(attachments ? { onAttachPress: () => setPickerOpen(true) } : {}),
       ...(replyingTo ? { replyingTo } : {}),
@@ -614,6 +885,8 @@ export function ConversationView({
       editingMessage,
       editingId,
       edit,
+      draftText,
+      emojiPicker,
     ],
   );
 
@@ -649,7 +922,7 @@ export function ConversationView({
         keyboardVerticalOffset={keyboardOffset}
       >
         {headerNode}
-        {focusMissing ? (
+        {notice ? (
           <Text
             style={[
               styles.notice,
@@ -657,7 +930,7 @@ export function ConversationView({
             ]}
             accessibilityRole="alert"
           >
-            That message isn't available.
+            {notice}
           </Text>
         ) : null}
         {onJoinCall ? (
@@ -679,6 +952,7 @@ export function ConversationView({
             renderItem={renderItem}
             scrollToMessageId={jump?.id ?? null}
             scrollRequest={jump?.request ?? 0}
+            onVisibleItemsChange={onVisibleItemsChange}
             ListHeader={
               <View>
                 {visibleStreams.map((stream) =>
@@ -716,6 +990,36 @@ export function ConversationView({
             }
             {...(emptyState !== undefined ? { emptyState } : {})}
           />
+          {unreadPending ? (
+            <Pressable
+              onPress={jumpToUnread}
+              style={[
+                styles.unreadPill,
+                { backgroundColor: theme.colors.accent, borderRadius: theme.radii.pill },
+                theme.shadows.sm,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Jump to first unread message"
+            >
+              <PoolseIcon
+                name="chevron-up"
+                size={14}
+                color={theme.colors.accentText}
+                label={null}
+              />
+              <Text style={[styles.unreadPillText, { color: theme.colors.accentText }]}>
+                {seekingUnread ? 'Loading…' : 'New messages'}
+              </Text>
+              <Pressable
+                onPress={() => setDividerSeen(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss"
+              >
+                <PoolseIcon name="close" size={12} color={theme.colors.accentText} label={null} />
+              </Pressable>
+            </Pressable>
+          ) : null}
           {/* WhatsApp-style dim while editing: the overlay covers
               the scroll surface but the row being edited renders
               above it (MessageRow elevates itself when isEditing).
@@ -736,7 +1040,13 @@ export function ConversationView({
         )}
 
         {canAttach ? (
-          <AttachmentPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} />
+          <AttachmentPicker
+            visible={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            onError={setNotice}
+            {...(maxFileSize !== undefined ? { maxFileSize } : {})}
+            {...(acceptedFileTypes ? { acceptedTypes: acceptedFileTypes } : {})}
+          />
         ) : null}
 
         {threads && threadRoot ? (
@@ -748,6 +1058,8 @@ export function ConversationView({
             {...(labelFor ? { labelFor } : {})}
             layout={layout}
             {...(timeFormat ? { timeFormat } : {})}
+            showPresence={showPresence}
+            linkPreviews={linkPreviews}
           />
         ) : null}
       </KeyboardAvoidingView>
@@ -794,9 +1106,26 @@ function readStateForMessage(
   return anyRead ? 'read' : 'sent';
 }
 
+const NEW_MESSAGES_KEY = 'new-messages';
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  unreadPill: {
+    position: 'absolute',
+    top: 10,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    zIndex: 4,
+  },
+  unreadPillText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   notice: {
     fontSize: 12,

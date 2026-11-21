@@ -57,6 +57,11 @@ export interface MessageListProps {
    */
   scrollToMessageId?: string | null;
   scrollRequest?: number;
+  /**
+   * The rows on screen changed: message ids and separator ids. Lets a
+   * parent tell whether a row (e.g. the "New messages" line) was seen.
+   */
+  onVisibleItemsChange?: (keys: string[]) => void;
 }
 
 // How far above the bottom (in pixels — the list is inverted, so
@@ -85,6 +90,7 @@ export function MessageList({
   meId = null,
   scrollToMessageId = null,
   scrollRequest = 0,
+  onVisibleItemsChange,
 }: MessageListProps) {
   const theme = useTheme();
   const flatListRef = useRef<FlatList<MessageListItem>>(null);
@@ -158,6 +164,15 @@ export function MessageList({
     [],
   );
 
+  // FlatList wants one stable callback for its whole life.
+  const visibleCbRef = useRef(onVisibleItemsChange);
+  visibleCbRef.current = onVisibleItemsChange;
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: Array<{ key: string }> }) => {
+      visibleCbRef.current?.(viewableItems.map((v) => v.key));
+    },
+  ).current;
+
   const scrollToBottom = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     setNewCount(0);
@@ -186,6 +201,9 @@ export function MessageList({
   if (messages.length === 0) {
     return (
       <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
+        {/* The typing indicator / streaming replies still show in an
+            empty conversation — someone may be writing the first message. */}
+        {ListHeader ? <View style={styles.emptyHeader}>{ListHeader}</View> : null}
         {typeof emptyState === 'string' ? (
           <Text style={{ color: theme.colors.textSubtle, fontFamily: theme.fonts.body }}>
             {emptyState}
@@ -209,6 +227,8 @@ export function MessageList({
         onEndReachedThreshold={0.3}
         onScrollToIndexFailed={onScrollToIndexFailed}
         onScroll={handleScroll}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={VIEWABILITY}
         scrollEventThrottle={32}
         // `inverted` flips the list, so FlatList's ListHeaderComponent
         // renders at the bottom of the screen (above the latest message,
@@ -249,6 +269,8 @@ export function MessageList({
   );
 }
 
+const VIEWABILITY = { itemVisiblePercentThreshold: 50 };
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -258,6 +280,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
+  },
+  emptyHeader: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 8,
   },
   jumpButton: {
     position: 'absolute',
