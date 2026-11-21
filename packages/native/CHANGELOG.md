@@ -2,7 +2,7 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
-## [Unreleased]
+## 3.5.0 — 2026-11-21
 
 - Reply and Mark as read from a chat notification now use
   `POST /v1/notification-actions/{reply,read}` (grant as bearer and `token`,
