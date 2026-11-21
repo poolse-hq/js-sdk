@@ -2,6 +2,34 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## [Unreleased]
+
+- Several workspaces (servers) at once:
+  `addServer({ id, apiBaseUrl, tenantId?, name? })`, `removeServer(id)`,
+  `listServers()`, `serverOfNotification(data)` and `DEFAULT_SERVER_ID`; `configure(apiBaseUrl, options)` is unchanged and
+  sets the `default` server, `configure(options)` sets the options alone.
+  Persisted, so a ring or a notification action with the app closed finds its
+  server; a single-server install migrates to `default` on upgrade.
+- Calls: a push's `tenant_id` picks its server; answer, decline, busy-decline,
+  hang-up and reconnect go to the server the call came from. `place` /
+  `startRoom` take `serverId`, `join` a 4th `serverId` argument;
+  `ringIntoCall` uses the call's own server. A ring from another workspace
+  during a call is call waiting (CallKit End & Accept, Android End & answer).
+  Snapshots and `waiting` carry `serverId` and `workspaceName`.
+- With two or more servers, CallKit, the Android ring screen and the
+  call-waiting heads-up read "Ana · Acme" (`workspace_name` from the push, else
+  the server's `name`). Custom ring Activities get `EXTRA_SERVER_ID` and
+  `EXTRA_WORKSPACE_NAME`.
+- Notifications: Reply / Mark as read are sent to the notification's server and
+  report `serverId`; Android taps carry `CallAction.serverId`. Android groups
+  chats per workspace (own group, summary, and a "Messages" channel in a
+  channel group named after it) and shows the workspace as subtext; iOS clears
+  per workspace (thread ids may be `<tenant_id>:<conversation_id>`) and a
+  failed-reply notice keeps the workspace. `setActiveConversation` takes an
+  optional `serverId`; `removeServer` takes the workspace's notifications down.
+- Fix (Android): Mark as read from a notification lost its grant when the
+  notification was cleared first, and failed with `no_grant`.
+
 ## 3.7.1 — 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.7.1.

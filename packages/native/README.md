@@ -106,6 +106,9 @@ The full API:
 - Chat notifications: `setActiveConversation`, `shouldPresentMessage`,
   `conversationOfNotification`, `onNotificationAction`,
   `onNotificationReply`, `takeNotificationActions` (see below).
+- Several workspaces: `addServer`, `removeServer`, `listServers`,
+  `serverOfNotification`, `DEFAULT_SERVER_ID`, `serverId` on `place` / `join`
+  / `startRoom` and in snapshots, taps and action results (see below).
 - Socket forwarding (optional): `onCallFinished`, `onRingEnded`. Feed them
   from `@poolse/sdk` 3.1's user channel:
 
@@ -233,7 +236,8 @@ into a Reply button with a text field and a Mark as read button, and sends
 them itself — from the lock screen, with the app closed, with no session
 and no JS — to `POST /v1/notification-actions/reply` and `/read` on the API
 origin you passed to `configure` (persisted, so call it once on every app
-start as usual).
+start as usual), or on the notification's own server with several (see
+[Signed in to several workspaces](#signed-in-to-several-workspaces)).
 
 - **iOS**: the core registers the `poolse_message` category (actions `reply`
   and `mark_read`) beside the app's own categories at launch, and handles the
@@ -284,6 +288,62 @@ the whole category set natively without it.
 expo-notifications also hands these responses to its own JS listeners: in
 `addNotificationResponseReceivedListener`, ignore an `actionIdentifier` of
 `reply` or `mark_read` (only the default tap should open the chat).
+
+## Signed in to several workspaces
+
+The core can serve several API servers at once — one per workspace the user
+is signed in to. `configure(apiBaseUrl)` is still all a single-server app
+needs: that server is `default` (`DEFAULT_SERVER_ID`), and everything below
+is optional. Add the others (or all of them, with `configure(options)` for
+the options alone):
+
+```ts
+await calls.configure({ ringback: 'ringback', apnsEnvironment: 'production' });
+await calls.addServer({
+  id: 'acme', // your id: 1–64 of A–Z a–z 0–9 . _ : -
+  apiBaseUrl: 'https://chat.acme.example',
+  tenantId: me.tenant_id, // the poolse tenant of this sign-in
+  name: 'Acme',
+});
+// …and register the device's push tokens with each server's client
+// (`devices.register`, VoIP + alert on iOS, FCM on Android).
+
+await calls.place(conversationId, { media: 'audio', sessionToken, serverId: 'acme' });
+await calls.join(callId, conversationId, sessionToken, 'acme');
+
+// Signed out of one workspace (unregister its tokens there first):
+await calls.removeServer('acme');
+```
+
+- **Routing.** A push's `tenant_id` picks its server — the one added with that
+  `tenantId` (pass it as soon as there are two servers). Rings are answered and
+  declined on their own server, with their own grant; place / join / rooms go
+  where `serverId` says, and hang-up, reconnect and `ringIntoCall` follow the
+  call. A push with no known tenant goes to the only server, else the only one
+  without a `tenantId`, else `default`.
+- **One call at a time.** A ring from another workspace during a call is call
+  waiting, exactly like one from the same workspace: CallKit's End & Accept /
+  Decline, Android's heads-up with End & answer / Decline. Each goes to the
+  server the ring came from.
+- **Names.** With two or more servers added, CallKit and the Android ring
+  screen, call-waiting heads-up and notifications show the workspace: "Ana ·
+  Acme" (the push's `workspace_name`, else the server's `name`).
+  `snapshot.serverId` / `snapshot.workspaceName` and the same on
+  `snapshot.waiting` tell the app which workspace a call is on. Custom
+  incoming-call Activities get `EXTRA_SERVER_ID` (`poolse_server_id`) and
+  `EXTRA_WORKSPACE_NAME` (`poolse_workspace_name`, set only with several
+  servers).
+- **Notifications.** Reply and Mark as read go to the notification's own
+  server; `NotificationActionResult.serverId` says which. Android: a missed call
+  or chat tap delivers `CallAction.serverId`; each server other than `default`
+  gets its own notification group, summary and "Messages" channel inside a
+  channel group named after the workspace (so it can be muted on its own); the
+  workspace is the notification's subtext while several are signed in. iOS: the
+  tap reaches your notification library — `serverOfNotification(data)` names
+  the workspace to open. Pass `setActiveConversation(conversationId, serverId)`.
+- **Upgrading** keeps everything: the server a single-server build configured
+  becomes `default`, and its notifications, channel and stored chats are left
+  as they are.
 
 ## Links
 
