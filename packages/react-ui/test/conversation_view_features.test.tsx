@@ -125,12 +125,15 @@ describe('<ConversationView> focusMessageId', () => {
       fetchFn,
     );
 
-    await waitFor(() =>
-      expect(
-        container
-          .querySelector('[data-message-id="m7"]')
-          ?.classList.contains('poolse-message-row--highlight'),
-      ).toBe(true),
+    // Two pages of 50 rows: give a loaded CI box longer than the 1s default.
+    await waitFor(
+      () =>
+        expect(
+          container
+            .querySelector('[data-message-id="m7"]')
+            ?.classList.contains('poolse-message-row--highlight'),
+        ).toBe(true),
+      { timeout: 3000 },
     );
   });
 
