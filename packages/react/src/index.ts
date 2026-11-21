@@ -192,33 +192,60 @@ export {
   type UseReadReceipts,
 } from './use-read-receipts.js';
 
-// ── Agents (AG1, AG4, AG5) ───────────────────────────────────────
+// ── Agents (AG1, AG3, AG4, AG5, AG10, AG11) ──────────────────────
 export { useApproval, useApprovals, type UseApproval, type UseApprovals } from './use-approvals.js';
+export {
+  useAgents,
+  useConversationAgents,
+  useFollowups,
+  useMemory,
+  type UseAgents,
+  type UseConversationAgents,
+  type UseFollowups,
+  type UseMemory,
+} from './use-agents.js';
 export {
   APPROVAL_REASON_MAX,
   agentFromWire,
+  agentMetaOf,
   approvalErrorMessage,
+  approvalIdOf,
   approvalStatusLabel,
   citationLabel,
   citationsOf,
-  formatApprovalPreview,
   messageAgent,
-  parseApproval,
+  toolLabel,
 } from '@poolse/sdk';
 export type {
   AgentApproval,
   AgentInfo,
+  AgentMessageKind,
+  AgentMeta,
+  AgentProfile,
+  AgentScope,
+  AgentScopeUpdate,
   ApprovalDetail,
   ApprovalStatus,
   Citation,
   CitationType,
+  ConversationAgent,
+  Followup,
+  FollowupStatus,
+  MemoryFact,
+  MemoryKind,
 } from '@poolse/sdk';
 
-// ── Meetings: summaries, asking, clips, playback (RT6–RT9, RT13) ─
+// ── Meetings: summaries, asking, clips, playback (RT6–RT9, RT12, RT13)
 export {
   useAskMeetings,
+  useCallSummary,
+  useClip,
+  useRecordingPlayback,
   useRecordingUrl,
   type UseAskMeetings,
+  type UseCallSummary,
+  type UseClip,
+  type UseRecordingPlayback,
   type UseRecordingUrl,
 } from './use-meetings.js';
 export {
@@ -227,28 +254,41 @@ export {
   activeSegmentIndex,
   chapterIndexAt,
   chaptersOf,
+  clipFromWire,
   clipOf,
   formatCallSummaryPreview,
   formatClock,
   formatDue,
   formatTimeRange,
   meetingsErrorMessage,
+  momentOf,
   parseCallSummary,
+  silencesFromSegments,
   silencesOf,
   skipSilenceTarget,
+  summaryFromWire,
+  summaryStatusText,
   summaryStyleLabel,
-  transcriptOffsetMs,
 } from '@poolse/sdk';
 export type {
   CallSummary,
+  Clip,
   ClipInfo,
+  ClipStatus,
+  FollowUpDraft,
   MeetingAnswer,
-  MeetingLink,
+  MeetingCallRef,
+  MeetingCitation,
+  MeetingMoment,
   PlaybackRate,
   RecordingChapter,
+  RecordingPlayback,
   SilenceRange,
   SummaryActionItem,
+  SummaryItem,
   SummaryMoment,
+  SummarySection,
+  SummaryStatus,
 } from '@poolse/sdk';
 
 // Experimental: the shared-document relay (`poolse.realtime.doc`).

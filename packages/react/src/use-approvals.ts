@@ -1,5 +1,5 @@
 // Agent approvals (AG4): the pending list, and one approval's live state
-// for the card that shows it.
+// for the card under the agent's message that asked.
 
 import type { AgentApproval } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -19,10 +19,10 @@ export interface UseApprovals {
 }
 
 /**
- * Everything waiting for your answer (`GET /v1/approvals?status=pending`),
- * kept live: approval events on your user channel, your own answers, the
- * approval cards rendered in chat, a re-list after every reconnect, and
- * (as a fallback) every `pollMs` (default 60 s; 0 turns it off).
+ * Everything waiting for your answer (`GET /v1/me/approvals?status=pending`),
+ * kept live: `agent:approval` on your user channel, your own answers, a
+ * re-list after every reconnect, and (as a fallback) every `pollMs`
+ * (default 60 s; 0 turns it off).
  */
 export function useApprovals(opts: { pollMs?: number } = {}): UseApprovals {
   const chat = usePoolse();
@@ -48,6 +48,8 @@ export function useApprovals(opts: { pollMs?: number } = {}): UseApprovals {
     const off = chat.approvals.subscribe(() => setApprovals(chat.approvals.pending()));
     setApprovals(chat.approvals.pending());
     void refresh();
+    // Names come from the directory.
+    void chat.agents.list().catch(() => undefined);
     const offStatus = onReconnect(chat, () => void refresh());
     const timer = pollMs > 0 ? setInterval(() => void refresh(), pollMs) : null;
     return () => {
@@ -73,8 +75,10 @@ export function useApprovals(opts: { pollMs?: number } = {}): UseApprovals {
 }
 
 export interface UseApproval {
-  /** The newest state seen — the message's, or a later answer. */
+  /** The newest state seen; null while loading, or when it isn't yours to see. */
   approval: AgentApproval | null;
+  /** Looking it up (`id` given and not known yet). */
+  loading: boolean;
   /** An answer is on its way. */
   pending: 'approve' | 'deny' | null;
   /** The last answer failed. */
@@ -84,35 +88,57 @@ export interface UseApproval {
 }
 
 /**
- * One approval, for a card: starts from `initial` (parsed from its
- * message with `parseApproval`) and follows the shared store, so an
- * answer given here, in a pending list or on another device shows at once.
+ * One approval, for a card: an id (`approvalIdOf(message)` — loaded from
+ * `GET /v1/me/approvals?status=all` when not known) or an approval from
+ * `useApprovals()`. Follows the shared store, so an answer given here, in
+ * the pending list or on another device shows at once.
  */
-export function useApproval(initial: AgentApproval | null): UseApproval {
+export function useApproval(source: AgentApproval | string | null): UseApproval {
   const chat = usePoolse();
-  const id = initial?.id ?? null;
-  const [approval, setApproval] = useState<AgentApproval | null>(
-    () => (id ? chat.approvals.peek(id) : undefined) ?? initial,
-  );
+  const id = typeof source === 'string' ? source : (source?.id ?? null);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  const read = () =>
+    id
+      ? (chat.approvals.peek(id) ??
+        (typeof sourceRef.current === 'object' ? sourceRef.current : null))
+      : null;
+  const [approval, setApproval] = useState<AgentApproval | null>(read);
+  const [loading, setLoading] = useState(() => !!id && !read());
   const [pending, setPending] = useState<'approve' | 'deny' | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
-  // Callers often parse the message on every render: key on what matters.
-  const initialRef = useRef(initial);
-  initialRef.current = initial;
-  const key = initial ? `${initial.id}|${initial.status}|${initial.summary}|${initial.reason}` : '';
-
-  // The message's copy goes into the store (it never undoes a newer answer).
   useEffect(() => {
     if (!id) {
       setApproval(null);
+      setLoading(false);
       return;
     }
-    if (initialRef.current) chat.approvals._apply(initialRef.current);
-    const read = () => setApproval(chat.approvals.peek(id) ?? initialRef.current);
-    read();
-    return chat.approvals.subscribe(read);
-  }, [chat, id, key]);
+    const given = sourceRef.current;
+    if (given && typeof given === 'object') chat.approvals._apply(given);
+    const update = () => setApproval(read());
+    const off = chat.approvals.subscribe(update);
+    update();
+    let live = true;
+    if (!chat.approvals.peek(id)) {
+      setLoading(true);
+      void chat.approvals
+        .ensure(id)
+        .catch(() => null)
+        .finally(() => {
+          if (live) {
+            setLoading(false);
+            update();
+          }
+        });
+    }
+    return () => {
+      live = false;
+      off();
+    };
+    // `read` closes over `id` and the ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat, id]);
 
   const decide = useCallback(
     async (action: 'approve' | 'deny', reason?: string) => {
@@ -136,6 +162,7 @@ export function useApproval(initial: AgentApproval | null): UseApproval {
 
   return {
     approval,
+    loading,
     pending,
     error,
     approve: (reason) => decide('approve', reason),
