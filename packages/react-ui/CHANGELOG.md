@@ -4,6 +4,22 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `AgentBadge`; `Avatar agent`; the badge on `UserName`, `MemberList`,
+  `MentionInput` suggestions, sender labels (all layouts) and `ChatHeader`.
+- `ApprovalCard`, `MessageApproval` (under an agent message with
+  `agent_meta.approval_id`), `ApprovalList`.
+- `MessageCitations` under agent answers; `ConversationView` /
+  `MessageExtrasProvider` `onOpenCitation` (message sources of the
+  conversation are focused by default).
+- `SummaryCard` (rendered for `call_summary` messages, live),
+  `SummaryMessageRow`, `AskMeetings`, `ClipPlayer` (attachment, `clipId` or a
+  range), `RecordingPlayer` (speeds, skip silence, chapters, synced
+  transcript); `onOpenMoment(moment: MeetingMoment)`.
+
 ## [3.9.0] - 2026-11-22
 
 ### Added

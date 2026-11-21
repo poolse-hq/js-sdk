@@ -4,6 +4,39 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Agents (docs/AGENTS.md): `is_agent` on `Me` / `Membership`, `sender_is_agent`
+  and `agent_meta` on `Message`, `sender_is_agent` on `MentionEvent`;
+  `agentMetaOf`, `citationsOf` (numbered `Citation`s), `approvalIdOf`,
+  `messageAgent`, `agentFromWire`. `users.agentOf` / `isAgent` /
+  `noteAgents` / `noteAgentProfiles` remember who is an agent.
+- `poolse.agents`: `list()` (`GET /v1/me/agents`), `inConversation`,
+  `setScope`, `resetScope` (AG3), `memory`, `addMemory`, `updateMemory`,
+  `deleteMemory` (AG10), `followups`, `followupDone`, `followupCancel` (AG11).
+- `poolse.approvals` (AG4): `list({ status })`, `ensure(id)`, `approve(id, {
+reason })`, `deny`, a live store (`subscribe`, `peek`, `pending`) following
+  `agent:approval` on the user channel (`UserChannel.onAgentApproval`).
+- `poolse.meetings` (docs/SUMMARIES.md): `summary`, `regenerateSummary`,
+  `deleteSummary`, `summaries`, `styles`, `setCallStyle`,
+  `conversationSettings`, `updateConversationSettings`, `followUp` (a
+  draft), `ask` (`{ answer, citations, calls }`), `createClip`, `clips`,
+  `clip`, `clipDownloadUrl`, `clipAttachment`, `deleteClip`, `playback`.
+  `parseCallSummary` / `summaryFromWire` (v1 body: items with `start_ms`,
+  `end_ms`, `recording_ms`; action items with `assignee_name`, `due_date`,
+  `due_text`; `sections`; `shortened`), `MeetingMoment`, `momentOf`,
+  `clipOf`, `chaptersOf`, `silencesOf`, `silencesFromSegments`,
+  `skipSilenceTarget`, `activeSegmentIndex`, `formatDue`, `formatClock`,
+  `summaryStatusText`, `formatCallSummaryPreview`, `meetingsErrorMessage`.
+- Conversation channel: `onSummaryReady`, `onClipReady`, `onClipDeleted`.
+  `Recording.chapters` (with `end_ms`), `Attachment.clip`.
+- Experimental: `realtime.doc(docId, docToken, { clientId })` →
+  `DocChannel`, the live-docs relay (docs/DOCS_RELAY.md): binary `update`,
+  `awareness`, `sync_request` / `sync_reply`, `refresh`, presence, `closed`,
+  `DocPushError` (`retryAfterMs`), join reply `limits` enforced locally.
+
 ## [3.9.0] - 2026-11-22
 
 ### Added

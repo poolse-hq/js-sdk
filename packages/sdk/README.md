@@ -162,61 +162,77 @@ start and stop is read with `parseRecordingNotice` /
 
 ## Agents, meetings and live docs
 
-These follow server contracts that are still being finalised (Phase 2 of the
-Workspace roadmap). Each wire shape is read in one mapping section
-(`agents.ts`, `meetings.ts`, `realtime/doc.ts`), so a changed field is a
-one-function change.
+Built against the server's docs/AGENTS.md, docs/SUMMARIES.md and
+docs/DOCS_RELAY.md. Each wire shape is read in one mapping section
+(`agents.ts`, `meetings.ts`, `realtime/doc.ts`).
 
-**Agents (AG1).** Users, members and messages may carry `is_agent: true`
-and `agent: { id, name, kind }` (on a message: its sender). The hooks feed
-those to `poolse.users.noteAgents(rows)`; `users.agentOf(externalId)` /
-`isAgent(externalId)` answer from that, or from your resolver's
-`isAgent` / `agent`. The UI packages put an Agent badge on every avatar
-and name of such a user.
+**Agents (AG1).** Users and members carry `is_agent`, messages and
+`mention:new` `sender_is_agent`. The hooks feed rows to
+`poolse.users.noteAgents(rows)`; `poolse.agents.list()` (`GET
+/v1/me/agents`) adds names; `users.agentOf(externalId)` / `isAgent` answer
+from both (or your resolver's `isAgent`). The UI packages badge every
+avatar and name of an agent.
 
-**Approvals (AG4).** An agent asking before it acts posts a message whose
-body is `{"kind":"agent_approval", approval_id, agent, summary, details,
-status}` (`status` `pending` | `approved` | `denied` | `expired`):
+An agent's message has `agent_meta`: `agentMetaOf(msg)` → `{ kind
+('asked' | 'watch' | 'standup_update' | …), citations, approvalId, … }`.
 
-```ts
-const a = parseApproval(message); // AgentApproval | null (details as label/value lines)
-await poolse.approvals.list(); // GET /v1/approvals?status=pending
-await poolse.approvals.approve(a.id); // POST /v1/approvals/:id/approve
-await poolse.approvals.deny(a.id, { reason: 'Not this week' }); // reason ≤ 500 chars
-poolse.approvals.subscribe(() => poolse.approvals.pending()); // live store
-```
-
-The store follows `approval:created` / `approval:updated` on the user
-channel (or an app event of those types) and never lets an older pending
-copy undo an answer. `approvalErrorMessage(err)` words `already_decided`,
-`expired`, `forbidden`, `not_found`, `validation_failed`, `rate_limited`.
-
-**Citations (AG5).** An assistant's answer carries `message.citations: [{
-type: 'message' | 'file' | 'transcript', id, conversation_id?, call_id?,
-start_ms?, snippet }]`; `citationsOf(message)` reads them.
-
-**Meetings (RT6–RT9, RT13).**
+**Approvals (AG4).** The asking message carries `agent_meta.approval_id`:
 
 ```ts
-const s = parseCallSummary(message); // {"kind":"call_summary", call_id, style, decisions, action_items, open_questions, moments}
-const { answer, links } = await poolse.meetings.ask({ question, callId }); // POST /v1/meetings/ask
-clipOf(attachment); // attachment.clip = { recording_id, start_ms, end_ms }
-chaptersOf(recording); // recording.chapters = [{ title, start_ms }]
-silencesOf(recording); // recording.silences = [{ start_ms, end_ms }] (optional)
+const id = approvalIdOf(message);
+const a = await poolse.approvals.ensure(id); // from GET /v1/me/approvals?status=all; null if not yours
+await poolse.approvals.list(); // pending ones
+await poolse.approvals.approve(id); // POST /v1/me/approvals/:id/approve
+await poolse.approvals.deny(id, { reason: 'Not this week' }); // ≤ 500 chars
+poolse.approvals.subscribe(() => poolse.approvals.pending()); // live: agent:approval
 ```
 
-Playback helpers: `skipSilenceTarget(silences, ms)`, `chapterIndexAt`,
-`activeSegmentIndex(segments, ms)`, `transcriptOffsetMs(recording.started_at,
-transcript.started_at)` (recording time + offset = transcript time; summary
-moments and citations use transcript time), `formatClock`, `formatDue`,
-`summaryStyleLabel`, `PLAYBACK_RATES` (1, 1.25, 1.5, 2).
+`AgentApproval`: `tool`, `summary` ("Create issue (github)"), `details`
+(the arguments as label/value lines), `status` (`pending` → `running` →
+`done` | `failed`, or `declined`, `expired`, `replaced`, `cancelled`),
+`expiresAt`. `approvalErrorMessage(err)` words 404 / 409 `not_pending` /
+410 `expired`.
 
-**Live docs relay (experimental, MS5).** A thin transport over the server's
-docs relay (its `docs/DOCS_RELAY.md`); a Yjs provider sits on top:
+**Citations (AG5).** `citationsOf(message)` → numbered `Citation`s
+(`n`, `type`: `message` | `file` | `transcript` | `summary` | `memory`,
+`snippet`, `title`, and per-type `messageId`, `attachmentId`, `fileName`,
+`callId`, `startMs`, `speaker`, `summaryId`, `factId`).
+
+**Scopes, memory, follow-ups (AG3, AG10, AG11).**
+`agents.inConversation(conversationId)` (each agent with `scope.ceiling`,
+`.conversation`, `.effective`), `setScope(conversationId, agentId, { mode,
+tools, readHistory })`, `resetScope`; `agents.memory({ conversationId, kind,
+q })`, `addMemory`, `updateMemory`, `deleteMemory`; `agents.followups({
+status })`, `followupDone`, `followupCancel`.
+
+**Meetings (RT6–RT9, RT12, RT13).** Two clocks: transcript time
+(`startMs`) and recording time (`recordingMs`); a `MeetingMoment` carries
+both.
+
+```ts
+const s = parseCallSummary(message); // the v1 system message; s.shortened → meetings.summary(callId)
+conv.onSummaryReady(({ call_id, summary }) => …); // regenerated, failed, skipped, deleted
+await poolse.meetings.regenerateSummary(callId, { style: 'retro' });
+await poolse.meetings.followUp(callId, { channel: 'email' }); // a draft; poolse never sends it
+const { answer, citations, calls } = await poolse.meetings.ask({ question, callId, conversationId });
+const clip = await poolse.meetings.createClip(recordingId, { startMs, endMs, base: 'transcript' });
+// clip:ready → share it:
+const { attachmentId } = await poolse.meetings.clipAttachment(clip.id); // then send attachment_ids
+const p = await poolse.meetings.playback(recordingId); // url (5 min), chapters, transcript in recording ms
+```
+
+Helpers: `momentOf(summary, item)`, `summaryStatusText`, `summaryStyleLabel`,
+`formatDue(dueDate, dueText)`, `chapterIndexAt`, `skipSilenceTarget`,
+`silencesFromSegments`, `activeSegmentIndex`, `formatClock`,
+`PLAYBACK_RATES`, `meetingsErrorMessage` (`no_model`, `no_transcript`,
+`clips_unavailable`, `recording_too_large`, `legal_hold`, …).
+
+**Live docs relay (experimental, MS5).** A thin transport; a Yjs provider
+sits on top:
 
 ```ts
 const doc = poolse.realtime.doc(docId, docToken, { clientId: ydoc.clientID });
-doc.onJoined(({ peer, rights, expiresAt, limits }) => void doc.requestSync(Y.encodeStateVector(ydoc))); // every (re)join; null = no_peer
+doc.onJoined(() => void doc.requestSync(Y.encodeStateVector(ydoc))); // every (re)join; null = no_peer
 doc.onSyncRequest(({ fromPeer, stateVector }) =>
   doc.sendSyncReply(fromPeer, Y.encodeStateAsUpdate(ydoc, stateVector)),
 );

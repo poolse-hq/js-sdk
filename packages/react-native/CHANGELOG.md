@@ -4,6 +4,19 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- The same agents and meetings components as `@poolse/react-ui`
+  (`AgentBadge`, `AgentBadgeInline`, `ApprovalCard`, `MessageApproval`,
+  `ApprovalList`, `MessageCitations`, `SummaryCard`, `AskMeetings`,
+  `ClipPlayer`, `RecordingPlayer`) and `Avatar agent`, with the badge on
+  names, members, mentions, senders and the DM header.
+- `renderMedia` (`PoolseMediaProps`): plays recordings and clips through the
+  app's own player (README: an expo-video adapter); no new peer dependency.
+- `ConversationView` `onOpenCitation`, `onOpenMoment`, `renderMedia`.
+
 ## [3.9.0] - 2026-11-22
 
 ### Added

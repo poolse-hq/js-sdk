@@ -213,35 +213,40 @@ log, naming people through `MessageRow`'s `nameForUserId`.
 <ConversationView
   conversationId={id}
   onOpenCitation={(c, msg) => …} // message sources here are focused by default
-  onOpenMoment={(callId, startMs) => openRecording(callId, startMs)}
+  onOpenMoment={(m) => openRecording(m.recordingId, m.recordingMs ?? 0)} // or the transcript at m.startMs
 />
 <ApprovalList />                          // everything waiting for your answer
-<AskMeetings onOpenMoment={openRecording} />
-<RecordingPlayer ref={player} recording={rec} startMs={momentMs} />
+<AskMeetings onOpenMoment={openMoment} />
+<RecordingPlayer ref={player} recordingId={rec.id} startMs={moment.recordingMs} />
 ```
 
 - **Agent badge (AG1).** `<AgentBadge>`; `<Avatar agent>` (rounded square,
   "(agent)" in its label); `UserName`, member rows, mention suggestions,
-  sender labels and a DM's header add it by themselves for anyone the server
-  marked `is_agent`.
-- **Approvals (AG4).** `agent_approval` messages render as `<ApprovalCard>`:
-  summary, details (first 4, "Show all"), Approve / Deny, an optional reason,
-  then Approved / Denied / Expired. The card follows the shared store, so
-  `<ApprovalList>` and other devices stay in step.
-- **Sources (AG5).** `<MessageCitations>` under an assistant's answer, numbered
-  links (meeting sources show their time).
+  sender labels and a DM's header add it by themselves for agents.
+- **Approvals (AG4).** Under an agent message with `agent_meta.approval_id`,
+  `<MessageApproval>` shows `<ApprovalCard>` to the person asked: the tool,
+  its arguments (first 4, "Show all"), Approve / Deny with an optional
+  reason, then Running… / Done / Failed / Denied / Expired. The card follows
+  the shared store, so `<ApprovalList>` and other devices stay in step.
+- **Sources (AG5).** `<MessageCitations>` under an answer: numbered links
+  (`[n]`), meeting sources with their time.
 - **Summaries (RT6).** `call_summary` messages render as `<SummaryCard>`:
-  decisions, action items with the assignee's name and due date, open
-  questions, and key moments that call `onOpenMoment`.
-- **Clips (RT9).** Attachments with `clip` play inline in `<ClipPlayer>`; or
-  `<ClipPlayer clip={{ recordingId, startMs, endMs }}>` plays that range of a
-  recording.
-- **Playback (RT13).** `<RecordingPlayer recording>` — HTML5 media, 1× / 1.25× /
-  1.5× / 2×, "Skip silence" when the recording lists silences, chapters, and
-  the transcript scrolling along (tap a line to play from it). Expired links
-  renew by themselves. `ref.seek(ms)` takes transcript time.
+  overview, decisions, action items (assignee's name, else the name said;
+  due date or the words used), open questions, the style's sections, key
+  moments. Every timed line calls `onOpenMoment` with a `MeetingMoment`.
+  It fetches the full summary when the message copy is shortened and
+  follows `summary:ready`.
+- **Clips (RT9).** `<ClipPlayer clipId>` ("Cutting the clip…" until
+  `clip:ready`), `<ClipPlayer attachment>` for one shared in chat (inline
+  when the attachment carries `clip`), or `clip={{ recordingId, startMs,
+endMs }}` for a range.
+- **Playback (RT13).** `<RecordingPlayer recordingId>` — the playback
+  endpoint, HTML5 media, 1× / 1.25× / 1.5× / 2×, "Skip silence" (the gaps
+  between transcript lines), chapters, the transcript scrolling along (tap a
+  line to play from it); expired links renew by themselves. The ref has
+  `seek(recordingMs)` and `seekTranscript(startMs)`.
 - Custom layouts wrap rows in `<MessageExtrasProvider value={{ onOpenCitation,
-  onOpenMoment, nameForUserId, externalIdForUserId }}>`.
+onOpenMoment, nameForUserId, externalIdForUserId }}>`.
 
 ## Theming
 

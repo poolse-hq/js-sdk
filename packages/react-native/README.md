@@ -231,6 +231,60 @@ give it `hasMore`, `loadingMore` and `onLoadMore`.
   unpublished. Hide participants whose identity starts with `poolse:`
   (`isServiceParticipant`).
 
+- Agents and meetings: `AgentBadge`, `ApprovalCard`, `MessageApproval`,
+  `ApprovalList`, `MessageCitations`, `SummaryCard`, `AskMeetings`,
+  `ClipPlayer`, `RecordingPlayer` — the same props as `@poolse/react-ui`.
+  The approval card shows under an agent message with
+  `agent_meta.approval_id`; `call_summary` messages render as cards;
+  `ConversationView` takes `onOpenCitation`, `onOpenMoment(moment)` and
+  `renderMedia`.
+
+**Playing recordings and clips.** The package ships no media player. Pass a
+`renderMedia` adapter (to `ConversationView`, `MessageExtrasProvider`,
+`ClipPlayer` or `RecordingPlayer`) over the player your app uses. With
+`expo-video`:
+
+```tsx
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useEffect } from 'react';
+import type { PoolseMediaProps } from '@poolse/react-native';
+
+function ExpoMedia({
+  uri,
+  kind,
+  paused,
+  rate,
+  seek,
+  onProgress,
+  onLoad,
+  onEnd,
+  style,
+}: PoolseMediaProps) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.timeUpdateEventInterval = 0.25;
+  });
+  useEffect(() => (paused ? player.pause() : player.play()), [player, paused]);
+  useEffect(() => void (player.playbackRate = rate), [player, rate]);
+  useEffect(() => void (seek && (player.currentTime = seek.ms / 1000)), [player, seek?.nonce]);
+  useEffect(() => {
+    const subs = [
+      player.addListener('timeUpdate', (e) => onProgress(e.currentTime * 1000)),
+      player.addListener('sourceLoad', (e) => onLoad(e.duration * 1000)),
+      player.addListener('playToEnd', onEnd),
+    ];
+    return () => subs.forEach((s) => s.remove());
+  }, [player, onProgress, onLoad, onEnd]);
+  return kind === 'video' ? (
+    <VideoView player={player} style={style} nativeControls={false} />
+  ) : null;
+}
+
+<ConversationView conversationId={id} renderMedia={(p) => <ExpoMedia {...p} />} />;
+```
+
+Without an adapter a clip shows its time range and the recording player its
+chapters and transcript.
+
 The names follow `@poolse/react-ui`, but the props differ in places (for
 example `ThreadView` needs `visible` and `onClose`, and there is no
 `EditableMessageBubble`); see the docs for each component's props.

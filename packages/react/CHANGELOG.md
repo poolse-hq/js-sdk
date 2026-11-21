@@ -4,6 +4,20 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `useAgent`, `useAgents`, `useConversationAgents` (`setScope`,
+  `resetScope`), `useMemory`, `useFollowups`; `useUser` returns `agent`.
+  `useMembers`, `useMessages` and `useThread` tell `poolse.users` which rows
+  are agents.
+- `useApprovals` (pending, live; loads the directory for names) and
+  `useApproval(id | approval)`.
+- `useCallSummary`, `useAskMeetings({ callId, conversationId })`, `useClip`,
+  `useRecordingPlayback`, `useRecordingUrl`.
+- Re-exports of the SDK's agent, meeting and doc-relay helpers and types.
+
 ## [3.9.0] - 2026-11-22
 
 ### Added
