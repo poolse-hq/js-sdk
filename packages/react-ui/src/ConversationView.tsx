@@ -137,6 +137,9 @@ export interface ConversationViewProps {
   /** Paperclip → file picker → presigned upload → send-with-attachment. */
   attachments?: boolean;
 
+  /** An emoji button in the composer (`<EmojiPicker>`). Defaults to `true`. */
+  emojiPicker?: boolean;
+
   /** Hover-revealed react / reply / edit / delete popover next to each message. */
   actions?: boolean;
 
@@ -266,6 +269,7 @@ export function ConversationView({
   reactions = TRUE,
   mentions = TRUE,
   attachments = TRUE,
+  emojiPicker = TRUE,
   actions = TRUE,
   threads = TRUE,
   quotations = TRUE,
@@ -724,6 +728,7 @@ export function ConversationView({
         onSend={onSendWithMentions}
         onTyping={signalTyping}
         attachments={attachments}
+        emojiPicker={emojiPicker}
         {...(labelFor ? { labelFor } : {})}
         {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />
@@ -733,6 +738,7 @@ export function ConversationView({
         onSend={onSendBody}
         onTyping={signalTyping}
         attachments={attachments}
+        emojiPicker={emojiPicker}
         {...(labelFor ? { labelFor } : {})}
         {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />

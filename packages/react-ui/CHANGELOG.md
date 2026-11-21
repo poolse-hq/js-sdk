@@ -38,6 +38,17 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   first ("Original · …"). A 403 (not the sender or a conversation admin) turns
   it back into plain text. `<EditedLabel messageId label?>` and
   `useEditHistory(messageId)` (`{ label(), popover }`) for custom rows.
+- `<EmojiPicker onPick onClose? autoFocus?>`: search (by Unicode name and a few
+  aliases), recently used (memory + `localStorage`, guarded), category tabs,
+  arrow-key navigation; ~800 emoji with no dependency. The list is a separate
+  module loaded on first open (its own chunk in the ESM build);
+  `loadEmojiData()` warms it.
+- `ReactionPicker` ends with a "+" (More emoji) that opens the full picker, so
+  the message toolbar's React button and `ReactionStrip`'s "+" reach every
+  emoji. Picks are remembered as recent.
+- An emoji button in `MessageComposer` and `MentionInput` (`emojiPicker`,
+  default `true`) inserts at the caret; `ConversationView emojiPicker` passes
+  it through.
 - `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
   `getText()`, `setText(text)` and `focus()`.
 - `ConversationView` shows a notice when a send is refused because the quoted

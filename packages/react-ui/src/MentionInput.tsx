@@ -14,6 +14,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import { ComposerEmojiButton, insertAtCaret } from './composerParts.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
@@ -53,6 +54,8 @@ export interface MentionInputProps {
    * Defaults to `true`.
    */
   attachments?: boolean;
+  /** An emoji button that opens `<EmojiPicker>` and inserts at the caret. Default `true`. */
+  emojiPicker?: boolean;
 }
 
 interface MentionState {
@@ -74,6 +77,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       replyingTo,
       onCancelReply,
       attachments = true,
+      emojiPicker = true,
     },
     ref,
   ) {
@@ -349,6 +353,12 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
               ? { 'aria-activedescendant': `poolse-mention-opt-${activeIdx}` }
               : {})}
           />
+          {emojiPicker && (
+            <ComposerEmojiButton
+              disabled={disabled || sending}
+              onPick={(emoji) => setValue((v) => insertAtCaret(v, emoji, taRef))}
+            />
+          )}
           <button
             type="submit"
             className="poolse-composer__send"

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useAttachmentUpload } from '@poolse/react';
+import { ComposerEmojiButton, insertAtCaret } from './composerParts.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
@@ -47,6 +48,8 @@ export interface MessageComposerProps {
    * disable attachments entirely (text-only composer).
    */
   attachments?: boolean;
+  /** An emoji button that opens `<EmojiPicker>` and inserts at the caret. Default `true`. */
+  emojiPicker?: boolean;
 }
 
 /**
@@ -86,6 +89,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       onCancelReply,
       labelFor,
       attachments = true,
+      emojiPicker = true,
     },
     ref,
   ) {
@@ -257,6 +261,12 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             disabled={disabled || sending}
             aria-label={placeholder}
           />
+          {emojiPicker && (
+            <ComposerEmojiButton
+              disabled={disabled || sending}
+              onPick={(emoji) => setValue((v) => insertAtCaret(v, emoji, taRef))}
+            />
+          )}
           <button
             type="submit"
             className="poolse-composer__send"

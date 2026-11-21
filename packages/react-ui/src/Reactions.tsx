@@ -4,6 +4,7 @@
 import type { Uuid } from '@poolse/sdk';
 import { useReactions, type ReactionMap } from '@poolse/react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { EmojiPicker, loadEmojiData, rememberEmoji } from './EmojiPicker.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '😢', '🙏'] as const;
@@ -97,8 +98,8 @@ export function ReactionStrip({
 }
 
 /**
- * Emoji picker popover. Renders the common set; customers needing
- * the full emoji set should provide their own picker via children.
+ * Reaction picker popover: the six common reactions and a "+" that
+ * opens the full `<EmojiPicker>` (search, recently used, categories).
  */
 export function ReactionPicker({
   onPick,
@@ -108,6 +109,7 @@ export function ReactionPicker({
   onClose?: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const [full, setFull] = useState(false);
 
   // Auto-focus first button on mount so keyboard users land inside
   // the picker immediately. Without this, focus stays on the trigger
@@ -116,6 +118,11 @@ export function ReactionPicker({
     const firstBtn = rootRef.current?.querySelector('button');
     if (firstBtn instanceof HTMLElement) firstBtn.focus();
   }, []);
+
+  const pick = (emoji: string) => {
+    rememberEmoji(emoji);
+    onPick(emoji);
+  };
 
   // Close on outside click. Listening in capture phase so the click
   // on a sibling action button (e.g. the React toggle) reaches this
@@ -154,6 +161,14 @@ export function ReactionPicker({
     }
   };
 
+  if (full) {
+    return (
+      <div ref={rootRef} className="poolse-reaction-picker poolse-reaction-picker--full">
+        <EmojiPicker onPick={pick} {...(onClose ? { onClose } : {})} />
+      </div>
+    );
+  }
+
   return (
     <div
       ref={rootRef}
@@ -168,12 +183,24 @@ export function ReactionPicker({
           type="button"
           role="menuitem"
           className="poolse-reaction-picker__btn"
-          onClick={() => onPick(e)}
+          onClick={() => pick(e)}
           aria-label={`React with ${e}`}
         >
           {e}
         </button>
       ))}
+      <button
+        type="button"
+        role="menuitem"
+        className="poolse-reaction-picker__btn poolse-reaction-picker__more"
+        aria-label="More emoji"
+        title="More emoji"
+        onPointerEnter={() => void loadEmojiData()}
+        onFocus={() => void loadEmojiData()}
+        onClick={() => setFull(true)}
+      >
+        <PoolseIcon name="plus" size={16} label={null} />
+      </button>
     </div>
   );
 }

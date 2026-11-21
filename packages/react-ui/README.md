@@ -94,6 +94,9 @@ preview>` draws one on its own.
   replies · last reply 5m ago"; click opens the thread (`<ThreadSummary>`).
 - **Edit history.** "edited" opens the earlier versions (`messages.edits`);
   people the server doesn't show history to (403) see plain text.
+- **Emoji.** `<EmojiPicker>` (search, recent, categories; its data loads on
+  first open) behind the reaction "+" and a composer button
+  (`emojiPicker={false}` hides it).
 - **Deleted messages** read "This message was deleted" and keep their thread
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.
@@ -110,7 +113,7 @@ preview>` draws one on its own.
   `focus`), `MentionInput`, `UploadQueueStrip`, `AttachmentPreview`.
 - Rich content: `LinkPreviewCard`.
 - Lists: `ConversationList`, `MemberList`.
-- Reactions: `ReactionStrip`, `ReactionPicker`.
+- Reactions and emoji: `ReactionStrip`, `ReactionPicker`, `EmojiPicker`.
 - Rooms and calls: `RoomJoinBar`, `RoomStage` (both take `useRoom()` from
   `@poolse/react`), `CallVideoGrid`, `CallControlButton`, `CallDeviceMenu`.
 - Identity and brand: `Avatar`, `PresenceBadge`, `UserName`, `useDisplayName`, `PoolseIcon`,
