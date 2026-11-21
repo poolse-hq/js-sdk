@@ -24,6 +24,12 @@ export interface MessageActionsProps {
   onEdit?: () => void;
   /** Triggered when the user wants to delete. Only show on own messages. */
   onDelete?: () => void;
+  /**
+   * Slack-style toolbar: React, Reply, Thread, then a "More" button
+   * whose menu holds Copy / Edit / Delete. Defaults to `false` (every
+   * action as its own button).
+   */
+  moreMenu?: boolean;
   /** Render any extra trailing action buttons (e.g. "Pin"). */
   children?: ReactNode;
 }
@@ -35,9 +41,12 @@ export function MessageActions({
   onCopy,
   onEdit,
   onDelete,
+  moreMenu = false,
   children,
 }: MessageActionsProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const hasMore = !!(onCopy || onEdit || onDelete);
 
   return (
     <div className="poolse-msg-actions" role="toolbar" aria-label="Message actions">
@@ -62,12 +71,65 @@ export function MessageActions({
           )}
         </>
       )}
-      {onReply && <ActionButton label="Reply in thread" icon="messages" onClick={onReply} />}
-      {onQuote && <ActionButton label="Reply" icon="reply" onClick={onQuote} />}
-      {onCopy && <ActionButton label="Copy" icon="copy" onClick={onCopy} />}
-      {onEdit && <ActionButton label="Edit" icon="edit" onClick={onEdit} />}
-      {onDelete && <ActionButton label="Delete" icon="trash" danger onClick={onDelete} />}
-      {children}
+      {moreMenu ? (
+        <>
+          {onQuote && <ActionButton label="Reply" icon="reply" onClick={onQuote} />}
+          {onReply && <ActionButton label="Reply in thread" icon="messages" onClick={onReply} />}
+          {children}
+          {hasMore && (
+            <>
+              <ActionButton
+                label="More actions"
+                icon="more-h"
+                onClick={() => setMenuOpen((o) => !o)}
+                active={menuOpen}
+              />
+              {menuOpen && (
+                <div
+                  className="poolse-msg-actions__menu"
+                  role="menu"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setMenuOpen(false);
+                  }}
+                >
+                  {[
+                    onCopy && { label: 'Copy', icon: 'copy' as const, run: onCopy },
+                    onEdit && { label: 'Edit', icon: 'edit' as const, run: onEdit },
+                    onDelete && { label: 'Delete', icon: 'trash' as const, run: onDelete },
+                  ]
+                    .filter((item) => !!item)
+                    .map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        role="menuitem"
+                        className={`poolse-msg-actions__menu-item${
+                          item.label === 'Delete' ? ' poolse-msg-actions__menu-item--danger' : ''
+                        }`}
+                        onClick={() => {
+                          setMenuOpen(false);
+                          item.run();
+                        }}
+                      >
+                        <PoolseIcon name={item.icon} size={15} label={null} />
+                        <span>{item.label}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {onReply && <ActionButton label="Reply in thread" icon="messages" onClick={onReply} />}
+          {onQuote && <ActionButton label="Reply" icon="reply" onClick={onQuote} />}
+          {onCopy && <ActionButton label="Copy" icon="copy" onClick={onCopy} />}
+          {onEdit && <ActionButton label="Edit" icon="edit" onClick={onEdit} />}
+          {onDelete && <ActionButton label="Delete" icon="trash" danger onClick={onDelete} />}
+          {children}
+        </>
+      )}
     </div>
   );
 }

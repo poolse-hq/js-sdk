@@ -57,6 +57,27 @@ provider drops that conversation's badge. `focusMessageId` loads older pages
 until the message is there, scrolls to it and flashes it; a message it can't
 find shows a short notice and calls `onFocusMessageNotFound`.
 
+## Layouts
+
+```tsx
+<ConversationView conversationId={id} layout="list" density="compact" timeFormat="24h" />
+```
+
+- `layout="bubbles"` (default) — chat bubbles, yours on the right.
+- `layout="list"` — Slack-style rows: avatar, name and time once per run of
+  messages (`groupWindowMinutes`, default 5), the time on hover for the rest, a
+  hover toolbar (React · Reply · Thread · More), "N replies" under threads.
+- `layout="compact"` — Discord/IRC-style lines: time, the sender's name in
+  their colour, the text; `showAvatars` adds small avatars. Messages that
+  mention you get an accent bar (also in `list`).
+
+Reactions, threads, quotes, edits, deletes, attachments, read receipts, typing,
+the new-messages button, `focusMessageId` and `onSenderPress` /
+`onAvatarPress` work the same in all three. To change one part of every
+message, pass `slots={{ header, body, attachments, reactions, thread, actions }}`
+— each is `(props) => ReactNode` and gets the default rendering as `children`.
+`renderMessage(msg, meId, { layout, renderDefault })` replaces whole rows.
+
 ## Components
 
 - Composed: `PoolseInbox` (with a ref: `open`, `openDirect`, `openGroup`,

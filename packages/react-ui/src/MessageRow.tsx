@@ -7,16 +7,29 @@
 // Customers building a custom layout can import this directly to
 // reuse the full feature surface (reactions, attachments, hover
 // actions, edit/delete, read receipts) without re-wiring.
+//
+// `layout` picks the shape: `bubbles` renders here, `list` and
+// `compact` in ./FlatMessageRow.tsx. All three take the same props
+// and the same `slots`.
 
 import type { Message, Uuid } from '@poolse/sdk';
 import { callLogDisplayFor, useReactions, useUser } from '@poolse/react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { CallLogRow } from './CallLogRow.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
+import { FlatMessageRow } from './FlatMessageRow.js';
+import {
+  renderSlot,
+  type ChatLayout,
+  type MessageSlotContext,
+  type MessageSlots,
+  type TimeFormat,
+} from './layout.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { InlineReactions, useRowActions } from './rowParts.js';
 
 /** Who sent a message — what `onSenderPress` / `onAvatarPress` receive. */
 export interface MessageUser {
@@ -85,6 +98,17 @@ export interface MessageRowProps {
   onAvatarPress?: (user: MessageUser) => void;
   /** Call-log rows: offer "Call back" (see `<CallLogRow onCallBack>`). */
   onCallBack?: (media: 'audio' | 'video') => void;
+  /** `'bubbles'` (default), `'list'` or `'compact'` — see `ChatLayout`. */
+  layout?: ChatLayout;
+  /** `'12h'`, `'24h'` or a formatter for timestamps. Defaults to the locale's. */
+  timeFormat?: TimeFormat;
+  /** Replace or wrap parts of the row — see `MessageSlots`. */
+  slots?: MessageSlots;
+  /**
+   * The message @-mentions the viewer: `list` and `compact` mark it
+   * with an accent bar.
+   */
+  mentionsMe?: boolean;
 }
 
 export function MessageRow(props: MessageRowProps) {
@@ -102,6 +126,9 @@ export function MessageRow(props: MessageRowProps) {
         {...(props.onCallBack ? { onCallBack: props.onCallBack } : {})}
       />
     ) : null;
+  }
+  if (props.layout === 'list' || props.layout === 'compact') {
+    return <FlatMessageRow {...props} layout={props.layout} />;
   }
   return <BubbleMessageRow {...props} />;
 }
@@ -131,6 +158,8 @@ function BubbleMessageRow({
   showAvatar = false,
   onSenderPress,
   onAvatarPress,
+  timeFormat,
+  slots,
 }: MessageRowProps) {
   // Resolve the sender once at the row level so both the avatar slot
   // (rendered here) and the bubble's inline sender label (rendered
@@ -169,35 +198,15 @@ function BubbleMessageRow({
   const handleSave = onSaveEdit ?? (async () => undefined);
   const handleCancel = onCancelEdit ?? (() => undefined);
 
-  // Touch reveal: hover doesn't fire on touch devices, so tapping
-  // the bubble itself toggles the action toolbar. Desktop continues
-  // to reveal on hover/focus via CSS — the tap path no-ops there to
-  // avoid hijacking text selection.
-  const [actionsOpen, setActionsOpen] = useState(false);
-  const rowRef = useRef<HTMLDivElement | null>(null);
+  // Touch reveal: tapping the bubble toggles the action toolbar.
+  const { actionsOpen, setActionsOpen, rowRef, onRowClick } = useRowActions();
 
-  // Auto-close when the user taps anywhere outside this row.
-  useEffect(() => {
-    if (!actionsOpen) return;
-    const onDown = (e: PointerEvent) => {
-      const t = e.target;
-      if (t instanceof Node && rowRef.current && !rowRef.current.contains(t)) {
-        setActionsOpen(false);
-      }
-    };
-    document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
-  }, [actionsOpen]);
-
-  const onRowClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Only fire on touch-only viewports. Desktop keeps hover/focus.
-    if (typeof window === 'undefined' || !window.matchMedia('(hover: none)').matches) return;
-    // Don't hijack clicks on interactive children — links, attachment
-    // images (wrapped in <button>), reaction pills, edit textarea,
-    // composer, etc. Use closest() so deep targets are still caught.
-    const target = e.target as HTMLElement;
-    if (target.closest('a, button, input, textarea, label, select')) return;
-    setActionsOpen((o) => !o);
+  const slotContext: MessageSlotContext = {
+    message: msg,
+    isSelf,
+    sender,
+    layout: 'bubbles',
+    isRunStart: groupPosition === 'first' || groupPosition === 'standalone',
   };
 
   return (
@@ -249,6 +258,8 @@ function BubbleMessageRow({
             {...(readState ? { readState } : {})}
             {...(labelFor ? { labelFor } : {})}
             {...(onQuotedClick ? { onQuotedClick } : {})}
+            {...(timeFormat ? { timeFormat } : {})}
+            {...(slots ? { slots, slotContext } : {})}
             {...(showActions
               ? {
                   actionsTrigger: (
@@ -274,111 +285,79 @@ function BubbleMessageRow({
         </BubbleWithAvatar>
       )}
 
-      {showReactions && (
-        <div className={`poolse-message-row__reactions ${isSelf ? 'is-self' : ''}`}>
-          {/* Render reactions from the shared hook's state directly so
-              they update in tandem with the hover-menu picker. */}
-          <InlineReactions
-            reactions={reactionsHook.reactions}
-            currentUserId={meId}
-            onAdd={(e) => void reactionsHook.addReaction(e)}
-            onRemove={(e) => void reactionsHook.removeReaction(e)}
-          />
-        </div>
+      {renderSlot(
+        slots?.reactions,
+        slotContext,
+        showReactions ? (
+          <div className={`poolse-message-row__reactions ${isSelf ? 'is-self' : ''}`}>
+            {/* Render reactions from the shared hook's state directly so
+                they update in tandem with the hover-menu picker. */}
+            <InlineReactions
+              reactions={reactionsHook.reactions}
+              currentUserId={meId}
+              onAdd={(e) => void reactionsHook.addReaction(e)}
+              onRemove={(e) => void reactionsHook.removeReaction(e)}
+            />
+          </div>
+        ) : null,
       )}
 
-      {showThreadPill && (
-        <button
-          type="button"
-          className={`poolse-thread-pill ${
-            isSelf ? 'poolse-thread-pill--right' : 'poolse-thread-pill--left'
-          }`}
-          onClick={onOpenThread}
-          aria-label={`View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
-        >
-          <PoolseIcon name="messages" size={12} label={null} />
-          <span>
-            {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
-          </span>
-        </button>
-      )}
-
-      {showActions && (
-        <div
-          className={`poolse-message-row__actions ${
-            isSelf ? 'poolse-message-row__actions--right' : 'poolse-message-row__actions--left'
-          }`}
-        >
-          <MessageActions
-            {...(reactions
-              ? {
-                  onReact: (emoji) => {
-                    void reactionsHook.addReaction(emoji);
-                  },
-                }
-              : {})}
-            {...(threads && onOpenThread ? { onReply: onOpenThread } : {})}
-            {...(quotations && onQuote ? { onQuote } : {})}
-            {...(msg.body
-              ? {
-                  onCopy: () => {
-                    // Best-effort: navigator.clipboard isn't available in
-                    // older browsers / non-HTTPS contexts. Caller can wire
-                    // its own toast via the SDK if needed; we just fail
-                    // silently here rather than throw inside an onClick.
-                    void navigator?.clipboard?.writeText(msg.body ?? '').catch(() => undefined);
-                  },
-                }
-              : {})}
-            {...(isSelf && onStartEdit ? { onEdit: onStartEdit } : {})}
-            {...(isSelf && onDelete ? { onDelete } : {})}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Stripped-down ReactionStrip that uses an external addReaction/
-// removeReaction (rather than calling useReactions internally). Lets
-// MessageRow share one useReactions across the strip + the hover
-// picker. Picker disabled on this internal variant; the hover menu
-// handles "add reaction" instead.
-function InlineReactions({
-  reactions,
-  currentUserId,
-  onAdd: _onAdd,
-  onRemove,
-}: {
-  reactions: Record<string, string[]>;
-  currentUserId: string | null;
-  onAdd: (emoji: string) => void;
-  onRemove: (emoji: string) => void;
-}) {
-  const entries = Object.entries(reactions);
-  if (entries.length === 0) return null;
-  return (
-    <div className="poolse-reactions">
-      {entries.map(([emoji, users]) => {
-        const mine =
-          currentUserId !== null && currentUserId !== undefined && users.includes(currentUserId);
-        return (
+      {renderSlot(
+        slots?.thread,
+        slotContext,
+        showThreadPill ? (
           <button
-            key={emoji}
             type="button"
-            className={`poolse-reaction-pill${mine ? ' poolse-reaction-pill--mine' : ''}`}
-            onClick={() => {
-              if (mine) onRemove(emoji);
-              else _onAdd(emoji);
-            }}
-            aria-pressed={mine}
-            aria-label={`${emoji} reacted by ${users.length} ${users.length === 1 ? 'user' : 'users'}`}
+            className={`poolse-thread-pill ${
+              isSelf ? 'poolse-thread-pill--right' : 'poolse-thread-pill--left'
+            }`}
+            onClick={onOpenThread}
+            aria-label={`View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
           >
-            <span>{emoji}</span>
-            <span className="poolse-reaction-pill__count">{users.length}</span>
+            <PoolseIcon name="messages" size={12} label={null} />
+            <span>
+              {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+            </span>
           </button>
-        );
-      })}
+        ) : null,
+      )}
+
+      {renderSlot(
+        slots?.actions,
+        slotContext,
+        showActions ? (
+          <div
+            className={`poolse-message-row__actions ${
+              isSelf ? 'poolse-message-row__actions--right' : 'poolse-message-row__actions--left'
+            }`}
+          >
+            <MessageActions
+              {...(reactions
+                ? {
+                    onReact: (emoji) => {
+                      void reactionsHook.addReaction(emoji);
+                    },
+                  }
+                : {})}
+              {...(threads && onOpenThread ? { onReply: onOpenThread } : {})}
+              {...(quotations && onQuote ? { onQuote } : {})}
+              {...(msg.body
+                ? {
+                    onCopy: () => {
+                      // Best-effort: navigator.clipboard isn't available in
+                      // older browsers / non-HTTPS contexts. Caller can wire
+                      // its own toast via the SDK if needed; we just fail
+                      // silently here rather than throw inside an onClick.
+                      void navigator?.clipboard?.writeText(msg.body ?? '').catch(() => undefined);
+                    },
+                  }
+                : {})}
+              {...(isSelf && onStartEdit ? { onEdit: onStartEdit } : {})}
+              {...(isSelf && onDelete ? { onDelete } : {})}
+            />
+          </div>
+        ) : null,
+      )}
     </div>
   );
 }

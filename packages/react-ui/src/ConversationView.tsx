@@ -34,6 +34,14 @@ import React, {
 } from 'react';
 import { usePoolseFonts } from './fonts.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
+import {
+  mentionsViewer,
+  type ChatDensity,
+  type ChatLayout,
+  type MessageSlots,
+  type RenderMessageContext,
+  type TimeFormat,
+} from './layout.js';
 import { LiveCallBanner } from './LiveCallBanner.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
@@ -53,9 +61,49 @@ export interface ConversationViewProps {
    * COMPLETELY overrides the default per-message rendering — you
    * get the raw message + currentUserId and own the bubble shape.
    * Leave unset to use the brand-aligned defaults (with reactions,
-   * actions, attachments inline as configured below).
+   * actions, attachments inline as configured below). The third
+   * argument carries the layout and `renderDefault()`, the row this
+   * view would have drawn — return it for the messages you don't
+   * want to change.
    */
-  renderMessage?: (msg: Message, currentUserId: string | null) => ReactNode;
+  renderMessage?: (
+    msg: Message,
+    currentUserId: string | null,
+    context: RenderMessageContext,
+  ) => ReactNode;
+
+  /**
+   * How messages are drawn:
+   *   * `'bubbles'` (default) — chat bubbles, yours on the right.
+   *   * `'list'` — Slack-style full-width rows; avatar, name and time
+   *     once per run, the time on hover for the rest, a hover toolbar
+   *     (React · Reply · Thread · More), "N replies" under threads.
+   *   * `'compact'` — Discord/IRC-style dense lines: time at the left,
+   *     the name in the sender's colour, an accent bar on messages
+   *     that mention you.
+   */
+  layout?: ChatLayout;
+  /** `'comfortable'` (default) or `'compact'` spacing, in any layout. */
+  density?: ChatDensity;
+  /**
+   * Show avatars. Defaults: `list` on, `compact` off, `bubbles` per
+   * `avatars` (others' messages in group chats). Overrides `avatars`.
+   */
+  showAvatars?: boolean;
+  /** `'12h'`, `'24h'` or a formatter. Defaults to the locale's. */
+  timeFormat?: TimeFormat;
+  /**
+   * Same-sender messages less than this many minutes apart form one
+   * run (one bubble cluster, one `list` header). Default 5.
+   */
+  groupWindowMinutes?: number;
+  /**
+   * Replace or wrap one part of every message — `header`, `body`,
+   * `attachments`, `reactions`, `thread`, `actions` — in any layout.
+   * Each receives the message, sender, layout and its default
+   * rendering as `children`.
+   */
+  slots?: MessageSlots;
 
   /**
    * Translate an `external_id` into a display name. Passed through to
@@ -122,7 +170,7 @@ export interface ConversationViewProps {
    */
   grouping?: boolean;
 
-  /** Milliseconds between same-sender messages to still count as a group. Default 5 min. */
+  /** @deprecated Use `groupWindowMinutes`. */
   groupingWindowMs?: number;
 
   /**
@@ -212,7 +260,13 @@ export function ConversationView({
   markdown = TRUE,
   maxBodyLength = 200,
   grouping = TRUE,
-  groupingWindowMs = 5 * 60 * 1000,
+  groupingWindowMs,
+  groupWindowMinutes,
+  layout = 'bubbles',
+  density = 'comfortable',
+  showAvatars,
+  timeFormat,
+  slots,
   daySeparators = TRUE,
   senderLabels = 'auto',
   avatars = 'auto',
@@ -274,7 +328,23 @@ export function ConversationView({
   const isGroupChat = members.length > 2;
   const showSenderLabelsResolved =
     senderLabels === 'always' || (senderLabels === 'auto' && isGroupChat);
-  const showAvatarsResolved = avatars === 'always' || (avatars === 'auto' && isGroupChat);
+  const showAvatarsResolved =
+    showAvatars ??
+    (layout === 'list'
+      ? true
+      : layout === 'compact'
+        ? false
+        : avatars === 'always' || (avatars === 'auto' && isGroupChat));
+  const groupWindowMs =
+    groupWindowMinutes !== undefined
+      ? groupWindowMinutes * 60 * 1000
+      : (groupingWindowMs ?? 5 * 60 * 1000);
+  // Props every row gets, whatever the layout.
+  const layoutProps = {
+    layout,
+    ...(timeFormat ? { timeFormat } : {}),
+    ...(slots ? { slots } : {}),
+  };
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -620,7 +690,14 @@ export function ConversationView({
   return (
     <div className="poolse-conversation-shell">
       <div
-        className={`poolse-conversation${dragActive ? ' is-drag-active' : ''}`}
+        className={[
+          'poolse-conversation',
+          `poolse-conversation--layout-${layout}`,
+          `poolse-conversation--density-${density}`,
+          dragActive ? 'is-drag-active' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -671,14 +748,11 @@ export function ConversationView({
             <div className="poolse-conversation__empty">{emptyState ?? 'No messages yet.'}</div>
           ) : (
             visibleMessages.map((msg, idx) => {
-              if (renderMessage) {
-                return <Fragment key={msg.id}>{renderMessage(msg, me?.id ?? null)}</Fragment>;
-              }
               const prev: Message | null = idx > 0 ? (visibleMessages[idx - 1] ?? null) : null;
               const next: Message | null =
                 idx < visibleMessages.length - 1 ? (visibleMessages[idx + 1] ?? null) : null;
               const groupPosition = grouping
-                ? computeGroupPosition(msg, prev, next, groupingWindowMs)
+                ? computeGroupPosition(msg, prev, next, groupWindowMs)
                 : 'standalone';
               const showDaySeparator =
                 daySeparators && (prev === null || !sameDay(msg.inserted_at, prev.inserted_at));
@@ -724,6 +798,63 @@ export function ConversationView({
                     ? ('read' as const)
                     : ('sent' as const)
                   : undefined;
+              const renderDefault = () => (
+                <MessageRow
+                  msg={enriched}
+                  meId={me?.id ?? null}
+                  reactions={reactions}
+                  attachments={attachments}
+                  actions={actions}
+                  threads={threads}
+                  quotations={canQuote}
+                  groupPosition={groupPosition}
+                  maxBodyLength={maxBodyLength}
+                  markdown={markdown}
+                  showSenderName={showSenderLabelsResolved}
+                  showAvatar={showAvatarsResolved}
+                  {...(onSenderPress ? { onSenderPress } : {})}
+                  {...(onAvatarPress ? { onAvatarPress } : {})}
+                  {...(readState ? { readState } : {})}
+                  {...(labelFor ? { labelFor } : {})}
+                  editing={editingId === msg.id}
+                  {...(canEditOwnMessage({
+                    isSelf,
+                    deleted: !!msg.deleted_at,
+                    receiptsVisible,
+                    readState,
+                    insertedAt: msg.inserted_at,
+                  })
+                    ? { onStartEdit: () => setEditingId(msg.id) }
+                    : {})}
+                  onCancelEdit={() => setEditingId(null)}
+                  onSaveEdit={async (body: string) => {
+                    await edit(msg.id, body);
+                    setEditingId(null);
+                  }}
+                  onDelete={() => void deleteMsg(msg.id)}
+                  onOpenThread={() => setThreadRootId(msg.id)}
+                  onQuote={() => setReplyingTo(msg)}
+                  onQuotedClick={scrollToOriginal}
+                  {...(onCallBack ? { onCallBack } : {})}
+                  {...layoutProps}
+                  mentionsMe={mentionsViewer(msg, me?.id ?? null)}
+                />
+              );
+              if (renderMessage) {
+                return (
+                  <Fragment key={msg.id}>
+                    {renderMessage(msg, me?.id ?? null, {
+                      layout,
+                      groupPosition,
+                      isRunStart:
+                        layout === 'compact' ||
+                        groupPosition === 'first' ||
+                        groupPosition === 'standalone',
+                      renderDefault,
+                    })}
+                  </Fragment>
+                );
+              }
               return (
                 <Fragment key={msg.id}>
                   {showDaySeparator && (
@@ -731,44 +862,7 @@ export function ConversationView({
                       <span>{formatDayLabel(msg.inserted_at)}</span>
                     </div>
                   )}
-                  <MessageRow
-                    msg={enriched}
-                    meId={me?.id ?? null}
-                    reactions={reactions}
-                    attachments={attachments}
-                    actions={actions}
-                    threads={threads}
-                    quotations={canQuote}
-                    groupPosition={groupPosition}
-                    maxBodyLength={maxBodyLength}
-                    markdown={markdown}
-                    showSenderName={showSenderLabelsResolved}
-                    showAvatar={showAvatarsResolved}
-                    {...(onSenderPress ? { onSenderPress } : {})}
-                    {...(onAvatarPress ? { onAvatarPress } : {})}
-                    {...(readState ? { readState } : {})}
-                    {...(labelFor ? { labelFor } : {})}
-                    editing={editingId === msg.id}
-                    {...(canEditOwnMessage({
-                      isSelf,
-                      deleted: !!msg.deleted_at,
-                      receiptsVisible,
-                      readState,
-                      insertedAt: msg.inserted_at,
-                    })
-                      ? { onStartEdit: () => setEditingId(msg.id) }
-                      : {})}
-                    onCancelEdit={() => setEditingId(null)}
-                    onSaveEdit={async (body: string) => {
-                      await edit(msg.id, body);
-                      setEditingId(null);
-                    }}
-                    onDelete={() => void deleteMsg(msg.id)}
-                    onOpenThread={() => setThreadRootId(msg.id)}
-                    onQuote={() => setReplyingTo(msg)}
-                    onQuotedClick={scrollToOriginal}
-                    {...(onCallBack ? { onCallBack } : {})}
-                  />
+                  {renderDefault()}
                 </Fragment>
               );
             })
@@ -794,6 +888,7 @@ export function ConversationView({
                   showSenderName={showSenderLabelsResolved}
                   showAvatar={showAvatarsResolved}
                   {...(labelFor ? { labelFor } : {})}
+                  {...layoutProps}
                 />
               </div>
             ),
@@ -849,6 +944,8 @@ export function ConversationView({
             conversationId={conversationId}
             rootMessage={threadRoot}
             onClose={() => setThreadRootId(null)}
+            layout={layout}
+            {...(timeFormat ? { timeFormat } : {})}
           />
         </div>
       )}

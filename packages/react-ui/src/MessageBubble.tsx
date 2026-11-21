@@ -5,6 +5,13 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
+import {
+  formatMessageTime,
+  renderSlot,
+  type MessageSlotContext,
+  type MessageSlots,
+  type TimeFormat,
+} from './layout.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { userColor } from './userColor.js';
 
@@ -85,6 +92,14 @@ export interface MessageBubbleProps {
    * attachments yourself outside the bubble.
    */
   showAttachments?: boolean;
+  /** `'12h'`, `'24h'` or a formatter for the timestamp. Defaults to the locale's. */
+  timeFormat?: TimeFormat;
+  /**
+   * Replace or wrap the `header` (sender label), `attachments` and
+   * `body` parts. Needs `slotContext` (MessageRow passes both).
+   */
+  slots?: MessageSlots;
+  slotContext?: MessageSlotContext;
 }
 
 /**
@@ -109,6 +124,9 @@ export function MessageBubble({
   onSenderPress,
   actionsTrigger,
   showAttachments = true,
+  timeFormat,
+  slots,
+  slotContext,
 }: MessageBubbleProps) {
   const isSelf = currentUserId !== null && message.sender_id === currentUserId;
   const [expanded, setExpanded] = useState(false);
@@ -188,12 +206,7 @@ export function MessageBubble({
     .filter(Boolean)
     .join(' ');
 
-  const time = message.inserted_at
-    ? new Date(message.inserted_at).toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '';
+  const time = formatMessageTime(message.inserted_at, timeFormat);
 
   // Show the quote card whenever the message HAS a quote, even if the
   // preview hasn't landed yet (e.g., the optimistic temp before the
@@ -210,21 +223,26 @@ export function MessageBubble({
   return (
     <div className={className}>
       {actionsTrigger}
-      {renderSenderName &&
-        (onSenderPress ? (
-          <button
-            type="button"
-            className="poolse-message__sender poolse-message__sender--button"
-            style={{ color: senderColorHex }}
-            onClick={onSenderPress}
-          >
-            {senderName}
-          </button>
-        ) : (
-          <div className="poolse-message__sender" style={{ color: senderColorHex }}>
-            {senderName}
-          </div>
-        ))}
+      {renderSlot(
+        slots?.header,
+        slotContext,
+        renderSenderName ? (
+          onSenderPress ? (
+            <button
+              type="button"
+              className="poolse-message__sender poolse-message__sender--button"
+              style={{ color: senderColorHex }}
+              onClick={onSenderPress}
+            >
+              {senderName}
+            </button>
+          ) : (
+            <div className="poolse-message__sender" style={{ color: senderColorHex }}>
+              {senderName}
+            </div>
+          )
+        ) : null,
+      )}
       {showQuoteCard === 'full' && (
         <QuotedCard
           quoted={message.quoted_message!}
@@ -236,13 +254,21 @@ export function MessageBubble({
       {showQuoteCard === 'placeholder' && (
         <QuotedPlaceholder isSelf={isSelf} quotedMessageId={message.quoted_message_id!} />
       )}
-      {imageAttachments.length > 0 && <ImageMosaic images={imageAttachments} />}
-      {fileAttachments.length > 0 && (
-        <div className="poolse-message__files">
-          {fileAttachments.map((att) => (
-            <AttachmentPreview key={att.id} attachment={att} />
-          ))}
-        </div>
+      {renderSlot(
+        slots?.attachments,
+        slotContext,
+        hasAnyAttachment ? (
+          <>
+            {imageAttachments.length > 0 && <ImageMosaic images={imageAttachments} />}
+            {fileAttachments.length > 0 && (
+              <div className="poolse-message__files">
+                {fileAttachments.map((att) => (
+                  <AttachmentPreview key={att.id} attachment={att} />
+                ))}
+              </div>
+            )}
+          </>
+        ) : null,
       )}
       {(() => {
         // One meta fragment, three placements: floated into the last
@@ -343,7 +369,7 @@ export function MessageBubble({
 
         return (
           <>
-            {body}
+            {renderSlot(slots?.body, slotContext, body)}
             <span className={metaClass}>{metaContent}</span>
           </>
         );
@@ -357,7 +383,7 @@ export function MessageBubble({
 // authored on older clients (or partially-populated rows during a
 // realtime echo race) we fall back to "treat as file" which is the
 // safer of the two paths.
-function isImageContentType(ct: string | null | undefined): boolean {
+export function isImageContentType(ct: string | null | undefined): boolean {
   return typeof ct === 'string' && ct.toLowerCase().startsWith('image/');
 }
 
@@ -368,7 +394,7 @@ function isImageContentType(ct: string | null | undefined): boolean {
 //   3  → one wide tile on top, two equal squares beneath
 //   4+ → 2×2 grid; the 4th tile shows a "+N more" overlay when there
 //        are more than four images.
-function ImageMosaic({ images }: { images: Attachment[] }) {
+export function ImageMosaic({ images }: { images: Attachment[] }) {
   const total = images.length;
   // Cap the visible tiles at 4; anything past that surfaces via the
   // overflow badge on the last tile.
@@ -404,7 +430,7 @@ function ImageMosaic({ images }: { images: Attachment[] }) {
 // window. The host's `useMembers`/`useMessages` will usually fill in
 // the preview within ~100ms; until then this keeps the bubble's
 // "this is a quote" affordance visible.
-function QuotedPlaceholder({
+export function QuotedPlaceholder({
   isSelf,
   quotedMessageId: _quotedMessageId,
 }: {
@@ -424,7 +450,7 @@ function QuotedPlaceholder({
   );
 }
 
-function QuotedCard({
+export function QuotedCard({
   quoted,
   isSelf,
   labelFor,

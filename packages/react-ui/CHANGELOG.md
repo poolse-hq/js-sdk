@@ -19,6 +19,32 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   `encodeTheme`, `decodeTheme` and the theme types from `@poolse/theme`.
 - Stylesheet: a `[data-theme='light']` block, so a light-pinned subtree stays
   light under a dark OS or a dark ancestor.
+- `ConversationView` chat layouts: `layout="bubbles" | "list" | "compact"`
+  (default `bubbles`, unchanged). `list` is Slack-style — full-width
+  left-aligned rows, avatar + name + time once per run, later messages show
+  their time in the gutter on hover, a hover toolbar (React · Reply · Thread ·
+  More with Copy / Edit / Delete), "N replies" under thread roots. `compact` is
+  Discord/IRC-style — time, the name in the sender's `userColor`, and the text
+  on one line, small avatars only with `showAvatars`. Both mark messages that
+  @-mention the viewer with an accent bar and draw day dividers as a rule.
+- `ConversationView` props `density` (`'comfortable' | 'compact'`),
+  `showAvatars` (overrides `avatars`; defaults `list` on, `compact` off),
+  `timeFormat` (`'12h' | '24h' | (date) => string`), `groupWindowMinutes`
+  (default 5), and `slots` — `header`, `body`, `attachments`, `reactions`,
+  `thread`, `actions`, each `(props) => ReactNode` receiving the message,
+  sender, layout, `isRunStart` and its default rendering as `children`; they
+  apply in every layout. Types `ChatLayout`, `ChatDensity`, `TimeFormat`,
+  `MessageSlots`, `MessageSlot`, `MessageSlotProps`, `RenderMessageContext`.
+- `renderMessage` gets a third argument, `{ layout, groupPosition, isRunStart,
+renderDefault }`; return `renderDefault()` to keep the built-in row.
+- `MessageActions` `moreMenu` (Copy / Edit / Delete behind a "More" button);
+  `MessageBubble` `timeFormat`, `slots` / `slotContext`; `ThreadView` `layout`,
+  `timeFormat` (ConversationView passes its own).
+
+### Deprecated
+
+- `ConversationView` `groupingWindowMs` — use `groupWindowMinutes` (still
+  honoured when that is unset).
 
 ### Changed
 

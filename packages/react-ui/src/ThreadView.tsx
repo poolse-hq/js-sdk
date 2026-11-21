@@ -12,6 +12,7 @@ import { useMe, useThread } from '@poolse/react';
 import React, { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
+import type { ChatLayout, TimeFormat } from './layout.js';
 import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
@@ -26,6 +27,9 @@ export interface ThreadViewProps {
    * brand-styled <MessageBubble>.
    */
   renderMessage?: (msg: Message, currentUserId: string | null) => ReactNode;
+  /** Row layout for the replies — see `ChatLayout`. Defaults to `'bubbles'`. */
+  layout?: ChatLayout;
+  timeFormat?: TimeFormat;
 }
 
 export function ThreadView({
@@ -33,6 +37,8 @@ export function ThreadView({
   rootMessage,
   onClose,
   renderMessage,
+  layout,
+  timeFormat,
 }: ThreadViewProps) {
   const { me } = useMe();
   const {
@@ -140,6 +146,8 @@ export function ThreadView({
         setEditingId(null);
       }}
       onDelete={() => void deleteReply(msg.id)}
+      {...(layout ? { layout } : {})}
+      {...(timeFormat ? { timeFormat } : {})}
     />
   );
 
