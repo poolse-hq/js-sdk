@@ -66,6 +66,7 @@ export { MemberList, type MemberListProps } from './MemberList.js';
 
 // ── Rich content ──────────────────────────────────────────────
 export { AttachmentPreview, type AttachmentPreviewProps } from './AttachmentPreview.js';
+export { LinkPreviewCard, type LinkPreviewCardProps } from './LinkPreviewCard.js';
 export { UploadQueueStrip } from './UploadQueueStrip.js';
 export { ReactionStrip, ReactionPicker, type ReactionStripProps } from './Reactions.js';
 export { MentionInput, type MentionInputProps } from './MentionInput.js';

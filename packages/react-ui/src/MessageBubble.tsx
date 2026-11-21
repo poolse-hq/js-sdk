@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { hasLinkPreviews, MessageLinkPreviews } from './LinkPreviewCard.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
 import {
   formatMessageTime,
@@ -95,6 +96,11 @@ export interface MessageBubbleProps {
   /** `'12h'`, `'24h'` or a formatter for the timestamp. Defaults to the locale's. */
   timeFormat?: TimeFormat;
   /**
+   * Cards for the links in the text (`message.link_previews`) under the
+   * body; the sender gets a × to remove one. Defaults to `true`.
+   */
+  linkPreviews?: boolean;
+  /**
    * Replace or wrap the `header` (sender label), `attachments` and
    * `body` parts. Needs `slotContext` (MessageRow passes both).
    */
@@ -125,6 +131,7 @@ export function MessageBubble({
   actionsTrigger,
   showAttachments = true,
   timeFormat,
+  linkPreviews = true,
   slots,
   slotContext,
 }: MessageBubbleProps) {
@@ -185,8 +192,10 @@ export function MessageBubble({
   // their last line, so those fall back to the meta row.
   const trimToggleVisible =
     shouldTrim || (expanded && rawBody.length > maxBodyLength + TRIM_BUFFER);
+  const showPreviews = linkPreviews && hasLinkPreviews(message);
   const inlineMeta =
     hasVisibleBody &&
+    !showPreviews &&
     jumboCount === 0 &&
     !trimToggleVisible &&
     (!markdown || !hasMarkdown(displayBody));
@@ -372,6 +381,7 @@ export function MessageBubble({
         return (
           <>
             {renderSlot(slots?.body, slotContext, body)}
+            {showPreviews ? <MessageLinkPreviews message={message} canRemove={isSelf} /> : null}
             <span className={metaClass}>{metaContent}</span>
           </>
         );

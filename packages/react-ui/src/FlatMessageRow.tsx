@@ -16,6 +16,7 @@ import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { hasLinkPreviews, MessageLinkPreviews } from './LinkPreviewCard.js';
 import { Avatar } from './Avatar.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
@@ -53,6 +54,7 @@ export function FlatMessageRow({
   markdown = false,
   showAvatar = layout === 'list',
   showPresence = false,
+  linkPreviews = true,
   onSenderPress,
   onAvatarPress,
   timeFormat,
@@ -263,6 +265,9 @@ export function FlatMessageRow({
       {quote}
       {renderSlot(slots?.attachments, ctx, attachmentsEl)}
       {renderSlot(slots?.body, ctx, body)}
+      {linkPreviews && !editing && hasLinkPreviews(msg) ? (
+        <MessageLinkPreviews message={msg} canRemove={isSelf} />
+      ) : null}
       {renderSlot(slots?.reactions, ctx, reactionsEl)}
       {renderSlot(slots?.thread, ctx, threadEl)}
     </div>

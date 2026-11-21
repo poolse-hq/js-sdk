@@ -20,6 +20,14 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   (direct chats: badge and state as the subtitle, default `true`) and
   `ConversationView` / `MessageRow` (message avatars, default `false`).
 
+- Link previews: `<LinkPreviewCard preview onRemove?>` — a web page's image,
+  site name with favicon, title (2 lines) and description (3 lines), or an
+  image link drawn inline. `ConversationView`, `MessageRow` and `MessageBubble`
+  draw `message.link_previews` under the text in every layout (prop
+  `linkPreviews`, default `true`); nothing is reserved until they arrive. The
+  sender gets a × that hides the card and calls
+  `messages.update(id, { remove_link_previews: [url] })` (the card returns if
+  that fails). Only `http(s)` links are drawn.
 - `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
   `getText()`, `setText(text)` and `focus()`.
 - `ConversationView` shows a notice when a send is refused because the quoted

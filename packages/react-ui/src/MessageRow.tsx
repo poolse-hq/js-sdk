@@ -97,6 +97,8 @@ export interface MessageRowProps {
    * to `false`.
    */
   showPresence?: boolean;
+  /** Link preview cards under the text (sender can remove). Defaults to `true`. */
+  linkPreviews?: boolean;
   /** Makes the sender label a button (other people's messages). */
   onSenderPress?: (user: MessageUser) => void;
   /** Makes the avatar a button (other people's messages). */
@@ -162,6 +164,7 @@ function BubbleMessageRow({
   showSenderName = false,
   showAvatar = false,
   showPresence = false,
+  linkPreviews = true,
   onSenderPress,
   onAvatarPress,
   timeFormat,
@@ -262,6 +265,7 @@ function BubbleMessageRow({
             showSenderName={showSenderName}
             {...(onSenderPress ? { onSenderPress: () => onSenderPress(sender) } : {})}
             showAttachments={attachments}
+            linkPreviews={linkPreviews}
             {...(readState ? { readState } : {})}
             {...(labelFor ? { labelFor } : {})}
             {...(onQuotedClick ? { onQuotedClick } : {})}

@@ -87,6 +87,9 @@ message, pass `slots={{ header, body, attachments, reactions, thread, actions }}
   "Last seen …") and `MemberList` show it; turn it off with
   `showPresence={false}`. `ConversationView showPresence` adds it to message
   avatars (off by default).
+- **Link previews** show under the text in every layout (`linkPreviews`,
+  default on); the sender can remove one with its ×. `<LinkPreviewCard
+preview>` draws one on its own.
 - **Deleted messages** read "This message was deleted" and keep their thread
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.
@@ -99,8 +102,9 @@ message, pass `slots={{ header, body, attachments, reactions, thread, actions }}
 - Sheets: `UserPickerSheet`, `GroupDetailsSheet`.
 - Messages: `MessageBubble`, `EditableMessageBubble`, `MessageActions`,
   `TypingIndicator`, `CallLogRow`, `LiveCallBanner`.
-- Composer: `MessageComposer` (ref: `addFiles`), `MentionInput`,
-  `UploadQueueStrip`, `AttachmentPreview`.
+- Composer: `MessageComposer` (ref: `addFiles`, `getText`, `setText`,
+  `focus`), `MentionInput`, `UploadQueueStrip`, `AttachmentPreview`.
+- Rich content: `LinkPreviewCard`.
 - Lists: `ConversationList`, `MemberList`.
 - Reactions: `ReactionStrip`, `ReactionPicker`.
 - Rooms and calls: `RoomJoinBar`, `RoomStage` (both take `useRoom()` from

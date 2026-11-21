@@ -151,6 +151,13 @@ export interface ConversationViewProps {
    */
   quotations?: boolean;
 
+  /**
+   * Cards for links in message text (site, title, description, image;
+   * an image link inline), arriving a moment after the message. The
+   * sender can remove one with its ×. Defaults to `true`.
+   */
+  linkPreviews?: boolean;
+
   /** Check-double glyph on own messages once another member's read cursor advances past them. */
   readReceipts?: boolean;
 
@@ -263,6 +270,7 @@ export function ConversationView({
   threads = TRUE,
   quotations = TRUE,
   readReceipts = TRUE,
+  linkPreviews = TRUE,
   markdown = TRUE,
   maxBodyLength = 200,
   grouping = TRUE,
@@ -350,6 +358,7 @@ export function ConversationView({
   const layoutProps = {
     layout,
     showPresence,
+    linkPreviews,
     ...(timeFormat ? { timeFormat } : {}),
     ...(slots ? { slots } : {}),
   };
