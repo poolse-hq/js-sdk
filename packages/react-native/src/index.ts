@@ -63,11 +63,11 @@ export { AgentBadge, AgentBadgeInline, type AgentBadgeProps } from './AgentBadge
 export {
   ApprovalCard,
   ApprovalList,
-  ApprovalMessageRow,
+  MessageApproval,
   MessageCitations,
   type ApprovalCardProps,
   type ApprovalListProps,
-  type ApprovalMessageRowProps,
+  type MessageApprovalProps,
   type MessageCitationsProps,
 } from './Agents.js';
 export {

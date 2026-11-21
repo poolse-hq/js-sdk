@@ -13,12 +13,10 @@ import {
   citationLabel,
   citationsOf,
   formatClock,
-  parseApproval,
   useApproval,
   useApprovals,
-  useUser,
 } from '@poolse/react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -36,7 +34,7 @@ import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 export interface ApprovalCardProps {
-  /** The request — from `parseApproval(message)` or `useApprovals()`. */
+  /** The request — from `useApprovals()` or `useApproval(id)`. */
   approval: AgentApproval;
   /** The agent's name when the request leaves it out (e.g. the message's sender). */
   agentName?: string | null;
@@ -48,7 +46,7 @@ export interface ApprovalCardProps {
 }
 
 /**
- * An agent asking before it does something outside the chat. One tap
+ * An agent asking before it calls a tool with an effect outside the chat. One tap
  * approves or denies; a reason is optional. Follows the shared
  * approvals store, so an answer given anywhere shows here at once.
  */
@@ -71,9 +69,9 @@ export function ApprovalCard({
   const name = approval.agent?.name ?? agentName ?? 'An agent';
   const details = allDetails ? approval.details : approval.details.slice(0, maxDetails);
   const statusColor =
-    status === 'approved'
+    status === 'running' || status === 'done'
       ? theme.colors.success
-      : status === 'denied'
+      : status === 'declined' || status === 'failed'
         ? theme.colors.danger
         : status === 'pending'
           ? theme.colors.warning
@@ -213,20 +211,27 @@ export function ApprovalCard({
   );
 }
 
-export interface ApprovalMessageRowProps {
-  msg: Message;
-  meId: string | null;
+export interface MessageApprovalProps {
+  /** `approvalIdOf(message)`. */
+  approvalId: string;
+  /** The asking agent's name (the message's sender) when the directory doesn't know it. */
+  agentName?: string | null;
+  style?: StyleProp<ViewStyle>;
 }
 
-/** A `kind: "agent_approval"` message in a list: the card, full width. */
-export function ApprovalMessageRow({ msg }: ApprovalMessageRowProps) {
-  const approval = useMemo(() => parseApproval(msg), [msg]);
-  const { profile } = useUser(approval?.agent?.name ? null : msg.sender_external_id);
+/**
+ * The approval an agent's message waits for (`agent_meta.approval_id`),
+ * loaded and kept live. Nothing shows for someone else's approval.
+ */
+export function MessageApproval({ approvalId, agentName, style }: MessageApprovalProps) {
+  const { approval } = useApproval(approvalId);
   if (!approval) return null;
   return (
-    <View style={styles.cardRow}>
-      <ApprovalCard approval={approval} agentName={profile?.displayName ?? null} />
-    </View>
+    <ApprovalCard
+      approval={approval}
+      {...(agentName !== undefined ? { agentName } : {})}
+      style={[styles.inline, style]}
+    />
   );
 }
 
@@ -297,7 +302,7 @@ export function MessageCitations({
         const label = citationLabel(c);
         const row = (
           <View style={styles.citation}>
-            <Text style={[styles.citationNum, { color: muted }]}>{i + 1}</Text>
+            <Text style={[styles.citationNum, { color: muted }]}>{c.n || i + 1}</Text>
             <PoolseIcon
               name={CITATION_ICON[c.type]}
               size={13}
@@ -334,8 +339,20 @@ export function MessageCitations({
   );
 }
 
-const CITATION_ICON = { message: 'message', file: 'attachment', transcript: 'mic' } as const;
-const CITATION_KIND = { message: 'Message', file: 'File', transcript: 'Meeting' } as const;
+const CITATION_ICON = {
+  message: 'message',
+  file: 'attachment',
+  transcript: 'mic',
+  summary: 'pulse',
+  memory: 'pin',
+} as const;
+const CITATION_KIND = {
+  message: 'Message',
+  file: 'File',
+  transcript: 'Meeting',
+  summary: 'Meeting summary',
+  memory: 'What we know',
+} as const;
 
 function useExpired(a: AgentApproval): boolean {
   const at = a.expiresAt ? Date.parse(a.expiresAt) : NaN;
@@ -349,7 +366,7 @@ function useExpired(a: AgentApproval): boolean {
 }
 
 const styles = StyleSheet.create({
-  cardRow: { paddingHorizontal: 12, paddingVertical: 6, alignItems: 'stretch' },
+  inline: { marginTop: 8, marginHorizontal: 8, marginBottom: 4, width: 'auto' },
   card: { borderWidth: 1, padding: 12, maxWidth: 520, width: '100%' },
   head: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
   agent: { flexShrink: 1, fontSize: 13, fontWeight: '700' },

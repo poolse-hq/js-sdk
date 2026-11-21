@@ -3,34 +3,37 @@
 // @poolse/react-ui; media plays through your adapter (`renderMedia`,
 // see messageExtras.tsx and the README).
 //
-//     <SummaryCard summary={parseCallSummary(msg)!} onOpenMoment={seek} />
-//     <AskMeetings onOpenMoment={openCall} />
+//     <SummaryCard summary={parseCallSummary(msg)!} onOpenMoment={open} />
+//     <AskMeetings onOpenMoment={open} />
 //     <ClipPlayer attachment={att} renderMedia={expoVideo} />
-//     <RecordingPlayer recording={rec} renderMedia={expoVideo} />
+//     <RecordingPlayer recordingId={id} renderMedia={expoVideo} />
 
-import type { Attachment, CallSummary, Message, Recording } from '@poolse/sdk';
+import type { Attachment, CallSummary, MeetingMoment, Message, SummaryItem } from '@poolse/sdk';
 import {
   ASK_QUESTION_MAX,
   PLAYBACK_RATES,
   activeSegmentIndex,
   chapterIndexAt,
-  chaptersOf,
   clipOf,
   formatClock,
   formatDue,
   formatTimeRange,
   meetingsErrorMessage,
+  momentOf,
   parseCallSummary,
+  silencesFromSegments,
   silencesOf,
   skipSilenceTarget,
   speakerName,
+  summaryStatusText,
   summaryStyleLabel,
-  transcriptOffsetMs,
   useAskMeetings,
   useAttachmentUrl,
+  useCallSummary,
+  useClip,
   useMembers,
+  useRecordingPlayback,
   useRecordingUrl,
-  useTranscript,
   useUser,
   type PlaybackRate,
 } from '@poolse/react';
@@ -65,17 +68,27 @@ import { UserName } from './UserName.js';
 
 export interface SummaryCardProps {
   summary: CallSummary;
-  /** A moment was pressed. Defaults to the provider's `onOpenMoment`; without one, moments are plain text. */
-  onOpenMoment?: (callId: string, startMs: number) => void;
+  /** A timed line or moment was pressed. Defaults to the provider's; without one, times are plain text. */
+  onOpenMoment?: (moment: MeetingMoment) => void;
   /** A poolse user id → name, for assignees. Defaults to the provider's, then the conversation's members. */
   nameForUserId?: (userId: string) => string | null | undefined;
+  /** Fetch the full copy when shortened and follow `summary:ready`. Defaults to true. */
+  live?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
-/** A call's summary: decisions, action items, open questions and seekable key moments. */
-export function SummaryCard({ summary, onOpenMoment, nameForUserId, style }: SummaryCardProps) {
+/** A call's summary: overview, decisions, action items, open questions, sections and moments. */
+export function SummaryCard({
+  summary: initial,
+  onOpenMoment,
+  nameForUserId,
+  live = true,
+  style,
+}: SummaryCardProps) {
   const theme = useTheme();
   const extras = useMessageExtras();
+  const followed = useCallSummary(live ? initial.callId : null, initial);
+  const summary = (live ? followed.summary : null) ?? initial;
   const open = onOpenMoment ?? extras.onOpenMoment;
   const nameFor = nameForUserId ?? extras.nameForUserId;
   const needsMembers =
@@ -87,28 +100,39 @@ export function SummaryCard({ summary, onOpenMoment, nameForUserId, style }: Sum
     null;
   const text = { color: theme.colors.text, fontFamily: theme.fonts.body };
   const subtle = { color: theme.colors.textSubtle, fontFamily: theme.fonts.body };
-  const style_ = summaryStyleLabel(summary.style);
+  const styleLabel = summaryStyleLabel(summary.style);
+  const status = summaryStatusText(summary);
   const empty =
     !summary.overview &&
     summary.decisions.length === 0 &&
     summary.actionItems.length === 0 &&
     summary.openQuestions.length === 0 &&
-    summary.moments.length === 0;
+    summary.moments.length === 0 &&
+    summary.sections.length === 0;
 
-  const section = (title: string, children: ReactNode) => (
-    <View style={styles.section}>
+  const time = (item: SummaryItem) =>
+    item.startMs === null ? null : (
+      <TimeLink
+        ms={item.startMs}
+        {...(open ? { onPress: () => open(momentOf(summary, item)) } : {})}
+      />
+    );
+  const section = (title: string, children: ReactNode, key?: string) => (
+    <View style={styles.section} key={key}>
       <Text style={[styles.sectionTitle, subtle]} accessibilityRole="header">
         {title.toUpperCase()}
       </Text>
       {children}
     </View>
   );
-  const bullet = (t: string, i: number) => (
-    <View key={i} style={styles.bulletRow}>
-      <Text style={[styles.bullet, subtle]}>•</Text>
-      <Text style={[styles.body, text]}>{t}</Text>
-    </View>
-  );
+  const bullets = (list: SummaryItem[]) =>
+    list.map((d, i) => (
+      <View key={i} style={styles.bulletRow}>
+        <Text style={[styles.bullet, subtle]}>•</Text>
+        <Text style={[styles.body, text]}>{d.text}</Text>
+        {time(d)}
+      </View>
+    ));
 
   return (
     <View
@@ -121,74 +145,122 @@ export function SummaryCard({ summary, onOpenMoment, nameForUserId, style }: Sum
         },
         style,
       ]}
-      accessibilityLabel={style_ === 'Call summary' ? 'Call summary' : `Call summary, ${style_}`}
+      accessibilityLabel={styleLabel === 'Meeting' ? 'Call summary' : `Call summary, ${styleLabel}`}
     >
       <View style={styles.head}>
         <PoolseIcon name="pulse" size={16} color={theme.colors.accentStrong} label={null} />
         <Text style={[styles.title, text]}>Call summary</Text>
-        {style_ !== 'Call summary' ? (
+        {styleLabel !== 'Meeting' ? (
           <View style={[styles.pill, { backgroundColor: theme.colors.surfaceAlt }]}>
-            <Text style={[styles.pillText, subtle]}>{style_}</Text>
+            <Text style={[styles.pillText, subtle]}>{styleLabel}</Text>
           </View>
         ) : null}
       </View>
-      {summary.overview ? <Text style={[styles.overview, subtle]}>{summary.overview}</Text> : null}
-      {empty ? (
-        <Text style={[styles.overview, subtle]}>Nothing to report from this call.</Text>
-      ) : null}
-      {summary.decisions.length > 0 ? section('Decisions', summary.decisions.map(bullet)) : null}
-      {summary.actionItems.length > 0
-        ? section(
-            'Action items',
-            summary.actionItems.map((a, i) => {
-              const due = formatDue(a.due);
-              const resolved = a.assigneeUserId ? (nameFor?.(a.assigneeUserId) ?? null) : null;
-              const ext = a.assigneeUserId && !resolved ? extFor(a.assigneeUserId) : null;
-              return (
-                <View key={i} style={styles.task}>
-                  <View style={[styles.box, { borderColor: theme.colors.textSubtle }]} />
-                  <View style={styles.taskBody}>
-                    <Text style={[styles.body, text]}>{a.text}</Text>
-                    {resolved || ext || due ? (
-                      <View style={styles.taskMeta}>
-                        {resolved ? (
-                          <Text style={[styles.meta, subtle]} numberOfLines={1}>
-                            {resolved}
-                          </Text>
-                        ) : ext ? (
-                          <UserName externalId={ext} />
-                        ) : null}
-                        {due ? (
-                          <Text style={[styles.meta, subtle]}>
-                            {resolved || ext ? '· ' : ''}
-                            {due}
-                          </Text>
+      {status ? (
+        <Text style={[styles.overview, subtle]}>{status}</Text>
+      ) : (
+        <>
+          {summary.overview ? (
+            <Text style={[styles.overview, subtle]}>{summary.overview}</Text>
+          ) : null}
+          {empty ? (
+            <Text style={[styles.overview, subtle]}>Nothing to report from this call.</Text>
+          ) : null}
+          {summary.decisions.length > 0 ? section('Decisions', bullets(summary.decisions)) : null}
+          {summary.actionItems.length > 0
+            ? section(
+                'Action items',
+                summary.actionItems.map((a, i) => {
+                  const due = formatDue(a.dueDate, a.dueText);
+                  const resolved = a.assigneeUserId ? (nameFor?.(a.assigneeUserId) ?? null) : null;
+                  const ext = a.assigneeUserId && !resolved ? extFor(a.assigneeUserId) : null;
+                  const said = !resolved && !ext ? a.assigneeName : null;
+                  return (
+                    <View key={a.id ?? i} style={styles.task}>
+                      <View style={[styles.box, { borderColor: theme.colors.textSubtle }]} />
+                      <View style={styles.taskBody}>
+                        <Text style={[styles.body, text]}>{a.text}</Text>
+                        {resolved || ext || said || due ? (
+                          <View style={styles.taskMeta}>
+                            {resolved || said ? (
+                              <Text style={[styles.meta, subtle]} numberOfLines={1}>
+                                {resolved ?? said}
+                              </Text>
+                            ) : ext ? (
+                              <UserName externalId={ext} />
+                            ) : null}
+                            {due ? (
+                              <Text style={[styles.meta, subtle]} numberOfLines={1}>
+                                {resolved || ext || said ? '· ' : ''}
+                                {due}
+                              </Text>
+                            ) : null}
+                          </View>
                         ) : null}
                       </View>
-                    ) : null}
-                  </View>
-                </View>
-              );
-            }),
-          )
-        : null}
-      {summary.openQuestions.length > 0
-        ? section('Open questions', summary.openQuestions.map(bullet))
-        : null}
-      {summary.moments.length > 0
-        ? section(
-            'Key moments',
-            summary.moments.map((m, i) => (
-              <MomentRow
-                key={i}
-                startMs={m.startMs}
-                label={m.label}
-                {...(open ? { onPress: () => open(summary.callId, m.startMs) } : {})}
-              />
-            )),
-          )
-        : null}
+                      {time(a)}
+                    </View>
+                  );
+                }),
+              )
+            : null}
+          {summary.openQuestions.length > 0
+            ? section('Open questions', bullets(summary.openQuestions))
+            : null}
+          {summary.sections.map((sec, i) => section(sec.title, bullets(sec.items), `s${i}`))}
+          {summary.moments.length > 0
+            ? section(
+                'Key moments',
+                summary.moments.map((m, i) => (
+                  <MomentRow
+                    key={i}
+                    startMs={m.startMs}
+                    label={m.speakerName ? `${m.title} · ${m.speakerName}` : m.title}
+                    {...(open && m.startMs !== null
+                      ? { onPress: () => open(momentOf(summary, m)) }
+                      : {})}
+                  />
+                )),
+              )
+            : null}
+          {summary.truncated ? (
+            <Text style={[styles.note, subtle]}>
+              The meeting was long: this covers its first part.
+            </Text>
+          ) : null}
+        </>
+      )}
     </View>
+  );
+}
+
+function TimeLink({ ms, onPress }: { ms: number; onPress?: () => void }) {
+  const theme = useTheme();
+  const label = formatClock(ms);
+  const t = (
+    <Text
+      style={[
+        styles.itemTime,
+        {
+          color: onPress ? theme.colors.accentStrong : theme.colors.textSubtle,
+          fontFamily: theme.fonts.mono,
+        },
+      ]}
+    >
+      {label}
+    </Text>
+  );
+  return onPress ? (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Play from ${label}`}
+      hitSlop={8}
+    >
+      {t}
+    </Pressable>
+  ) : (
+    t
   );
 }
 
@@ -197,17 +269,18 @@ function MomentRow({
   label,
   onPress,
 }: {
-  startMs: number;
+  startMs: number | null;
   label: string;
   onPress?: () => void;
 }) {
   const theme = useTheme();
+  const at = startMs !== null ? formatClock(startMs) : '–';
   const row = (
     <View style={styles.moment}>
       <Text
         style={[styles.time, { color: theme.colors.accentStrong, fontFamily: theme.fonts.mono }]}
       >
-        {formatClock(startMs)}
+        {at}
       </Text>
       <Text
         style={[styles.body, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
@@ -221,7 +294,7 @@ function MomentRow({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Play from ${formatClock(startMs)}: ${label}`}
+      accessibilityLabel={`Play from ${at}: ${label}`}
       style={({ pressed }) => [pressed && { backgroundColor: theme.colors.surfaceAlt }]}
     >
       {row}
@@ -243,10 +316,11 @@ export function SummaryMessageRow({ msg, nameForUserId }: SummaryMessageRowProps
   const summary = useMemo(() => parseCallSummary(msg), [msg]);
   const { profile, agent } = useUser(msg.sender_external_id);
   if (!summary) return null;
-  const isAgent = !!agent || msg.is_agent === true;
+  const isAgent = !!agent || msg.sender_is_agent === true;
+  const name = profile?.displayName ?? agent?.name ?? null;
   return (
     <View style={styles.cardRow}>
-      {msg.sender_external_id ? (
+      {name ? (
         <View style={styles.sender}>
           <Text
             style={[
@@ -255,7 +329,7 @@ export function SummaryMessageRow({ msg, nameForUserId }: SummaryMessageRowProps
             ]}
             numberOfLines={1}
           >
-            {profile?.displayName ?? msg.agent?.name ?? 'Note-taker'}
+            {name}
           </Text>
           {isAgent ? <AgentBadge size="xs" /> : null}
         </View>
@@ -269,18 +343,26 @@ export function SummaryMessageRow({ msg, nameForUserId }: SummaryMessageRowProps
 
 export interface AskMeetingsProps {
   callId?: string | null;
-  onOpenMoment?: (callId: string, startMs: number) => void;
+  conversationId?: string | null;
+  onOpenMoment?: (moment: MeetingMoment) => void;
   placeholder?: string;
   style?: StyleProp<ViewStyle>;
 }
 
 /** A question box over your meetings, answered with links to the moments. */
-export function AskMeetings({ callId, onOpenMoment, placeholder, style }: AskMeetingsProps) {
+export function AskMeetings({
+  callId,
+  conversationId,
+  onOpenMoment,
+  placeholder,
+  style,
+}: AskMeetingsProps) {
   const theme = useTheme();
   const extras = useMessageExtras();
   const open = onOpenMoment ?? extras.onOpenMoment;
   const { answer, question, loading, error, ask, reset } = useAskMeetings({
     callId: callId ?? null,
+    conversationId: conversationId ?? null,
   });
   const [draft, setDraft] = useState('');
   const text = { color: theme.colors.text, fontFamily: theme.fonts.body };
@@ -288,6 +370,7 @@ export function AskMeetings({ callId, onOpenMoment, placeholder, style }: AskMee
   const submit = () => {
     if (draft.trim()) void ask(draft);
   };
+  const label = callId ? 'Ask about this meeting' : 'Ask your meetings';
 
   return (
     <View style={style}>
@@ -304,9 +387,9 @@ export function AskMeetings({ callId, onOpenMoment, placeholder, style }: AskMee
           onSubmitEditing={submit}
           returnKeyType="search"
           maxLength={ASK_QUESTION_MAX}
-          placeholder={placeholder ?? (callId ? 'Ask about this meeting' : 'Ask your meetings')}
+          placeholder={placeholder ?? label}
           placeholderTextColor={theme.colors.textSubtle}
-          accessibilityLabel={callId ? 'Ask about this meeting' : 'Ask your meetings'}
+          accessibilityLabel={label}
           style={[styles.askInput, text]}
         />
         <Pressable
@@ -335,14 +418,16 @@ export function AskMeetings({ callId, onOpenMoment, placeholder, style }: AskMee
           <>
             {question ? <Text style={[styles.meta, subtle]}>{question}</Text> : null}
             <Text style={[styles.answer, text]}>
-              {answer.answer || 'Nothing in your meetings answers that.'}
+              {answer.answer ?? 'Nothing in your meetings answers that.'}
             </Text>
-            {answer.links.map((l, i) => (
+            {answer.citations.map((c, i) => (
               <MomentRow
-                key={`${l.callId}-${l.startMs}-${i}`}
-                startMs={l.startMs}
-                label={l.snippet || 'In the meeting'}
-                {...(open ? { onPress: () => open(l.callId, l.startMs) } : {})}
+                key={`${c.callId}-${c.startMs}-${i}`}
+                startMs={c.startMs}
+                label={[c.speakerName, c.text].filter(Boolean).join(': ') || 'In the meeting'}
+                {...(open && (c.startMs !== null || c.recordingMs !== null)
+                  ? { onPress: () => open(c) }
+                  : {})}
               />
             ))}
             <Pressable
@@ -400,8 +485,10 @@ function PlayButton({ paused, onPress }: { paused: boolean; onPress: () => void 
 // ── Clips ────────────────────────────────────────────────────────────────
 
 export interface ClipPlayerProps {
-  /** A clip attachment (it carries `clip`) — plays its own file. */
+  /** A clip shared in chat (an attachment) — plays its own file. */
   attachment?: Attachment | null;
+  /** A clip by id — shows "Cutting…" until `clip:ready`. */
+  clipId?: string | null;
   /** Or a range of a recording: plays from `startMs` and stops at `endMs`. */
   clip?: { recordingId: string; startMs: number; endMs: number } | null;
   onOpenRecording?: (recordingId: string, startMs: number) => void;
@@ -411,9 +498,10 @@ export interface ClipPlayerProps {
   style?: StyleProp<ViewStyle>;
 }
 
-/** A short piece of a call's recording, shared in chat. */
+/** A short piece of a call's recording. */
 export function ClipPlayer({
   attachment,
+  clipId,
   clip: rangeClip,
   onOpenRecording,
   renderMedia,
@@ -423,16 +511,26 @@ export function ClipPlayer({
   const theme = useTheme();
   const extras = useMessageExtras();
   const render = renderMedia ?? extras.renderMedia;
-  const info = (attachment ? clipOf(attachment) : null) ?? rangeClip ?? null;
-  const fileUrl = useAttachmentUrl(render && attachment ? attachment.id : null);
-  const recUrl = useRecordingUrl(render && !attachment && rangeClip ? rangeClip.recordingId : null);
-  const url = attachment ? fileUrl.url : recUrl.url;
-  const error = attachment ? fileUrl.error : recUrl.error;
-  const ranged = !attachment && !!rangeClip;
+  const mode = attachment ? 'file' : clipId ? 'clip' : rangeClip ? 'range' : 'none';
+  const fileUrl = useAttachmentUrl(render && mode === 'file' ? attachment!.id : null);
+  const cut = useClip(mode === 'clip' ? clipId! : null);
+  const recUrl = useRecordingUrl(render && mode === 'range' ? rangeClip!.recordingId : null);
+  const info =
+    mode === 'file'
+      ? clipOf(attachment)
+      : mode === 'clip' && cut.clip
+        ? { recordingId: cut.clip.recordingId, startMs: cut.clip.startMs, endMs: cut.clip.endMs }
+        : (rangeClip ?? null);
+  const url = mode === 'file' ? fileUrl.url : mode === 'clip' ? cut.url : recUrl.url;
+  const error = mode === 'file' ? fileUrl.error : mode === 'clip' ? cut.error : recUrl.error;
+  const contentType =
+    mode === 'file' ? attachment!.content_type : mode === 'clip' ? cut.clip?.contentType : null;
+  const isVideo = !!contentType?.startsWith('video/');
+  const ranged = mode === 'range';
+  const status = mode === 'clip' ? cut.clip?.status : null;
   const m = useMediaState();
   const subtle = { color: theme.colors.textSubtle, fontFamily: theme.fonts.body };
   const label = info ? formatTimeRange(info.startMs, info.endMs) : null;
-  const isVideo = !!attachment?.content_type.startsWith('video/');
 
   return (
     <View
@@ -446,7 +544,9 @@ export function ClipPlayer({
     >
       <View style={styles.clipHead}>
         <PoolseIcon name="video" size={14} color={theme.colors.textMuted} label={null} />
-        <Text style={[styles.clipTitle, { color: theme.colors.textMuted }]}>Clip</Text>
+        <Text style={[styles.clipTitle, { color: theme.colors.textMuted }]} numberOfLines={1}>
+          {(mode === 'clip' ? cut.clip?.title : null) ?? 'Clip'}
+        </Text>
         {label ? <Text style={[styles.meta, subtle]}>{label}</Text> : null}
         {info ? (
           <Text style={[styles.meta, subtle, styles.push]}>
@@ -454,16 +554,22 @@ export function ClipPlayer({
           </Text>
         ) : null}
       </View>
-      {render ? (
+      {status === 'queued' || status === 'cutting' ? (
+        <Text style={[styles.meta, subtle]}>Cutting the clip…</Text>
+      ) : status === 'failed' || status === 'deleted' ? (
+        <Text style={[styles.meta, { color: theme.colors.danger }]}>
+          {status === 'deleted' ? 'This clip was deleted.' : 'The clip couldn’t be cut.'}
+        </Text>
+      ) : render ? (
         error ? (
           <Text style={[styles.meta, { color: theme.colors.danger }]}>
-            The clip couldn’t be loaded.
+            {meetingsErrorMessage(error)}
           </Text>
         ) : url ? (
           <>
             {render({
               uri: url,
-              contentType: attachment?.content_type ?? null,
+              contentType: contentType ?? null,
               kind: isVideo ? 'video' : 'audio',
               paused: m.paused,
               rate: 1,
@@ -478,7 +584,8 @@ export function ClipPlayer({
               },
               onEnd: () => m.setPaused(true),
               onError: () => {
-                if (!attachment) recUrl.refresh();
+                if (mode === 'range') recUrl.refresh();
+                if (mode === 'clip') cut.refresh();
               },
               ...(isVideo ? { style: styles.clipVideo } : {}),
             })}
@@ -509,9 +616,9 @@ export function ClipPlayer({
 // ── Recording player ─────────────────────────────────────────────────────
 
 export interface RecordingPlayerProps {
-  recording: Recording;
+  recordingId: string;
   showTranscript?: boolean;
-  /** Start here (ms since the transcript started); a new value seeks. */
+  /** Start here (recording ms — a moment's `recordingMs`); a new value seeks. */
   startMs?: number | null;
   defaultSkipSilence?: boolean;
   /** The media adapter. Defaults to the provider's `renderMedia`. */
@@ -520,34 +627,36 @@ export interface RecordingPlayerProps {
 }
 
 export interface RecordingPlayerHandle {
-  /** Seek to transcript time `ms` and play. */
+  /** Seek to recording time `ms` and play. */
   seek: (ms: number) => void;
+  /** Seek to transcript time `ms` (a summary item's `startMs`) and play. */
+  seekTranscript: (ms: number) => void;
   play: () => void;
   pause: () => void;
 }
 
 /**
- * A finished recording: 1×–2× speed, skip silence (when the recording
- * lists its silences), chapters, and the transcript scrolling along —
- * tap a line to play from there.
+ * A finished recording (`GET /v1/recordings/:id/playback`): 1×–2× speed,
+ * skip silence, chapters, and the transcript scrolling along — tap a line
+ * to play from there.
  */
 export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayerProps>(
   function RecordingPlayer(
-    { recording, showTranscript = true, startMs, defaultSkipSilence = false, renderMedia, style },
+    { recordingId, showTranscript = true, startMs, defaultSkipSilence = false, renderMedia, style },
     ref,
   ) {
     const theme = useTheme();
     const extras = useMessageExtras();
     const render = renderMedia ?? extras.renderMedia;
-    const ready = recording.status === 'ready';
-    const { url, contentType, error, refresh } = useRecordingUrl(
-      ready && render ? recording.id : null,
-    );
-    const { transcript } = useTranscript(showTranscript && ready ? recording.call_id : null);
-    const offset = transcriptOffsetMs(recording.started_at, transcript?.started_at);
-    const chapters = useMemo(() => chaptersOf(recording), [recording]);
-    const silences = useMemo(() => silencesOf(recording), [recording]);
-    const segments = useMemo(() => transcript?.segments ?? [], [transcript]);
+    const { playback, error, refresh } = useRecordingPlayback(recordingId);
+    const url = playback?.url || null;
+    const segments = useMemo(() => playback?.transcript?.segments ?? [], [playback]);
+    const offset = playback?.transcript?.offsetMs ?? 0;
+    const chapters = playback?.chapters ?? [];
+    const silences = useMemo(() => {
+      const listed = silencesOf(playback?.recording);
+      return listed.length > 0 ? listed : silencesFromSegments(segments);
+    }, [playback, segments]);
     const m = useMediaState();
     const [rate, setRate] = useState<PlaybackRate>(1);
     const [skip, setSkip] = useState(defaultSkipSilence);
@@ -556,7 +665,11 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
 
     useImperativeHandle(ref, () => ({
       seek: (ms) => {
-        m.seekTo(ms - offset);
+        m.seekTo(ms);
+        m.setPaused(false);
+      },
+      seekTranscript: (ms) => {
+        m.seekTo(ms + offset);
         m.setPaused(false);
       },
       play: () => m.setPaused(false),
@@ -564,12 +677,12 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
     }));
 
     useEffect(() => {
-      if (typeof startMs === 'number') m.seekTo(startMs - offset);
+      if (typeof startMs === 'number') m.seekTo(startMs);
       // Only a new start point seeks.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [startMs]);
 
-    const active = activeSegmentIndex(segments, m.posMs + offset);
+    const active = activeSegmentIndex(segments, m.posMs);
     const scroller = useRef<ScrollView>(null);
     const lineY = useRef(new Map<number, number>());
     const userScrolledAt = useRef(0);
@@ -580,18 +693,14 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
     }, [active]);
 
     const chapterIdx = chapterIndexAt(chapters, m.posMs);
+    const isAudio =
+      playback?.recording?.mode === 'audio' || !!playback?.contentType?.startsWith('audio/');
     const text = { color: theme.colors.text, fontFamily: theme.fonts.body };
     const subtle = { color: theme.colors.textSubtle, fontFamily: theme.fonts.body };
 
     return (
       <View style={[styles.player, style]} accessibilityLabel="Recording">
-        {!ready ? (
-          <Text style={[styles.note, subtle]}>
-            {recording.status === 'failed'
-              ? 'This recording couldn’t be saved.'
-              : 'The recording is still being saved.'}
-          </Text>
-        ) : !render ? null : error && !url ? (
+        {!render ? null : error && !url ? (
           <Text style={[styles.note, { color: theme.colors.danger }]} accessibilityRole="alert">
             {meetingsErrorMessage(error)}
           </Text>
@@ -601,8 +710,8 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
           <>
             {render({
               uri: url,
-              contentType,
-              kind: recording.mode === 'audio' ? 'audio' : 'video',
+              contentType: playback?.contentType ?? null,
+              kind: isAudio ? 'audio' : 'video',
               paused: m.paused,
               rate,
               seek: m.seek,
@@ -634,7 +743,7 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
                 resumeAt.current = m.posMs;
                 refresh();
               },
-              ...(recording.mode === 'audio' ? {} : { style: styles.video }),
+              ...(isAudio ? {} : { style: styles.video }),
             })}
             <View style={styles.controls}>
               <PlayButton paused={m.paused} onPress={() => m.setPaused((p) => !p)} />
@@ -659,36 +768,33 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
                 {m.durMs ? ` / ${formatClock(m.durMs)}` : ''}
               </Text>
             </View>
+            <View style={styles.controls}>
+              <View
+                style={[styles.rates, { backgroundColor: theme.colors.surfaceAlt }]}
+                accessibilityLabel="Playback speed"
+              >
+                {PLAYBACK_RATES.map((r) => (
+                  <Pressable
+                    key={r}
+                    onPress={() => setRate(r)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: rate === r }}
+                    accessibilityLabel={`${r}× speed`}
+                    style={[styles.rate, rate === r && { backgroundColor: theme.colors.surface }]}
+                  >
+                    <Text style={[styles.rateText, rate === r ? text : subtle]}>{r}×</Text>
+                  </Pressable>
+                ))}
+              </View>
+              {silences.length > 0 ? (
+                <View style={[styles.skipRow, styles.push]}>
+                  <Text style={[styles.meta, subtle]}>Skip silence</Text>
+                  <Switch value={skip} onValueChange={setSkip} accessibilityLabel="Skip silence" />
+                </View>
+              ) : null}
+            </View>
           </>
         )}
-
-        {ready && render ? (
-          <View style={styles.controls}>
-            <View
-              style={[styles.rates, { backgroundColor: theme.colors.surfaceAlt }]}
-              accessibilityLabel="Playback speed"
-            >
-              {PLAYBACK_RATES.map((r) => (
-                <Pressable
-                  key={r}
-                  onPress={() => setRate(r)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: rate === r }}
-                  accessibilityLabel={`${r}× speed`}
-                  style={[styles.rate, rate === r && { backgroundColor: theme.colors.surface }]}
-                >
-                  <Text style={[styles.rateText, rate === r ? text : subtle]}>{r}×</Text>
-                </Pressable>
-              ))}
-            </View>
-            {silences.length > 0 ? (
-              <View style={[styles.skipRow, styles.push]}>
-                <Text style={[styles.meta, subtle]}>Skip silence</Text>
-                <Switch value={skip} onValueChange={setSkip} accessibilityLabel="Skip silence" />
-              </View>
-            ) : null}
-          </View>
-        ) : null}
 
         {chapters.length > 0 ? (
           <ScrollView
@@ -748,7 +854,7 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
                   key={`${s.start_ms}-${i}`}
                   onLayout={(e) => lineY.current.set(i, e.nativeEvent.layout.y)}
                   onPress={() => {
-                    m.seekTo(s.start_ms - offset);
+                    m.seekTo(s.start_ms);
                     m.setPaused(false);
                   }}
                   accessibilityRole="button"
@@ -761,9 +867,7 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
                     </Text>
                   ) : null}
                   <View style={styles.lineRow}>
-                    <Text style={[styles.lineTime, subtle]}>
-                      {formatClock(Math.max(0, s.start_ms - offset))}
-                    </Text>
+                    <Text style={[styles.lineTime, subtle]}>{formatClock(s.start_ms)}</Text>
                     <Text style={[styles.body, on ? text : { color: theme.colors.textMuted }]}>
                       {s.text}
                     </Text>
@@ -788,16 +892,18 @@ const styles = StyleSheet.create({
   pill: { paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999 },
   pillText: { fontSize: 11, fontWeight: '600' },
   overview: { marginTop: 8, fontSize: 13, lineHeight: 19 },
+  note: { marginTop: 10, fontSize: 12, padding: 0 },
   section: { marginTop: 10, gap: 4 },
   sectionTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
-  bulletRow: { flexDirection: 'row', gap: 6 },
+  bulletRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
   bullet: { fontSize: 13, lineHeight: 19 },
   body: { flex: 1, fontSize: 13, lineHeight: 19 },
+  itemTime: { fontSize: 11, fontWeight: '600', lineHeight: 19, fontVariant: ['tabular-nums'] },
   task: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   box: { width: 14, height: 14, marginTop: 2, borderWidth: 1.5, borderRadius: 4 },
   taskBody: { flex: 1, minWidth: 0 },
   taskMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
-  meta: { fontSize: 12 },
+  meta: { fontSize: 12, flexShrink: 1 },
   moment: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -825,7 +931,7 @@ const styles = StyleSheet.create({
   clip: { padding: 8, marginVertical: 4, gap: 6, width: 320, maxWidth: '100%' },
   clipCompact: { width: '100%', maxWidth: 300 },
   clipHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  clipTitle: { fontSize: 12, fontWeight: '600' },
+  clipTitle: { flexShrink: 1, fontSize: 12, fontWeight: '600' },
   clipVideo: { width: '100%', aspectRatio: 16 / 9, borderRadius: 8 },
   push: { marginLeft: 'auto' },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
@@ -841,7 +947,6 @@ const styles = StyleSheet.create({
   skipText: { fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   player: { gap: 8 },
   video: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#000' },
-  note: { padding: 16, textAlign: 'center', fontSize: 13 },
   rates: { flexDirection: 'row', padding: 2, borderRadius: 999 },
   rate: {
     minWidth: 48,

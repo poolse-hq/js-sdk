@@ -12,6 +12,7 @@
 // the viewer work the same in both.
 
 import {
+  approvalIdOf,
   citationsOf,
   clipOf,
   isTombstone,
@@ -23,7 +24,7 @@ import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { AgentBadgeInline } from './AgentBadge.js';
-import { MessageCitations } from './Agents.js';
+import { MessageApproval, MessageCitations } from './Agents.js';
 import { ClipPlayer } from './Meetings.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { canShowEditHistory } from './EditHistorySheet.js';
@@ -213,6 +214,7 @@ export function FlatMessageRow({
       : [];
   const clips = attachments && !deleted ? (msg.attachments ?? []).filter((a) => !!clipOf(a)) : [];
   const citations = citationsOf(msg);
+  const approvalId = approvalIdOf(msg);
   const mediaWidth = Math.min(screenWidth - GUTTER - 48, 320);
   const attachmentsEl =
     images.length > 0 || files.length > 0 || clips.length > 0 ? (
@@ -373,6 +375,7 @@ export function FlatMessageRow({
       {renderSlot(slots?.attachments, ctx, attachmentsEl)}
       {renderSlot(slots?.body, ctx, body)}
       {citations.length > 0 ? <MessageCitations message={msg} citations={citations} /> : null}
+      {approvalId ? <MessageApproval approvalId={approvalId} agentName={senderName} /> : null}
       {renderSlot(slots?.reactions, ctx, reactionsEl)}
       {renderSlot(slots?.thread, ctx, threadEl)}
       <SendStatus

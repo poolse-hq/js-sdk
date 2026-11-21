@@ -1,10 +1,10 @@
 import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
-import { citationsOf, clipOf, messageAgent, useUser } from '@poolse/react';
+import { approvalIdOf, citationsOf, clipOf, messageAgent, useUser } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { AgentBadgeInline } from './AgentBadge.js';
-import { MessageCitations } from './Agents.js';
+import { MessageApproval, MessageCitations } from './Agents.js';
 import { ClipPlayer } from './Meetings.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { ImageMosaic } from './ImageMosaic.js';
@@ -174,6 +174,8 @@ export function MessageBubble({
   const clips =
     showAttachments && !isDeleted ? (message.attachments ?? []).filter((a) => !!clipOf(a)) : [];
   const citations = citationsOf(message);
+  // An agent waiting for a yes (AG4): its card, for the person asked.
+  const approvalId = approvalIdOf(message);
   const hasMedia = images.length > 0;
   const hasFiles = files.length > 0 || clips.length > 0;
   const hasBody = !isDeleted && body.length > 0;
@@ -200,6 +202,7 @@ export function MessageBubble({
     !trimmable &&
     !hasPreviews &&
     citations.length === 0 &&
+    !approvalId &&
     (!markdown || !hasMarkdown(truncated));
 
   const sectionAbove = hasMedia || hasFiles || !!message.quoted_message || isDeleted;
@@ -477,6 +480,10 @@ export function MessageBubble({
             citations={citations}
             tone={isSelf ? 'onBrand' : 'default'}
           />
+        ) : null}
+
+        {approvalId ? (
+          <MessageApproval approvalId={approvalId} agentName={isSelf ? null : senderLabel} />
         ) : null}
 
         {hasPreviews ? (

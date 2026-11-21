@@ -9,7 +9,6 @@ import { useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 
 import { Avatar } from './primitives/Avatar.js';
-import { ApprovalMessageRow } from './Agents.js';
 import { CallLogRow } from './CallLogRow.js';
 import { SummaryMessageRow } from './Meetings.js';
 import { RecordingNoticeRow } from './Recording.js';
@@ -37,7 +36,6 @@ import {
   isTombstone,
   recordingNoticeDisplayFor,
   messageAgent,
-  parseApproval,
   parseCallSummary,
   useReactions,
   useUser,
@@ -271,11 +269,7 @@ export function MessageRow(props: MessageRowProps) {
       />
     ) : null;
   }
-  // An agent asking before it acts (AG4), and a call's summary (RT6):
-  // full-width cards with the sender above them.
-  if (parseApproval(props.msg)) {
-    return <ApprovalMessageRow msg={props.msg} meId={props.meId} />;
-  }
+  // A call's summary (RT6): a full-width card with the sender above it.
   if (parseCallSummary(props.msg)) {
     return (
       <SummaryMessageRow

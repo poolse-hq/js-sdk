@@ -1,4 +1,4 @@
-import type { Citation, LiveCall, Message, Uuid } from '@poolse/sdk';
+import type { Citation, LiveCall, MeetingMoment, Message, Uuid } from '@poolse/sdk';
 import { MessageQueuedError, safeUuid } from '@poolse/sdk';
 import {
   canEditOwnMessage,
@@ -225,10 +225,10 @@ export interface ConversationViewProps {
    */
   onOpenCitation?: (citation: Citation, message: Message) => void;
   /**
-   * A point in a call was pressed — a summary's moment or a clip (RT6,
-   * RT9): open its recording or transcript at `startMs`.
+   * A point in a call was pressed — a line or moment of a summary (RT6):
+   * open its recording at `moment.recordingMs` or transcript at `moment.startMs`.
    */
-  onOpenMoment?: (callId: string, startMs: number) => void;
+  onOpenMoment?: (moment: MeetingMoment) => void;
   /**
    * Plays clips in chat (RT9): your media adapter (expo-video,
    * expo-audio…) — see `RenderMedia` and the README. Without it a clip

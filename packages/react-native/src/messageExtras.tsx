@@ -3,7 +3,7 @@
 // props; a custom layout wraps its rows in `<MessageExtrasProvider>`.
 // Same handlers as @poolse/react-ui, plus `renderMedia`.
 
-import type { Citation, Message } from '@poolse/sdk';
+import type { Citation, MeetingMoment, Message } from '@poolse/sdk';
 import { createContext, useContext, type ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 
@@ -43,8 +43,11 @@ export interface MessageExtrasHandlers {
    * itself when this isn't given.
    */
   onOpenCitation?: (citation: Citation, message: Message) => void;
-  /** A point in a call was pressed: open its recording or transcript at `startMs`. */
-  onOpenMoment?: (callId: string, startMs: number) => void;
+  /**
+   * A point in a call was pressed: open its recording at `recordingMs`
+   * (when `recordingId` is set) or its transcript at `startMs`.
+   */
+  onOpenMoment?: (moment: MeetingMoment) => void;
   /** A poolse user id → display name (assignees in summaries). Unknown: null. */
   nameForUserId?: (userId: string) => string | null | undefined;
   /** A poolse user id → their `external_id`, so a name resolves live with `useUser`. */
