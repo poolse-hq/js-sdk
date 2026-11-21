@@ -38,7 +38,30 @@ function split(option) {
   throw new Error('@poolse/native: ringtone must be a file path or { ios, android }.');
 }
 
+/**
+ * One Info.plist and one manifest mod that both clear and set: mods run
+ * in reverse order of registration, so a separate "clear" mod registered
+ * first would run last and undo the value.
+ */
+function withRingtoneNames(config, plistValue, metaValue) {
+  config = withInfoPlist(config, (cfg) => {
+    if (plistValue) cfg.modResults[PLIST_KEY] = plistValue;
+    else delete cfg.modResults[PLIST_KEY];
+    return cfg;
+  });
+  return withAndroidManifest(config, (cfg) => {
+    const app = cfg.modResults.manifest.application?.[0];
+    if (!app) throw new Error('withRingtone: no <application> in AndroidManifest');
+    app['meta-data'] = (app['meta-data'] ?? []).filter((m) => m.$?.['android:name'] !== META_NAME);
+    if (metaValue)
+      app['meta-data'].push({ $: { 'android:name': META_NAME, 'android:value': metaValue } });
+    return cfg;
+  });
+}
+
 module.exports = function withRingtone(config, option, ringback) {
+  // Without the option this still runs, removing what an earlier prebuild wrote.
+  if (!option) return withRingtoneNames(config, null, null);
   const { ios, android } = split(option);
   const ringbackName = ringback ? path.parse(ringback).name : null;
 
@@ -58,10 +81,6 @@ module.exports = function withRingtone(config, option, ringback) {
       );
     }
     config = withIosBundleSound(config, ios, 'ringtone', MISSING);
-    config = withInfoPlist(config, (cfg) => {
-      cfg.modResults[PLIST_KEY] = path.basename(ios);
-      return cfg;
-    });
   }
 
   if (android) {
@@ -73,13 +92,10 @@ module.exports = function withRingtone(config, option, ringback) {
       );
     }
     config = withAndroidRawSound(config, android, 'ringtone', MISSING);
-    config = withAndroidManifest(config, (cfg) => {
-      const app = cfg.modResults.manifest.application?.[0];
-      if (!app) throw new Error('withRingtone: no <application> in AndroidManifest');
-      app['meta-data'] = (app['meta-data'] ?? []).filter((m) => m.$?.['android:name'] !== META_NAME);
-      app['meta-data'].push({ $: { 'android:name': META_NAME, 'android:value': name } });
-      return cfg;
-    });
   }
-  return config;
+  return withRingtoneNames(
+    config,
+    ios ? path.basename(ios) : null,
+    android ? path.parse(android).name : null,
+  );
 };

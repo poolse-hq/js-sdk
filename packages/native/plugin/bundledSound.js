@@ -68,7 +68,14 @@ function withAndroidRawSound(config, file, label, missing) {
   return withDangerousMod(config, [
     'android',
     (cfg) => {
-      const rawDir = path.join(cfg.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'raw');
+      const rawDir = path.join(
+        cfg.modRequest.platformProjectRoot,
+        'app',
+        'src',
+        'main',
+        'res',
+        'raw',
+      );
       fs.mkdirSync(rawDir, { recursive: true });
       fs.copyFileSync(sourceOf(cfg, file, label, missing), path.join(rawDir, path.basename(file)));
       return cfg;
