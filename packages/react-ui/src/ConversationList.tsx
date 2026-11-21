@@ -9,7 +9,13 @@
 // sends a message into an existing one (no refetch).
 
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { formatCallLogPreview, useConversations, useMe, useUser } from '@poolse/react';
+import {
+  filterConversations,
+  formatCallLogPreview,
+  useConversations,
+  useMe,
+  useUser,
+} from '@poolse/react';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { EmptyState } from './EmptyState.js';
@@ -130,7 +136,10 @@ export function ConversationList({
   const conversations = useMemo(
     () =>
       needle
-        ? allConversations.filter((c) => matchesQuery(c, needle, meExternalId, labelFor))
+        ? filterConversations(allConversations, needle, {
+            meExternalId,
+            ...(labelFor ? { labelFor } : {}),
+          })
         : allConversations,
     [allConversations, needle, meExternalId, labelFor],
   );
@@ -312,21 +321,6 @@ const TYPE_SECTIONS: ConversationListSection[] = [
 
 // Each conversation goes under the first section that takes it; empty
 // sections are left out. `null` = no sections, one flat list.
-function matchesQuery(
-  conv: Conversation,
-  needle: string,
-  meExternalId: string | null,
-  labelFor: ((externalId: string) => string) | undefined,
-): boolean {
-  const hay: string[] = [conv.name ?? '', conv.last_message_preview ?? ''];
-  for (const ext of conv.member_external_ids ?? []) {
-    if (ext === meExternalId) continue;
-    hay.push(ext);
-    if (labelFor) hay.push(labelFor(ext));
-  }
-  return hay.some((h) => h.toLowerCase().includes(needle));
-}
-
 function groupConversations(
   conversations: Conversation[],
   sections: ConversationListSection[] | null,

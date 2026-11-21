@@ -15,6 +15,7 @@ export {
 } from './use-unread.js';
 export { useOutbox, type UseOutbox } from './use-outbox.js';
 export { useClientTimings } from './use-timings.js';
+export { filterConversations, type ConversationSearchOptions } from './conversation-search.js';
 export { useMe } from './use-me.js';
 export { useConversation } from './use-conversation.js';
 export { useConversations } from './use-conversations.js';
