@@ -279,11 +279,16 @@ export function citationLabel(c: Citation): string {
   return 'A message';
 }
 
-/** Conversation-list preview for an approval body; null when it isn't one. */
+/**
+ * Conversation-list preview for an approval body; null when it isn't
+ * one. The server cuts previews short (80 chars), so a cut-off body
+ * still reads "Approval request".
+ */
 export function formatApprovalPreview(preview: string | null | undefined): string | null {
   if (typeof preview !== 'string') return null;
   const a = parseApproval({ type: 'custom', body: preview });
-  return a ? `Approval: ${a.summary}` : null;
+  if (a) return `Approval: ${a.summary}`;
+  return /^\s*\{.*"kind"\s*:\s*"agent_approval"/.test(preview) ? 'Approval request' : null;
 }
 
 /** Plain-language text for a failed approve / deny. */

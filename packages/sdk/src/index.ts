@@ -126,7 +126,17 @@ export {
 } from './meetings.js';
 
 // Experimental: the live-edit relay for shared documents (MS5).
-export { DocChannel, DOC_FRAME_MAX_BYTES, type DocFrame } from './realtime/doc.js';
+export {
+  DEFAULT_DOC_LIMITS,
+  DocChannel,
+  DocPushError,
+  openDocChannel,
+  type DocClosedReason,
+  type DocEditor,
+  type DocJoinInfo,
+  type DocLimits,
+  type DocRights,
+} from './realtime/doc.js';
 export { CallRoom } from './voice/call-room.js';
 export type {
   CallConnection,

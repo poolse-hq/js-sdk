@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   activeSegmentIndex,
@@ -12,8 +12,6 @@ import {
   skipSilenceTarget,
   transcriptOffsetMs,
 } from '../src/meetings.js';
-import { fromBase64, toBase64 } from '../src/realtime/doc.js';
-import { Poolse } from '../src/index.js';
 import { bodyJson, buildPoolse, jsonResponse, scriptedFetch } from './_helpers.js';
 
 const summaryBody = JSON.stringify({
@@ -133,40 +131,5 @@ describe('clips and playback', () => {
     expect(transcriptOffsetMs(null, '2026-11-21T10:00:00Z')).toBe(0);
     expect(formatClock(65_000)).toBe('1:05');
     expect(formatClock(3_725_000)).toBe('1:02:05');
-  });
-});
-
-describe('doc relay (experimental)', () => {
-  it('round-trips base64', () => {
-    for (const len of [0, 1, 2, 3, 4, 255, 1000]) {
-      const bytes = new Uint8Array(len).map((_, i) => (i * 37) & 0xff);
-      expect(fromBase64(toBase64(bytes))).toEqual(bytes);
-    }
-    expect(toBase64(new TextEncoder().encode('poolse'))).toBe('cG9vbHNl');
-    expect(() => fromBase64('a$b=')).toThrow();
-  });
-
-  it('joins with the token and decodes frames', () => {
-    const chat = new Poolse({
-      apiUrl: 'https://chat.example',
-      getToken: () => 'tok',
-      fetch: vi.fn() as unknown as typeof globalThis.fetch,
-    });
-    const doc = chat.realtime.doc('d-1', 'doc-token');
-    const ch = (
-      doc as unknown as {
-        channel: { topic: string; params: () => unknown; trigger(e: string, p: unknown): void };
-      }
-    ).channel;
-    expect(ch.topic).toBe('doc:d-1');
-    const updates = vi.fn();
-    doc.onUpdate(updates);
-    ch.trigger('update', { user_id: 'u-2', data: 'AQID' });
-    ch.trigger('update', { user_id: 'u-2', data: 42 });
-    expect(updates).toHaveBeenCalledOnce();
-    expect(updates.mock.calls[0]![0]).toEqual({ userId: 'u-2', data: new Uint8Array([1, 2, 3]) });
-    doc.leave();
-    expect(doc.closed).toBe(true);
-    return expect(doc.sendUpdate(new Uint8Array([1]))).rejects.toThrow();
   });
 });

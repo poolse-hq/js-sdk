@@ -18,7 +18,7 @@ import type { Channel } from 'phoenix';
 import type { ResolvedConfig } from '../config.js';
 import { ChannelReplyError, PoolseError } from '../errors.js';
 import type { TokenCache } from '../token-cache.js';
-import { DocChannel } from './doc.js';
+import { openDocChannel, type DocChannel } from './doc.js';
 import type { Presence, PresenceActivity } from '../types.js';
 import type { ConsentDecision, Recording, RecordingMode } from '../resources/calls.js';
 import type {
@@ -368,20 +368,18 @@ export class PoolseRealtime {
   }
 
   /**
-   * **Experimental.** Open a shared document's live-edit relay
-   * (`doc:<doc_id>`) with the token the Workspace API issued for it.
-   * Binary editor updates and awareness (cursors, selections) pass
-   * through as they are: the relay neither reads nor stores them. Each
-   * call opens its own channel; `leave()` it when the editor closes.
+   * **Experimental.** Open a live doc's relay (`doc:<doc_id>`, the
+   * server's docs/DOCS_RELAY.md) with a doc token from the doc's owner
+   * (the Workspace API). `clientId`: the Yjs awareness clientID, shown in
+   * presence. Each call opens its own channel; `leave()` it when the
+   * editor closes.
    */
-  doc(docId: string, token: string): DocChannel {
+  doc(docId: string, docToken: string, opts: { clientId?: number } = {}): DocChannel {
     this.connect();
     if (!this.socket) {
       throw new PoolseError('socket not initialised — call connect() first');
     }
-    const handle = new DocChannel(docId, this.socket.channel(`doc:${docId}`, { token }));
-    handle._join();
-    return handle;
+    return openDocChannel(this.socket, docId, docToken, opts);
   }
 
   /** Drop a conversation handle and leave the channel. */

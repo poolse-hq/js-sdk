@@ -277,7 +277,8 @@ export function summaryStyleLabel(style: string): string {
 export function formatCallSummaryPreview(preview: string | null | undefined): string | null {
   if (typeof preview !== 'string') return null;
   const s = parseCallSummary({ type: 'custom', body: preview });
-  if (!s) return null;
+  // Previews are cut at 80 chars: a cut-off body still reads as a summary.
+  if (!s) return /^\s*\{.*"kind"\s*:\s*"call_summary"/.test(preview) ? 'Call summary' : null;
   const label = summaryStyleLabel(s.style);
   return label === 'Call summary' ? 'Call summary' : `Call summary · ${label}`;
 }
