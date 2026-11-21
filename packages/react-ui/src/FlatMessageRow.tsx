@@ -20,6 +20,7 @@ import { hasLinkPreviews, MessageLinkPreviews } from './LinkPreviewCard.js';
 import { Avatar } from './Avatar.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
+import { useEditHistory } from './EditedLabel.js';
 import { formatMessageTime, renderSlot, type MessageSlotContext } from './layout.js';
 import { MessageActions } from './MessageActions.js';
 import { ImageMosaic, isImageContentType, QuotedCard, QuotedPlaceholder } from './MessageBubble.js';
@@ -181,9 +182,13 @@ export function FlatMessageRow({
       </div>
     ) : null;
 
+  const editHistory = useEditHistory(msg.id);
   const meta = (
     <>
-      {msg.edited_at && !deleted ? <span className="poolse-row__edited">(edited)</span> : null}
+      {msg.edited_at && !deleted ? (
+        <span className="poolse-row__edited">({editHistory.label()})</span>
+      ) : null}
+      {editHistory.popover}
       {isSelf && readState ? (
         <span className="poolse-row__receipt">
           <PoolseIcon

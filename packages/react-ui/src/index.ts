@@ -45,6 +45,7 @@ export { MessageBubble, type MessageBubbleProps } from './MessageBubble.js';
 export { CallLogRow, type CallLogRowProps } from './CallLogRow.js';
 export { LiveCallBanner, type LiveCallBannerProps } from './LiveCallBanner.js';
 export { RoomJoinBar, RoomStage, type RoomJoinBarProps, type RoomStageProps } from './Room.js';
+export { EditedLabel, useEditHistory, type EditedLabelProps } from './EditedLabel.js';
 export { EditableMessageBubble, type EditableMessageBubbleProps } from './EditableMessageBubble.js';
 export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';
 export { MessageActions, type MessageActionsProps } from './MessageActions.js';

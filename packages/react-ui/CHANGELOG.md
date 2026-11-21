@@ -33,6 +33,11 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   "N replies · last reply 5m ago" (`last_reply_at`). It replaces the reply
   count under thread roots in every layout (same classes and accessible name)
   and opens the `ThreadView`; `thread:updated` keeps it live.
+- Edit history: the "edited" mark on a message (every layout) is a button that
+  opens a popover with the earlier versions from `messages.edits(id)`, oldest
+  first ("Original · …"). A 403 (not the sender or a conversation admin) turns
+  it back into plain text. `<EditedLabel messageId label?>` and
+  `useEditHistory(messageId)` (`{ label(), popover }`) for custom rows.
 - `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
   `getText()`, `setText(text)` and `focus()`.
 - `ConversationView` shows a notice when a send is refused because the quoted

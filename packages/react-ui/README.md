@@ -92,6 +92,8 @@ message, pass `slots={{ header, body, attachments, reactions, thread, actions }}
 preview>` draws one on its own.
 - **Thread summaries** under thread roots: stacked participant avatars, "N
   replies · last reply 5m ago"; click opens the thread (`<ThreadSummary>`).
+- **Edit history.** "edited" opens the earlier versions (`messages.edits`);
+  people the server doesn't show history to (403) see plain text.
 - **Deleted messages** read "This message was deleted" and keep their thread
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.

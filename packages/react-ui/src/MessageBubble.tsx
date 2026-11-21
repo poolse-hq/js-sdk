@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { useEditHistory } from './EditedLabel.js';
 import { hasLinkPreviews, MessageLinkPreviews } from './LinkPreviewCard.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
 import {
@@ -216,6 +217,7 @@ export function MessageBubble({
     .join(' ');
 
   const time = formatMessageTime(message.inserted_at, timeFormat);
+  const editHistory = useEditHistory(message.id);
 
   // Show the quote card whenever the message HAS a quote, even if the
   // preview hasn't landed yet (e.g., the optimistic temp before the
@@ -287,10 +289,14 @@ export function MessageBubble({
         // / files / deleted), or a scrim pill over the media
         // (image-only). Read-receipt glyph: single check = delivered,
         // double = at least one recipient read past this message.
-        const metaContent = (
+        // The real meta's "edited" opens the edit history; the spacer
+        // twin keeps plain text of the same width.
+        const metaParts = (interactive: boolean) => (
           <>
             <span>{time}</span>
-            {message.edited_at && !message.deleted_at ? <span>· edited</span> : null}
+            {message.edited_at && !message.deleted_at ? (
+              <span>· {interactive ? editHistory.label() : 'edited'}</span>
+            ) : null}
             {isSelf && readState ? (
               <PoolseIcon
                 name={readState === 'read' ? 'check-double' : 'check'}
@@ -300,6 +306,7 @@ export function MessageBubble({
             ) : null}
           </>
         );
+        const metaContent = metaParts(true);
 
         const body = message.deleted_at ? (
           <span className="poolse-message__body--deleted">This message was deleted</span>
@@ -342,7 +349,7 @@ export function MessageBubble({
               // reservation wraps and the meta drops a line, flush
               // right. The WhatsApp trick.
               <span className="poolse-message__meta poolse-message__meta--spacer" aria-hidden>
-                {metaContent}
+                {metaParts(false)}
               </span>
             )}
             {shouldTrim && (
@@ -383,6 +390,7 @@ export function MessageBubble({
             {renderSlot(slots?.body, slotContext, body)}
             {showPreviews ? <MessageLinkPreviews message={message} canRemove={isSelf} /> : null}
             <span className={metaClass}>{metaContent}</span>
+            {editHistory.popover}
           </>
         );
       })()}
