@@ -37,6 +37,8 @@ import java.util.concurrent.TimeUnit
 class MessageActionReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     val conversationId = intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION) ?: return
+    // Null on a notification posted before servers (the default one).
+    val serverId = intent.getStringExtra(MessageNotifications.EXTRA_SERVER)
     val app = context.applicationContext
 
     when (intent.action) {
@@ -45,19 +47,21 @@ class MessageActionReceiver : BroadcastReceiver() {
           ?.getCharSequence(MessageNotifications.KEY_REPLY)?.toString()?.trim().orEmpty()
         if (text.isEmpty()) {
           // Nothing typed; still repost so the field stops spinning.
-          MessageNotifications.refresh(app, conversationId)
+          MessageNotifications.refresh(app, serverId, conversationId)
           return
         }
         // One id per reply, reused by every retry of it: the server
         // answers a repeat with the original message, never a second one.
         val clientId = UUID.randomUUID().toString()
-        MessageNotifications.onReplying(app, conversationId, clientId, text)
-        MessageActionWorker.enqueue(app, MessageActionWorker.REPLY, conversationId, text, clientId)
+        MessageNotifications.onReplying(app, serverId, conversationId, clientId, text)
+        MessageActionWorker.enqueue(app, MessageActionWorker.REPLY, serverId, conversationId, text, clientId)
       }
       MessageNotifications.ACTION_READ -> {
         // Optimistic: the notification goes now; the server catches up.
-        MessageNotifications.clear(app, conversationId)
-        MessageActionWorker.enqueue(app, MessageActionWorker.READ, conversationId, null, null)
+        // Grant first: clearing drops it with the conversation.
+        val grant = MessageNotifications.grantFor(app, serverId, conversationId)
+        MessageNotifications.clear(app, conversationId, serverId ?: dev.poolse.callcore.CallServers.DEFAULT_ID)
+        MessageActionWorker.enqueue(app, MessageActionWorker.READ, serverId, conversationId, null, null, grant)
       }
     }
   }
@@ -66,7 +70,8 @@ class MessageActionReceiver : BroadcastReceiver() {
 /**
  * The HTTP side of a notification action: `POST /v1/notification-actions/
  * {reply,read}` with the conversation's reply grant (bearer and `token`),
- * against the API origin `configure` persisted — no app, no session, no JS.
+ * against its server's API origin (persisted by `configure` / `addServer`)
+ * — no app, no session, no JS.
  *
  * WorkManager, expedited: it runs at once when there is a network, waits
  * for one when there is not, survives the process being killed, and
@@ -82,9 +87,16 @@ class MessageActionWorker(context: Context, params: WorkerParameters) : Coroutin
     val conversationId = inputData.getString(KEY_CONVERSATION) ?: return@withContext Result.failure()
     val text = inputData.getString(KEY_TEXT).orEmpty()
     val clientId = inputData.getString(KEY_CLIENT_ID).orEmpty()
+    val serverId = inputData.getString(KEY_SERVER)
     // The newest grant this conversation got, else the one at tap time.
-    val grant = MessageNotifications.grantFor(app, conversationId) ?: inputData.getString(KEY_GRANT)
-    val base = CallCore.apiBaseUrl(app)
+    val grant = MessageNotifications.grantFor(app, serverId, conversationId) ?: inputData.getString(KEY_GRANT)
+    // Its own server; one signed out since has no address (never another
+    // server's: the grant is for this one).
+    val base = if (serverId != null) {
+      ServerRegistry.baseUrl(app, serverId).ifEmpty { null }
+    } else {
+      ServerRegistry.baseUrl(app, null).ifEmpty { null } ?: CallCore.apiBaseUrl(app)
+    }
 
     val outcome = when {
       base == null -> Outcome(0, "not_configured", null)
@@ -103,6 +115,7 @@ class MessageActionWorker(context: Context, params: WorkerParameters) : Coroutin
       "action" to if (action == REPLY) "reply" else "mark_read",
       "conversationId" to conversationId,
       "ok" to ok,
+      "serverId" to (serverId ?: ServerRegistry.servers(app).get(null)?.id),
     )
     if (!ok) {
       event["error"] = outcome.code ?: if (outcome.status == 0) "network" else "http_${outcome.status}"
@@ -112,7 +125,7 @@ class MessageActionWorker(context: Context, params: WorkerParameters) : Coroutin
       event["text"] = text
       event["clientId"] = clientId
       if (ok) event["messageId"] = outcome.json?.optString("id")?.ifBlank { null } ?: clientId
-      MessageNotifications.onReplied(app, conversationId, clientId, text, ok, if (ok) null else reason(outcome), grant)
+      MessageNotifications.onReplied(app, serverId, conversationId, clientId, text, ok, if (ok) null else reason(outcome), grant)
     } else if (!ok) {
       // A failed read is only logged: the message stays unread, nothing is lost.
       Log.w(TAG, "mark read failed status=${outcome.status} code=${outcome.code}")
@@ -172,6 +185,7 @@ class MessageActionWorker(context: Context, params: WorkerParameters) : Coroutin
     internal const val READ = "read"
     private const val KEY_ACTION = "action"
     private const val KEY_CONVERSATION = "conversation_id"
+    private const val KEY_SERVER = "server_id"
     private const val KEY_TEXT = "text"
     private const val KEY_CLIENT_ID = "client_id"
     private const val KEY_GRANT = "grant"
@@ -190,13 +204,22 @@ class MessageActionWorker(context: Context, params: WorkerParameters) : Coroutin
         .build()
     }
 
-    internal fun enqueue(context: Context, action: String, conversationId: String, text: String?, clientId: String?) {
+    internal fun enqueue(
+      context: Context,
+      action: String,
+      serverId: String?,
+      conversationId: String,
+      text: String?,
+      clientId: String?,
+      grant: String? = MessageNotifications.grantFor(context, serverId, conversationId),
+    ) {
       val data = Data.Builder()
         .putString(KEY_ACTION, action)
         .putString(KEY_CONVERSATION, conversationId)
+        .putString(KEY_SERVER, serverId)
         .putString(KEY_TEXT, text)
         .putString(KEY_CLIENT_ID, clientId)
-        .putString(KEY_GRANT, MessageNotifications.grantFor(context, conversationId))
+        .putString(KEY_GRANT, grant)
         .putLong(KEY_AT, System.currentTimeMillis())
         .build()
       val request = OneTimeWorkRequestBuilder<MessageActionWorker>()
@@ -206,7 +229,7 @@ class MessageActionWorker(context: Context, params: WorkerParameters) : Coroutin
         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
         .addTag("poolse-notification-action")
         .build()
-      val name = "poolse-$action-" + (clientId ?: conversationId)
+      val name = "poolse-$action-" + (clientId ?: listOfNotNull(serverId, conversationId).joinToString("/"))
       runCatching {
         WorkManager.getInstance(context).enqueueUniqueWork(name, ExistingWorkPolicy.KEEP, request)
       }.onFailure { Log.e(TAG, "could not queue the notification action", it) }

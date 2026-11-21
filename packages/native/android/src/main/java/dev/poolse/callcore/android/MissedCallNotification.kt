@@ -27,6 +27,8 @@ object MissedCallNotification {
   const val EXTRA_CONVERSATION_ID = "poolse_call_action_conversation"
   const val EXTRA_CALL_ID = "poolse_call_action_call"
   const val EXTRA_MEDIA = "poolse_call_action_media"
+  /** The host's id of the server (workspace) the notification belongs to. */
+  const val EXTRA_SERVER_ID = "poolse_call_action_server"
   const val ACTION_OPEN = "open"
   const val ACTION_CALL_BACK = "call_back"
   private const val TAG = "PoolseMissedCall"
@@ -45,6 +47,10 @@ object MissedCallNotification {
       ?: "Missed call"
     val body = data["body"]?.ifBlank { null }
       ?: if (media == "video") "Missed video call" else "Missed voice call"
+    val servers = ServerRegistry.servers(context)
+    val server = servers.resolve(data["tenant_id"]?.ifBlank { null })
+    // Several workspaces signed in: say which one called.
+    val workspace = servers.workspaceLabel(server?.id, data["workspace_name"])
 
     ensureChannel(context)
     val id = notificationId(callId)
@@ -56,6 +62,7 @@ object MissedCallNotification {
         .putExtra(EXTRA_CONVERSATION_ID, conversationId)
         .putExtra(EXTRA_CALL_ID, callId)
         .putExtra(EXTRA_MEDIA, media)
+        .putExtra(EXTRA_SERVER_ID, server?.id)
       return PendingIntent.getActivity(
         context,
         id + requestOffset,
@@ -73,6 +80,7 @@ object MissedCallNotification {
       .setAutoCancel(true)
       .setWhen(sentAt ?: System.currentTimeMillis())
       .setShowWhen(true)
+      .apply { if (workspace != null) setSubText(workspace) }
     launch(ACTION_OPEN, 0)?.let(builder::setContentIntent)
     launch(ACTION_CALL_BACK, 1)?.let { builder.addAction(0, "Call back", it) }
 

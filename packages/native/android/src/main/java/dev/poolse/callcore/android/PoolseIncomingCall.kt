@@ -45,6 +45,14 @@ object PoolseIncomingCall {
   /** The conversation's name (a group's title), when it has one. */
   const val EXTRA_CONVERSATION_NAME = "poolse_conversation_name"
   const val EXTRA_CALLER_NAME = "poolse_caller_name"
+  /**
+   * The workspace the ring came from (the push's `workspace_name`, else
+   * the server's name), present only while several servers are signed in
+   * — show "Ana · Acme" with it.
+   */
+  const val EXTRA_WORKSPACE_NAME = "poolse_workspace_name"
+  /** The host's id of the server the ring came from (`addServer({ id })`). */
+  const val EXTRA_SERVER_ID = "poolse_server_id"
   /** The caller's picture: the push's `caller_avatar_url`, else `incomingCall.avatarUrl` filled in. */
   const val EXTRA_CALLER_AVATAR_URL = "poolse_caller_avatar_url"
   /** `audio` | `video`. */
@@ -95,4 +103,12 @@ object PoolseIncomingCall {
     .putExtra(EXTRA_CALLER_AVATAR_URL, ring.callerAvatarUrl)
     .putExtra(EXTRA_MEDIA, ring.media)
     .putExtra(EXTRA_RING_DEADLINE, ring.ringDeadlineEpochMs)
+    .putExtra(EXTRA_SERVER_ID, ring.serverId)
+
+  /** [fill] plus the workspace label, which needs the server list. */
+  internal fun fill(context: Context, intent: Intent, ring: RingContext): Intent = fill(intent, ring)
+    .putExtra(
+      EXTRA_WORKSPACE_NAME,
+      ServerRegistry.servers(context).workspaceLabel(ring.serverId, ring.workspaceName),
+    )
 }

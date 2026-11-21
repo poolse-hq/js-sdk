@@ -10,7 +10,10 @@ import dev.poolse.callcore.CallCoreRuntime
 import dev.poolse.callcore.MachineState
 import dev.poolse.callcore.MediaPort
 import dev.poolse.callcore.Phase
+import dev.poolse.callcore.CallServer
+import dev.poolse.callcore.CallServers
 import dev.poolse.callcore.RingContext
+import dev.poolse.callcore.RoutedHttpPort
 import dev.poolse.callcore.SnapshotSink
 
 /**
@@ -44,8 +47,16 @@ class CallCore private constructor(context: Context) {
     peekConfig()?.ringSurface ?: RingSurfaceConfig(appContext.applicationInfo.icon, 0)
   }
 
+  // One HTTP client per server, each reading its URL per request (a
+  // re-added server's new address applies at once); the router picks the
+  // one the call belongs to. A single-server app only ever uses `default`.
+  private val httpClient = CallHttpClient.defaultClient()
+  private val router = RoutedHttpPort { serverId ->
+    CallHttpClient({ ServerRegistry.baseUrl(appContext, serverId) }, httpClient)
+  }
+
   private val runtime = CallCoreRuntime(
-    http = CallHttpClient({ peekConfig()?.apiBaseUrl ?: "" }),
+    http = router,
     media = media,
     surface = surface,
     session = CallForegroundService.also { it.attach(appContext) },
@@ -92,8 +103,26 @@ class CallCore private constructor(context: Context) {
 
   // ── native entry points ─────────────────────────────────────────────
 
-  /** A ring arrived — from FCM (closed app) or the socket (open app). */
-  fun onRing(ring: RingContext) = runtime.onRing(ring)
+  /** The push's `workspace_name` per ringing call. */
+  private val ringWorkspaces = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+  /**
+   * A ring arrived — from FCM (closed app) or the socket (open app).
+   * Bound to its server before the runtime sees it: a busy-decline runs
+   * inside the ring's own dispatch.
+   */
+  fun onRing(ring: RingContext) {
+    bind(ring)
+    runtime.onRing(ring)
+  }
+
+  private fun bind(ring: RingContext) {
+    router.bindCall(ring.callId, ring.serverId)
+    ring.workspaceName?.let {
+      if (ringWorkspaces.size > 16) ringWorkspaces.clear()
+      ringWorkspaces[ring.callId] = it
+    }
+  }
 
   /**
    * The caller withdrew, or the ring resolved elsewhere. Beyond the
@@ -120,7 +149,7 @@ class CallCore private constructor(context: Context) {
    * Android 10+ and left audio connected behind the lock screen.
    */
   fun onUserAnswer(ring: RingContext, from: Context? = null): Boolean {
-    runtime.onRing(ring) // idempotent: dedupes if already showing
+    onRing(ring) // idempotent: dedupes if already showing
     runtime.answer()
     return bringAppToFront(ring.callId, from)
   }
@@ -138,17 +167,18 @@ class CallCore private constructor(context: Context) {
       }
       return false
     }
+    bind(ring)
     runtime.answerWaiting(ring.callId)
     return bringAppToFront(ring.callId, from)
   }
 
   fun onUserDecline(ring: RingContext) {
-    runtime.onRing(ring)
+    onRing(ring)
     runtime.decline()
   }
 
   fun onUserOpen(ring: RingContext, from: Context? = null) {
-    runtime.onRing(ring)
+    onRing(ring)
     bringAppToFront(ring.callId, from)
   }
 
@@ -166,10 +196,35 @@ class CallCore private constructor(context: Context) {
   fun answerWaiting(callId: String? = null) = runtime.answerWaiting(callId)
   /** Call waiting: turn the waiting call away — its caller hears busy. */
   fun declineWaiting(callId: String? = null) = runtime.declineWaiting(callId)
-  fun place(conversationId: String, media: String, sessionToken: String) =
-    runtime.place(conversationId, media, sessionToken)
-  fun join(callId: String, conversationId: String?, sessionToken: String) =
-    runtime.join(callId, conversationId, sessionToken)
+  /** [serverId]: the server the session token is for (null = the default). */
+  fun place(conversationId: String, media: String, sessionToken: String, serverId: String? = null) =
+    runtime.post {
+      // Busy: the runtime ignores it, so the binding must not move either.
+      if (!idle()) return@post
+      router.bindPlace(conversationId, serverId)
+      runtime.place(conversationId, media, sessionToken)
+    }
+
+  fun join(callId: String, conversationId: String?, sessionToken: String, serverId: String? = null) =
+    runtime.post {
+      if (!idle()) return@post
+      router.bindCall(callId, serverId)
+      runtime.join(callId, conversationId, sessionToken)
+    }
+
+  private fun idle() = runtime.currentState().phase.let { it == Phase.IDLE || it == Phase.ENDED }
+
+  /** The server [callId] runs on: its binding, else the default (when there is one). */
+  private fun serverOf(callId: String?): String? {
+    val id = callId ?: return null
+    router.serverFor(id)?.let { return it }
+    val servers = ServerRegistry.servers(appContext)
+    return servers.get(CallServers.DEFAULT_ID)?.id ?: servers.all.singleOrNull()?.id
+  }
+
+  /** The server of the current call (null = the default). Any thread. */
+  val currentServerId: String? get() = serverOf(runtime.currentState().callId)
+
 
   fun setMuted(muted: Boolean) {
     runtime.post { mutedSelf = muted }
@@ -286,9 +341,32 @@ class CallCore private constructor(context: Context) {
       videoPaused = videoPaused,
       screenSharing = screenSharing,
     )
-    lastSnapshot = snap
+    val withServers = snap?.let { withServers(it, state) }
+    lastSnapshot = withServers
     reconcileAndroid(state)
-    runCatching { listener?.invoke(snap) }.onFailure { Log.w(TAG, "snapshot listener failed", it) }
+    runCatching { listener?.invoke(withServers) }.onFailure { Log.w(TAG, "snapshot listener failed", it) }
+  }
+
+  /**
+   * The workspace each call belongs to: `serverId` and `workspaceName`
+   * on the snapshot and on its waiting call.
+   */
+  private fun withServers(snap: Map<String, Any?>, state: MachineState): Map<String, Any?> {
+    val servers = ServerRegistry.servers(appContext)
+    val serverId = serverOf(state.callId)
+    val out = snap.toMutableMap()
+    out["serverId"] = serverId
+    out["workspaceName"] = state.callId?.let { ringWorkspaces[it] } ?: servers.get(serverId)?.name
+    val waiting = snap["waiting"] as? Map<*, *>
+    val ring = runtime.waitingRing
+    if (waiting != null && ring != null) {
+      val waitingServer = ring.serverId ?: serverOf(ring.callId)
+      out["waiting"] = waiting.entries.associate { (k, v) -> k.toString() to v } + mapOf(
+        "serverId" to waitingServer,
+        "workspaceName" to (ring.workspaceName ?: servers.get(waitingServer)?.name),
+      )
+    }
+    return out
   }
 
   private fun isRenameOfPending(previous: String?, state: MachineState): Boolean =
@@ -446,14 +524,32 @@ class CallCore private constructor(context: Context) {
       incomingCall: Map<String, String?> = emptyMap(),
     ) {
       val ctx = context.applicationContext
+      // A URL is the `default` server; "" sets the options only and keeps
+      // whatever default server there is.
+      val url = apiBaseUrl.trimEnd('/').ifEmpty {
+        ServerRegistry.servers(ctx).get(CallServers.DEFAULT_ID)?.apiBaseUrl.orEmpty()
+      }
+      if (apiBaseUrl.isNotBlank()) {
+        val current = ServerRegistry.servers(ctx).get(CallServers.DEFAULT_ID)
+        ServerRegistry.upsert(ctx, current?.copy(apiBaseUrl = url) ?: CallServer(CallServers.DEFAULT_ID, url))
+      }
       val edit = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-        .putString("apiBaseUrl", apiBaseUrl)
+        .putString("apiBaseUrl", url)
         .putString("smallIcon", smallIconName)
         .putString("ringback", ringbackName)
         .putString("ringtone", ringtoneName)
       for (key in INCOMING_KEYS) edit.putString("incoming.$key", incomingCall[key])
       edit.apply()
-      config = build(ctx, apiBaseUrl, smallIconName, ringbackName, ringtoneName, incomingCall)
+      config = build(ctx, url, smallIconName, ringbackName, ringtoneName, incomingCall)
+    }
+
+    /**
+     * `addServer` before any `configure`: the core still has to exist (it
+     * carries the rings), with the default options.
+     */
+    fun ensureConfigured(context: Context) {
+      if (config == null) restoreConfig(context.applicationContext)
+      if (config == null) configure(context, "", null, null)
     }
 
     /** The core; throws if never configured (not even persisted). Prefer [getOrNull]. */

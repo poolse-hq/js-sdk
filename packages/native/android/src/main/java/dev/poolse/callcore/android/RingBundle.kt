@@ -17,6 +17,8 @@ internal fun RingContext.toBundle(): Bundle = Bundle().apply {
   putString(K_GRANT, grant)
   putLong(K_DEADLINE, ringDeadlineEpochMs)
   putString(K_AVATAR, callerAvatarUrl)
+  putString(K_SERVER, serverId)
+  putString(K_WORKSPACE, workspaceName)
 }
 
 internal fun Bundle.toRingContext(): RingContext? {
@@ -32,6 +34,8 @@ internal fun Bundle.toRingContext(): RingContext? {
     grant = grant,
     ringDeadlineEpochMs = getLong(K_DEADLINE),
     callerAvatarUrl = getString(K_AVATAR),
+    serverId = getString(K_SERVER),
+    workspaceName = getString(K_WORKSPACE),
   )
 }
 
@@ -43,3 +47,5 @@ private const val K_MEDIA = "media"
 private const val K_GRANT = "grant"
 private const val K_DEADLINE = "ringDeadline"
 private const val K_AVATAR = "callerAvatarUrl"
+private const val K_SERVER = "serverId"
+private const val K_WORKSPACE = "workspaceName"

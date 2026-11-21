@@ -121,7 +121,7 @@ class IncomingCallActivity : Activity() {
     ring = next
     awaitingForward = false
     pulse?.cancel()
-    val title = next.conversationName ?: next.callerName ?: "Incoming call"
+    val title = ServerRegistry.ringTitle(this, next, next.conversationName ?: next.callerName) ?: "Incoming call"
     val body = if (next.media == "video") "Incoming video call" else "Incoming call"
     setContentView(buildScene(title, body, next))
   }

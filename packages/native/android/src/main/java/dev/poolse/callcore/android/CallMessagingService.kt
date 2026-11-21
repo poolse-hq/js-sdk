@@ -99,6 +99,10 @@ class CallMessagingService : FirebaseMessagingService() {
           externalId = this["caller_external_id"],
           userId = this["caller_user_id"],
         ),
+      // Signed in to several workspaces: the ring is answered (and
+      // declined) on the server of its tenant.
+      serverId = ServerRegistry.resolve(this@CallMessagingService, this["tenant_id"])?.id,
+      workspaceName = this["workspace_name"]?.ifEmpty { null },
     )
   }
 
