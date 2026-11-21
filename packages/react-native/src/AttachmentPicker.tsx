@@ -20,6 +20,7 @@ import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { useSharedUpload, useUploadPreview } from './internal/uploadContext.js';
+import { uploadRejection } from './internal/uploadRules.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 export interface AttachmentPickerProps {
@@ -46,6 +47,18 @@ export interface AttachmentPickerProps {
    * iOS Info.plist when leaving this on.
    */
   camera?: boolean;
+  /** Largest file accepted, in bytes (checked after image compression). */
+  maxFileSize?: number;
+  /** Accepted types: MIME types, wildcards (`'image/*'`) or extensions (`'.pdf'`). */
+  acceptedTypes?: string[];
+  /**
+   * A picked file was refused (too large, a type not accepted) or the
+   * picker failed (e.g. camera permission denied). Receives a sentence
+   * to show; `<ConversationView>` shows it above the composer.
+   */
+  onError?: (message: string) => void;
+  /** Pick several photos at once from the library. Defaults to true. */
+  multiple?: boolean;
 }
 
 /**
@@ -60,6 +73,10 @@ export function AttachmentPicker({
   onClose,
   onPickInputs,
   camera = true,
+  maxFileSize,
+  acceptedTypes,
+  onError,
+  multiple = true,
 }: AttachmentPickerProps) {
   const theme = useTheme();
   const insets = useSafeInsets();
@@ -71,9 +88,25 @@ export function AttachmentPicker({
 
   const pickFromKind = async (kind: 'image' | 'document' | 'camera') => {
     try {
-      const adapter = onPickInputs ?? defaultAdapter;
+      const adapter = onPickInputs ?? ((k: typeof kind) => defaultAdapter(k, { multiple }));
       const inputs = await adapter(kind);
+      const rejected: string[] = [];
       for (const input of inputs) {
+        const why = uploadRejection(
+          {
+            contentType: input.contentType,
+            byteSize: input.byteSize,
+            filename: input.filename ?? null,
+          },
+          {
+            ...(maxFileSize !== undefined ? { maxFileSize } : {}),
+            ...(acceptedTypes ? { acceptedTypes } : {}),
+          },
+        );
+        if (why) {
+          rejected.push(why);
+          continue;
+        }
         // Stash the original local URI on the shared context so the
         // UploadQueueStrip can render a real thumbnail. The SDK only
         // sees the Blob from here on out.
@@ -83,8 +116,16 @@ export function AttachmentPicker({
         }
         void upload.upload(input as never);
       }
+      if (rejected.length > 0) {
+        onError?.(
+          rejected.length === 1 ? rejected[0]! : `${rejected.length} files couldn't be attached.`,
+        );
+      }
     } catch (err) {
       console.warn('[poolse/picker]', err);
+      onError?.(
+        err instanceof PermissionDeniedError ? err.message : "Couldn't open the picker. Try again.",
+      );
     } finally {
       onClose();
     }
@@ -124,7 +165,7 @@ export function AttachmentPicker({
           ) : null}
           <Pressable style={styles.item} onPress={() => pickFromKind('image')}>
             <PoolseIcon name="image" size={20} color={theme.colors.textMuted} />
-            <Text style={[styles.itemText, { color: theme.colors.text }]}>Photo or video</Text>
+            <Text style={[styles.itemText, { color: theme.colors.text }]}>Photo library</Text>
           </Pressable>
           <Pressable style={styles.item} onPress={() => pickFromKind('document')}>
             <PoolseIcon name="attachment" size={20} color={theme.colors.textMuted} />
@@ -253,7 +294,12 @@ async function assetsToInputs(assets: ReadonlyArray<ImagePicker.ImagePickerAsset
   );
 }
 
-async function defaultAdapter(kind: 'image' | 'document' | 'camera') {
+class PermissionDeniedError extends Error {}
+
+async function defaultAdapter(
+  kind: 'image' | 'document' | 'camera',
+  { multiple }: { multiple: boolean },
+) {
   if (kind === 'camera') {
     // Camera permissions are required on both iOS (Info.plist
     // NSCameraUsageDescription) and Android. requestCameraPermissionsAsync
@@ -261,8 +307,9 @@ async function defaultAdapter(kind: 'image' | 'document' | 'camera') {
     // resolve immediately with the cached answer.
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      console.warn('[poolse/picker] camera permission denied');
-      return [];
+      throw new PermissionDeniedError(
+        'Camera access is off. Turn it on in Settings to take a photo.',
+      );
     }
     const res = await ImagePicker.launchCameraAsync({
       mediaTypes: 'images',
@@ -278,6 +325,8 @@ async function defaultAdapter(kind: 'image' | 'document' | 'camera') {
       // compression ourselves below. Letting the picker re-encode
       // first just chains two lossy passes.
       quality: 1,
+      allowsMultipleSelection: multiple,
+      ...(multiple ? { selectionLimit: 10 } : {}),
     });
     if (res.canceled) return [];
     return assetsToInputs(res.assets);
