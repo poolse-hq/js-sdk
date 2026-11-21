@@ -2,17 +2,18 @@
 
 TypeScript SDKs for [poolse](https://poolse.dev). Docs: <https://poolse.dev/docs/sdk>
 
-This repository is a pnpm monorepo with **six packages**. They share one
+This repository is a pnpm monorepo with **seven packages**. They share one
 version number and are released together (current release: 3.1).
 
-| Package                                           | What                                                                                                               | Use when                                                      |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| [`@poolse/theme`](./packages/theme)               | Design tokens and the eight built-in light/dark themes, as CSS variables or a React Native object; theme codes.    | Theming the prebuilt components, or your own UI to match.     |
-| [`@poolse/sdk`](./packages/sdk)                   | Headless TypeScript client: REST, the realtime WebSocket, rooms and call media on the web. No React, no UI.        | Node, vanilla JS, other frameworks, or your own layer on top. |
-| [`@poolse/react`](./packages/react)               | React provider and hooks (`useMessages`, `useTyping`, `usePresence`, `useRoom`, …). No UI. Web and React Native.   | Your own UI with realtime state handled for you.              |
-| [`@poolse/react-ui`](./packages/react-ui)         | Prebuilt web components (`PoolseInbox`, `ConversationView`, room UI), themed with CSS variables.                   | A working web chat quickly.                                   |
-| [`@poolse/react-native`](./packages/react-native) | Prebuilt React Native / Expo components, a JS theme, the app-lifecycle hook, call-screen building blocks.          | An Expo or bare React Native app.                             |
-| [`@poolse/native`](./packages/native)             | Native call core (CallKit/PushKit on iOS, call service on Android), chat-notification helpers, Expo config plugin. | Phone calls and poolse's push notifications on phones.        |
+| Package                                           | What                                                                                                                             | Use when                                                      |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [`@poolse/theme`](./packages/theme)               | Design tokens and the eight built-in light/dark themes, as CSS variables or a React Native object; theme codes.                  | Theming the prebuilt components, or your own UI to match.     |
+| [`@poolse/crypto`](./packages/crypto)             | End-to-end encryption on WebCrypto: device keys, wrapped account and item keys, attachments, QR device approval, encrypted sync. | Personal notes and other data the server must not read.       |
+| [`@poolse/sdk`](./packages/sdk)                   | Headless TypeScript client: REST, the realtime WebSocket, rooms and call media on the web. No React, no UI.                      | Node, vanilla JS, other frameworks, or your own layer on top. |
+| [`@poolse/react`](./packages/react)               | React provider and hooks (`useMessages`, `useTyping`, `usePresence`, `useRoom`, …). No UI. Web and React Native.                 | Your own UI with realtime state handled for you.              |
+| [`@poolse/react-ui`](./packages/react-ui)         | Prebuilt web components (`PoolseInbox`, `ConversationView`, room UI), themed with CSS variables.                                 | A working web chat quickly.                                   |
+| [`@poolse/react-native`](./packages/react-native) | Prebuilt React Native / Expo components, a JS theme, the app-lifecycle hook, call-screen building blocks.                        | An Expo or bare React Native app.                             |
+| [`@poolse/native`](./packages/native)             | Native call core (CallKit/PushKit on iOS, call service on Android), chat-notification helpers, Expo config plugin.               | Phone calls and poolse's push notifications on phones.        |
 
 `ConversationView` uses the hooks from `@poolse/react`, which use the client
 from `@poolse/sdk`, so you can drop down a layer at any point.
@@ -162,6 +163,7 @@ docker compose run --rm node pnpm build        # build all packages
 poolse-js-sdk/
 ├── packages/
 │   ├── theme/          @poolse/theme
+│   ├── crypto/         @poolse/crypto
 │   ├── sdk/            @poolse/sdk
 │   ├── react/          @poolse/react
 │   ├── react-ui/       @poolse/react-ui
@@ -187,11 +189,12 @@ uses for the others. Before publishing, both checks must pass:
 Publish in dependency order, so no package goes out before one it depends on:
 
 1. `@poolse/theme`
-2. `@poolse/sdk`
-3. `@poolse/react`
-4. `@poolse/react-ui`
-5. `@poolse/react-native`
-6. `@poolse/native`
+2. `@poolse/crypto`
+3. `@poolse/sdk`
+4. `@poolse/react`
+5. `@poolse/react-ui`
+6. `@poolse/react-native`
+7. `@poolse/native`
 
 ## License
 
