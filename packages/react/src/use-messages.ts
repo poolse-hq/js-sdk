@@ -253,9 +253,17 @@ export function useMessages(conversationId: string): UseMessagesState {
       return;
     }
     const older = [...page.data].reverse();
-    setMessages((prev) => [...older, ...prev]);
+    // Overlapping loads (two `loadMore`s, or one beside `loadUntil`) can
+    // fetch the same page: keep each message once.
+    setMessages((prev) => {
+      const have = new Set(prev.map((m) => m.id));
+      return [...older.filter((m) => !have.has(m.id)), ...prev];
+    });
     setHasMore(page.data.length === PAGE_SIZE);
-    oldestSequenceRef.current = older[0]?.sequence ?? oldestSequenceRef.current;
+    const first = older[0]?.sequence;
+    const current = oldestSequenceRef.current;
+    if (first != null)
+      oldestSequenceRef.current = current == null ? first : Math.min(current, first);
   }, [chat, conversationId, hasMore, loading]);
 
   const loadUntil = useCallback(

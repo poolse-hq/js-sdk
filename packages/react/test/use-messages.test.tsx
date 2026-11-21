@@ -99,6 +99,25 @@ describe('useMessages', () => {
       expect(fetchFn.calls[3]?.url).toContain('before=51');
     });
 
+    it('loadMore beside loadUntil keeps each message once', async () => {
+      const fetchFn = scriptedFetch([
+        jsonResponse(me),
+        jsonResponse({ data: page(51, 100) }),
+        jsonResponse({ data: page(1, 50) }),
+        jsonResponse({ data: page(1, 50) }),
+      ]);
+      const { result } = renderHookWithProvider(() => useMessages('c-1'), fetchFn);
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await Promise.all([result.current.loadMore(), result.current.loadUntil('m10')]);
+      });
+
+      const ids = result.current.messages.map((m) => m.id);
+      expect(ids).toHaveLength(100);
+      expect(new Set(ids).size).toBe(100);
+    });
+
     it('resolves true without fetching when already loaded', async () => {
       const fetchFn = scriptedFetch([jsonResponse(me), jsonResponse({ data: page(1, 3) })]);
       const { result } = renderHookWithProvider(() => useMessages('c-1'), fetchFn);
