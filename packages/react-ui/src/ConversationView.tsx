@@ -11,6 +11,7 @@
 
 import type { LiveCall, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import {
+  ApiError,
   canEditOwnMessage,
   isMessageVisibleTo,
   receiptsOf,
@@ -592,7 +593,24 @@ export function ConversationView({
     setReplyingTo(null);
     setEditingId(null);
     setThreadRootId(null);
+    setSendNotice(null);
   }, [conversationId]);
+  // The message being quoted was deleted meanwhile: a tombstone can't be
+  // quoted, so drop the chip.
+  useEffect(() => {
+    if (!replyingTo) return;
+    const current = messages.find((m) => m.id === replyingTo.id);
+    if (current?.deleted_at) setReplyingTo(null);
+  }, [messages, replyingTo]);
+
+  // A short notice over the feed when a send is refused for a reason
+  // the user can act on (the quoted message was deleted).
+  const [sendNotice, setSendNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sendNotice) return;
+    const t = setTimeout(() => setSendNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [sendNotice]);
 
   // Scroll-to-original handler for the quoted card. Tries to find the
   // target row in the loaded window and scrolls it into view. If the
@@ -649,24 +667,41 @@ export function ConversationView({
     if (files.length > 0) composerRef.current?.addFiles(files);
   };
 
-  const onSendBody = async (
-    body: string,
-    opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] },
-  ) => {
-    await send({
+  // Sends, and maps the refusals the user can fix to a notice: quoting
+  // a message deleted meanwhile drops the quote and puts the text back
+  // so it can go out without it. Anything else is rethrown.
+  const sendRequest = async (req: MessageCreateRequest) => {
+    try {
+      await send(req);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'quoted_message_deleted') {
+        setReplyingTo(null);
+        setSendNotice('The message you replied to was deleted.');
+        // After the composer has finished its own post-send reset.
+        const body = req.body;
+        if (body) {
+          setTimeout(() => {
+            const composer = composerRef.current;
+            if (composer && composer.getText() === '') composer.setText(body);
+          }, 0);
+        }
+        return;
+      }
+      throw err;
+    }
+    setReplyingTo(null);
+  };
+
+  const onSendBody = (body: string, opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] }) =>
+    sendRequest({
       body,
       ...(opts?.quoted_message_id ? { quoted_message_id: opts.quoted_message_id } : {}),
       ...(opts?.attachment_ids && opts.attachment_ids.length > 0
         ? { attachment_ids: opts.attachment_ids }
         : {}),
     });
-    setReplyingTo(null);
-  };
 
-  const onSendWithMentions = async (req: MessageCreateRequest) => {
-    await send(req);
-    setReplyingTo(null);
-  };
+  const onSendWithMentions = (req: MessageCreateRequest) => sendRequest(req);
 
   // Mention input is only ergonomic when members are loaded. Falls back to
   // the plain composer otherwise. Both variants accept the same
@@ -733,6 +768,14 @@ export function ConversationView({
         {focusMissing && (
           <div className="poolse-conversation__status" role="status" aria-live="polite">
             That message isn't available.
+          </div>
+        )}
+        {sendNotice && (
+          <div
+            className="poolse-conversation__status poolse-conversation__status--error"
+            role="alert"
+          >
+            {sendNotice}
           </div>
         )}
 

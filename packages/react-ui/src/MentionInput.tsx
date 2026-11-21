@@ -113,7 +113,18 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       },
       [attachments, uploadAll],
     );
-    useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
+    const valueRef = useRef(value);
+    valueRef.current = value;
+    useImperativeHandle(
+      ref,
+      () => ({
+        addFiles,
+        getText: () => valueRef.current,
+        setText: (text: string) => setValue(text),
+        focus: () => taRef.current?.focus(),
+      }),
+      [addFiles],
+    );
 
     const label = labelFor ?? ((id: string) => id);
 

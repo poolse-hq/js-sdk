@@ -87,6 +87,9 @@ message, pass `slots={{ header, body, attachments, reactions, thread, actions }}
   "Last seen …") and `MemberList` show it; turn it off with
   `showPresence={false}`. `ConversationView showPresence` adds it to message
   avatars (off by default).
+- **Deleted messages** read "This message was deleted" and keep their thread
+  link; quotes of them read "Original message deleted". A send refused with
+  `quoted_message_deleted` shows a notice and puts the text back.
 
 ## Components
 

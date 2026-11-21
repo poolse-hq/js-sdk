@@ -381,6 +381,10 @@
   border-bottom: 1px solid var(--poolse-border);
 }
 
+.poolse-conversation__status--error {
+  color: var(--poolse-error);
+}
+
 .poolse-conversation__messages {
   flex: 1 1 auto;
   min-height: 0;
@@ -903,6 +907,12 @@
 .poolse-message__body--deleted {
   font-style: italic;
   opacity: 0.6;
+}
+
+/* A quote of a message that was since deleted. */
+.poolse-quote--deleted .poolse-quote__body {
+  font-style: italic;
+  opacity: 0.75;
 }
 
 /* ─────────────────────────────────────────────────────────────

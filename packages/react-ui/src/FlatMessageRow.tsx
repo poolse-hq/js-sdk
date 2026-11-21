@@ -86,7 +86,8 @@ export function FlatMessageRow({
   const deleted = !!msg.deleted_at;
   const time = formatMessageTime(msg.inserted_at, timeFormat);
   const replyCount = msg.reply_count ?? 0;
-  const showThreadLink = threads && !deleted && !msg.thread_root_id && replyCount > 0;
+  // A deleted root keeps its thread link: the replies are still there.
+  const showThreadLink = threads && !msg.thread_root_id && replyCount > 0;
   const showActions = actions && !deleted && !editing;
 
   const timeEl = (className: string) => (
@@ -148,17 +149,16 @@ export function FlatMessageRow({
     </div>
   ) : null;
 
-  const quote =
-    msg.quoted_message !== undefined && msg.quoted_message !== null ? (
-      <QuotedCard
-        quoted={msg.quoted_message}
-        isSelf={false}
-        {...(labelFor ? { labelFor } : {})}
-        {...(onQuotedClick ? { onClick: onQuotedClick } : {})}
-      />
-    ) : msg.quoted_message_id ? (
-      <QuotedPlaceholder isSelf={false} quotedMessageId={msg.quoted_message_id} />
-    ) : null;
+  const quote = deleted ? null : msg.quoted_message !== undefined && msg.quoted_message !== null ? (
+    <QuotedCard
+      quoted={msg.quoted_message}
+      isSelf={false}
+      {...(labelFor ? { labelFor } : {})}
+      {...(onQuotedClick ? { onClick: onQuotedClick } : {})}
+    />
+  ) : msg.quoted_message_id ? (
+    <QuotedPlaceholder isSelf={false} quotedMessageId={msg.quoted_message_id} />
+  ) : null;
 
   const attachmentList: Attachment[] =
     attachments && !deleted && Array.isArray(msg.attachments) ? msg.attachments : [];
@@ -325,7 +325,7 @@ function FlatBody({
   if (message.deleted_at) {
     return (
       <div className="poolse-message__body poolse-row__body">
-        <span className="poolse-message__body--deleted">Message deleted</span>
+        <span className="poolse-message__body--deleted">This message was deleted</span>
       </div>
     );
   }

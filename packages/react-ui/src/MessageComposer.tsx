@@ -57,6 +57,12 @@ export interface MessageComposerProps {
 export interface MessageComposerHandle {
   /** Enqueue files to upload + attach to the next send. No-op when `attachments={false}`. */
   addFiles: (files: File[]) => void;
+  /** The text in the input right now. */
+  getText: () => string;
+  /** Replace the text in the input (e.g. to restore a draft or a failed send). */
+  setText: (text: string) => void;
+  /** Focus the input. */
+  focus: () => void;
 }
 
 /**
@@ -116,7 +122,18 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       [attachments, uploadAll],
     );
 
-    useImperativeHandle(ref, () => ({ addFiles }), [addFiles]);
+    const valueRef = useRef(value);
+    valueRef.current = value;
+    useImperativeHandle(
+      ref,
+      () => ({
+        addFiles,
+        getText: () => valueRef.current,
+        setText: (text: string) => setValue(text),
+        focus: () => taRef.current?.focus(),
+      }),
+      [addFiles],
+    );
 
     const submit = async () => {
       const trimmed = value.trim();

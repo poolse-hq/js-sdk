@@ -156,7 +156,7 @@ describe('<ConversationView layout>', () => {
       expect(row(container, 'm3').querySelector('[aria-label="Read"]')).not.toBeNull();
       expect(row(container, 'm8').querySelector('[aria-label="Sent"]')).not.toBeNull();
       expect(row(container, 'm6').textContent).toContain('(edited)');
-      expect(row(container, 'm7').textContent).toContain('Message deleted');
+      expect(row(container, 'm7').textContent).toContain('This message was deleted');
       expect(row(container, 'm7').querySelector('.poolse-row__toolbar')).toBeNull();
       expect(row(container, 'm8').querySelector('.poolse-quote')?.textContent).toContain(
         'message 1',

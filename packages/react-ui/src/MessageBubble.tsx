@@ -213,8 +213,10 @@ export function MessageBubble({
   // server echo, or a message quoting something paginated out of the
   // current window). The fallback variant just says "Replying to a
   // message" — better than rendering nothing and confusing the sender.
-  const showQuoteCard =
-    message.quoted_message !== undefined && message.quoted_message !== null
+  // A tombstone shows no quote (the server drops it on delete).
+  const showQuoteCard = message.deleted_at
+    ? null
+    : message.quoted_message !== undefined && message.quoted_message !== null
       ? 'full'
       : message.quoted_message_id
         ? 'placeholder'
@@ -291,7 +293,7 @@ export function MessageBubble({
         );
 
         const body = message.deleted_at ? (
-          <span className="poolse-message__body--deleted">Message deleted</span>
+          <span className="poolse-message__body--deleted">This message was deleted</span>
         ) : hasVisibleBody ? (
           <div
             className={
@@ -470,7 +472,9 @@ export function QuotedCard({
   return (
     <button
       type="button"
-      className={`poolse-quote ${isSelf ? 'poolse-quote--self' : 'poolse-quote--other'}`}
+      className={`poolse-quote ${isSelf ? 'poolse-quote--self' : 'poolse-quote--other'}${
+        isDeleted ? ' poolse-quote--deleted' : ''
+      }`}
       onClick={handleClick}
       // No tabbing / click affordance when the host doesn't wire a
       // scroll-to-original handler — keeps the card static rather than

@@ -197,9 +197,9 @@ function BubbleMessageRow({
   // Thread pill: only show on the root message of an existing thread
   // (i.e. when reply_count > 0 AND this message isn't itself a reply).
   // ThreadView passes threads={false} so the pill won't show inside the
-  // thread side-pane.
+  // thread side-pane. A deleted root keeps it: the replies are still there.
   const replyCount = msg.reply_count ?? 0;
-  const showThreadPill = threads && !msg.deleted_at && !msg.thread_root_id && replyCount > 0;
+  const showThreadPill = threads && !msg.thread_root_id && replyCount > 0;
 
   const handleSave = onSaveEdit ?? (async () => undefined);
   const handleCancel = onCancelEdit ?? (() => undefined);

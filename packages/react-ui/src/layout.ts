@@ -67,7 +67,7 @@ export type MessageSlot = (props: MessageSlotProps) => ReactNode;
  * Replace or wrap one part of every message, in any layout:
  *
  * - `header` — sender name and time (the name label in `bubbles`)
- * - `body` — the text (or "Message deleted")
+ * - `body` — the text (or "This message was deleted")
  * - `attachments` — images and files
  * - `reactions` — the reaction pills
  * - `thread` — the "N replies" link

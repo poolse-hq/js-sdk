@@ -20,8 +20,19 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   (direct chats: badge and state as the subtitle, default `true`) and
   `ConversationView` / `MessageRow` (message avatars, default `false`).
 
+- `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
+  `getText()`, `setText(text)` and `focus()`.
+- `ConversationView` shows a notice when a send is refused because the quoted
+  message was deleted (`quoted_message_deleted`): the quote is dropped and the
+  text is put back to send again.
+
 ### Changed
 
+- Deleted messages (tombstones) read "This message was deleted" (muted, italic)
+  in every layout, with no actions, reactions, quote or attachments, and keep
+  their thread link while the thread has replies. A quote of a deleted message
+  reads "Original message deleted" (italic). A reply chip whose message is
+  deleted meanwhile is dropped.
 - `MemberList` reads each member's presence with `usePresenceMany` (online /
   away / in a call / last seen) instead of who has the conversation open;
   `onlineExternalIds` still gives the old green dot.
