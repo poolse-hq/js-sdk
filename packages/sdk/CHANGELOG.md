@@ -21,6 +21,10 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
   (`thread:updated`, `ThreadUpdatedEvent`); `MessageDeletedEvent.thread_root_id`.
 - Helpers for keeping a local message list in step: `isTombstone`,
   `toTombstone`, `mergeMessage`, `applyThreadUpdate`, `markQuoteDeleted`.
+- Conversation list paging: `conversations.list({ cursor, limit })` returns
+  `next_cursor` (null on the last page; `ConversationListOptions`), and
+  `conversations.listAll({ limit?, signal? })` iterates every conversation
+  across pages (`for await`). `list(signal)` keeps working.
 - `ApiErrorCode` — the known error codes (`quoted_message_deleted`,
   `quoted_message_not_found`, `quoted_message_wrong_conversation`,
   `reply_parent_not_found`, `message_deleted`, `device_signed_out`, …);
