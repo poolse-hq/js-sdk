@@ -169,6 +169,9 @@ APNs token is registered with `kind: 'alert'` (iOS) and the FCM token
 read-sync push. If your app calls expo-notifications'
 `setNotificationCategoryAsync`, that keeps `poolse_message`; don't replace
 the whole category set natively without it.
+expo-notifications also hands these responses to its own JS listeners: in
+`addNotificationResponseReceivedListener`, ignore an `actionIdentifier` of
+`reply` or `mark_read` (only the default tap should open the chat).
 
 ## Links
 
