@@ -19,6 +19,10 @@
  *                     the screen needs (default false). `true`, or
  *                     `{ appGroup }` to use your own app group instead of
  *                     `group.<bundle id>`. Android needs nothing extra.
+ *   messageReplyRequiresUnlock
+ *                     both: a chat notification's Reply asks for the
+ *                     passcode / biometrics first (default false: Reply
+ *                     works straight from the lock screen).
  *
  * Always applied on Android: the LiveKit media adapter and expo-notifications
  * as the FCM delegate for pushes that are not calls.
@@ -27,6 +31,7 @@ const { createRunOncePlugin } = require('expo/config-plugins');
 
 const withCallDelegate = require('./withCallDelegate');
 const withLockscreenCalls = require('./withLockscreenCalls');
+const withMessageReplyUnlock = require('./withMessageReplyUnlock');
 const withNativeCallMedia = require('./withNativeCallMedia');
 const withPictureInPicture = require('./withPictureInPicture');
 const withRingback = require('./withRingback');
@@ -40,12 +45,14 @@ function withPoolseCalls(config, options = {}) {
     pictureInPicture = true,
     lockscreen = true,
     screenShare = false,
+    messageReplyRequiresUnlock = false,
   } = options ?? {};
   config = withNativeCallMedia(config);
   config = withCallDelegate(config);
   if (lockscreen) config = withLockscreenCalls(config);
   if (pictureInPicture) config = withPictureInPicture(config);
   if (ringback) config = withRingback(config, ringback);
+  config = withMessageReplyUnlock(config, messageReplyRequiresUnlock);
   if (screenShare) config = withScreenShare(config, screenShare === true ? {} : screenShare);
   return config;
 }

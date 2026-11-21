@@ -9,7 +9,7 @@ public class PoolseCallsModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PoolseCalls")
 
-    Events("onCallState", "onVoipToken", "onPictureInPicture")
+    Events("onCallState", "onVoipToken", "onPictureInPicture", "onNotificationAction")
 
     // Normally done at launch by PoolseCallsAppDelegateSubscriber; this is
     // the backstop for a host whose AppDelegate does not forward to Expo.
@@ -31,6 +31,9 @@ public class PoolseCallsModule: Module {
         CallPictureInPicture.listener = { [weak self] active in
           self?.sendEvent("onPictureInPicture", ["active": active])
         }
+        MessageNotifications.actionListener = { [weak self] event in
+          self?.sendEvent("onNotificationAction", event)
+        }
       }
     }
 
@@ -39,6 +42,7 @@ public class PoolseCallsModule: Module {
         CallCore.listener = nil
         VoipPush.tokenListener = nil
         CallPictureInPicture.listener = nil
+        MessageNotifications.actionListener = nil
       }
     }
 
@@ -109,6 +113,15 @@ public class PoolseCallsModule: Module {
     // notification handler — see shouldPresentMessage in src/index.ts.)
     Function("setActiveConversation") { (conversationId: String?) in
       if let conversationId = conversationId { MessageNotifications.clear(conversationId: conversationId) }
+    }
+
+    // Reply / Mark as read done from a notification while JS was not
+    // listening (usually: the app was not running). Oldest first, once.
+    Function("takeNotificationActions") { () -> [[String: Any]] in
+      MessageNotifications.takePending()
+    }
+    Function("observeNotificationActions") { (on: Bool) in
+      DispatchQueue.main.async { MessageNotifications.actionsObserved = on }
     }
 
     // Android-only: CallKit owns the lock screen on iOS.

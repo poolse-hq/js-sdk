@@ -3,7 +3,6 @@ package dev.poolse.callcore.android
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -12,12 +11,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.UUID
 
 /**
  * Chat notifications on Android (CALL_CONTRACT.md §5.5), WhatsApp-style.
@@ -27,6 +22,10 @@ import java.util.UUID
  * group summary collects every chat. Reply (inline text) and Mark as
  * read run natively, authorized by the reply grant the push carried, so
  * they work with the app killed and the phone locked.
+ *
+ * The HTTP side ([MessageActionWorker]) runs in WorkManager, so a reply
+ * typed with no signal, or into a process Android kills a second later,
+ * still goes out — with the same idempotency id on every retry.
  *
  * Android cannot read back the lines of a posted notification, so the
  * last few lines per conversation are kept in a small preferences file
@@ -44,6 +43,9 @@ object MessageNotifications {
   internal const val ACTION_READ = "dev.poolse.callcore.message.READ"
   internal const val EXTRA_CONVERSATION = "poolse_message_conversation"
   private const val TAG = "PoolseMessages"
+  private const val ACTIONS_PREFS = "dev.poolse.messages.actions"
+  private const val MAX_PENDING_ACTIONS = 50
+  private const val META_REPLY_UNLOCK = "dev.poolse.messages.reply_requires_unlock"
 
   // A message notification that waited this long for the phone to come
   // online is history.
@@ -54,6 +56,15 @@ object MessageNotifications {
    * are not notified — the user is reading them.
    */
   @Volatile var activeConversationId: String? = null
+
+  /** The bridge's subscriber for finished Reply / Mark as read actions. */
+  @Volatile var actionListener: ((Map<String, Any?>) -> Unit)? = null
+
+  /**
+   * True while JS has an `onNotificationAction` subscriber; until then
+   * results queue, even with the bridge observing other events.
+   */
+  @Volatile var actionsObserved = false
 
   /** A `type: "message", event: "new"` push. */
   fun onNew(context: Context, data: Map<String, String>, smallIcon: Int) {
@@ -83,6 +94,17 @@ object MessageNotifications {
     post(context, state, smallIcon, alert = true)
   }
 
+  /**
+   * A `type: "message", event: "read"` push: read on some device (maybe
+   * this one, after a Reply or Mark as read). Launcher badges follow the
+   * notifications' numbers, so dropping the conversation's is the badge
+   * update; `unread_total` has no Android API to go to.
+   */
+  fun onRead(context: Context, data: Map<String, String>) {
+    val conversationId = data["conversation_id"] ?: return
+    clear(context, conversationId)
+  }
+
   /** The conversation was read (here, or on another device): clear it. */
   fun clear(context: Context, conversationId: String) {
     prefs(context).edit().remove(key(conversationId)).apply()
@@ -90,21 +112,97 @@ object MessageNotifications {
     refreshSummary(context, CallCore.smallIcon(context))
   }
 
-  /** The reply went through: show it as the user's line and stop the spinner. */
-  internal fun onReplied(context: Context, conversationId: String, text: String, ok: Boolean) {
+  /** Repost a conversation's notification as it is, silently. */
+  internal fun refresh(context: Context, conversationId: String) {
     val state = load(context, conversationId) ?: return
+    post(context, state, CallCore.smallIcon(context), alert = false)
+  }
+
+  /**
+   * Reply tapped: show the user's line at once ("Sending…") — Android
+   * keeps the reply field spinning until the notification is updated.
+   */
+  internal fun onReplying(context: Context, conversationId: String, clientId: String, text: String) {
+    val state = load(context, conversationId) ?: Conversation(conversationId)
+    state.lines.removeAll { it.self && it.id == clientId }
     state.lines += Line(
-      id = null,
+      id = clientId,
       sender = "You",
       senderKey = null,
-      text = if (ok) text else "Not sent: $text",
+      text = text,
       at = System.currentTimeMillis(),
       self = true,
+      status = STATUS_SENDING,
     )
     while (state.lines.size > MAX_LINES) state.lines.removeAt(0)
     save(context, state)
     post(context, state, CallCore.smallIcon(context), alert = false)
   }
+
+  /**
+   * The reply's outcome. Sent: the line stays (the server's read-sync
+   * push then clears the conversation — replying is reading). Failed:
+   * the line reads "Not sent", with why underneath, and the
+   * notification alerts again; Reply stays on it to try again.
+   */
+  internal fun onReplied(context: Context, conversationId: String, clientId: String, text: String, ok: Boolean, reason: String?, grant: String?) {
+    val state = load(context, conversationId) ?: if (ok) return else Conversation(conversationId, grant = grant)
+    val index = state.lines.indexOfFirst { it.self && it.id == clientId }
+    val line = Line(
+      id = clientId,
+      sender = "You",
+      senderKey = null,
+      text = text,
+      at = if (index >= 0) state.lines[index].at else System.currentTimeMillis(),
+      self = true,
+      status = if (ok) STATUS_SENT else STATUS_FAILED,
+    )
+    if (index >= 0) state.lines[index] = line else state.lines += line
+    while (state.lines.size > MAX_LINES) state.lines.removeAt(0)
+    state.failure = if (ok) null else reason
+    save(context, state)
+    post(context, state, CallCore.smallIcon(context), alert = !ok)
+  }
+
+  internal const val STATUS_SENDING = "sending"
+  internal const val STATUS_SENT = "sent"
+  internal const val STATUS_FAILED = "failed"
+
+  // ── JS events ───────────────────────────────────────────────────────
+
+  /** A finished action, to JS: live when the bridge listens, else queued on disk. */
+  internal fun report(context: Context, event: Map<String, Any?>) {
+    val full = event + ("at" to System.currentTimeMillis())
+    val listener = actionListener.takeIf { actionsObserved }
+    if (listener != null && runCatching { listener(full) }.isSuccess) return
+    val p = context.applicationContext.getSharedPreferences(ACTIONS_PREFS, Context.MODE_PRIVATE)
+    synchronized(this) {
+      val queue = runCatching { JSONArray(p.getString("queue", "[]")) }.getOrDefault(JSONArray())
+      queue.put(JSONObject(full.filterValues { it != null }))
+      val trimmed = JSONArray()
+      for (i in maxOf(0, queue.length() - MAX_PENDING_ACTIONS) until queue.length()) trimmed.put(queue.get(i))
+      p.edit().putString("queue", trimmed.toString()).apply()
+    }
+  }
+
+  /** The queued actions, oldest first, removed. */
+  fun takePendingActions(context: Context): List<Map<String, Any?>> {
+    val p = context.applicationContext.getSharedPreferences(ACTIONS_PREFS, Context.MODE_PRIVATE)
+    val raw = synchronized(this) {
+      p.getString("queue", null).also { p.edit().remove("queue").apply() }
+    } ?: return emptyList()
+    val queue = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+    return List(queue.length()) { i ->
+      val o = queue.getJSONObject(i)
+      o.keys().asSequence().associateWith { k -> o.get(k).takeUnless { it == JSONObject.NULL } }
+    }
+  }
+
+  private fun replyRequiresUnlock(context: Context): Boolean = runCatching {
+    context.packageManager
+      .getApplicationInfo(context.packageName, android.content.pm.PackageManager.GET_META_DATA)
+      .metaData?.getBoolean(META_REPLY_UNLOCK, false) ?: false
+  }.getOrDefault(false)
 
   internal fun grantFor(context: Context, conversationId: String): String? =
     load(context, conversationId)?.grant
@@ -119,7 +217,8 @@ object MessageNotifications {
     if (state.group) style.conversationTitle = state.title
     for (line in state.lines) {
       val person = if (line.self) null else Person.Builder().setName(line.sender).setKey(line.senderKey).build()
-      style.addMessage(NotificationCompat.MessagingStyle.Message(line.text, line.at, person))
+      val text = if (line.self && line.status == STATUS_FAILED) "Not sent: ${line.text}" else line.text
+      style.addMessage(NotificationCompat.MessagingStyle.Message(text, line.at, person))
     }
 
     val id = notificationId(state.id)
@@ -142,6 +241,10 @@ object MessageNotifications {
     } else {
       builder.setStyle(style)
     }
+    when {
+      state.failure != null -> builder.setSubText(state.failure)
+      state.lines.lastOrNull()?.let { it.self && it.status == STATUS_SENDING } == true -> builder.setSubText("Sending…")
+    }
     openIntent(context, state.id, id)?.let(builder::setContentIntent)
 
     if (state.grant != null) {
@@ -151,6 +254,7 @@ object MessageNotifications {
         .setAllowGeneratedReplies(true)
         .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
         .setShowsUserInterface(false)
+        .setAuthenticationRequired(replyRequiresUnlock(context))
         .build()
       val read = NotificationCompat.Action.Builder(0, "Mark as read", actionIntent(context, ACTION_READ, state.id, id + 2, mutable = false))
         .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
@@ -239,6 +343,8 @@ object MessageNotifications {
     val text: String,
     val at: Long,
     val self: Boolean,
+    /** The user's own replies: sending | sent | failed (`id` is the reply's client id). */
+    val status: String? = null,
   )
 
   internal class Conversation(
@@ -248,6 +354,8 @@ object MessageNotifications {
     var grant: String? = null,
     val lines: MutableList<Line> = mutableListOf(),
     var hidden: Boolean = false,
+    /** Why the last reply was not sent, shown under the conversation. */
+    var failure: String? = null,
   )
 
   private fun prefs(context: Context) =
@@ -266,6 +374,7 @@ object MessageNotifications {
         group = o.optBoolean("group"),
         grant = o.optString("grant").ifBlank { null },
         hidden = o.optBoolean("hidden"),
+        failure = o.optString("failure").ifBlank { null },
         lines = MutableList(lines.length()) { i ->
           val l = lines.getJSONObject(i)
           Line(
@@ -275,6 +384,7 @@ object MessageNotifications {
             text = l.optString("text"),
             at = l.optLong("at"),
             self = l.optBoolean("self"),
+            status = l.optString("status").ifBlank { null },
           )
         },
       )
@@ -291,7 +401,8 @@ object MessageNotifications {
           .put("key", l.senderKey ?: "")
           .put("text", l.text)
           .put("at", l.at)
-          .put("self", l.self),
+          .put("self", l.self)
+          .put("status", l.status ?: ""),
       )
     }
     val o = JSONObject()
@@ -299,55 +410,8 @@ object MessageNotifications {
       .put("group", c.group)
       .put("grant", c.grant ?: "")
       .put("hidden", c.hidden)
+      .put("failure", c.failure ?: "")
       .put("lines", lines)
     prefs(context).edit().putString(key(c.id), o.toString()).apply()
   }
-}
-
-/**
- * Reply / Mark as read, tapped on a message notification. Posts to the
- * notification-action endpoints with the conversation's reply grant —
- * no app, no session — on a background thread kept alive by goAsync().
- */
-class MessageActionReceiver : BroadcastReceiver() {
-  override fun onReceive(context: Context, intent: Intent) {
-    val conversationId = intent.getStringExtra(MessageNotifications.EXTRA_CONVERSATION) ?: return
-    val app = context.applicationContext
-    val grant = MessageNotifications.grantFor(app, conversationId)
-    val base = CallCore.apiBaseUrl(app)
-
-    when (intent.action) {
-      MessageNotifications.ACTION_REPLY -> {
-        val text = RemoteInput.getResultsFromIntent(intent)
-          ?.getCharSequence(MessageNotifications.KEY_REPLY)?.toString()?.trim().orEmpty()
-        if (text.isEmpty() || grant == null || base == null) return
-        val pending = goAsync()
-        Thread {
-          val body = JSONObject().put("body", text).put("id", UUID.randomUUID().toString())
-          val ok = post("$base/v1/notifications/reply", grant, body)
-          MessageNotifications.onReplied(app, conversationId, text, ok)
-          pending.finish()
-        }.start()
-      }
-      MessageNotifications.ACTION_READ -> {
-        // Optimistic: the notification goes now; the server catches up.
-        MessageNotifications.clear(app, conversationId)
-        if (grant == null || base == null) return
-        val pending = goAsync()
-        Thread {
-          post("$base/v1/notifications/read", grant, JSONObject())
-          pending.finish()
-        }.start()
-      }
-    }
-  }
-
-  private fun post(url: String, grant: String, body: JSONObject): Boolean = runCatching {
-    val request = Request.Builder()
-      .url(url)
-      .header("Authorization", "Bearer $grant")
-      .post(body.toString().toRequestBody("application/json".toMediaType()))
-      .build()
-    CallHttpClient.defaultClient().newCall(request).execute().use { it.isSuccessful }
-  }.onFailure { Log.w("PoolseMessages", "notification action failed", it) }.getOrDefault(false)
 }

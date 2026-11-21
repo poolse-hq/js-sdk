@@ -164,6 +164,38 @@ export interface CallAction {
   media: 'audio' | 'video';
 }
 
+/**
+ * A Reply or Mark as read the user did from a chat notification, after
+ * the native core sent it (or gave up). The server has already posted
+ * the reply and marked the conversation read; use this to refresh what
+ * the app shows (insert the message, drop the unread count) without
+ * waiting for the socket, or to tell the user a reply did not go out.
+ */
+export interface NotificationActionResult {
+  action: 'reply' | 'mark_read';
+  conversationId: string;
+  /** Whether the server accepted it. */
+  ok: boolean;
+  /** Reply only: what the user typed. */
+  text?: string;
+  /** Reply only: the idempotency id sent with it — the message's id once posted. */
+  clientId?: string;
+  /** Reply, `ok` only: the posted message's id (equals `clientId`). */
+  messageId?: string;
+  /**
+   * When not `ok`: the server's error code (`unauthorized`,
+   * `device_signed_out`, `user_blocked`, `forbidden`, `not_found`,
+   * `mau_cap_exceeded`, `validation_failed`, `rate_limited`), or
+   * `network`, `no_grant` (the push carried no reply grant),
+   * `not_configured` (never `configure`d), `http_<status>`.
+   */
+  error?: string;
+  /** The HTTP status when the server answered with an error. */
+  status?: number;
+  /** When it finished, epoch ms. */
+  at: number;
+}
+
 type NativeSnapshot = { snapshot: Snapshot | null };
 
 interface PoolseCallsNative {
@@ -196,9 +228,15 @@ interface PoolseCallsNative {
   getVoipToken?(): VoipToken | null;
   takeCallAction?(): CallAction | null;
   setActiveConversation?(conversationId: string | null): void;
+  takeNotificationActions?(): NotificationActionResult[];
+  observeNotificationActions?(on: boolean): void;
   addListener(event: 'onCallState', cb: (payload: NativeSnapshot) => void): { remove(): void };
   addListener(event: 'onVoipToken', cb: (payload: VoipToken) => void): { remove(): void };
   addListener(event: 'onCallAction', cb: (payload: CallAction) => void): { remove(): void };
+  addListener(
+    event: 'onNotificationAction',
+    cb: (payload: NotificationActionResult) => void,
+  ): { remove(): void };
   addListener(
     event: 'onPictureInPicture',
     cb: (payload: { active: boolean }) => void,
@@ -493,6 +531,45 @@ export function conversationOfNotification(
   const type = data['type'];
   if (type !== 'message' && type !== 'call_missed') return null;
   return typeof data['conversation_id'] === 'string' ? data['conversation_id'] : null;
+}
+
+/**
+ * Reply and Mark as read from a chat notification are handled natively —
+ * from the lock screen, with the app closed — using the grant the push
+ * carried and the API origin given to `configure` (which persists it).
+ * This fires once each finishes while the app is running. Read the ones
+ * that finished while it was not with `takeNotificationActions` on mount.
+ */
+export function onNotificationAction(cb: (result: NotificationActionResult) => void): Unsubscribe {
+  if (!native?.takeNotificationActions) return () => undefined;
+  const sub = native.addListener('onNotificationAction', cb);
+  if (actionObservers++ === 0) native.observeNotificationActions?.(true);
+  let removed = false;
+  return () => {
+    if (removed) return;
+    removed = true;
+    sub.remove();
+    if (--actionObservers === 0) native?.observeNotificationActions?.(false);
+  };
+}
+
+// Native queues results until someone listens for them specifically.
+let actionObservers = 0;
+
+/** `onNotificationAction`, replies only. */
+export function onNotificationReply(cb: (result: NotificationActionResult) => void): Unsubscribe {
+  return onNotificationAction((result) => {
+    if (result.action === 'reply') cb(result);
+  });
+}
+
+/**
+ * The notification actions that finished while no `onNotificationAction`
+ * listener was attached (usually: the app was not running), oldest
+ * first, each returned once. Up to the last 50 are kept.
+ */
+export function takeNotificationActions(): NotificationActionResult[] {
+  return native?.takeNotificationActions?.() ?? [];
 }
 
 // ── VoIP push (iOS) ───────────────────────────────────────────────────

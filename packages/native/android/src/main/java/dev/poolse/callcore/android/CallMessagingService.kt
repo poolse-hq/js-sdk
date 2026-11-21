@@ -42,7 +42,7 @@ class CallMessagingService : FirebaseMessagingService() {
       val conversationId = data["conversation_id"] ?: return
       when (data["event"]) {
         "new" -> MessageNotifications.onNew(this, data, CallCore.smallIcon(this))
-        "read" -> MessageNotifications.clear(this, conversationId)
+        "read" -> MessageNotifications.onRead(this, data)
       }
       return
     }

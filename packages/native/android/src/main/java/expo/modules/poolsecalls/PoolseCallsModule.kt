@@ -35,7 +35,7 @@ class PoolseCallsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("PoolseCalls")
 
-    Events("onCallState", "onCallAction", "onPictureInPicture")
+    Events("onCallState", "onCallAction", "onPictureInPicture", "onNotificationAction")
 
     // <CallVideoView>: renders a participant's (or our own) camera.
     View(PoolseCallVideoView::class) {
@@ -57,10 +57,12 @@ class PoolseCallsModule : Module() {
     OnStartObserving {
       CallCore.listener = { snapshot -> sendEvent("onCallState", mapOf("snapshot" to snapshot)) }
       CallPictureInPicture.listener = { active -> sendEvent("onPictureInPicture", mapOf("active" to active)) }
+      MessageNotifications.actionListener = { event -> sendEvent("onNotificationAction", event) }
     }
     OnStopObserving {
       CallCore.listener = null
       CallPictureInPicture.listener = null
+      MessageNotifications.actionListener = null
     }
 
     // Picture-in-picture: armed while a video call shows someone. Android
@@ -173,6 +175,13 @@ class PoolseCallsModule : Module() {
       MessageNotifications.activeConversationId = conversationId
       if (conversationId != null) context?.let { MessageNotifications.clear(it, conversationId) }
     }
+
+    // Reply / Mark as read done from a notification while JS was not
+    // listening (usually: the app was not running). Oldest first, once.
+    Function("takeNotificationActions") {
+      context?.let(MessageNotifications::takePendingActions) ?: emptyList()
+    }
+    Function("observeNotificationActions") { on: Boolean -> MessageNotifications.actionsObserved = on }
 
     // While a call rings or runs the app may sit over the lock screen.
     Function("setShowOnLockscreen") { enabled: Boolean ->
