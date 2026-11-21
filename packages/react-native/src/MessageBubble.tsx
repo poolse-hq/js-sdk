@@ -5,6 +5,7 @@ import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 
 
 import { AttachmentPreview } from './AttachmentPreview.js';
 import { ImageMosaic } from './ImageMosaic.js';
+import { LinkPreviewCard } from './LinkPreviewCard.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './internal/bubbleText.js';
 import { renderMarkdown } from './internal/markdown.js';
@@ -69,6 +70,10 @@ export interface MessageBubbleProps {
    */
   slots?: MessageSlots;
   slotContext?: MessageSlotContext;
+  /** Show `message.link_previews` as cards under the text. Defaults to true. */
+  linkPreviews?: boolean;
+  /** Makes the "edited" label tappable — `<MessageRow>` opens the edit history. */
+  onEditedPress?: () => void;
 }
 
 /**
@@ -96,6 +101,8 @@ export function MessageBubble({
   density = 'comfortable',
   slots,
   slotContext,
+  linkPreviews = true,
+  onEditedPress,
 }: MessageBubbleProps) {
   const dense = density === 'compact';
   const theme = useTheme();
@@ -162,6 +169,8 @@ export function MessageBubble({
   const hasMedia = images.length > 0;
   const hasFiles = files.length > 0;
   const hasBody = !isDeleted && body.length > 0;
+  const previews = linkPreviews && !isDeleted ? (message.link_previews ?? []) : [];
+  const hasPreviews = previews.length > 0;
 
   // Image-only bubble → the meta floats over the picture on a scrim
   // pill, WhatsApp-style, and the bubble is nothing but the frame.
@@ -169,13 +178,20 @@ export function MessageBubble({
 
   // 1–3 emoji and nothing else → no bubble chrome, big glyphs.
   const jumboCount =
-    hasBody && !hasMedia && !hasFiles && !message.quoted_message_id ? emojiOnlyCount(body) : 0;
+    hasBody && !hasMedia && !hasFiles && !hasPreviews && !message.quoted_message_id
+      ? emojiOnlyCount(body)
+      : 0;
 
   // Timestamp may share the last text line — but only on the
   // plain-text path; markdown blocks and the Read-more toggle own
   // their last line, so those keep the meta row.
+  // Link previews sit under the text, so the meta follows them instead.
   const inlineMeta =
-    hasBody && jumboCount === 0 && !trimmable && (!markdown || !hasMarkdown(truncated));
+    hasBody &&
+    jumboCount === 0 &&
+    !trimmable &&
+    !hasPreviews &&
+    (!markdown || !hasMarkdown(truncated));
 
   const sectionAbove = hasMedia || hasFiles || !!message.quoted_message || isDeleted;
 
@@ -214,9 +230,24 @@ export function MessageBubble({
             ? (e) => setMetaWidth(e.nativeEvent.layout.width)
             : undefined
         }
-        pointerEvents="none"
+        pointerEvents={isEdited && onEditedPress ? 'box-none' : 'none'}
       >
-        {isEdited ? <Text style={[styles.editedTag, { color, opacity: 0.8 }]}>edited</Text> : null}
+        {isEdited ? (
+          <Text
+            style={[styles.editedTag, { color, opacity: 0.8 }]}
+            {...(onEditedPress
+              ? {
+                  onPress: onEditedPress,
+                  suppressHighlighting: true,
+                  accessibilityRole: 'button' as const,
+                  accessibilityLabel: 'Edited. Show edit history',
+                  hitSlop: 8,
+                }
+              : {})}
+          >
+            edited
+          </Text>
+        ) : null}
         <Text style={[styles.meta, { color, opacity: variant === 'overlay' ? 1 : 0.75 }]}>
           {time}
         </Text>
@@ -344,7 +375,7 @@ export function MessageBubble({
                     fontStyle: 'italic',
                   }}
                 >
-                  Message deleted
+                  This message was deleted
                 </Text>
               </View>
             ) : null}
@@ -425,6 +456,22 @@ export function MessageBubble({
             ) : null}
           </>,
         )}
+
+        {hasPreviews ? (
+          // A fixed width, like media: a card squeezed into the width of
+          // a one-word message would be unreadable.
+          <View style={[styles.previews, !hasBody && styles.previewsAlone, { width: mediaWidth }]}>
+            {previews.map((p) => (
+              <LinkPreviewCard
+                key={p.url}
+                preview={p}
+                maxWidth={mediaWidth - 12}
+                tone={isSelf ? 'onBrand' : 'default'}
+                {...(onLongPress ? { onLongPress } : {})}
+              />
+            ))}
+          </View>
+        ) : null}
 
         {/* Fallback meta row for everything that couldn't inline or
             overlay it: markdown bodies, file bubbles, deleted rows. */}
@@ -555,6 +602,14 @@ const styles = StyleSheet.create({
   },
   // A hair less air when media / files / a quote already sit above.
   textBlockAfter: {
+    paddingTop: 6,
+  },
+  previews: {
+    paddingHorizontal: 6,
+    paddingBottom: 6,
+    gap: 6,
+  },
+  previewsAlone: {
     paddingTop: 6,
   },
   jumboBlock: {

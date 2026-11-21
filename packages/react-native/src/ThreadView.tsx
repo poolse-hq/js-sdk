@@ -1,5 +1,5 @@
 import type { Message, Uuid } from '@poolse/sdk';
-import { useMe, useThread } from '@poolse/react';
+import { useMe, usePoolse, useThread } from '@poolse/react';
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import {
   Animated,
@@ -34,6 +34,10 @@ export interface ThreadViewProps {
   /** Row layout for the root and replies — see `ChatLayout`. Defaults to `'bubbles'`. */
   layout?: ChatLayout;
   timeFormat?: TimeFormat;
+  /** Presence badges on reply avatars. Defaults to `false`. */
+  showPresence?: boolean;
+  /** Link previews under replies. Defaults to `true`. */
+  linkPreviews?: boolean;
 }
 
 // Sheet covers the bottom 88% of the screen. The remaining 12% is the
@@ -64,6 +68,8 @@ export function ThreadView({
   avatarFor,
   layout,
   timeFormat,
+  showPresence = false,
+  linkPreviews = true,
 }: ThreadViewProps) {
   return (
     <Modal
@@ -88,6 +94,8 @@ export function ThreadView({
           {...(avatarFor ? { avatarFor } : {})}
           {...(layout ? { layout } : {})}
           {...(timeFormat ? { timeFormat } : {})}
+          showPresence={showPresence}
+          linkPreviews={linkPreviews}
         />
       </UploadProvider>
     </Modal>
@@ -102,6 +110,8 @@ function ThreadSheet({
   avatarFor,
   layout,
   timeFormat,
+  showPresence,
+  linkPreviews,
 }: {
   onClose: () => void;
   conversationId: Uuid;
@@ -110,9 +120,12 @@ function ThreadSheet({
   avatarFor?: (externalId: string) => string | null;
   layout?: ChatLayout;
   timeFormat?: TimeFormat;
+  showPresence: boolean;
+  linkPreviews: boolean;
 }) {
   const theme = useTheme();
   const { me } = useMe();
+  const chat = usePoolse();
   const meId = me?.id ?? null;
   const {
     replies,
@@ -165,10 +178,31 @@ function ThreadSheet({
           {...(avatarFor ? { avatarFor } : {})}
           {...(layout ? { layout } : {})}
           {...(timeFormat ? { timeFormat } : {})}
+          showPresence={showPresence}
+          linkPreviews={linkPreviews}
+          {...(linkPreviews && isSelf && !msg.deleted_at && (msg.link_previews?.length ?? 0) > 0
+            ? {
+                onRemoveLinkPreview: (url: string) =>
+                  void chat.messages
+                    .update(msg.id, { remove_link_previews: [url] })
+                    .catch(() => undefined),
+              }
+            : {})}
         />
       );
     },
-    [meId, editingId, deleteReply, labelFor, avatarFor, layout, timeFormat],
+    [
+      meId,
+      editingId,
+      deleteReply,
+      labelFor,
+      avatarFor,
+      layout,
+      timeFormat,
+      showPresence,
+      linkPreviews,
+      chat,
+    ],
   );
 
   const editingMessage = useMemo(
@@ -190,9 +224,10 @@ function ThreadSheet({
         {...(avatarFor ? { avatarFor } : {})}
         {...(layout ? { layout } : {})}
         {...(timeFormat ? { timeFormat } : {})}
+        linkPreviews={linkPreviews}
       />
     ),
-    [rootMessage, meId, labelFor, avatarFor, layout, timeFormat],
+    [rootMessage, meId, labelFor, avatarFor, layout, timeFormat, linkPreviews],
   );
 
   return (

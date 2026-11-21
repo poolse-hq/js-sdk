@@ -24,6 +24,20 @@ export interface MessageActionsProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onCopy?: () => void;
+  /** "Mark unread" — offered on other people's messages. */
+  onMarkUnread?: () => void;
+  /**
+   * "Remove preview" (one per link when there are several) — offered to
+   * the sender. Receives the preview's `url`.
+   */
+  onRemovePreview?: (url: string) => void;
+  /** The message's link-preview urls, for `onRemovePreview`. */
+  previewUrls?: string[];
+  /**
+   * A "+" after the quick reactions that opens the full emoji picker.
+   * Called after the sheet closes.
+   */
+  onMoreReactions?: () => void;
 }
 
 /**
@@ -44,6 +58,10 @@ export function MessageActions({
   onEdit,
   onDelete,
   onCopy,
+  onMarkUnread,
+  onRemovePreview,
+  previewUrls = [],
+  onMoreReactions,
 }: MessageActionsProps) {
   const theme = useTheme();
   const insets = useSafeInsets();
@@ -53,6 +71,17 @@ export function MessageActions({
   if (onReplyInThread)
     items.push({ label: 'Reply in thread', icon: 'messages', onPress: onReplyInThread });
   if (onCopy) items.push({ label: 'Copy text', icon: 'copy', onPress: onCopy });
+  if (!isSelf && onMarkUnread)
+    items.push({ label: 'Mark unread', icon: 'bell', onPress: onMarkUnread });
+  if (isSelf && onRemovePreview) {
+    for (const url of previewUrls) {
+      items.push({
+        label: previewUrls.length > 1 ? `Remove preview (${hostOf(url)})` : 'Remove preview',
+        icon: 'link',
+        onPress: () => onRemovePreview(url),
+      });
+    }
+  }
   if (isSelf && onEdit) items.push({ label: 'Edit', icon: 'edit', onPress: onEdit });
   if (isSelf && onDelete)
     items.push({ label: 'Delete', icon: 'trash', onPress: onDelete, danger: true });
@@ -70,7 +99,10 @@ export function MessageActions({
       {...EDGE_TO_EDGE_MODAL}
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View
+        <Pressable
+          // Taps on the sheet itself must not reach the backdrop.
+          onPress={() => undefined}
+          accessible={false}
           style={[
             styles.sheet,
             {
@@ -101,6 +133,20 @@ export function MessageActions({
                   <Text style={styles.emoji}>{emoji}</Text>
                 </Pressable>
               ))}
+              {onMoreReactions ? (
+                <Pressable
+                  onPress={() => {
+                    onClose();
+                    onMoreReactions();
+                  }}
+                  style={[styles.moreBtn, { backgroundColor: theme.colors.surfaceAlt }]}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="More reactions"
+                >
+                  <PoolseIcon name="plus" size={20} color={theme.colors.textMuted} label={null} />
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
 
@@ -124,10 +170,15 @@ export function MessageActions({
               </Text>
             </Pressable>
           ))}
-        </View>
+        </Pressable>
       </Pressable>
     </Modal>
   );
+}
+
+function hostOf(url: string): string {
+  const m = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(url);
+  return (m?.[1] ?? url).replace(/^www\./, '');
 }
 
 const styles = StyleSheet.create({
@@ -153,6 +204,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 6,
     borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },

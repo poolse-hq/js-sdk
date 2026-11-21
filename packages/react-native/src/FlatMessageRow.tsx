@@ -11,23 +11,29 @@
 // attachments, read ticks and the accent bar on messages that mention
 // the viewer work the same in both.
 
-import { useReactions, useUser } from '@poolse/react';
-import * as Clipboard from 'expo-clipboard';
+import { isTombstone, useReactions, useUser } from '@poolse/react';
 import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { canShowEditHistory } from './EditHistorySheet.js';
 import { ImageMosaic } from './ImageMosaic.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './internal/bubbleText.js';
 import { renderMarkdown } from './internal/markdown.js';
 import { formatMessageTime, renderSlot, type MessageSlotContext } from './layout.js';
-import { MessageActions } from './MessageActions.js';
+import { LinkPreviewCard } from './LinkPreviewCard.js';
 import { isImageContentType, QuotedCard } from './MessageBubble.js';
-import type { MessageRowProps, MessageUser } from './MessageRow.js';
+import {
+  RowActionsSheet,
+  RowSheets,
+  type MessageRowProps,
+  type MessageUser,
+} from './MessageRow.js';
 import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { userColor } from './primitives/userColor.js';
 import { ReactionStrip } from './Reactions.js';
+import { ThreadSummary } from './ThreadSummary.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 const GUTTER = 40;
@@ -60,6 +66,11 @@ export function FlatMessageRow({
   timeFormat,
   slots,
   mentionsMe = false,
+  showPresence = false,
+  linkPreviews = true,
+  onRemoveLinkPreview,
+  onMarkUnread,
+  editHistory = true,
 }: MessageRowProps & { layout: 'list' | 'compact' }) {
   const theme = useTheme();
   const { width: screenWidth } = useWindowDimensions();
@@ -68,6 +79,8 @@ export function FlatMessageRow({
   const isSelf = meId !== null && msg.sender_id === meId;
   const [actionsOpen, setActionsOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const reactionsApi = useReactions(msg.id, {
     conversationId: msg.conversation_id,
@@ -94,7 +107,7 @@ export function FlatMessageRow({
   const isRunStart = compact || groupPosition === 'first' || groupPosition === 'standalone';
   const ctx: MessageSlotContext = { message: msg, isSelf, sender, layout, isRunStart };
 
-  const deleted = !!msg.deleted_at;
+  const deleted = isTombstone(msg);
   const time = formatMessageTime(msg.inserted_at, timeFormat);
   const openActions = () => {
     if (actions && !deleted) setActionsOpen(true);
@@ -103,7 +116,13 @@ export function FlatMessageRow({
 
   // Others' avatar / name become tappable when the host asks; your own never do.
   const avatarEl = showAvatar ? (
-    <Avatar src={avatarUrl} name={senderName} seed={ext} size={compact ? 'xs' : 'md'} />
+    <Avatar
+      src={avatarUrl}
+      name={senderName}
+      seed={ext}
+      size={compact ? 'xs' : 'md'}
+      {...(showPresence && ext ? { presence: true as const } : {})}
+    />
   ) : null;
   const avatar =
     avatarEl && onAvatarPress && !isSelf ? (
@@ -189,8 +208,13 @@ export function FlatMessageRow({
   const raw = msg.body ?? '';
   const trimmable = maxBodyLength > 0 && raw.length > maxBodyLength;
   const shown = trimmable && !expanded ? raw.slice(0, maxBodyLength) + '…' : raw;
+  const previews = linkPreviews && !deleted ? (msg.link_previews ?? []) : [];
   const jumbo =
-    raw && images.length === 0 && files.length === 0 && !msg.quoted_message_id
+    raw &&
+    images.length === 0 &&
+    files.length === 0 &&
+    previews.length === 0 &&
+    !msg.quoted_message_id
       ? emojiOnlyCount(raw)
       : 0;
   const bodyText = {
@@ -204,7 +228,20 @@ export function FlatMessageRow({
     edited || (isSelf && readState) ? (
       <View style={styles.meta}>
         {edited ? (
-          <Text style={[styles.edited, { color: theme.colors.textSubtle }]}>(edited)</Text>
+          <Text
+            style={[styles.edited, { color: theme.colors.textSubtle }]}
+            {...(editHistory && canShowEditHistory(msg.id)
+              ? {
+                  onPress: () => setHistoryOpen(true),
+                  suppressHighlighting: true,
+                  accessibilityRole: 'button' as const,
+                  accessibilityLabel: 'Edited. Show edit history',
+                  hitSlop: 8,
+                }
+              : {})}
+          >
+            (edited)
+          </Text>
         ) : null}
         {isSelf && readState ? (
           <PoolseIcon
@@ -218,7 +255,7 @@ export function FlatMessageRow({
 
   const body = deleted ? (
     <Text style={[bodyText, styles.deleted, { color: theme.colors.textMuted }]}>
-      Message deleted
+      This message was deleted
     </Text>
   ) : raw ? (
     <View>
@@ -248,6 +285,18 @@ export function FlatMessageRow({
           </Text>
         </Pressable>
       ) : null}
+      {previews.length > 0 ? (
+        <View style={styles.previews}>
+          {previews.map((p) => (
+            <LinkPreviewCard
+              key={p.url}
+              preview={p}
+              maxWidth={mediaWidth}
+              onLongPress={openActions}
+            />
+          ))}
+        </View>
+      ) : null}
       {meta}
     </View>
   ) : (
@@ -256,13 +305,14 @@ export function FlatMessageRow({
 
   const replyCount = msg.reply_count ?? 0;
   const threadEl =
-    threads && !deleted && !msg.thread_root_id && replyCount > 0 && onOpenThread ? (
-      <Pressable onPress={onOpenThread} style={styles.thread} accessibilityRole="button">
-        <PoolseIcon name="messages" size={13} color={theme.colors.link} />
-        <Text style={[styles.threadText, { color: theme.colors.link }]}>
-          {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
-        </Text>
-      </Pressable>
+    // Kept on a deleted root: its replies are still there.
+    threads && !msg.thread_root_id && replyCount > 0 && onOpenThread ? (
+      <ThreadSummary
+        message={msg}
+        onPress={onOpenThread}
+        {...(labelFor ? { labelFor } : {})}
+        {...(avatarFor ? { avatarFor } : {})}
+      />
     ) : null;
 
   const reactionsEl =
@@ -273,6 +323,7 @@ export function FlatMessageRow({
           conversationId={msg.conversation_id}
           meId={meId}
           {...(msg.reactions ? { initialReactions: msg.reactions } : {})}
+          {...(actions ? { onMorePress: () => setEmojiOpen(true) } : {})}
         />
       </View>
     ) : null;
@@ -297,56 +348,24 @@ export function FlatMessageRow({
     </View>
   );
 
-  const close = () => setActionsOpen(false);
   const sheet =
-    actions && actionsOpen ? (
-      <MessageActions
-        visible
-        onClose={close}
+    actions && actionsOpen && !deleted ? (
+      <RowActionsSheet
+        msg={msg}
         isSelf={isSelf}
-        {...(reactions
-          ? { onPickReaction: (emoji: string) => void reactionsApi.addReaction(emoji) }
-          : {})}
-        {...(msg.body && !deleted
-          ? {
-              onCopy: () => {
-                close();
-                void Clipboard.setStringAsync(msg.body ?? '');
-              },
-            }
-          : {})}
-        {...(onStartEdit
-          ? {
-              onEdit: () => {
-                close();
-                onStartEdit();
-              },
-            }
-          : {})}
-        {...(onDelete
-          ? {
-              onDelete: () => {
-                close();
-                onDelete();
-              },
-            }
-          : {})}
-        {...(threads && onOpenThread
-          ? {
-              onReplyInThread: () => {
-                close();
-                onOpenThread();
-              },
-            }
-          : {})}
-        {...(quotations && onQuote
-          ? {
-              onQuote: () => {
-                close();
-                onQuote();
-              },
-            }
-          : {})}
+        close={() => setActionsOpen(false)}
+        reactions={reactions}
+        addReaction={(emoji) => void reactionsApi.addReaction(emoji)}
+        onMoreReactions={() => setEmojiOpen(true)}
+        threads={threads}
+        quotations={quotations}
+        onStartEdit={onStartEdit}
+        onDelete={onDelete}
+        onOpenThread={onOpenThread}
+        onQuote={onQuote}
+        onMarkUnread={onMarkUnread}
+        onRemoveLinkPreview={onRemoveLinkPreview}
+        linkPreviews={linkPreviews}
       />
     ) : null;
 
@@ -384,6 +403,14 @@ export function FlatMessageRow({
         )}
       </Pressable>
       {renderSlot(slots?.actions, ctx, sheet)}
+      <RowSheets
+        msg={msg}
+        emojiOpen={emojiOpen}
+        onCloseEmoji={() => setEmojiOpen(false)}
+        onPickEmoji={(emoji) => void reactionsApi.addReaction(emoji)}
+        historyOpen={historyOpen}
+        onCloseHistory={() => setHistoryOpen(false)}
+      />
     </View>
   );
 }
@@ -479,19 +506,12 @@ const styles = StyleSheet.create({
   edited: {
     fontSize: 11,
   },
+  previews: {
+    marginTop: 6,
+    gap: 6,
+  },
   reactions: {
     marginTop: 4,
     alignSelf: 'flex-start',
-  },
-  thread: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-  },
-  threadText: {
-    fontSize: 12.5,
-    fontWeight: '600',
   },
 });
