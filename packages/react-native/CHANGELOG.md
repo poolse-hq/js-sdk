@@ -4,6 +4,19 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [3.6.2] - 2026-11-21
+
+### Fixed
+
+- `usePoolseTheme()` is exported again (deprecated; use `useTheme()`). 3.4.0
+  removed the export by mistake, although the changelog called it deprecated.
+- Re-exports from `@poolse/theme`, as the 3.4.0 notes said: `BUILT_IN_THEME_IDS`,
+  `DEFAULT_THEME_ID`, `createTheme`, `encodeTheme`, `decodeTheme`, plus the new
+  `tokensFromFlat` and the types `BuiltInThemeId`, `ColorScheme`,
+  `ColorSchemePreference`, `FlatThemeTokens`, `Theme`, `ThemeInput`.
+- Threads follow the app's settings: `ThreadView` takes `density`, and the
+  thread `ConversationView` opens gets its `avatarFor` and `density`.
+
 ## [3.6.1] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.6.1.

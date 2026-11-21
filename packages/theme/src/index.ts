@@ -51,6 +51,7 @@ export {
 } from './css.js';
 export { toNativeTheme, tokensToNative, type NativeThemeOptions } from './native.js';
 export { decodeTheme, encodeTheme, ThemeCodeError } from './code.js';
+export { tokensFromFlat, type FlatThemeTokens } from './flat.js';
 export {
   CONTRAST_PAIRS,
   contrastIssues,

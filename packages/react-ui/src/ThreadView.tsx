@@ -12,7 +12,7 @@ import { useMe, useThread } from '@poolse/react';
 import React, { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
-import type { ChatLayout, TimeFormat } from './layout.js';
+import type { ChatDensity, ChatLayout, TimeFormat } from './layout.js';
 import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
@@ -30,6 +30,17 @@ export interface ThreadViewProps {
   /** Row layout for the replies — see `ChatLayout`. Defaults to `'bubbles'`. */
   layout?: ChatLayout;
   timeFormat?: TimeFormat;
+  /**
+   * Row spacing. Inside `ConversationView` the thread follows the view's
+   * own `density`; set it when using ThreadView on its own.
+   */
+  density?: ChatDensity;
+  /** Avatars on replies, as `ConversationView`'s `showAvatars`. */
+  showAvatars?: boolean;
+  /** Presence badges on reply avatars. Defaults to `false`. */
+  showPresence?: boolean;
+  /** Link previews under replies. Defaults to `true`. */
+  linkPreviews?: boolean;
   /** Largest attachment accepted, in bytes (see `MessageComposer`). */
   maxFileSize?: number;
   /** Accepted attachment types (see `MessageComposer`). */
@@ -43,6 +54,10 @@ export function ThreadView({
   renderMessage,
   layout,
   timeFormat,
+  density,
+  showAvatars,
+  showPresence = false,
+  linkPreviews = true,
   maxFileSize,
   acceptFileTypes,
 }: ThreadViewProps) {
@@ -154,6 +169,9 @@ export function ThreadView({
       onDelete={() => void deleteReply(msg.id)}
       {...(layout ? { layout } : {})}
       {...(timeFormat ? { timeFormat } : {})}
+      {...(showAvatars !== undefined ? { showAvatar: showAvatars } : {})}
+      showPresence={showPresence}
+      linkPreviews={linkPreviews}
     />
   );
 
@@ -163,7 +181,9 @@ export function ThreadView({
 
   return (
     <aside
-      className={`poolse-thread${dragActive ? ' is-drag-active' : ''}`}
+      className={`poolse-thread${density ? ` poolse-conversation--density-${density}` : ''}${
+        dragActive ? ' is-drag-active' : ''
+      }`}
       role="complementary"
       aria-label="Message thread"
       onDragEnter={onDragEnter}

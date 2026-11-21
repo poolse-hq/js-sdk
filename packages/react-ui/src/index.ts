@@ -93,9 +93,11 @@ export {
   createTheme,
   decodeTheme,
   encodeTheme,
+  tokensFromFlat,
   type BuiltInThemeId,
   type ColorScheme,
   type ColorSchemePreference,
+  type FlatThemeTokens,
   type Theme,
   type ThemeInput,
 } from '@poolse/theme';

@@ -177,8 +177,14 @@ poolse-js-sdk/
 ### Releasing
 
 `pnpm bump <version>` sets the version in every package and in the range each
-uses for the others. Publish in dependency order, so no package goes out
-before one it depends on:
+uses for the others. Before publishing, both checks must pass:
+
+- `pnpm check` (types, lint, format, tests, build);
+- `scripts/android-compile-check.sh [host-app-dir]`, which compiles
+  `@poolse/native`'s Kotlin inside a copy of a prebuilt Expo app (default
+  `../poolse-native`). `pnpm check` never compiles native code.
+
+Publish in dependency order, so no package goes out before one it depends on:
 
 1. `@poolse/theme`
 2. `@poolse/sdk`

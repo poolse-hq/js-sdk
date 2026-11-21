@@ -1056,8 +1056,10 @@ export function ConversationView({
             conversationId={conversationId}
             rootMessage={threadRoot}
             {...(labelFor ? { labelFor } : {})}
+            {...(avatarFor ? { avatarFor } : {})}
             layout={layout}
             {...(timeFormat ? { timeFormat } : {})}
+            density={density}
             showPresence={showPresence}
             linkPreviews={linkPreviews}
           />

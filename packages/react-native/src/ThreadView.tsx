@@ -21,7 +21,7 @@ import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { UploadProvider } from './internal/uploadContext.js';
 import { useDismissableSheet } from './internal/useDismissableSheet.js';
-import type { ChatLayout, TimeFormat } from './layout.js';
+import type { ChatDensity, ChatLayout, TimeFormat } from './layout.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 export interface ThreadViewProps {
@@ -34,6 +34,8 @@ export interface ThreadViewProps {
   /** Row layout for the root and replies — see `ChatLayout`. Defaults to `'bubbles'`. */
   layout?: ChatLayout;
   timeFormat?: TimeFormat;
+  /** Row spacing for the root and replies, as on `ConversationView`. */
+  density?: ChatDensity;
   /** Presence badges on reply avatars. Defaults to `false`. */
   showPresence?: boolean;
   /** Link previews under replies. Defaults to `true`. */
@@ -68,6 +70,7 @@ export function ThreadView({
   avatarFor,
   layout,
   timeFormat,
+  density,
   showPresence = false,
   linkPreviews = true,
 }: ThreadViewProps) {
@@ -94,6 +97,7 @@ export function ThreadView({
           {...(avatarFor ? { avatarFor } : {})}
           {...(layout ? { layout } : {})}
           {...(timeFormat ? { timeFormat } : {})}
+          {...(density ? { density } : {})}
           showPresence={showPresence}
           linkPreviews={linkPreviews}
         />
@@ -110,6 +114,7 @@ function ThreadSheet({
   avatarFor,
   layout,
   timeFormat,
+  density,
   showPresence,
   linkPreviews,
 }: {
@@ -120,6 +125,7 @@ function ThreadSheet({
   avatarFor?: (externalId: string) => string | null;
   layout?: ChatLayout;
   timeFormat?: TimeFormat;
+  density?: ChatDensity;
   showPresence: boolean;
   linkPreviews: boolean;
 }) {
@@ -178,6 +184,7 @@ function ThreadSheet({
           {...(avatarFor ? { avatarFor } : {})}
           {...(layout ? { layout } : {})}
           {...(timeFormat ? { timeFormat } : {})}
+          {...(density ? { density } : {})}
           showPresence={showPresence}
           linkPreviews={linkPreviews}
           {...(linkPreviews && isSelf && !msg.deleted_at && (msg.link_previews?.length ?? 0) > 0
@@ -199,6 +206,7 @@ function ThreadSheet({
       avatarFor,
       layout,
       timeFormat,
+      density,
       showPresence,
       linkPreviews,
       chat,
@@ -224,6 +232,7 @@ function ThreadSheet({
         {...(avatarFor ? { avatarFor } : {})}
         {...(layout ? { layout } : {})}
         {...(timeFormat ? { timeFormat } : {})}
+        {...(density ? { density } : {})}
         linkPreviews={linkPreviews}
       />
     ),

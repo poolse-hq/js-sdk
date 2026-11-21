@@ -4,6 +4,15 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.6.2] - 2026-11-21
+
+### Fixed
+
+- The thread pane follows `ConversationView`: replies get its `showAvatars`,
+  `showPresence` and `linkPreviews`. `ThreadView` takes those plus `density`
+  for use on its own.
+- Re-exports `tokensFromFlat` and `FlatThemeTokens` from `@poolse/theme`.
+
 ## [3.6.1] - 2026-11-21
 
 ### Fixed

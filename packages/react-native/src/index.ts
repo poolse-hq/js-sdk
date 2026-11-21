@@ -92,7 +92,27 @@ export {
 export { Avatar, type AvatarProps } from './primitives/Avatar.js';
 
 // ── Theme ─────────────────────────────────────────────────────
-export { PoolseTheme, useTheme, type PoolseThemeProps } from './theme/PoolseTheme.js';
+export {
+  PoolseTheme,
+  useTheme,
+  /** @deprecated Use `useTheme()`; kept so 3.3 code keeps working. */
+  usePoolseTheme,
+  type PoolseThemeProps,
+} from './theme/PoolseTheme.js';
+export {
+  BUILT_IN_THEME_IDS,
+  DEFAULT_THEME_ID,
+  createTheme,
+  decodeTheme,
+  encodeTheme,
+  tokensFromFlat,
+  type BuiltInThemeId,
+  type ColorScheme,
+  type ColorSchemePreference,
+  type FlatThemeTokens,
+  type Theme,
+  type ThemeInput,
+} from '@poolse/theme';
 export { defaultLightTheme, defaultDarkTheme } from './theme/default.js';
 export type {
   PoolseRNTheme,

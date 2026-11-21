@@ -179,7 +179,7 @@ class PoolseCallsModule : Module() {
     // Reply / Mark as read done from a notification while JS was not
     // listening (usually: the app was not running). Oldest first, once.
     Function("takeNotificationActions") {
-      context?.let(MessageNotifications::takePendingActions) ?: emptyList()
+      context?.let { MessageNotifications.takePendingActions(it) } ?: emptyList<Map<String, Any?>>()
     }
     Function("observeNotificationActions") { on: Boolean -> MessageNotifications.actionsObserved = on }
 

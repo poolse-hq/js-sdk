@@ -2,6 +2,12 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.6.2 — 2026-11-21
+
+- Android: `takeNotificationActions` compiles (3.6.1's
+  `PoolseCallsModule.kt` failed with "Not enough information to infer type
+  argument"). Releases now compile the Android code before publishing.
+
 ## 3.6.1 — 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.6.1.

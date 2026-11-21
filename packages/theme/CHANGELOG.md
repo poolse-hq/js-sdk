@@ -4,6 +4,15 @@ All notable changes to `@poolse/theme` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.6.2] - 2026-11-21
+
+### Added
+
+- `tokensFromFlat(tokens)`: turns the Workspace API's flat custom-theme tokens
+  (`{name: value}`) into the overrides `createTheme`/`mergeTokens` take. A key
+  counts only if it names a `ThemeColors` token and its value is a hex colour
+  (#rgb, #rrggbb or #rrggbbaa); anything else falls back to the base theme.
+
 ## [3.6.1] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.6.1.

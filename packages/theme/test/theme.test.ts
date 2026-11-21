@@ -249,3 +249,33 @@ describe('encodeTheme / decodeTheme', () => {
     expect(() => encodeTheme(t)).toThrow(ThemeCodeError);
   });
 });
+
+describe('tokensFromFlat', () => {
+  it('keeps colour tokens with hex values and drops everything else', async () => {
+    const { tokensFromFlat, createTheme } = await import('../src/index.js');
+    const overrides = tokensFromFlat({
+      accent: '#0b63c4',
+      sidebar: '#123',
+      mention: '#11223380',
+      text: 'red', // not hex
+      link: '#12345', // wrong length
+      radiusBubble: '#ffffff', // not a colour token
+      background: 42,
+    });
+    expect(overrides).toEqual({
+      colors: { accent: '#0b63c4', sidebar: '#123', mention: '#11223380' },
+    });
+
+    const theme = createTheme({ id: 'mine', name: 'Mine', extends: 'coral', tokens: overrides });
+    expect(theme.light.colors.accent).toBe('#0b63c4');
+    expect(theme.light.colors.text).toBe(
+      createTheme({ id: 'b', name: 'B', extends: 'coral' }).light.colors.text,
+    );
+  });
+
+  it('returns {} for nothing usable', async () => {
+    const { tokensFromFlat } = await import('../src/index.js');
+    expect(tokensFromFlat(undefined)).toEqual({});
+    expect(tokensFromFlat({ text: 'blue' })).toEqual({});
+  });
+});

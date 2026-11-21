@@ -1288,6 +1288,9 @@ export function ConversationView({
             onClose={() => setThreadRootId(null)}
             layout={layout}
             {...(timeFormat ? { timeFormat } : {})}
+            showAvatars={showAvatarsResolved}
+            showPresence={showPresence}
+            linkPreviews={linkPreviews}
             {...attachmentRules}
           />
         </div>
