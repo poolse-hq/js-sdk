@@ -75,7 +75,9 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   viewer sends. While it's off-screen (or older than the loaded pages) a
   "Jump to first unread" pill at the top of the feed scrolls to it, loading
   older pages with `loadUntil` first when needed; it can be dismissed. The
-  "↓ N new" button is unchanged. Every layout, and with `renderMessage`.
+  "↓ N new" button is unchanged. Every layout, and with `renderMessage`. The
+  view now marks the conversation read only after it has the members (the read
+  position), so the divider can't lose the race.
 - Mark unread: a "Mark unread" message action on other people's messages (a
   button in `bubbles`, under More in `list` / `compact`) calls
   `conversations.one(id).markUnread(messageId)`; the divider moves above that

@@ -58,6 +58,29 @@ describe('"New messages" divider', () => {
     });
   }
 
+  it('waits for the read position before marking read (slow members)', async () => {
+    let releaseMembers: () => void = () => undefined;
+    const membersReady = new Promise<void>((r) => (releaseMembers = r));
+    const fetchFn = routedFetch(
+      viewRoutes(feed(1, 4), {
+        'GET /v1/conversations/c-1/members': () =>
+          membersReady.then(() =>
+            jsonResponse({ data: [member('u-me', 'me', { id: 'm2', seq: 2 })] }),
+          ) as unknown as Response,
+      }),
+    );
+    const { container } = renderWithProvider(
+      <ConversationView conversationId="c-1" loadFonts={false} />,
+      fetchFn,
+    );
+    await waitFor(() => expect(container.textContent).toContain('message 4'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fetchFn.calls.some((r) => r.url.endsWith('/read'))).toBe(false);
+    releaseMembers();
+    await waitFor(() => expect(dividerBefore(container)).toBe('m3'));
+    await waitFor(() => expect(fetchFn.calls.some((r) => r.url.endsWith('/read'))).toBe(true));
+  });
+
   it('no divider when everything was read', async () => {
     const { container } = renderWithProvider(
       <ConversationView conversationId="c-1" loadFonts={false} />,

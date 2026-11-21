@@ -511,6 +511,7 @@ export function ConversationView({
   // with the same id, and `useMessages.markReadUpTo` doesn't mutate
   // local state.
   const lastMarkedReadRef = useRef<Uuid | null>(null);
+  const [markerReadyFor, setMarkerReadyFor] = useState<string | null>(null);
   useEffect(() => {
     if (!atBottom) return;
     if (messages.length === 0) return;
@@ -519,6 +520,9 @@ export function ConversationView({
     // Don't mark optimistic temp messages (which have
     // sequence === MAX_SAFE_INTEGER) — wait for the canonical row.
     if (tail.sequence === Number.MAX_SAFE_INTEGER) return;
+    // Hold off until the divider has its read position: marking read
+    // first would move the cursor it is taken from.
+    if (membersOn && markerReadyFor !== conversationId) return;
     if (lastMarkedReadRef.current === tail.id) return;
     lastMarkedReadRef.current = tail.id;
     void markReadUpTo(tail.id)
@@ -529,7 +533,7 @@ export function ConversationView({
         // Allow re-attempt on next tail.
         lastMarkedReadRef.current = null;
       });
-  }, [atBottom, messages, markReadUpTo, onMarkedRead, conversationId]);
+  }, [atBottom, messages, markReadUpTo, onMarkedRead, conversationId, membersOn, markerReadyFor]);
 
   // ── "New messages" divider ─────────────────────────────────────────
   // Where the viewer's read position was when they opened the
@@ -539,16 +543,23 @@ export function ConversationView({
   // "Mark unread" moves it to that message.
   const [unreadMarker, setUnreadMarker] = useState<UnreadMarker | null>(null);
   const markerTakenRef = useRef<string | null>(null);
+  // The conversation whose read position has been looked at (divider
+  // or not); auto mark-read waits for it.
   useEffect(() => {
     setUnreadMarker(null);
     markerTakenRef.current = null;
   }, [conversationId]);
   useEffect(() => {
     if (markerTakenRef.current === conversationId) return;
-    if (!membersOn || loading || membersLoading || !me) return;
-    const mine = members.find((m) => m.user_id === me.id && m.conversation_id === conversationId);
-    if (!mine) return;
+    if (!membersOn || loading || membersLoading) return;
+    // Right after a switch the previous conversation's members linger
+    // for a render; wait for this one's.
+    if (members.some((m) => m.conversation_id !== conversationId)) return;
+    if (!me && members.length > 0) return;
     markerTakenRef.current = conversationId;
+    setMarkerReadyFor(conversationId);
+    const mine = me ? members.find((m) => m.user_id === me.id) : undefined;
+    if (!mine) return;
     let after: number | null = mine.last_read_sequence ?? null;
     if (after === null && mine.last_read_message_id) {
       after = messages.find((m) => m.id === mine.last_read_message_id)?.sequence ?? null;
