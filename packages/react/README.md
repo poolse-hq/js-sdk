@@ -107,7 +107,11 @@ of one with `client.destroy({ clearStorage: true })`.
 | `useReadReceipts()`                                                              | `{ visible, mode, shared, canChange, setShared }`                                                                                                                   |
 | `useLiveCall(conversationId \| null)`                                            | `{ call, participantIds, refresh }`                                                                                                                                 |
 | `useRoom(conversationId \| null, { livekit })`                                   | `{ live, presentIds, joined, joining, join, leave, media, error }`                                                                                                  |
-| `useCallRoom(conversationId \| null, { livekit, … })`                            | Call media: participants, mic, camera, devices                                                                                                                      |
+| `useCallRoom(conversationId \| null, { livekit, … })`                            | Call media: participants, mic, camera, devices, `canPublish`, `republish()`                                                                                         |
+| `useRecording(callId, conversationId, initial?)`                                 | `{ available, active, capturing, consentRequired, myConsent, needsConsent, notice, lastRecording, start(mode?), stop, consent(decision), pending, error }`          |
+| `useLiveTranscript(callId, { enabled? })`                                        | `{ segments, finals, interim, transcript, live, joined, start, stop, error }` — the call's live transcript topic                                                    |
+| `useTranscript(callId)`                                                          | `{ transcript, loading, missing, error, renameSpeakers(names), refresh }`                                                                                           |
+| `useTranscripts(conversationId)` / `useRecordings(conversationId)`               | `{ items, loading, error, refresh }`, newest first, re-read as they change                                                                                          |
 
 Helpers: `canEditOwnMessage`, `EDIT_WINDOW_MS`, `receiptsOf`,
 `computeGroupPosition`, `sameGroup`, `sameDay`, `formatDayLabel`, plus

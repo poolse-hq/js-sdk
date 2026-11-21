@@ -4,6 +4,22 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `RecordingBanner`, `RecordingIndicator`, `ConsentPrompt` (`onAnswer`,
+  `onAccepted` — bring the microphone and camera back — `onDeclined`),
+  `RecordingNoticeRow`, `LiveTranscriptPanel`, `TranscriptViewer` (speakers,
+  timestamps, search, speaker rename). Same props in `@poolse/react-native`.
+- `MessageRow` renders the `{"kind":"recording"}` system message as a line
+  instead of raw JSON (`nameForUserId` names people; `ConversationView`
+  passes it from the members), and conversation lists word it in previews.
+- `RoomStage` shows the recording banner, indicator and consent prompt
+  (`capture`, default `true`) and can offer a Record control (`allowRecord`).
+- poolse's transcript assistant and the recorder no longer appear in
+  `CallVideoGrid` / `RoomStage`.
+
 ## [3.8.0] - 2026-11-21
 
 ### Added

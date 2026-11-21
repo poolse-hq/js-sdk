@@ -161,13 +161,51 @@ preview>` draws one on its own.
 - Lists: `ConversationList`, `MemberList`.
 - Reactions and emoji: `ReactionStrip`, `ReactionPicker`, `EmojiPicker`.
 - Rooms and calls: `RoomJoinBar`, `RoomStage` (both take `useRoom()` from
-  `@poolse/react`), `CallVideoGrid`, `CallControlButton`, `CallDeviceMenu`.
+  `@poolse/react`; `RoomStage` shows recording state and the consent prompt
+  — `capture`, default on — and a Record control with `allowRecord`),
+  `CallVideoGrid`, `CallControlButton`, `CallDeviceMenu`.
+- Recording and transcripts: `RecordingBanner`, `RecordingIndicator`,
+  `ConsentPrompt`, `RecordingNoticeRow` (rendered by `MessageRow`),
+  `LiveTranscriptPanel`, `TranscriptViewer`. See below.
 - Identity and brand: `Avatar`, `PresenceBadge`, `UserName`, `useDisplayName`, `PoolseIcon`,
   `PoolseLogo`, `PoolseFonts`, `usePoolseFonts`.
 - Theme: `PoolseTheme`, `useTheme`, `useSystemColorScheme`.
 
 Every `labelFor` / `avatarFor` takes your user id (`external_id`), except on
 `CallVideoGrid` and `RoomStage`, where it takes the poolse user id.
+
+## Recording, consent and transcripts
+
+```tsx
+const rec = useRecording(call.id, call.conversation_id, call);
+const media = useCallRoom(call.conversation_id, { livekit });
+
+<RecordingBanner
+  recording={rec.active}
+  transcribing={!!rec.transcription?.active}
+  mode={rec.recording?.mode}
+  consentRequired={rec.consentRequired}
+  myConsent={rec.myConsent}
+  onStop={() => void rec.stop()}
+/>
+{rec.needsConsent && (
+  <ConsentPrompt
+    recording={rec.active}
+    transcribing={!!rec.transcription?.active}
+    onAnswer={rec.consent}
+    onAccepted={() => void media.republish()} // CallRoom also does it by itself
+  />
+)}
+<LiveTranscriptPanel callId={call.id} onClose={…} />
+<TranscriptViewer callId={pastCallId} onSeek={(ms) => …} />
+```
+
+`ConsentPrompt` fills the nearest positioned ancestor with a scrim
+(`overlay={false}` for the card alone). `TranscriptViewer` searches within the
+transcript (accent- and case-insensitive, Enter / Shift+Enter between hits)
+and renames speakers for people who were in the call (others get an
+explanation). The recording notice in the chat is a centred line like a call
+log, naming people through `MessageRow`'s `nameForUserId`.
 
 ## Theming
 

@@ -4,6 +4,17 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `RecordingBanner`, `RecordingIndicator`, `ConsentPrompt`,
+  `RecordingNoticeRow`, `LiveTranscriptPanel`, `TranscriptViewer` — the same
+  props as `@poolse/react-ui` (`style` in place of `className`).
+- `MessageRow` renders the `{"kind":"recording"}` system message as a line
+  instead of raw JSON (`nameForUserId`), and `ConversationList` /
+  `PoolseInbox` word it in previews.
+
 ## [3.8.0] - 2026-11-21
 
 ### Added

@@ -4,6 +4,24 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `useRecording(callId, conversationId, initial?)` — recording and consent
+  state from the call snapshot (late joiners see it at once) kept live by
+  events: `available`, `active`, `capturing`, `consentRequired`, `myConsent`,
+  `needsConsent`, `notice`, `lastRecording`, `start(mode?)`, `stop()`,
+  `consent(decision)`, `pending`, `error`.
+- `useLiveTranscript(callId, { enabled?, maxSegments? })` — the live
+  transcript topic: `segments` / `finals` / `interim`, `transcript`, `live`,
+  `joined`, `start()`, `stop()`.
+- `useTranscript(callId)` (`transcript`, `missing`, `renameSpeakers`, live
+  `transcript:speakers`), `useTranscripts(conversationId)`,
+  `useRecordings(conversationId)`.
+- `useLiveCall().call.recording` / `.transcription` follow the events.
+- `useCallRoom`: `canPublish`, `republish()`, `republishOnPermission` option.
+
 ## [3.8.0] - 2026-11-21
 
 ### Added

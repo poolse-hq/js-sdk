@@ -220,6 +220,16 @@ give it `hasMore`, `loadingMore` and `onLoadMore`.
   `PoolseLogo`, `Primitives`.
 - Call screen: `CallControlButton`, `CallAvatar`, `AudioRouteSheet`,
   `callColors`, `useCallDuration`.
+- Recording and transcripts: `RecordingBanner`, `RecordingIndicator`,
+  `ConsentPrompt`, `RecordingNoticeRow` (rendered by `MessageRow`),
+  `LiveTranscriptPanel`, `TranscriptViewer` — the same props as
+  `@poolse/react-ui`, with `style` for `className`. Drive them with
+  `useRecording` / `useLiveTranscript` / `useTranscript` from
+  `@poolse/react`. Calls on phones run in the native call core: after
+  `ConsentPrompt`'s `onAccepted`, turn the microphone (and camera) back on
+  there — the server lets you publish again, but the tracks were
+  unpublished. Hide participants whose identity starts with `poolse:`
+  (`isServiceParticipant`).
 
 The names follow `@poolse/react-ui`, but the props differ in places (for
 example `ThreadView` needs `visible` and `onClose`, and there is no

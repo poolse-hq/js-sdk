@@ -4,6 +4,45 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Call recording, consent and transcripts (needs a poolse server with
+  docs/RECORDING.md). `poolse.calls`:
+  `recording.start(callId, { mode })`, `recording.stop`, `recording.list(conversationId, { limit, before })`,
+  `recording.downloadUrl(recordingId)` (5-minute link), `recording.settings` /
+  `updateSettings` (a conversation's `auto_record`, `consent`, …);
+  `consent(callId, 'accepted' | 'declined')`; `transcription.start` / `stop`;
+  `transcript.get(callId)`, `transcript.list(conversationId)`,
+  `transcript.renameSpeakers(callId, { key: name | null })`. Types `Recording`,
+  `Transcript`, `TranscriptWithSegments`, `TranscriptSpeaker`, `TranscriptSegment`, …
+- `LiveCall.recording` (`CallRecordingState`: `available`, `active`, `mode`,
+  `consent_required`, `consent.accepted/declined`, …) and `LiveCall.transcription`.
+- Conversation channel: `onRecordingStarted` / `Stopped` / `Ready` / `Consent`,
+  `onTranscriptStarted` / `Stopped` / `Ready` / `Speakers`, and
+  `startRecording` / `stopRecording` / `sendConsent` over the socket.
+- `realtime.transcript(callId)` → `TranscriptChannel` (`onJoined` with the last
+  200 final segments, `onSegment`, `onError`, `release()`); `applyLiveSegment`
+  folds interim and final segments.
+- `CallRoom`: poolse's assistant (`poolse:…`, LiveKit kind agent) and the
+  recorder (`EG_…`) are left out of `getParticipants()` and the "alone" check
+  (`isServiceParticipant`). Publish permission is followed for consent:
+  `canPublish()`, `onPublishPermission(fn)`, `republish()`; nothing is
+  published (and no error raised) while it is withheld, and the microphone
+  and camera come back by themselves once it returns
+  (`republishOnPermission`, default `true`).
+- The `{"kind":"recording"}` system message: `parseRecordingNotice`,
+  `describeRecordingNotice`, `recordingNoticeDisplayFor`,
+  `formatRecordingNoticePreview`. Also `captureLabel`, `captureErrorMessage`,
+  `groupTranscript`, `findInText`, `speakerName`.
+- Error codes: `recording_unavailable`, `recording_disabled`, `not_allowed`,
+  `call_finished`, `not_recording`, `not_ready`, `egress_failed`,
+  `invalid_mode`, `invalid_decision`, `transcription_unavailable`,
+  `transcription_disabled`, `not_in_call`, `not_transcribing`.
+  `recording.start` and `transcription.start` don't retry a 5xx (503 means
+  not set up, 502 that Egress refused).
+
 ## [3.8.0] - 2026-11-21
 
 ### Added

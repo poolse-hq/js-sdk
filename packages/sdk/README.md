@@ -86,6 +86,7 @@ poolse.destroy();
 | `poolse.users`                                | Cache over `userResolver`: `get`, `peek`, `subscribe`, `invalidate`, `invalidateAll`                                                                                                                                                                                     |
 | `poolse.devices`                              | `register`, `unregister` (push tokens)                                                                                                                                                                                                                                   |
 | `poolse.liveCalls`                            | `get(conversationId)`                                                                                                                                                                                                                                                    |
+| `poolse.calls`                                | `recording.start / stop / list / downloadUrl / settings / updateSettings`, `consent`, `transcription.start / stop`, `transcript.get / list / renameSpeakers` — see below                                                                                                 |
 | `poolse.rooms`                                | `start`, `ring`, `leave`                                                                                                                                                                                                                                                 |
 | `poolse.callTokens`                           | `create(conversationId)`                                                                                                                                                                                                                                                 |
 | `poolse.call(conversationId, { livekit, … })` | `CallRoom`: call media on the web (pass your `livekit-client` import)                                                                                                                                                                                                    |
@@ -105,6 +106,59 @@ sent by your backend or the Workspace API), `onRingEnded`
 `cancelled`, `timeout` or `finished`), `onCallFinished` (with
 `conversation_id`) and `onPresenceChanged`, and has `setPresence(state)`,
 `getPresence({ user_ids } | { external_ids })`, `onJoined` and `isJoined`.
+
+## Recording, consent and transcripts
+
+On a poolse server with call recording (its `docs/RECORDING.md`):
+
+```ts
+const rec = await poolse.calls.recording.start(callId, { mode: 'audio' }); // or 'video'
+await poolse.calls.recording.stop(callId); // status 'stopping'; recording:ready follows
+const list = await poolse.calls.recording.list(conversationId);
+const { url } = await poolse.calls.recording.downloadUrl(rec.id); // valid 5 minutes; 409 not_ready until ready
+
+await poolse.calls.consent(callId, 'accepted'); // or 'declined' (listen-only)
+
+await poolse.calls.transcription.start(callId); // live transcript on
+const t = await poolse.calls.transcript.get(callId); // speakers + segments
+await poolse.calls.transcript.renameSpeakers(callId, { [speakerKey]: 'Elena' }); // null: their own name
+```
+
+Every call snapshot (`liveCalls.get`, `call:started`) carries `recording`
+(`available`, `active`, `mode`, `consent_required`, `consent.accepted` /
+`declined`) and `transcription`, so someone joining late sees it at once.
+Changes arrive on the conversation channel: `onRecordingStarted` (with
+`notice: 'spoken' | 'banner'`), `onRecordingStopped`, `onRecordingReady`
+(`status` `ready` or `failed`), `onRecordingConsent`, `onTranscriptStarted`
+/ `Stopped` / `Ready` / `Speakers`. Errors are `ApiError` codes:
+`recording_unavailable` (503), `recording_disabled`, `not_allowed`,
+`call_finished`, `not_recording`, `not_ready`, `egress_failed` (502 — e.g.
+nobody's media connected yet), `invalid_mode`, `transcription_unavailable`,
+`transcription_disabled`, `not_in_call`; `captureErrorMessage(err)` words them.
+
+The live transcript has its own topic:
+
+```ts
+const t = poolse.realtime.transcript(callId); // shared; release() when done
+t.onJoined(({ transcript, segments }) => …); // the last 200 final segments, on every (re)join
+t.onSegment((s) => (list = applyLiveSegment(list, s))); // interim replaced by the speaker's next
+t.release();
+```
+
+**Consent.** Where the workspace or room requires it, someone who hasn't
+accepted may not publish while the call is captured: the SFU withholds
+publish permission. `CallRoom` publishes nothing meanwhile (and raises no
+error), and once they accept it republishes the microphone and camera as
+they last had them — `canPublish()`, `onPublishPermission(fn)`,
+`republish()`, `republishOnPermission: false` to do it yourself.
+
+poolse's own participants — the transcript assistant (`poolse:assistant:…`,
+LiveKit kind agent) and the recorder (`EG_…`) — are left out of
+`CallRoom.getParticipants()`; use `isServiceParticipant(identity, kind)` for
+your own rosters. The `{"kind":"recording"}` system message posted at each
+start and stop is read with `parseRecordingNotice` /
+`recordingNoticeDisplayFor(msg, meId, nameFor)` /
+`formatRecordingNoticePreview`.
 
 ## Several workspaces, offline, speed
 
