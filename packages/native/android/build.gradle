@@ -46,6 +46,9 @@ dependencies {
   implementation 'com.squareup.okhttp3:okhttp:4.12.0'
   implementation 'com.google.firebase:firebase-messaging:24.0.3'
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+  // Notification Reply / Mark as read: sent with retries that survive
+  // the process being killed and wait for a network.
+  implementation 'androidx.work:work-runtime-ktx:2.9.1'
 
   if (useLiveKit) {
     implementation 'io.livekit:livekit-android:2.11.0'
