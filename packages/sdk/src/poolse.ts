@@ -22,6 +22,8 @@ import { CallTokensResource } from './resources/call-tokens.js';
 import { LiveCallsResource } from './resources/live-calls.js';
 import { CallsResource } from './resources/calls.js';
 import { RoomsResource } from './resources/rooms.js';
+import { ApprovalsResource } from './agents.js';
+import { MeetingsResource } from './meetings.js';
 import { CallRoom } from './voice/call-room.js';
 import type { CallRoomOptions } from './voice/livekit-types.js';
 import { RestClient } from './rest-client.js';
@@ -113,6 +115,14 @@ export class Poolse {
   /** A conversation's drop-in room: voice or video, nobody rung. */
   public readonly rooms: RoomsResource;
   /**
+   * An agent's requests to act (send an email, create an issue…) and
+   * your answers: `list()` the pending ones, `approve(id)`, `deny(id,
+   * { reason })`; `subscribe` for a live view (AG4).
+   */
+  public readonly approvals: ApprovalsResource;
+  /** Ask what was said in your meetings: `meetings.ask({ question, callId })` (RT8). */
+  public readonly meetings: MeetingsResource;
+  /**
    * Who is online, away, in a call or offline: `get` (REST), a live
    * store (`subscribe` / `peek`), and this device's own activity
    * (`setActivity`, `trackActivity`).
@@ -197,6 +207,8 @@ export class Poolse {
     });
     this.presence = new PresenceResource(this.rest, this.realtime, this.me);
     this.unread = new UnreadResource(this.rest, this.realtime, this.me);
+    this.approvals = new ApprovalsResource(this.rest, this.realtime, this.me);
+    this.meetings = new MeetingsResource(this.rest);
     const scope = () => this.storageScope();
     this.cache = new LocalCache(scope, this.resolved.cache);
     this.outbox = new Outbox({

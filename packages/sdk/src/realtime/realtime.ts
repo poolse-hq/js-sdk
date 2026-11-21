@@ -18,6 +18,7 @@ import type { Channel } from 'phoenix';
 import type { ResolvedConfig } from '../config.js';
 import { ChannelReplyError, PoolseError } from '../errors.js';
 import type { TokenCache } from '../token-cache.js';
+import { DocChannel } from './doc.js';
 import type { Presence, PresenceActivity } from '../types.js';
 import type { ConsentDecision, Recording, RecordingMode } from '../resources/calls.js';
 import type {
@@ -362,6 +363,23 @@ export class PoolseRealtime {
     });
     this.transcripts.set(callId, handle);
     handle._hold();
+    handle._join();
+    return handle;
+  }
+
+  /**
+   * **Experimental.** Open a shared document's live-edit relay
+   * (`doc:<doc_id>`) with the token the Workspace API issued for it.
+   * Binary editor updates and awareness (cursors, selections) pass
+   * through as they are: the relay neither reads nor stores them. Each
+   * call opens its own channel; `leave()` it when the editor closes.
+   */
+  doc(docId: string, token: string): DocChannel {
+    this.connect();
+    if (!this.socket) {
+      throw new PoolseError('socket not initialised — call connect() first');
+    }
+    const handle = new DocChannel(docId, this.socket.channel(`doc:${docId}`, { token }));
     handle._join();
     return handle;
   }
@@ -904,6 +922,23 @@ export class UserChannel {
    */
   onAppEvent(fn: (evt: AppEvent) => void): Unsubscribe {
     return this.subscribe('app:event', fn as (p: unknown) => void);
+  }
+
+  /**
+   * An agent's approval request was created or answered
+   * (`approval:created` / `approval:updated`, or an app event of those
+   * types). Payload: the approval row — `poolse.approvals` reads it.
+   */
+  onApproval(fn: (payload: unknown) => void): Unsubscribe {
+    const offs = [
+      this.subscribe('approval:created', fn),
+      this.subscribe('approval:updated', fn),
+      this.subscribe('app:event', (evt) => {
+        const e = evt as AppEvent | null;
+        if (e && typeof e.type === 'string' && e.type.startsWith('approval:')) fn(e.data);
+      }),
+    ];
+    return () => offs.forEach((off) => off());
   }
 
   /**

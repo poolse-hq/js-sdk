@@ -70,6 +70,63 @@ export {
   type TranscriptBlock,
 } from './recording.js';
 export { RoomsResource, type RoomSession } from './resources/rooms.js';
+
+// Agents: badge, approvals, citations (AG1, AG4, AG5).
+export {
+  APPROVAL_REASON_MAX,
+  ApprovalsResource,
+  agentFromWire,
+  approvalErrorMessage,
+  approvalFromWire,
+  approvalStatusLabel,
+  citationLabel,
+  citationsOf,
+  formatApprovalPreview,
+  kindPayload,
+  messageAgent,
+  parseApproval,
+  type AgentApproval,
+  type AgentInfo,
+  type ApprovalDetail,
+  type ApprovalListOptions,
+  type ApprovalStatus,
+  type Citation,
+  type CitationType,
+} from './agents.js';
+
+// Meetings: summaries, asking, clips, playback (RT6–RT9, RT13).
+export {
+  ASK_QUESTION_MAX,
+  MeetingsResource,
+  PLAYBACK_RATES,
+  activeSegmentIndex,
+  chapterIndexAt,
+  chaptersOf,
+  clipOf,
+  formatCallSummaryPreview,
+  formatClock,
+  formatDue,
+  formatTimeRange,
+  meetingAnswerFromWire,
+  meetingsErrorMessage,
+  parseCallSummary,
+  silencesOf,
+  skipSilenceTarget,
+  summaryStyleLabel,
+  transcriptOffsetMs,
+  type CallSummary,
+  type ClipInfo,
+  type MeetingAnswer,
+  type MeetingLink,
+  type PlaybackRate,
+  type RecordingChapter,
+  type SilenceRange,
+  type SummaryActionItem,
+  type SummaryMoment,
+} from './meetings.js';
+
+// Experimental: the live-edit relay for shared documents (MS5).
+export { DocChannel, DOC_FRAME_MAX_BYTES, type DocFrame } from './realtime/doc.js';
 export { CallRoom } from './voice/call-room.js';
 export type {
   CallConnection,
@@ -166,7 +223,9 @@ export type {
 } from './realtime/types.js';
 
 export type {
+  AgentWire,
   ApiErrorCode,
+  CitationWire,
   Attachment,
   AttachmentDownloadResponse,
   AttachmentStatus,

@@ -41,6 +41,10 @@ export interface Recording {
   size_bytes: number | null;
   content_type: string | null;
   storage: CaptureStorage;
+  /** Chapters for playback (RT13); read with `chaptersOf(recording)`. Absent until generated. */
+  chapters?: Array<{ title: string; start_ms: number }>;
+  /** Stretches without speech, for "Skip silence"; read with `silencesOf(recording)`. Optional. */
+  silences?: Array<{ start_ms: number; end_ms: number }>;
 }
 
 /** A call snapshot's recording state (`LiveCall.recording`). */

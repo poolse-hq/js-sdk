@@ -20,6 +20,7 @@
 // swap).
 
 import type { ResolvedConfig } from '../config.js';
+import { agentFromWire, type AgentInfo } from '../agents.js';
 import type { PoolseUserProfile } from '../types.js';
 
 type Listener = () => void;
@@ -28,6 +29,8 @@ export class UsersResource {
   private readonly cache = new Map<string, PoolseUserProfile | null>();
   private readonly pending = new Map<string, Promise<PoolseUserProfile | null>>();
   private readonly listeners = new Map<string, Set<Listener>>();
+  /** Users the server said are agents (AG1), by external id. Kept across `invalidate`. */
+  private readonly agents = new Map<string, AgentInfo>();
 
   constructor(private readonly config: ResolvedConfig) {}
 
@@ -100,6 +103,60 @@ export class UsersResource {
     return () => {
       set?.delete(listener);
     };
+  }
+
+  /**
+   * The agent behind `externalId`, or null for a person: what the server
+   * said on a user, member or message (see `noteAgents`), else the
+   * resolver's `isAgent` / `agent`. Synchronous — the UI's badge check.
+   */
+  agentOf(externalId: string | null | undefined): AgentInfo | null {
+    if (!externalId) return null;
+    const known = this.agents.get(externalId);
+    if (known) return known;
+    const profile = this.cache.get(externalId);
+    if (profile?.agent) {
+      return {
+        id: profile.agent.id ?? null,
+        name: profile.agent.name ?? null,
+        kind: profile.agent.kind ?? null,
+      };
+    }
+    return profile?.isAgent ? { id: null, name: null, kind: null } : null;
+  }
+
+  /** Whether `externalId` is an agent (see `agentOf`). */
+  isAgent(externalId: string | null | undefined): boolean {
+    return this.agentOf(externalId) !== null;
+  }
+
+  /**
+   * Remember which users are agents from server rows: members
+   * (`external_id`) and messages (`sender_external_id`) with
+   * `is_agent` / `agent`. Subscribers of those users hear about it. The
+   * hooks in @poolse/react call this for every list they load.
+   */
+  noteAgents(rows: ReadonlyArray<object>): void {
+    for (const row of rows) {
+      const agent = agentFromWire(row);
+      if (!agent) continue;
+      const r = row as { external_id?: unknown; sender_external_id?: unknown };
+      const id =
+        typeof r.sender_external_id === 'string'
+          ? r.sender_external_id
+          : typeof r.external_id === 'string'
+            ? r.external_id
+            : null;
+      if (!id) continue;
+      const prev = this.agents.get(id);
+      // A bare `is_agent` doesn't wipe details learned before.
+      const next = prev && !agent.id && !agent.name ? prev : agent;
+      if (prev && prev.id === next.id && prev.name === next.name && prev.kind === next.kind) {
+        continue;
+      }
+      this.agents.set(id, next);
+      this.notify(id);
+    }
   }
 
   /** Drop a single cached entry — next `get` re-fetches via the resolver. */
