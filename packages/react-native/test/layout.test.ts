@@ -70,3 +70,14 @@ describe('renderSlot', () => {
     expect(seen).toEqual(['list', true, 'Two', 'default']);
   });
 });
+
+describe('gutterTime', () => {
+  it('drops the space before AM/PM so 10:00 PM fits the gutter on one line', async () => {
+    const { gutterTime } = await import('../src/layout.js');
+    expect(gutterTime('2:00 PM')).toBe('2:00PM');
+    expect(gutterTime('10:00 PM')).toBe('10:00PM');
+    expect(gutterTime('12:45 AM')).toBe('12:45AM');
+    expect(gutterTime('11:05 p.m.')).toBe('11:05p.m.');
+    expect(gutterTime('14:00')).toBe('14:00');
+  });
+});

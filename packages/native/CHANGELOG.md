@@ -2,6 +2,10 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## 3.7.1 — 2026-11-21
+
+- No changes; released with the other `@poolse/*` packages at 3.7.1.
+
 ## 3.7.0 — 2026-11-21
 
 - Custom incoming ringtone. Plugin option `ringtone` (a file path, or

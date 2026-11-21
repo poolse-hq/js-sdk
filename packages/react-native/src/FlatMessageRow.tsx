@@ -20,7 +20,7 @@ import { canShowEditHistory } from './EditHistorySheet.js';
 import { ImageMosaic } from './ImageMosaic.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './internal/bubbleText.js';
 import { renderMarkdown } from './internal/markdown.js';
-import { formatMessageTime, renderSlot, type MessageSlotContext } from './layout.js';
+import { formatMessageTime, gutterTime, renderSlot, type MessageSlotContext } from './layout.js';
 import { LinkPreviewCard } from './LinkPreviewCard.js';
 import { isImageContentType, QuotedCard } from './MessageBubble.js';
 import {
@@ -158,6 +158,9 @@ export function FlatMessageRow({
       {senderName}
     </Text>
   );
+  // `dim` is the time in the avatar gutter (later messages of a run): one
+  // line, always — "10:00 PM" is wider than the gutter, so the space goes
+  // ("10:00PM") and the text shrinks to fit rather than wrapping.
   const timeText = (dim: boolean) => (
     <Text
       style={[
@@ -165,8 +168,9 @@ export function FlatMessageRow({
         { color: theme.colors.textSubtle, fontFamily: theme.fonts.body },
         dim ? styles.timeDim : null,
       ]}
+      {...(dim ? { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.6 } : {})}
     >
-      {time}
+      {dim ? gutterTime(time) : time}
     </Text>
   );
 
@@ -484,6 +488,9 @@ const styles = StyleSheet.create({
   timeDim: {
     fontSize: 10,
     opacity: 0.7,
+    // Fill the gutter so shrink-to-fit measures against its width.
+    width: GUTTER,
+    textAlign: 'center',
   },
   attachments: {
     marginVertical: 4,

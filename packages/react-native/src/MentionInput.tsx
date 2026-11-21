@@ -194,11 +194,6 @@ function MentionRow({
       >
         {name}
       </Text>
-      {name !== externalId ? (
-        <Text style={[styles.rowId, { color: theme.colors.textSubtle }]} numberOfLines={1}>
-          {externalId}
-        </Text>
-      ) : null}
     </Pressable>
   );
 }
@@ -219,14 +214,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 10,
   },
+  // The name alone, with the whole row's width: an id next to it only
+  // pushed the name out.
   rowText: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '500',
-    flexShrink: 1,
-  },
-  rowId: {
-    fontSize: 12,
-    flexShrink: 1,
   },
   dismiss: {
     position: 'absolute',

@@ -20,6 +20,11 @@ export type ChatDensity = 'comfortable' | 'compact';
 /** `'12h'`, `'24h'`, or your own formatter. Omitted: the locale's default. */
 export type TimeFormat = '12h' | '24h' | ((date: Date) => string);
 
+/** The gutter's form of a time: no space before AM/PM, so it fits. */
+export function gutterTime(time: string): string {
+  return time.replace(/\s+(?=[AaPp]\.?[Mm]\.?$)/, '').replace(/\u202f/g, '');
+}
+
 /** A message's time of day, as every layout shows it. */
 export function formatMessageTime(iso: string | null | undefined, format?: TimeFormat): string {
   if (!iso) return '';

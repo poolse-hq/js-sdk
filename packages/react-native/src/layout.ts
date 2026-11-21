@@ -32,6 +32,11 @@ export function formatClock(date: Date, format?: TimeFormat): string {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+/** The gutter's form of a time: no space before AM/PM, so it fits. */
+export function gutterTime(time: string): string {
+  return time.replace(/\s+(?=[AaPp]\.?[Mm]\.?$)/, '').replace(/\u202f/g, '');
+}
+
 /** A message's time of day, as the `list` and `compact` rows show it. */
 export function formatMessageTime(iso: string | null | undefined, format?: TimeFormat): string {
   if (!iso) return '';

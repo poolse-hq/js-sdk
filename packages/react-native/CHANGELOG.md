@@ -4,6 +4,15 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [3.7.1] - 2026-11-21
+
+### Fixed
+
+- `list` layout: the time beside later messages of a run no longer wraps
+  ("2:00P" / "M"). It stays on one line, without the space before AM/PM, and
+  shrinks to fit the gutter, so "10:00 PM" and "12:45 AM" fit too.
+- @-mention suggestions show only the person's name, not their id next to it.
+
 ## [3.7.0] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.7.0.

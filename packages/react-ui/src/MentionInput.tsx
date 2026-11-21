@@ -446,17 +446,13 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
   },
 );
 
-// One suggestion: avatar, display name, and the external id when it
-// differs from the name.
+// One suggestion: avatar and display name.
 function MentionOption({ member, name }: { member: Membership; name: string }) {
   const { profile } = useUser(member.external_id);
   return (
     <>
       <Avatar src={profile?.avatarUrl ?? null} name={name} size="xs" />
       <span className="poolse-mention-menu__name">{name}</span>
-      {name !== member.external_id ? (
-        <span className="poolse-mention-menu__handle">{member.external_id}</span>
-      ) : null}
     </>
   );
 }

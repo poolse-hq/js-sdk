@@ -21,7 +21,7 @@ import { Avatar } from './Avatar.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { useEditHistory } from './EditedLabel.js';
-import { formatMessageTime, renderSlot, type MessageSlotContext } from './layout.js';
+import { formatMessageTime, gutterTime, renderSlot, type MessageSlotContext } from './layout.js';
 import { MessageActions } from './MessageActions.js';
 import { ImageMosaic, isImageContentType, QuotedCard, QuotedPlaceholder } from './MessageBubble.js';
 import type { MessageRowProps, MessageUser } from './MessageRow.js';
@@ -97,7 +97,7 @@ export function FlatMessageRow({
 
   const timeEl = (className: string) => (
     <time className={className} dateTime={msg.inserted_at}>
-      {time}
+      {className === 'poolse-row__gutter-time' ? gutterTime(time) : time}
     </time>
   );
 
