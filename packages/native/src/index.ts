@@ -38,7 +38,12 @@ export interface Snapshot {
     | 'cancelled'
     | 'connection_lost'
     | 'failed';
-  /** REMOTE participants only; `userId` is the LiveKit identity. */
+  /**
+   * REMOTE people only; `userId` is the LiveKit identity. poolse's
+   * transcript assistant (`poolse:…`, kind agent) and the recorder
+   * (LiveKit Egress, `EG_…`) are never listed — nor counted when the core
+   * ends a call left alone. Phone (SIP) participants are listed.
+   */
   participants: Array<{
     userId: string;
     externalId: string;
@@ -108,6 +113,50 @@ export interface Snapshot {
    * server's `name`. Absent before 3.8.
    */
   workspaceName?: string | null;
+  /**
+   * Whether the server lets you publish. `false` while recording consent
+   * is required and you have not accepted (docs/RECORDING.md §5): you
+   * still hear and see the call, but nothing of yours goes out. Your
+   * `mutedSelf` / camera choices are kept and come back as they were once
+   * it turns `true` again (the core republishes by itself; call
+   * `republish()` from ConsentPrompt's `onAccepted` too). Absent before 3.9.
+   */
+  canPublish?: boolean;
+  /**
+   * The call's recording state as the server last told this core (on
+   * answer / join / place and each reconnect) — enough to show the
+   * indicator at once. Live changes arrive on the conversation socket
+   * (`recording:*`). null: not known (a server without recording).
+   * Absent before 3.9.
+   */
+  recording?: CallRecordingState | null;
+  /** The live transcript's state, the same way (`transcript:*` on the socket). Absent before 3.9. */
+  transcription?: CallTranscriptionState | null;
+}
+
+/** The CallSummary's `recording` object, as the server sent it (docs/CALL_CONTRACT.md §4.2). */
+export interface CallRecordingState {
+  /** This server can record (LiveKit Egress). */
+  available: boolean;
+  active: boolean;
+  id: string | null;
+  mode: 'video' | 'audio' | null;
+  started_at: string | null;
+  started_by_user_id: string | null;
+  auto: boolean;
+  /** You may not publish until you accept. */
+  consent_required: boolean;
+  /** poolse user ids. */
+  consent?: { accepted: string[]; declined: string[] };
+}
+
+/** The CallSummary's `transcription` object, as the server sent it. */
+export interface CallTranscriptionState {
+  available: boolean;
+  active: boolean;
+  id: string | null;
+  status: 'live' | 'stopped' | 'ready' | null;
+  language: string | null;
 }
 
 /** `good` covers good and excellent; `unknown` until the SFU has measured. */
@@ -321,6 +370,7 @@ interface PoolseCallsNative {
   stopScreenShare?(): void;
   setSpeaker(on: boolean): void;
   setAudioOutput?(id: string): void;
+  republish?(): void;
   callControl?(): Promise<{
     callId: string;
     controlToken: string;
@@ -619,6 +669,33 @@ export const setSpeaker = (on: boolean): void => native?.setSpeaker(on);
 export function setAudioOutput(id: string): void {
   if (native?.setAudioOutput) native.setAudioOutput(id);
   else native?.setSpeaker(id === 'speaker'); // an older native build
+}
+
+/**
+ * Recording consent accepted (ConsentPrompt's `onAccepted`): publish the
+ * mic and camera again as the user last had them. The core also does it
+ * by itself once the server lets this participant publish; calling it
+ * early, or twice, is harmless — nothing goes out while
+ * `snapshot.canPublish` is false.
+ */
+export const republish = (): void => native?.republish?.();
+
+/**
+ * `snapshot.canPublish` changed (and once at subscribe time with the
+ * current value, while a call is up). `true` when no call is up or the
+ * native build predates it.
+ */
+export function onCanPublishChange(cb: (canPublish: boolean) => void): Unsubscribe {
+  let last: boolean | null = null;
+  const check = (snapshot: Snapshot | null): void => {
+    const now = snapshot?.canPublish ?? true;
+    if (now === last) return;
+    const first = last === null;
+    last = now;
+    if (!first || snapshot) cb(now);
+  };
+  check(getCallState());
+  return onCallState(check);
 }
 
 /**

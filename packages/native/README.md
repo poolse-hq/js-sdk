@@ -109,6 +109,9 @@ The full API:
 - Several workspaces: `addServer`, `removeServer`, `listServers`,
   `serverOfNotification`, `DEFAULT_SERVER_ID`, `serverId` on `place` / `join`
   / `startRoom` and in snapshots, taps and action results (see below).
+- Recording and transcripts: `snapshot.recording` / `snapshot.transcription`
+  (the server's state as of joining), `snapshot.canPublish`,
+  `onCanPublishChange`, `republish` (see below).
 - Socket forwarding (optional): `onCallFinished`, `onRingEnded`. Feed them
   from `@poolse/sdk` 3.1's user channel:
 
@@ -117,6 +120,36 @@ The full API:
   userChannel.onRingEnded((e) => calls.onRingEnded(e.call_id, e.reason));
   userChannel.onCallFinished((e) => calls.onCallFinished(e.call_id, e.reason));
   ```
+
+## Recording, consent and transcripts
+
+When the server records or transcribes a call (docs/RECORDING.md on the
+server), the core:
+
+- leaves poolse's own participants out of everything it reports — the
+  transcript assistant (`poolse:assistant:…`, LiveKit kind agent) and the
+  recorder (LiveKit Egress, `EG_…`). They are never in
+  `snapshot.participants`, never get a video tile, never count as someone
+  answering, and don't keep a call alive when everyone else has left.
+  Phone (SIP) participants are listed as usual.
+- carries the call's `recording` and `transcription` objects into the
+  snapshot, as the server sent them on answer / join / place and each
+  reconnect, so the indicator shows without another request. Later changes
+  come on the conversation socket (`recording:*`, `transcript:*`): use those
+  for anything after joining.
+- follows the server's publish permission. With `consent: "required"`, the
+  server turns publishing off until you accept: `snapshot.canPublish` turns
+  `false`, nothing of yours goes out (you still hear and see the call), and
+  mute / camera taps are remembered rather than refused. Once you accept,
+  the server turns it back on and the core publishes the mic and camera as
+  you last had them. Call `republish()` from ConsentPrompt's `onAccepted` as
+  well; it is harmless before the permission is back.
+
+```ts
+<ConsentPrompt onAccepted={() => calls.republish()} … />
+
+const off = calls.onCanPublishChange((allowed) => setListenOnly(!allowed));
+```
 
 ## Ringtone
 
