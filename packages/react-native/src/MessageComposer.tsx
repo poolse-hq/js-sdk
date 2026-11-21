@@ -282,6 +282,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
               onPress={onAttachPress}
               hitSlop={8}
               style={styles.iconBtn}
+              accessibilityRole="button"
               accessibilityLabel="Attach file"
             >
               <PoolseIcon name="attachment" size={22} color={theme.colors.textMuted} />
@@ -312,6 +313,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
               if (!isEditing) onSelectionChange?.(e.nativeEvent.selection);
             }}
             placeholder={placeholder}
+            accessibilityLabel={placeholder}
             placeholderTextColor={theme.colors.textSubtle}
             multiline
             editable={!disabled}
@@ -337,6 +339,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
                 opacity: submitDisabled ? 0.6 : 1,
               },
             ]}
+            accessibilityRole="button"
             accessibilityLabel="Send message"
           >
             <PoolseIcon name="send" size={18} color={theme.colors.accentText} />

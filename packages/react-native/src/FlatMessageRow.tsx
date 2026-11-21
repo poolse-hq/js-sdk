@@ -33,6 +33,8 @@ import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { userColor } from './primitives/userColor.js';
 import { ReactionStrip } from './Reactions.js';
+import { messageA11yLabel } from './internal/a11y.js';
+import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
@@ -71,6 +73,8 @@ export function FlatMessageRow({
   onRemoveLinkPreview,
   onMarkUnread,
   editHistory = true,
+  onRetrySend,
+  onDiscardSend,
 }: MessageRowProps & { layout: 'list' | 'compact' }) {
   const theme = useTheme();
   const { width: screenWidth } = useWindowDimensions();
@@ -108,9 +112,11 @@ export function FlatMessageRow({
   const ctx: MessageSlotContext = { message: msg, isSelf, sender, layout, isRunStart };
 
   const deleted = isTombstone(msg);
+  // Unsent (outbox): not on the server yet, so nothing to act on.
+  const inert = deleted || !!msg.local_status;
   const time = formatMessageTime(msg.inserted_at, timeFormat);
   const openActions = () => {
-    if (actions && !deleted) setActionsOpen(true);
+    if (actions && !inert) setActionsOpen(true);
   };
   const text = { fontFamily: theme.fonts.body, color: theme.colors.text };
 
@@ -320,7 +326,7 @@ export function FlatMessageRow({
     ) : null;
 
   const reactionsEl =
-    reactions && !deleted ? (
+    reactions && !inert ? (
       <View style={styles.reactions}>
         <ReactionStrip
           messageId={msg.id}
@@ -349,11 +355,17 @@ export function FlatMessageRow({
       {renderSlot(slots?.body, ctx, body)}
       {renderSlot(slots?.reactions, ctx, reactionsEl)}
       {renderSlot(slots?.thread, ctx, threadEl)}
+      <SendStatus
+        message={msg}
+        alignEnd={false}
+        {...(onRetrySend ? { onRetry: onRetrySend } : {})}
+        {...(onDiscardSend ? { onDiscard: onDiscardSend } : {})}
+      />
     </View>
   );
 
   const sheet =
-    actions && actionsOpen && !deleted ? (
+    actions && actionsOpen && !inert ? (
       <RowActionsSheet
         msg={msg}
         isSelf={isSelf}
@@ -389,8 +401,14 @@ export function FlatMessageRow({
       <Pressable
         onLongPress={openActions}
         style={[styles.line, compact ? styles.lineCompact : null]}
-        accessibilityRole="button"
-        accessibilityLabel="Message actions"
+        accessibilityLabel={messageA11yLabel(msg, senderName, isSelf)}
+        {...(actions && !inert
+          ? {
+              accessibilityHint: 'Long press for message actions',
+              accessibilityActions: [{ name: 'longpress', label: 'Message actions' }],
+              onAccessibilityAction: openActions,
+            }
+          : {})}
       >
         {compact ? (
           <>

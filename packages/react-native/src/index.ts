@@ -127,6 +127,13 @@ export type {
 // ── Lifecycle ─────────────────────────────────────────────────
 export { useAppStateLifecycle } from './lifecycle/useAppStateLifecycle.js';
 export { useAppStatePresence } from './lifecycle/useAppStatePresence.js';
+export {
+  useBackgroundClients,
+  applyBackground,
+  type BackgroundClientsOptions,
+} from './lifecycle/useBackgroundClients.js';
+export { EmptyState, type EmptyStateProps } from './EmptyState.js';
+export { SendStatus, type SendStatusProps } from './SendStatus.js';
 
 // ── Call building blocks ──────────────────────────────────────
 // Calls themselves run in the native call core (@poolse/native),

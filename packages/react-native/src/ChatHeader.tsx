@@ -143,7 +143,13 @@ export function ChatHeader({
         ]}
       >
         {onBack ? (
-          <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn} accessibilityLabel="Back">
+          <Pressable
+            onPress={onBack}
+            hitSlop={12}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
             <PoolseIcon name="reply" size={20} color={theme.colors.text} />
           </Pressable>
         ) : null}
@@ -177,6 +183,7 @@ export function ChatHeader({
             onPress={onMembersPress}
             hitSlop={12}
             style={styles.actionBtn}
+            accessibilityRole="button"
             accessibilityLabel="Show members"
           >
             <PoolseIcon name="users" size={20} color={theme.colors.textMuted} />

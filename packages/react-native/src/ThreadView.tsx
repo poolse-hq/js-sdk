@@ -1,6 +1,7 @@
 import type { Message, Uuid } from '@poolse/sdk';
 import { useMe, usePoolse, useThread } from '@poolse/react';
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
+import { EmptyState } from './EmptyState.js';
 import {
   Animated,
   KeyboardAvoidingView,
@@ -306,6 +307,12 @@ function ThreadSheet({
               hasMore={hasMore}
               onLoadMore={loadMore}
               renderItem={renderReply}
+              emptyState={
+                <EmptyState
+                  title="No replies yet"
+                  hint="Write a reply below to start the thread."
+                />
+              }
             />
           </View>
 

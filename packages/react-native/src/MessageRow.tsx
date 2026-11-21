@@ -25,6 +25,8 @@ import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { ReactionStrip } from './Reactions.js';
+import { messageA11yLabel } from './internal/a11y.js';
+import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
 import { useTheme } from './theme/PoolseTheme.js';
 import { callLogDisplayFor, isTombstone, useReactions, useUser } from '@poolse/react';
@@ -120,6 +122,10 @@ export interface MessageRowProps {
   onMarkUnread?: () => void;
   /** The "edited" label opens the edit history (`chat.messages.edits`). Defaults to true. */
   editHistory?: boolean;
+  /** Unsent message (queued or failed in the outbox): the Retry under it. */
+  onRetrySend?: () => void;
+  /** Unsent message: the Delete under it. */
+  onDiscardSend?: () => void;
 }
 
 /**
@@ -276,12 +282,15 @@ function BubbleMessageRow({
   onRemoveLinkPreview,
   onMarkUnread,
   editHistory = true,
+  onRetrySend,
+  onDiscardSend,
 }: MessageRowProps) {
   const theme = useTheme();
   const isSelf = meId !== null && msg.sender_id === meId;
   // A deleted message: "This message was deleted", nothing to act on,
-  // react to or quote — only its thread stays reachable.
-  const tombstone = isTombstone(msg);
+  // react to or quote — only its thread stays reachable. An unsent one
+  // (outbox) isn't on the server yet: nothing to act on either.
+  const tombstone = isTombstone(msg) || !!msg.local_status;
   const [actionsOpen, setActionsOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -395,8 +404,8 @@ function BubbleMessageRow({
   // Without the useUser fallback, omitting `avatarFor` / `labelFor` on
   // <ConversationView> bypassed the resolver at the row level even
   // when `PoolseConfig.userResolver` was configured.
-  const wantsSender = showAvatarSlot || (!isSelf && onSenderPress !== undefined);
-  const rowSender = useUser(wantsSender ? msg.sender_external_id : null);
+  // Always resolved: the row's screen-reader label names the sender.
+  const rowSender = useUser(msg.sender_external_id);
   const avatarUrl = msg.sender_external_id
     ? (avatarFor?.(msg.sender_external_id) ?? rowSender.profile?.avatarUrl ?? null)
     : null;
@@ -484,8 +493,14 @@ function BubbleMessageRow({
               if (!actions || tombstone) return;
               setActionsOpen(true);
             }}
-            accessibilityRole="button"
-            accessibilityLabel="Message actions"
+            accessibilityLabel={messageA11yLabel(msg, senderLabel ?? 'Unknown', isSelf)}
+            {...(actions && !tombstone
+              ? {
+                  accessibilityHint: 'Long press for message actions',
+                  accessibilityActions: [{ name: 'longpress', label: 'Message actions' }],
+                  onAccessibilityAction: () => setActionsOpen(true),
+                }
+              : {})}
           >
             <MessageBubble
               message={msg}
@@ -521,6 +536,13 @@ function BubbleMessageRow({
             />
           </Pressable>
         </Animated.View>
+
+        <SendStatus
+          message={msg}
+          alignEnd={isSelf}
+          {...(onRetrySend ? { onRetry: onRetrySend } : {})}
+          {...(onDiscardSend ? { onDiscard: onDiscardSend } : {})}
+        />
 
         {renderSlot(
           slots?.thread,

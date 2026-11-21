@@ -1,4 +1,5 @@
 import type { LiveCall, Message, Uuid } from '@poolse/sdk';
+import { MessageQueuedError, safeUuid } from '@poolse/sdk';
 import {
   canEditOwnMessage,
   computeGroupPosition,
@@ -43,7 +44,8 @@ import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
 import { latestMarkableId } from './internal/messageFocus.js';
-import { sharedDraftStore, type ConversationDraft, type DraftStorage } from './internal/drafts.js';
+import { EmptyState } from './EmptyState.js';
+import { draftStoreOf, type ConversationDraft, type DraftStorage } from './internal/drafts.js';
 import { isQuoteGone, sendErrorNotice } from './internal/errors.js';
 import {
   firstUnreadSequence,
@@ -329,11 +331,15 @@ export function ConversationView({
     loadMore,
     loadUntil,
     send,
+    retry: retrySend,
+    discard: discardSend,
     edit,
     delete: deleteMsg,
     markReadUpTo,
     refetch,
   } = useMessages(conversationId);
+  // Drafts belong to this client (server + user), never shared between workspaces.
+  const drafts = draftStoreOf(chat);
   const { typing: typingPeople, signalTyping } = useTyping(conversationId);
   // AI agent replies being written. Before the first words arrive the
   // agent shows as typing; then its reply streams into a bubble.
@@ -397,11 +403,9 @@ export function ConversationView({
   // `draftFor` says which conversation the state belongs to, so a
   // switch never saves one conversation's text under another's id.
   const [draftFor, setDraftFor] = useState(conversationId);
-  const [draftText, setDraftText] = useState(
-    () => sharedDraftStore.peek(conversationId)?.text ?? '',
-  );
+  const [draftText, setDraftText] = useState(() => drafts.peek(conversationId)?.text ?? '');
   const [replyingTo, setReplyingTo] = useState<Message | null>(
-    () => sharedDraftStore.peek(conversationId)?.quote ?? null,
+    () => drafts.peek(conversationId)?.quote ?? null,
   );
   const touchedRef = useRef(false);
   // Until the stored draft has been read, nothing is written back —
@@ -410,13 +414,13 @@ export function ConversationView({
   useEffect(() => {
     let live = true;
     touchedRef.current = false;
-    const inMemory = sharedDraftStore.peek(conversationId);
+    const inMemory = drafts.peek(conversationId);
     setDraftFor(conversationId);
     setDraftText(inMemory?.text ?? '');
     setReplyingTo(inMemory?.quote ?? null);
     if (!inMemory && storage) {
       setStoredDraftRead(false);
-      void sharedDraftStore.load(conversationId, storage).then((d) => {
+      void drafts.load(conversationId, storage).then((d) => {
         if (!live) return;
         setStoredDraftRead(true);
         // Typed something already? Theirs wins over the stored draft.
@@ -437,25 +441,25 @@ export function ConversationView({
   useEffect(() => {
     if (draftFor !== conversationId) return;
     const draft = { text: draftText, quote: replyingTo };
-    sharedDraftStore.save(conversationId, draft);
+    drafts.save(conversationId, draft);
     if (!storage || !storedDraftRead) return;
     // Storage writes are debounced; the memory copy is immediate.
     pendingDraftRef.current = { id: conversationId, draft };
     const t = setTimeout(() => {
       pendingDraftRef.current = null;
-      sharedDraftStore.save(conversationId, draft, storage);
+      drafts.save(conversationId, draft, storage);
     }, 400);
     return () => clearTimeout(t);
-  }, [draftFor, conversationId, draftText, replyingTo, storage, storedDraftRead]);
+  }, [drafts, draftFor, conversationId, draftText, replyingTo, storage, storedDraftRead]);
   // Flush a pending storage write when the view goes away.
   const storageRef = useRef(storage);
   storageRef.current = storage;
   useEffect(
     () => () => {
       const pending = pendingDraftRef.current;
-      if (pending) sharedDraftStore.save(pending.id, pending.draft, storageRef.current);
+      if (pending) drafts.save(pending.id, pending.draft, storageRef.current);
     },
-    [],
+    [drafts],
   );
 
   // One line of feedback above the list: a send that failed, a jump
@@ -719,6 +723,12 @@ export function ConversationView({
           showPresence={showPresence}
           linkPreviews={linkPreviews}
           {...(markable ? { onMarkUnread: () => markMessageUnread(msg) } : {})}
+          {...(msg.local_status
+            ? {
+                onRetrySend: () => void retrySend(msg.id).catch(() => undefined),
+                onDiscardSend: () => discardSend(msg.id),
+              }
+            : {})}
           {...(linkPreviews && isSelf && !tombstone && (msg.link_previews?.length ?? 0) > 0
             ? { onRemoveLinkPreview: (url: string) => removeLinkPreview(msg.id, url) }
             : {})}
@@ -752,6 +762,8 @@ export function ConversationView({
       return <View style={{ backgroundColor: theme.colors.accentSoft }}>{row}</View>;
     },
     [
+      retrySend,
+      discardSend,
       onCallBack,
       onQuotedClick,
       onSenderPress,
@@ -839,9 +851,21 @@ export function ConversationView({
         body: string,
         opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[]; mentions?: Uuid[] },
       ) => {
+        const id = safeUuid();
         try {
-          await send({ body, ...opts });
+          await send({ body, ...opts, id });
         } catch (err) {
+          // Offline: queued, it goes out by itself. Refused while the
+          // outbox is on: the row stays with Retry / Delete — except a
+          // deleted quote, which isn't worth a retry.
+          const kept =
+            err instanceof MessageQueuedError || (chat.outboxEnabled && !isQuoteGone(err));
+          if (kept) {
+            setReplyingTo(null);
+            setAutoReadPaused(false);
+            return;
+          }
+          if (isQuoteGone(err)) discardSend(id);
           // Back into the composer (unless they've typed on), and why.
           setDraftText((now) => (now ? now : body));
           if (isQuoteGone(err)) setReplyingTo(null);
@@ -875,6 +899,8 @@ export function ConversationView({
     }),
     [
       send,
+      chat.outboxEnabled,
+      discardSend,
       signalTyping,
       attachments,
       replyingTo,
@@ -988,7 +1014,18 @@ export function ConversationView({
                 <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
               </View>
             }
-            {...(emptyState !== undefined ? { emptyState } : {})}
+            emptyState={
+              emptyState !== undefined ? (
+                emptyState
+              ) : (
+                <EmptyState
+                  title="No messages yet"
+                  {...(showComposer
+                    ? { hint: 'Write the first message below — everyone here will see it.' }
+                    : {})}
+                />
+              )
+            }
           />
           {unreadPending ? (
             <Pressable

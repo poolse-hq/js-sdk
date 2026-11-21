@@ -5,6 +5,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
+import { reactionA11yLabel } from './internal/a11y.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 const DEFAULT_EMOJIS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
@@ -44,6 +45,10 @@ export function ReactionStrip({
           <Pressable
             key={emoji}
             onPress={() => (meReacted ? removeReaction(emoji) : addReaction(emoji))}
+            accessibilityRole="button"
+            accessibilityLabel={reactionA11yLabel(emoji, userArr.length, meReacted)}
+            accessibilityState={{ selected: meReacted }}
+            accessibilityHint={meReacted ? 'Removes your reaction' : 'Adds this reaction'}
             style={[
               styles.chip,
               {

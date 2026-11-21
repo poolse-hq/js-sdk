@@ -1,5 +1,6 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
 import {
+  filterConversations,
   formatCallLogPreview,
   useConversations,
   useMe,
@@ -7,6 +8,7 @@ import {
   useUserPresence,
 } from '@poolse/react';
 import { useCallback, useMemo, type ReactElement, type ReactNode } from 'react';
+import { EmptyState } from './EmptyState.js';
 import {
   ActivityIndicator,
   FlatList,
@@ -34,8 +36,15 @@ export interface ConversationListProps {
   onSelect?: (conv: Conversation) => void;
   /** Optional override for each row's rendering. */
   renderItem?: (conv: Conversation, selected: boolean) => ReactNode;
-  /** Custom empty state when there are no conversations. */
+  /**
+   * What an empty list shows. Defaults to "No conversations yet" with a
+   * hint at the next step.
+   */
   emptyState?: ReactNode | string;
+  /** Show only conversations matching this text (a search field in `header`). */
+  query?: string;
+  /** What shows when `query` matches nothing. Receives the query. */
+  noResultsState?: ReactNode | ((query: string) => ReactNode);
   /** Controlled-mode: skip `useConversations()` and render from these. */
   conversations?: Conversation[];
   loading?: boolean;
@@ -79,6 +88,8 @@ export function ConversationList({
   onSelect,
   renderItem,
   emptyState,
+  query = '',
+  noResultsState,
   conversations: controlled,
   loading: controlledLoading,
   error: controlledError,
@@ -100,7 +111,18 @@ export function ConversationList({
   const meExternalId = me?.external_id ?? null;
   const meId = me?.id ?? null;
   const isControlled = controlled !== undefined;
-  const conversations = isControlled ? controlled : auto.conversations;
+  const allConversations = isControlled ? controlled : auto.conversations;
+  const needle = query.trim();
+  const conversations = useMemo(
+    () =>
+      needle
+        ? filterConversations(allConversations, needle, {
+            meExternalId,
+            ...(labelFor ? { labelFor } : {}),
+          })
+        : allConversations,
+    [allConversations, needle, meExternalId, labelFor],
+  );
   const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
   const error = isControlled ? (controlledError ?? null) : auto.error;
   const counts = unreadCounts ?? (isControlled ? undefined : auto.unreadCounts);
@@ -171,11 +193,31 @@ export function ConversationList({
     );
   }
 
+  if (conversations.length === 0 && needle && allConversations.length > 0) {
+    return placeholder(
+      typeof noResultsState === 'function' ? (
+        noResultsState(needle)
+      ) : noResultsState !== undefined ? (
+        noResultsState
+      ) : (
+        <EmptyState
+          title={`Nothing matches “${needle}”`}
+          hint="Check the spelling, or search by a person's or channel's name."
+        />
+      ),
+    );
+  }
+
   if (conversations.length === 0) {
     return placeholder(
-      typeof emptyState === 'string' || emptyState == null ? (
+      emptyState == null ? (
+        <EmptyState
+          title="No conversations yet"
+          hint="Start a chat with someone, or join a channel — it shows up here."
+        />
+      ) : typeof emptyState === 'string' ? (
         <Text style={{ color: theme.colors.textSubtle, fontFamily: theme.fonts.body }}>
-          {(emptyState as string) ?? 'No conversations yet.'}
+          {emptyState}
         </Text>
       ) : (
         emptyState

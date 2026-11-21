@@ -14,6 +14,10 @@ import { usePoolse } from '@poolse/react';
  * `useConversations` reload from REST to catch up on what was sent
  * while the app was away.
  *
+ * One workspace. With several signed in, use `useBackgroundClients`
+ * instead (once, outside the providers) — it also keeps the workspaces
+ * that aren't on screen disconnected.
+ *
  * Mount once, inside the provider:
  *
  *     <PoolseProvider config={config}>
@@ -49,9 +53,9 @@ export function useAppStateLifecycle(options: { presence?: boolean } = {}) {
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'background') {
         setActivity('idle');
-        poolse.realtime.pause();
+        poolse.setBackground(true);
       } else if (next === 'active') {
-        poolse.realtime.resume();
+        poolse.setBackground(false);
         setActivity('active');
       } else {
         setActivity('idle');

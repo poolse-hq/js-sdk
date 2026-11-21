@@ -1,7 +1,7 @@
 // Unsent text + quote target per conversation — pure, so vitest can
 // run it under node.
 
-import type { Message } from '@poolse/sdk';
+import type { Message, Poolse } from '@poolse/sdk';
 
 /** What the composer held for a conversation. */
 export interface ConversationDraft {
@@ -45,12 +45,22 @@ export function parseDraft(raw: string | null | undefined): ConversationDraft | 
 }
 
 /**
- * Drafts in memory, shared by every ConversationView in the app — so a
- * draft survives switching conversations (the view remounts) — and
- * written through to a `DraftStorage` when given one.
+ * Drafts in memory — so a draft survives switching conversations (the
+ * view remounts) — and written through to a `DraftStorage` when given
+ * one. One store per client (`draftStoreOf(chat)`): its storage keys
+ * carry the client's namespace (server + user), so two workspaces never
+ * share a draft, and `chat.destroy({ clearStorage: true })` removes
+ * exactly that client's drafts.
  */
 export class DraftStore {
   private readonly memory = new Map<string, ConversationDraft>();
+  private readonly written = new Map<DraftStorage, Set<string>>();
+
+  /**
+   * `namespace` resolves to the client's namespace; without it keys are
+   * the pre-3.8 `poolse:draft:<conversation>` (tests, single client).
+   */
+  constructor(private readonly namespace?: () => Promise<string>) {}
 
   /** The in-memory draft, if any. */
   peek(conversationId: string): ConversationDraft | null {
@@ -59,14 +69,24 @@ export class DraftStore {
 
   /**
    * The draft: from memory, else from `storage` (which then seeds the
-   * memory). Null when there's none, or storage fails.
+   * memory; a pre-3.8 key is moved over). Null when there's none, or
+   * storage fails.
    */
   async load(conversationId: string, storage?: DraftStorage): Promise<ConversationDraft | null> {
     const inMemory = this.memory.get(conversationId);
     if (inMemory) return inMemory;
     if (!storage) return null;
     try {
-      const stored = parseDraft(await storage.get(draftKey(conversationId)));
+      const key = await this.key(conversationId);
+      let stored = parseDraft(await storage.get(key));
+      const legacy = draftKey(conversationId);
+      if (!stored && key !== legacy) {
+        stored = parseDraft(await storage.get(legacy));
+        if (stored && !isEmptyDraft(stored)) {
+          this.write(storage, key, stored);
+          swallow(() => storage.remove(legacy));
+        }
+      }
       if (stored && !isEmptyDraft(stored) && !this.memory.has(conversationId)) {
         this.memory.set(conversationId, stored);
       }
@@ -83,16 +103,80 @@ export class DraftStore {
       return;
     }
     this.memory.set(conversationId, draft);
-    if (storage) {
-      swallow(() => storage.set(draftKey(conversationId), JSON.stringify(draft)));
+    if (storage && !this.namespace) {
+      this.write(storage, draftKey(conversationId), draft);
+    } else if (storage) {
+      void this.key(conversationId).then(
+        (key) => this.write(storage, key, draft),
+        () => undefined,
+      );
     }
   }
 
   clear(conversationId: string, storage?: DraftStorage): void {
     this.memory.delete(conversationId);
-    if (storage) swallow(() => storage.remove(draftKey(conversationId)));
+    if (storage && !this.namespace) {
+      swallow(() => storage.remove(draftKey(conversationId)));
+    } else if (storage) {
+      void this.key(conversationId).then(
+        (key) => swallow(() => storage.remove(key)),
+        () => undefined,
+      );
+    }
+  }
+
+  /** Called by `chat.destroy()`. @internal */
+  async destroy(opts: { clearStorage: boolean }): Promise<void> {
+    this.memory.clear();
+    if (!opts.clearStorage) return;
+    const ns = this.namespace ? await this.namespace() : null;
+    for (const [storage, keys] of this.written) {
+      const all = new Set(keys);
+      if (ns) {
+        try {
+          const listed: unknown = JSON.parse((await storage.get(indexKey(ns))) ?? '[]');
+          if (Array.isArray(listed)) for (const k of listed) if (typeof k === 'string') all.add(k);
+        } catch {
+          // ignore
+        }
+        swallow(() => storage.remove(indexKey(ns)));
+      }
+      for (const k of all) swallow(() => storage.remove(k));
+    }
+    this.written.clear();
+  }
+
+  private async key(conversationId: string): Promise<string> {
+    if (!this.namespace) return draftKey(conversationId);
+    return `${await this.namespace()}:draft:${conversationId}`;
+  }
+
+  private write(storage: DraftStorage, key: string, draft: ConversationDraft): void {
+    swallow(() => storage.set(key, JSON.stringify(draft)));
+    let keys = this.written.get(storage);
+    if (!keys) {
+      keys = new Set();
+      this.written.set(storage, keys);
+    }
+    if (keys.has(key) || !this.namespace) return;
+    keys.add(key);
+    // An index of keys written, so a sign-out finds older sessions' drafts.
+    const all = keys;
+    void this.namespace().then(async (ns) => {
+      try {
+        const listed: unknown = JSON.parse((await storage.get(indexKey(ns))) ?? '[]');
+        const prev = Array.isArray(listed)
+          ? listed.filter((k): k is string => typeof k === 'string')
+          : [];
+        await storage.set(indexKey(ns), JSON.stringify([...new Set([...prev, ...all])]));
+      } catch {
+        // Storage is best-effort.
+      }
+    });
   }
 }
+
+const indexKey = (ns: string) => `${ns}:draft-index`;
 
 function swallow(fn: () => void | Promise<void>): void {
   try {
@@ -105,5 +189,7 @@ function swallow(fn: () => void | Promise<void>): void {
   }
 }
 
-/** The store ConversationView uses. */
-export const sharedDraftStore = new DraftStore();
+/** The drafts of one client — what ConversationView uses. */
+export function draftStoreOf(chat: Poolse): DraftStore {
+  return chat.scoped('react-native:drafts', (c) => new DraftStore(() => c.whenNamespace()));
+}
