@@ -42,6 +42,7 @@ In `app.json`, after `expo-notifications`:
 | `ringback`         | none    | Ships this sound in both apps; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only.                                                                                                                                                                |
 | `pictureInPicture` | `true`  | Android: the activity may float as a picture-in-picture window.                                                                                                                                                                                                                                |
 | `lockscreen`       | `true`  | Android: the app shows over the lock screen when opened for a call.                                                                                                                                                                                                                            |
+| `messageReplyRequiresUnlock` | `false` | Both: a chat notification's Reply asks for the passcode / Face ID / fingerprint before it sends. Off, Reply works straight from the lock screen (as in WhatsApp). Mark as read never asks. |
 | `screenShare`      | `false` | iOS: adds the broadcast upload extension that sharing the screen needs, and the app group `group.<bundle id>` it shares with the app (`{ "appGroup": "…" }` for your own). Register that group in the Apple Developer portal and assign it to the app's and `<bundle id>.broadcast`'s App IDs. |
 
 Always applied on Android: the LiveKit media adapter, and `expo-notifications`
@@ -101,7 +102,8 @@ The full API:
   `poolse.devices.register({ token, platform: 'ios', kind: 'voip', environment })`
   from `@poolse/sdk`, and the regular APNs token with `kind: 'alert'`.
 - Chat notifications: `setActiveConversation`, `shouldPresentMessage`,
-  `conversationOfNotification`.
+  `conversationOfNotification`, `onNotificationAction`,
+  `onNotificationReply`, `takeNotificationActions` (see below).
 - Socket forwarding (optional): `onCallFinished`, `onRingEnded`. Feed them
   from `@poolse/sdk` 3.1's user channel:
 
@@ -110,6 +112,63 @@ The full API:
   userChannel.onRingEnded((e) => calls.onRingEnded(e.call_id, e.reason));
   userChannel.onCallFinished((e) => calls.onCallFinished(e.call_id, e.reason));
   ```
+
+## Reply and Mark as read from a notification
+
+poolse's chat pushes carry a reply grant (24 h, bound to the device and
+conversation) and `actions: "reply,mark_read"`. The native core turns them
+into a Reply button with a text field and a Mark as read button, and sends
+them itself — from the lock screen, with the app closed, with no session
+and no JS — to `POST /v1/notification-actions/reply` and `/read` on the API
+origin you passed to `configure` (persisted, so call it once on every app
+start as usual).
+
+- **iOS**: the core registers the `poolse_message` category (actions `reply`
+  and `mark_read`) beside the app's own categories at launch, and handles the
+  taps through expo-notifications' delegate. A tap launches the app in the
+  background; a background task keeps it alive for the request, retried
+  (same reply id) on a network error, 5xx or 429 while iOS allows. On
+  success the conversation's notifications go and the badge drops by them
+  (the server's read-sync push then sets the exact count). A failed reply
+  posts a "Couldn't send your reply" notification in the same thread, with
+  Reply on it to try again. No Notification Service Extension is needed:
+  the grant rides in the delivered notification itself.
+- **Android**: one MessagingStyle notification per conversation. Reply shows
+  your line at once ("Sending…"), then WorkManager sends it — waiting for a
+  network, surviving the process being killed, retrying with the same id —
+  and the line stays (sent) or turns "Not sent: …" with the reason and an
+  alert. Mark as read cancels the notification at once. Launcher badges follow
+  the notifications' counts.
+
+Your app learns what happened:
+
+```ts
+import * as calls from '@poolse/native';
+
+useEffect(() => {
+  // Finished while the app was closed: oldest first, each once.
+  for (const r of calls.takeNotificationActions()) apply(r);
+  return calls.onNotificationAction(apply);
+}, []);
+
+function apply(r: calls.NotificationActionResult) {
+  if (r.action === 'reply' && r.ok) refreshConversation(r.conversationId); // r.messageId
+  if (r.action === 'mark_read' && r.ok) markReadLocally(r.conversationId);
+  // !r.ok: r.error is the server code (device_signed_out, forbidden,
+  // rate_limited, …) or network / no_grant / not_configured.
+}
+```
+
+`onNotificationReply(cb)` is the same, replies only. Results that finish
+with no `onNotificationAction` listener are queued (the last 50) for
+`takeNotificationActions`.
+
+Requirements: `configure` has run at least once on the device; the regular
+APNs token is registered with `kind: 'alert'` (iOS) and the FCM token
+(Android); `remote-notification` in `UIBackgroundModes` for the iOS
+read-sync push. If your app calls expo-notifications'
+`setNotificationCategoryAsync`, that keeps `poolse_message`; don't replace
+the whole category set natively without it.
 
 ## Links
 

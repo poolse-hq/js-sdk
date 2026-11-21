@@ -2,6 +2,28 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## [Unreleased]
+
+- Reply and Mark as read from a chat notification now use
+  `POST /v1/notification-actions/{reply,read}` (grant as bearer and `token`,
+  reply text as `text`) instead of the first `/v1/notifications/*` paths.
+- iOS: a reply is retried with the same id on a network error, 5xx or 429
+  while iOS keeps the app alive; success clears the conversation's
+  notifications and lowers the badge; a failed reply posts a "Couldn't send
+  your reply" notification with Reply on it. The background task now starts
+  before expo-notifications completes the response.
+- Android: Reply shows your line at once ("Sending…") and is sent by
+  WorkManager (new dependency `androidx.work:work-runtime-ktx`), which waits
+  for a network, survives the process being killed and retries with the
+  same id; a failed reply reads "Not sent: …" with the reason and alerts.
+  The read-sync push still clears the conversation.
+- New `onNotificationAction(cb)`, `onNotificationReply(cb)` and
+  `takeNotificationActions()` with `NotificationActionResult`: what a Reply
+  or Mark as read from a notification did, live or queued while the app
+  was closed.
+- Config plugin: `messageReplyRequiresUnlock` (default `false`) makes Reply
+  ask for the passcode / biometrics first on both platforms.
+
 ## 3.3.0 — 2026-11-20
 
 - No changes; released with the other `@poolse/*` packages at 3.3.0.
