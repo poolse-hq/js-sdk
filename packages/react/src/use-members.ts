@@ -42,6 +42,10 @@ export function useMembers(conversationId: Uuid): UseMembersState {
   // without racing the React updater queue against an `await`.
   const membersRef = useRef<Membership[]>([]);
   membersRef.current = members;
+  // Agents among the members get the badge everywhere (AG1).
+  useEffect(() => {
+    chat.users.noteAgents(members);
+  }, [chat, members]);
 
   // Buffer for `member:read` events that arrive BEFORE the initial
   // fetch lands. The realtime subscription runs almost immediately on

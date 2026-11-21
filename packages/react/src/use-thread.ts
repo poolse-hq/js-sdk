@@ -50,6 +50,10 @@ const PAGE_SIZE = 500;
 export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadState {
   const chat = usePoolse();
   const [replies, setReplies] = useState<Message[]>([]);
+  // Agents among the repliers get the badge everywhere (AG1).
+  useEffect(() => {
+    chat.users.noteAgents(replies);
+  }, [chat, replies]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [hasMore, setHasMore] = useState(true);

@@ -158,6 +158,11 @@ export function useMessages(conversationId: string): UseMessagesState {
     chat.cache.setMessages(conversationId, messages);
   }, [chat, conversationId, messages, loading]);
 
+  // Who of the senders are agents (AG1): every avatar and name of theirs gets the badge.
+  useEffect(() => {
+    chat.users.noteAgents(messages);
+  }, [chat, messages]);
+
   useEffect(() => {
     let cancelled = false;
     let fresh = false;

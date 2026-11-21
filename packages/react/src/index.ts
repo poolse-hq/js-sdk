@@ -34,7 +34,7 @@ export {
   type UploadItemStatus,
 } from './use-attachment-upload.js';
 export { useAttachmentUrl } from './use-attachment-url.js';
-export { useUser, type UseUserState } from './use-user.js';
+export { useAgent, useUser, type UseUserState } from './use-user.js';
 export { useAppEvent } from './use-app-event.js';
 export {
   computeGroupPosition,
@@ -191,3 +191,66 @@ export {
   EDIT_WINDOW_MS,
   type UseReadReceipts,
 } from './use-read-receipts.js';
+
+// ── Agents (AG1, AG4, AG5) ───────────────────────────────────────
+export { useApproval, useApprovals, type UseApproval, type UseApprovals } from './use-approvals.js';
+export {
+  APPROVAL_REASON_MAX,
+  agentFromWire,
+  approvalErrorMessage,
+  approvalStatusLabel,
+  citationLabel,
+  citationsOf,
+  formatApprovalPreview,
+  messageAgent,
+  parseApproval,
+} from '@poolse/sdk';
+export type {
+  AgentApproval,
+  AgentInfo,
+  ApprovalDetail,
+  ApprovalStatus,
+  Citation,
+  CitationType,
+} from '@poolse/sdk';
+
+// ── Meetings: summaries, asking, clips, playback (RT6–RT9, RT13) ─
+export {
+  useAskMeetings,
+  useRecordingUrl,
+  type UseAskMeetings,
+  type UseRecordingUrl,
+} from './use-meetings.js';
+export {
+  ASK_QUESTION_MAX,
+  PLAYBACK_RATES,
+  activeSegmentIndex,
+  chapterIndexAt,
+  chaptersOf,
+  clipOf,
+  formatCallSummaryPreview,
+  formatClock,
+  formatDue,
+  formatTimeRange,
+  meetingsErrorMessage,
+  parseCallSummary,
+  silencesOf,
+  skipSilenceTarget,
+  summaryStyleLabel,
+  transcriptOffsetMs,
+} from '@poolse/sdk';
+export type {
+  CallSummary,
+  ClipInfo,
+  MeetingAnswer,
+  MeetingLink,
+  PlaybackRate,
+  RecordingChapter,
+  SilenceRange,
+  SummaryActionItem,
+  SummaryMoment,
+} from '@poolse/sdk';
+
+// Experimental: the shared-document relay (`poolse.realtime.doc`).
+export { DocChannel, DOC_FRAME_MAX_BYTES } from '@poolse/sdk';
+export type { DocFrame } from '@poolse/sdk';

@@ -70,7 +70,7 @@ describe('useUser', () => {
   it('passes null/empty userId as a no-op (no resolver call)', async () => {
     const resolver = vi.fn();
     const { result } = renderHook(() => useUser(null), { wrapper: withResolver(resolver) });
-    expect(result.current).toEqual({ profile: null, loading: false });
+    expect(result.current).toEqual({ profile: null, loading: false, agent: null });
     expect(resolver).not.toHaveBeenCalled();
   });
 
