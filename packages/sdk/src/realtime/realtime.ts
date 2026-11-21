@@ -66,6 +66,8 @@ interface RealtimeOptions {
    * e.g. `{ presence: 'idle' }` for a device that starts idle.
    */
   userJoinParams?: () => Record<string, unknown>;
+  /** Called every time the socket opens (first connect and every reconnect). */
+  onOpen?: () => void;
 }
 
 export class PoolseRealtime {
@@ -75,6 +77,7 @@ export class PoolseRealtime {
   private readonly wsUrl: string;
   private readonly onUserChannel: ((channel: UserChannel) => void) | undefined;
   private readonly userJoinParams: (() => Record<string, unknown>) | undefined;
+  private readonly onOpen: (() => void) | undefined;
 
   private socket: Socket | null = null;
   private readonly conversations = new Map<string, ConversationChannel>();
@@ -82,6 +85,8 @@ export class PoolseRealtime {
 
   private status: RealtimeStatus = 'idle';
   private paused = false;
+  /** `_close()` ran: the client is destroyed and never connects again. */
+  private closedForGood = false;
   private lastTokenRefreshMs = 0;
   private readonly statusListeners = new Set<(s: RealtimeStatus) => void>();
 
@@ -92,6 +97,12 @@ export class PoolseRealtime {
     this.wsUrl = opts.wsUrl ?? deriveWsUrl(config.apiUrl);
     this.onUserChannel = opts.onUserChannel;
     this.userJoinParams = opts.userJoinParams;
+    this.onOpen = opts.onOpen;
+  }
+
+  /** Whether `pause()` holds the socket closed. */
+  isPaused(): boolean {
+    return this.paused;
   }
 
   /** The `user:<id>` handle if something has joined it, else null. Never connects. */
@@ -138,7 +149,10 @@ export class PoolseRealtime {
   connect(): void {
     if (this.socket) return;
 
-    this.setStatus('connecting');
+    // Paused before the first connect (a client created in the
+    // background): build the socket so channels can attach, but leave
+    // it closed until `resume()`.
+    if (!this.paused) this.setStatus('connecting');
 
     const socket = new Socket(`${this.wsUrl}${this.socketPath}`, {
       params: () => ({ token: this.tokenCache.peekToken() ?? '' }),
@@ -146,14 +160,20 @@ export class PoolseRealtime {
       // 200ms, 250ms, 500ms, 1s, 2s, 5s — perfectly reasonable for chat.
     });
 
-    socket.onOpen(() => this.setStatus('connected'));
+    socket.onOpen(() => {
+      this.setStatus('connected');
+      this.onOpen?.();
+    });
     socket.onClose(() => {
       // `onClose` fires for both intentional disconnect and network drop.
       // Phoenix triggers reconnect on its own for the latter; we just
       // surface the transitional state to UIs.
+      if (this.paused || this.socket !== socket) return;
       this.setStatus(this.status === 'closed' ? 'closed' : 'reconnecting');
     });
     socket.onError((err) => {
+      // A socket closed by pause() can still report its last error.
+      if (this.paused || this.socket !== socket) return;
       // Errors don't tear down the socket — Phoenix retries internally.
       // Surface as `reconnecting` so the UI can show a banner.
       this.setStatus('reconnecting');
@@ -182,7 +202,7 @@ export class PoolseRealtime {
         );
       })
       .finally(() => {
-        socket.connect();
+        if (this.socket === socket && !this.paused) socket.connect();
       });
   }
 
@@ -193,17 +213,22 @@ export class PoolseRealtime {
    * replayed; the React hooks reload from REST on reconnect.
    */
   pause(): void {
-    if (!this.socket || this.paused) return;
+    if (this.paused) return;
     this.paused = true;
+    // Not connected yet: the first `connect()` builds the socket but
+    // leaves it closed.
+    if (!this.socket) return;
     this.setStatus('closed');
     this.socket.disconnect();
   }
 
   /** Reopen a socket closed by `pause()`, with a fresh token. */
   resume(): void {
-    const socket = this.socket;
-    if (!socket || !this.paused) return;
+    if (!this.paused || this.closedForGood) return;
     this.paused = false;
+    const socket = this.socket;
+    // Never connected: the next `conversation()` / `user()` connects.
+    if (!socket) return;
     this.setStatus('connecting');
     void this.tokenCache
       .getToken()
@@ -218,8 +243,23 @@ export class PoolseRealtime {
       });
   }
 
+  /**
+   * Disconnect for good (the client is being destroyed): a hook that
+   * still asks for a channel afterwards gets an inert handle instead of
+   * opening a new socket.
+   *
+   * @internal
+   */
+  _close(): void {
+    this.disconnect();
+    this.closedForGood = true;
+    this.paused = true;
+    this.statusListeners.clear();
+  }
+
   /** Close the socket and tear down every joined channel. */
   disconnect(): void {
+    if (this.closedForGood) return;
     this.paused = false;
     this.setStatus('closed');
     this.conversations.forEach((c) => c._destroy());

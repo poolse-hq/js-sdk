@@ -69,6 +69,21 @@ export class MeResource {
     };
   }
 
+  /**
+   * Seed the user from a local cache (offline start) when none is known
+   * yet. The next `show()` replaces it.
+   *
+   * @internal
+   */
+  _hydrate(me: Me): void {
+    if (!this.current) this.set(me);
+  }
+
+  /** @internal */
+  _destroy(): void {
+    this.listeners.clear();
+  }
+
   private set(me: Me): void {
     this.current = me;
     for (const fn of this.listeners) fn(me);

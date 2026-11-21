@@ -288,6 +288,9 @@ export interface MembershipCreateRequest {
 
 export type MessageType = 'text' | 'system' | 'custom';
 
+/** Where an unsent message stands in the outbox; see `Message.local_status`. */
+export type LocalMessageStatus = 'sending' | 'queued' | 'failed';
+
 export interface Message {
   id: Uuid;
   tenant_id: Uuid;
@@ -355,6 +358,16 @@ export interface Message {
   sequence: number;
   inserted_at: IsoDateTime;
   updated_at: IsoDateTime;
+  /**
+   * Client-only: set by the outbox on a message this client sent that
+   * hasn't reached the server — `'sending'` (on its way), `'queued'`
+   * (offline; it goes out on reconnect, under the same id) or
+   * `'failed'` (the server refused it; offer Retry / Delete). Absent on
+   * every message from the server.
+   */
+  local_status?: LocalMessageStatus;
+  /** Client-only: why a `'failed'` send was refused, for display. */
+  local_error?: string;
 }
 
 /** One person who replied in a thread (`Message.thread_participants`). */

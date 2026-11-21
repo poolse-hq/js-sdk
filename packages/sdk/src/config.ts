@@ -6,6 +6,8 @@
  */
 export const POOLSE_API_URL = 'https://api.poolse.dev';
 
+import type { LocalCacheOptions } from './local-cache.js';
+import type { PoolseStorage } from './storage.js';
 import type { PoolseUserProfile } from './types.js';
 
 /**
@@ -113,6 +115,46 @@ export interface PoolseConfig {
   userResolver?: (
     externalId: string,
   ) => Promise<PoolseUserProfile | null> | PoolseUserProfile | null;
+
+  /**
+   * Where this client keeps data between launches: the outbox of unsent
+   * messages, the cached conversation list and recent history (readable
+   * offline), and the signed-in user. `createIndexedDbStorage()` in a
+   * browser; MMKV / AsyncStorage / SQLite behind the same three calls
+   * in React Native. Without it everything stays in memory.
+   *
+   * Every key is prefixed with this client's namespace (server + user),
+   * so several clients can share one storage.
+   */
+  storage?: PoolseStorage;
+
+  /**
+   * Who this session is, as a stable string you already know at start
+   * (your own user id for this server, say). Keys in `storage` are
+   * namespaced by `apiUrl` + this. Without it the namespace is
+   * `apiUrl` + the poolse user id, known only after the first
+   * `GET /v1/me` — so pass it if cached data should be readable when
+   * the app starts offline.
+   */
+  storageNamespace?: string;
+
+  /**
+   * Queue sends that can't reach the server and retry them (same
+   * message id) on reconnect; keep refused ones as `failed` with
+   * Retry / Delete. Default `true`. `false`: a failed send is simply
+   * rejected, as before 3.8.
+   */
+  outbox?: boolean;
+
+  /** Sizes of the warm cache (in memory, and in `storage` when given). */
+  cache?: LocalCacheOptions;
+
+  /**
+   * Start in the background: the socket stays closed until
+   * `setBackground(false)` (a workspace that isn't on screen on a
+   * phone). Default `false`.
+   */
+  background?: boolean;
 }
 
 /** Internal resolved config — all the defaults filled in. */
@@ -128,6 +170,11 @@ export interface ResolvedConfig {
   socketPath: string;
   onSocketError: ((err: Error) => void) | undefined;
   userResolver: PoolseConfig['userResolver'];
+  storage: PoolseStorage | undefined;
+  storageNamespace: string | undefined;
+  outbox: boolean;
+  cache: LocalCacheOptions;
+  background: boolean;
 }
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -166,6 +213,11 @@ export function resolveConfig(config: PoolseConfig): ResolvedConfig {
     socketPath: config.socketPath ?? '/socket',
     onSocketError: config.onSocketError,
     userResolver: config.userResolver,
+    storage: config.storage,
+    storageNamespace: config.storageNamespace,
+    outbox: config.outbox ?? true,
+    cache: config.cache ?? {},
+    background: config.background ?? false,
   };
 }
 

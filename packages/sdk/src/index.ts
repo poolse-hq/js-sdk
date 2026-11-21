@@ -126,6 +126,7 @@ export type {
   IsoDateTime,
   LinkPreview,
   LinkPreviewType,
+  LocalMessageStatus,
   Me,
   NotificationPreferences,
   NotifyLevel,
@@ -198,3 +199,22 @@ export {
 // message ids, upload queue local ids. Exported so RN consumers can
 // reuse the same fallback in their own config callbacks if they want.
 export { safeUuid } from './uuid.js';
+
+// Several clients side by side, offline and speed budgets (3.8).
+export type { DestroyOptions, ScopedService, WakeOptions } from './poolse.js';
+export {
+  createIndexedDbStorage,
+  memoryStorage,
+  type IndexedDbStorageOptions,
+  type PoolseStorage,
+} from './storage.js';
+export { ClientTimings, type BuiltInTiming, type TimingEvent } from './timings.js';
+export { LocalCache, type LocalCacheOptions } from './local-cache.js';
+export {
+  MessageDiscardedError,
+  MessageQueuedError,
+  Outbox,
+  isRetryable,
+  type OutboxEntry,
+} from './outbox.js';
+export { UnreadResource, type UnreadSummary, type UnreadTotals } from './resources/unread.js';

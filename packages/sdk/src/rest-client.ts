@@ -51,6 +51,12 @@ const IDEMPOTENT_METHODS: ReadonlySet<HttpMethod> = new Set(['GET']);
 export class RestClient {
   private readonly config: ResolvedConfig;
   private readonly tokenCache: TokenCache;
+  /**
+   * Called after every successful request (the client's timings use it).
+   *
+   * @internal
+   */
+  observer: ((method: HttpMethod, path: string) => void) | null = null;
 
   constructor(config: ResolvedConfig, tokenCache: TokenCache) {
     this.config = config;
@@ -101,7 +107,9 @@ export class RestClient {
       }
 
       if (response.status >= 200 && response.status < 300) {
-        return (await parseJsonOrNull(response)) as T;
+        const parsed = (await parseJsonOrNull(response)) as T;
+        this.observer?.(opts.method, opts.path);
+        return parsed;
       }
 
       // 401: a cached token can race a clock-skew expiry or a server
