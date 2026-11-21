@@ -4,7 +4,14 @@ export { Poolse } from './poolse.js';
 export { POOLSE_API_URL } from './config.js';
 export type { PoolseConfig } from './config.js';
 
-export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from './errors.js';
+export {
+  ApiError,
+  AuthError,
+  ChannelReplyError,
+  PoolseError,
+  NetworkError,
+  RateLimitedError,
+} from './errors.js';
 
 // Re-export the resource classes so callers can use them in type
 // signatures (e.g. dependency injection). They aren't normally
@@ -48,6 +55,25 @@ export type {
 } from './resources/devices.js';
 export { ConversationMessages, MessageHandle, MessagesResource } from './resources/messages.js';
 export { UsersResource } from './resources/users.js';
+export {
+  NotificationActions,
+  createNotificationActions,
+  parseNotificationActions,
+  type MessagePushData,
+  type MessageReadPushData,
+  type NotificationActionId,
+  type NotificationActionsOptions,
+  type NotificationReadRequest,
+  type NotificationReplyRequest,
+} from './notification-actions.js';
+export {
+  PRESENCE_MAX_LOOKUP,
+  PresenceResource,
+  type PresenceLookup,
+  type PresenceMe,
+  type PresenceRealtime,
+  type TrackActivityOptions,
+} from './resources/presence.js';
 export type { AttachmentProgressEvent } from './resources/attachments.js';
 export {
   AttachmentHandle,
@@ -73,7 +99,9 @@ export type {
   MessageStreamEvent,
   MessageNewEvent,
   MessageUpdatedEvent,
+  PresenceChangedEvent,
   PresenceSnapshot,
+  ThreadUpdatedEvent,
   ReactionEvent,
   RealtimeStatus,
   TypingEvent,
@@ -81,6 +109,7 @@ export type {
 } from './realtime/types.js';
 
 export type {
+  ApiErrorCode,
   Attachment,
   AttachmentDownloadResponse,
   AttachmentStatus,
@@ -89,10 +118,14 @@ export type {
   Conversation,
   ConversationCreateRequest,
   ConversationList,
+  ConversationListOptions,
   ConversationType,
   ConversationUpdateRequest,
   ErrorEnvelope,
+  IncludeDeletedOption,
   IsoDateTime,
+  LinkPreview,
+  LinkPreviewType,
   Me,
   NotificationPreferences,
   NotifyLevel,
@@ -106,15 +139,31 @@ export type {
   MembershipList,
   Message,
   MessageCreateRequest,
+  MessageEdit,
+  MessageEditList,
   MessageList,
   MessageType,
   MessageUpdateRequest,
   PoolseUserProfile,
+  Presence,
+  PresenceActivity,
+  PresenceList,
+  PresenceState,
   QuotedMessagePreview,
   ReactionRequest,
   ReadRequest,
+  ThreadParticipant,
   Uuid,
 } from './types.js';
+
+// Keeping a local message list in step with server events.
+export {
+  applyThreadUpdate,
+  isTombstone,
+  markQuoteDeleted,
+  mergeMessage,
+  toTombstone,
+} from './message-state.js';
 
 // ── Calling ──────────────────────────────────────────────────────────
 // Phones ring and carry calls in the native call core

@@ -4,6 +4,7 @@ import type {
   Conversation,
   ConversationCreateRequest,
   ConversationList,
+  ConversationListOptions,
   ConversationUpdateRequest,
   MemberRole,
   Membership,
@@ -164,12 +165,65 @@ export class ConversationHandle {
 export class ConversationsResource {
   constructor(private readonly client: RestClient) {}
 
-  list(signal?: AbortSignal): Promise<ConversationList> {
+  /**
+   * One page of the caller's conversations, most recently active first.
+   * Pass the previous page's `next_cursor` as `cursor` for the next one;
+   * `next_cursor` is null on the last page.
+   *
+   * ```ts
+   * const first = await chat.conversations.list({ limit: 50 });
+   * const second = first.next_cursor
+   *   ? await chat.conversations.list({ cursor: first.next_cursor })
+   *   : null;
+   * ```
+   *
+   * `list(signal)` (no options) still works.
+   */
+  list(signal?: AbortSignal): Promise<ConversationList>;
+  list(opts?: ConversationListOptions, signal?: AbortSignal): Promise<ConversationList>;
+  list(
+    optsOrSignal?: ConversationListOptions | AbortSignal,
+    maybeSignal?: AbortSignal,
+  ): Promise<ConversationList> {
+    const signal = isAbortSignal(optsOrSignal) ? optsOrSignal : maybeSignal;
+    const opts = isAbortSignal(optsOrSignal) ? {} : (optsOrSignal ?? {});
     return this.client.request<ConversationList>({
       method: 'GET',
       path: '/v1/conversations',
+      query: {
+        ...(opts.cursor ? { cursor: opts.cursor } : {}),
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+      },
       ...(signal ? { signal } : {}),
     });
+  }
+
+  /**
+   * Every conversation, page by page (`limit` per request), as an async
+   * iterator. Stops after the page whose `next_cursor` is null — or the
+   * first page, on a server that doesn't page the list.
+   *
+   * ```ts
+   * for await (const conv of chat.conversations.listAll()) console.log(conv.name);
+   * ```
+   */
+  async *listAll(
+    opts: { limit?: number; signal?: AbortSignal } = {},
+  ): AsyncGenerator<Conversation, void, undefined> {
+    let cursor: string | null = null;
+    for (;;) {
+      const page: ConversationList = await this.list(
+        {
+          ...(cursor ? { cursor } : {}),
+          ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+        },
+        opts.signal,
+      );
+      yield* page.data;
+      // Guard against a server echoing the same cursor forever.
+      if (!page.next_cursor || page.next_cursor === cursor) return;
+      cursor = page.next_cursor;
+    }
   }
 
   create(attrs: ConversationCreateRequest, signal?: AbortSignal): Promise<Conversation> {
@@ -185,4 +239,13 @@ export class ConversationsResource {
   one(id: Uuid): ConversationHandle {
     return new ConversationHandle(this.client, id);
   }
+}
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'aborted' in value &&
+    typeof (value as { addEventListener?: unknown }).addEventListener === 'function'
+  );
 }

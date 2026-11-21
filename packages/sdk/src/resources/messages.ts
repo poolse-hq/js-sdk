@@ -1,7 +1,9 @@
 import type { RestClient } from '../rest-client.js';
 import type {
+  IncludeDeletedOption,
   Message,
   MessageCreateRequest,
+  MessageEditList,
   MessageList,
   MessageUpdateRequest,
   ReactionRequest,
@@ -16,13 +18,21 @@ export class ConversationMessages {
     private readonly conversationId: Uuid,
   ) {}
 
-  list(opts: { limit?: number; before?: number } = {}, signal?: AbortSignal): Promise<MessageList> {
+  /**
+   * History, newest first. `before` is a sequence; `include_deleted`
+   * returns every deleted message as a tombstone.
+   */
+  list(
+    opts: { limit?: number; before?: number } & IncludeDeletedOption = {},
+    signal?: AbortSignal,
+  ): Promise<MessageList> {
     return this.client.request<MessageList>({
       method: 'GET',
       path: `/v1/conversations/${this.conversationId}/messages`,
       query: {
         ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
         ...(opts.before !== undefined ? { before: opts.before } : {}),
+        ...(opts.include_deleted ? { include_deleted: true } : {}),
       },
       ...(signal ? { signal } : {}),
     });
@@ -67,13 +77,44 @@ export class ConversationMessages {
   }
 }
 
-/** Per-message operations: edit, delete, react, list replies. */
+/** Per-message operations: read, edit, delete, react, list replies. */
 export class MessageHandle {
   constructor(
     private readonly client: RestClient,
     public readonly id: Uuid,
   ) {}
 
+  /**
+   * `GET /v1/messages/:id` — one message with its thread summary and
+   * quote. A deleted message comes back as its tombstone
+   * (`deleted_at` set, `body: null`). 403 for non-members, 404.
+   */
+  get(signal?: AbortSignal): Promise<Message> {
+    return this.client.request<Message>({
+      method: 'GET',
+      path: `/v1/messages/${this.id}`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /**
+   * `GET /v1/messages/:id/edits` — earlier versions of an edited
+   * message, oldest first (version 1 is the original). Sender and
+   * conversation owners/admins only (403 otherwise).
+   */
+  edits(signal?: AbortSignal): Promise<MessageEditList> {
+    return this.client.request<MessageEditList>({
+      method: 'GET',
+      path: `/v1/messages/${this.id}/edits`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /**
+   * `PATCH /v1/messages/:id` — edit `body` and/or drop link previews
+   * (`remove_link_previews: [url, …]` or `true` for all). Sender only;
+   * 409 `message_deleted` on a tombstone.
+   */
   update(attrs: MessageUpdateRequest, signal?: AbortSignal): Promise<Message> {
     return this.client.request<Message>({
       method: 'PATCH',
@@ -91,8 +132,9 @@ export class MessageHandle {
     });
   }
 
+  /** Thread replies, oldest first; `include_deleted` adds tombstones. */
   replies(
-    opts: { limit?: number; after?: number } = {},
+    opts: { limit?: number; after?: number } & IncludeDeletedOption = {},
     signal?: AbortSignal,
   ): Promise<MessageList> {
     return this.client.request<MessageList>({
@@ -101,6 +143,7 @@ export class MessageHandle {
       query: {
         ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
         ...(opts.after !== undefined ? { after: opts.after } : {}),
+        ...(opts.include_deleted ? { include_deleted: true } : {}),
       },
       ...(signal ? { signal } : {}),
     });
@@ -125,12 +168,33 @@ export class MessageHandle {
   }
 }
 
-/** Top-level `/v1/messages` namespace — accessed via `chat.messages(id)`. */
+/** Top-level `/v1/messages` namespace — `chat.messages.one(id)`, or the shortcuts below. */
 export class MessagesResource {
   constructor(private readonly client: RestClient) {}
 
   one(id: Uuid): MessageHandle {
     return new MessageHandle(this.client, id);
+  }
+
+  /** Shortcut for `one(id).get()`. */
+  get(id: Uuid, signal?: AbortSignal): Promise<Message> {
+    return this.one(id).get(signal);
+  }
+
+  /** Shortcut for `one(id).edits()`. */
+  edits(id: Uuid, signal?: AbortSignal): Promise<MessageEditList> {
+    return this.one(id).edits(signal);
+  }
+
+  /**
+   * Shortcut for `one(id).update(attrs)`.
+   *
+   * ```ts
+   * await chat.messages.update(id, { remove_link_previews: true });
+   * ```
+   */
+  update(id: Uuid, attrs: MessageUpdateRequest, signal?: AbortSignal): Promise<Message> {
+    return this.one(id).update(attrs, signal);
   }
 }
 

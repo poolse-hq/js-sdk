@@ -8,6 +8,18 @@ interface UseConversationsState {
   loading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
+  /**
+   * The server has more conversations than are loaded (the list is
+   * paged, 50 a page). False on servers that don't page.
+   */
+  hasMore: boolean;
+  /** A `loadMore()` is in flight. */
+  loadingMore: boolean;
+  /**
+   * Append the next page — e.g. when the list is scrolled to the end.
+   * A no-op without `hasMore`, and while a page is loading.
+   */
+  loadMore: () => Promise<void>;
   create: (attrs: ConversationCreateRequest) => Promise<Conversation>;
   /**
    * Per-conversation unread count, keyed by conversation id (only
@@ -44,6 +56,11 @@ interface UseConversationsState {
  * optimistic `create()` followed by the realtime echo doesn't insert
  * twice.
  *
+ * The list is paged: the first page (50, most recently active first)
+ * loads on its own; `loadMore()` appends the next while `hasMore`.
+ * Unread badges (`unreadCounts`) cover the loaded rows plus any that
+ * realtime brings in.
+ *
  * `refetch()` is still here for explicit re-syncs (e.g. after a
  * mutation that the SDK doesn't yet observe — name changes,
  * settings updates). `create()` returns the canonical server row.
@@ -61,13 +78,14 @@ export function useConversations(): UseConversationsState {
   }, [store]);
 
   const refetch = useCallback(() => store.refetch(), [store]);
+  const loadMore = useCallback(() => store.loadMore(), [store]);
   const create = useCallback((attrs: ConversationCreateRequest) => store.create(attrs), [store]);
   const markConversationRead = useCallback(
     (conversationId: Uuid) => store.markRead(conversationId),
     [store],
   );
 
-  const { conversations, loading, error } = snapshot;
+  const { conversations, loading, error, hasMore, loadingMore } = snapshot;
 
   const unreadCounts = useMemo(() => countsOf(conversations, 'unread_count'), [conversations]);
   const mentionUnreadCounts = useMemo(
@@ -80,6 +98,9 @@ export function useConversations(): UseConversationsState {
     loading,
     error,
     refetch,
+    hasMore,
+    loadingMore,
+    loadMore,
     create,
     unreadCounts,
     mentionUnreadCounts,

@@ -4,6 +4,50 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `useUserPresence(id)` → `Presence | null` and `usePresenceMany(ids)` →
+  `Record<id, Presence>`: people's presence (`online` / `away` / `in_call` /
+  `offline`) by user id or external id, from the one `poolse.presence` store
+  per provider — hooks mounted together make a single lookup, and
+  `presence:changed` keeps them live.
+- `<PoolseProvider trackActivity>`: reports the browser tab `active` / `idle`
+  for presence (`poolse.presence.trackActivity`). On by default; a no-op
+  without `document` (React Native: call `usePoolse().presence.setActivity()`
+  from `AppState`); `false` turns it off, or pass `{ idleAfterMs }`.
+- `useConversationPresence(conversationId)`, the same hook as
+  `usePresence(conversationId)` under a name that says what it lists (who has
+  the conversation open).
+- Re-exported `Presence`, `PresenceState`, `PresenceActivity`,
+  `PresenceChangedEvent`, `TrackActivityOptions`.
+
+- Conversation list paging: `useConversations().loadMore()`, `hasMore` and
+  `loadingMore`. The first page loads as before; `loadMore()` appends the
+  next (deduped by id, one request at a time; a failure rejects and keeps the
+  cursor). A quiet reload (remount, reconnect) refreshes the first page and
+  keeps rows of later pages already loaded.
+
+- Re-exported `LinkPreview`, `LinkPreviewType`, `ThreadParticipant`,
+  `ThreadUpdatedEvent`, `MessageEdit`, `MessageEditList`,
+  `MessageUpdateRequest`, `ApiErrorCode`, and the helpers `isTombstone`,
+  `mergeMessage`, `toTombstone`.
+
+### Changed
+
+- `useMessages` handles `thread:updated`: the root's `reply_count`,
+  `last_reply_at` and `thread_participants` follow the server.
+- `message:updated` (an edit, or link previews arriving) is merged into the
+  row instead of replacing it, in `useMessages` and `useThread`, so fields a
+  payload leaves out survive; `edit()` merges the server's row the same way.
+- A deleted message — from `message:deleted` or an optimistic `delete()` —
+  becomes the server's tombstone (no body, mentions, reactions, attachments,
+  link previews or quote; thread fields kept), and messages quoting it get
+  `quoted_message.deleted_at` / `body: null`. A deleted reply lowers its
+  root's `reply_count` using the event's `thread_root_id` (it never did for
+  replies before, as replies aren't in the main list).
+
 ## [3.4.0] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.4.0.

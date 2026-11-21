@@ -4,6 +4,66 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Presence (`poolse.presence`, `PresenceResource`): `get({ userIds?, externalIds? })`
+  (`GET /v1/presence`, any number of ids, sent 200 at a time); a shared store —
+  `subscribe(ids, fn)` batches lookups from every caller in a tick, `peek(id)`
+  reads the cache, and `presence:changed` keeps it live. Lookups go over the
+  socket (`presence:get`, which also subscribes) while the user channel is
+  joined, else REST; each (re)join asks again for everyone subscribed. Ids may
+  be user ids or external ids.
+- This device's activity: `presence.setActivity('active' | 'idle')` (sends
+  `presence:set`; unchanged states are skipped, `active` re-sent at most once a
+  minute), `presence.getActivity()`, and `presence.trackActivity({ idleAfterMs?,
+document?, window? })` for browsers (hidden / blur / no input for 5 min →
+  idle; a no-op without `document`). The `user:<id>` join carries
+  `presence: 'active' | 'idle'`.
+- `UserChannel.onPresenceChanged`, `setPresence`, `getPresence`, `onJoined`,
+  `isJoined`; `ChannelReplyError` for refused or timed-out channel requests.
+- Types `Presence`, `PresenceState`, `PresenceActivity`, `PresenceList`,
+  `PresenceChangedEvent`, `PresenceLookup`, `TrackActivityOptions`;
+  `PRESENCE_MAX_LOOKUP`.
+
+- Notification actions without a session: `createNotificationActions({ apiUrl?,
+fetch?, … })` and `poolse.notificationActions` (`NotificationActions`) with
+  `reply({ token, text, id? })` (`POST /v1/notification-actions/reply`; `id`
+  defaults to a fresh UUID and doubles as the idempotency key, so a retry
+  returns the original message) and `read({ token })`. The push's
+  `reply_grant` is sent as the bearer; 401 (`device_signed_out`, expired grant)
+  is not retried.
+- Push payload types `MessagePushData` (`reply_grant`, `actions`,
+  `unread_total`, …) and `MessageReadPushData`; `NotificationActionId` and
+  `parseNotificationActions(actions)`.
+- Message actions: `messages.get(id)` / `messages.one(id).get()` (a deleted
+  message comes back as its tombstone), `messages.edits(id)` /
+  `messages.one(id).edits()` (`MessageEditList`, `MessageEdit`), and the
+  `messages.update(id, attrs)` shortcut.
+- `include_deleted` on `conversations.one(id).messages.list()` and
+  `messages.one(id).replies()` (`IncludeDeletedOption`).
+- Link previews: `Message.link_previews` (`LinkPreview`, `LinkPreviewType`)
+  and `MessageUpdateRequest.remove_link_previews` (`string[] | true`).
+- Thread summaries: `Message.last_reply_at`, `Message.thread_participants`
+  (`ThreadParticipant`); `ConversationChannel.onThreadUpdated`
+  (`thread:updated`, `ThreadUpdatedEvent`); `MessageDeletedEvent.thread_root_id`.
+- Helpers for keeping a local message list in step: `isTombstone`,
+  `toTombstone`, `mergeMessage`, `applyThreadUpdate`, `markQuoteDeleted`.
+- Conversation list paging: `conversations.list({ cursor, limit })` returns
+  `next_cursor` (null on the last page; `ConversationListOptions`), and
+  `conversations.listAll({ limit?, signal? })` iterates every conversation
+  across pages (`for await`). `list(signal)` keeps working.
+- `ApiErrorCode` — the known error codes (`quoted_message_deleted`,
+  `quoted_message_not_found`, `quoted_message_wrong_conversation`,
+  `reply_parent_not_found`, `message_deleted`, `device_signed_out`, …);
+  `ApiError.code` is typed with it (still any string).
+
+### Changed
+
+- `MessageUpdateRequest.body` is optional (an update may only remove link
+  previews).
+
 ## [3.4.0] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.4.0.

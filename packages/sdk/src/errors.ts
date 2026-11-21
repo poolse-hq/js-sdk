@@ -2,7 +2,7 @@
 // decide whether to retry, prompt the user to re-login, etc. — the
 // alternative (parsing error.message strings) is brittle.
 
-import type { ErrorEnvelope } from './types.js';
+import type { ApiErrorCode, ErrorEnvelope } from './types.js';
 
 /** Base for any error originating in the SDK. */
 export class PoolseError extends Error {
@@ -33,7 +33,7 @@ export class NetworkError extends PoolseError {
 export class ApiError extends PoolseError {
   public override readonly name: string = 'ApiError';
   public readonly status: number;
-  public readonly code: string;
+  public readonly code: ApiErrorCode;
   public readonly docUrl: string;
   public readonly details: Record<string, unknown> | undefined;
 
@@ -71,5 +71,29 @@ export class AuthError extends ApiError {
 
   constructor(envelope: ErrorEnvelope['error']) {
     super(401, envelope);
+  }
+}
+
+/**
+ * A request pushed over the realtime channel (e.g. `presence:get`) was
+ * refused or timed out. `reason` is the server's (`rate_limited`,
+ * `too_many`, `invalid_state`, …) or `timeout`.
+ */
+export class ChannelReplyError extends PoolseError {
+  public override readonly name: string = 'ChannelReplyError';
+  public readonly event: string;
+  public readonly reason: string;
+  public readonly response: Record<string, unknown>;
+
+  constructor(event: string, response: unknown) {
+    const body =
+      typeof response === 'object' && response !== null
+        ? (response as Record<string, unknown>)
+        : {};
+    const reason = typeof body['reason'] === 'string' ? body['reason'] : 'error';
+    super(`${event}: ${reason}`);
+    this.event = event;
+    this.reason = reason;
+    this.response = body;
   }
 }

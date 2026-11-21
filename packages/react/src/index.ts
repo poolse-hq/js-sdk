@@ -14,7 +14,8 @@ export { useReactions, type ReactionMap } from './use-reactions.js';
 export { useThread } from './use-thread.js';
 export { useTyping } from './use-typing.js';
 export { useMessageStreams, type MessageStream } from './use-message-streams.js';
-export { usePresence } from './use-presence.js';
+export { usePresence, useConversationPresence } from './use-presence.js';
+export { useUserPresence, usePresenceMany } from './use-user-presence.js';
 export { useRealtimeStatus } from './use-realtime-status.js';
 export {
   useAttachmentUpload,
@@ -35,6 +36,7 @@ export {
 // Re-export the SDK so consumers can pull in types / errors from one
 // package — saves a second `npm install @poolse/sdk` for React-only apps.
 export type {
+  ApiErrorCode,
   AppEvent,
   Attachment,
   AttachmentStatus,
@@ -51,15 +53,28 @@ export type {
   NotifyLevel,
   OwnMembership,
   OwnMembershipUpdateRequest,
+  LinkPreview,
+  LinkPreviewType,
   Message,
   MessageCreateRequest,
+  MessageEdit,
+  MessageEditList,
   MessageType,
+  MessageUpdateRequest,
   PoolseConfig,
   PoolseUserProfile,
+  Presence,
+  PresenceActivity,
+  PresenceChangedEvent,
+  PresenceState,
   RealtimeStatus,
+  ThreadParticipant,
+  ThreadUpdatedEvent,
+  TrackActivityOptions,
   Uuid,
 } from '@poolse/sdk';
 export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from '@poolse/sdk';
+export { isTombstone, mergeMessage, toTombstone } from '@poolse/sdk';
 
 // Call-log system messages — shared parser + display helpers.
 export {

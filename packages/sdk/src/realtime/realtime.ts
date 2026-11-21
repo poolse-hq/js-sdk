@@ -16,8 +16,9 @@ import { Socket } from 'phoenix';
 import type { Channel } from 'phoenix';
 
 import type { ResolvedConfig } from '../config.js';
-import { PoolseError } from '../errors.js';
+import { ChannelReplyError, PoolseError } from '../errors.js';
 import type { TokenCache } from '../token-cache.js';
+import type { Presence, PresenceActivity } from '../types.js';
 import type {
   AppEvent,
   CallFinishedEvent,
@@ -32,10 +33,12 @@ import type {
   MessageStreamEvent,
   MessageNewEvent,
   MessageUpdatedEvent,
+  PresenceChangedEvent,
   PresenceSnapshot,
   ReactionEvent,
   RealtimeStatus,
   RingEndedEvent,
+  ThreadUpdatedEvent,
   TypingEvent,
   Unsubscribe,
 } from './types.js';
@@ -58,6 +61,11 @@ interface RealtimeOptions {
   wsUrl?: string;
   /** Called once when the `user:<id>` channel handle is created. */
   onUserChannel?: (channel: UserChannel) => void;
+  /**
+   * Join params for the `user:<id>` channel, read on every (re)join —
+   * e.g. `{ presence: 'idle' }` for a device that starts idle.
+   */
+  userJoinParams?: () => Record<string, unknown>;
 }
 
 export class PoolseRealtime {
@@ -66,6 +74,7 @@ export class PoolseRealtime {
   private readonly socketPath: string;
   private readonly wsUrl: string;
   private readonly onUserChannel: ((channel: UserChannel) => void) | undefined;
+  private readonly userJoinParams: (() => Record<string, unknown>) | undefined;
 
   private socket: Socket | null = null;
   private readonly conversations = new Map<string, ConversationChannel>();
@@ -82,6 +91,7 @@ export class PoolseRealtime {
     this.socketPath = opts.socketPath ?? '/socket';
     this.wsUrl = opts.wsUrl ?? deriveWsUrl(config.apiUrl);
     this.onUserChannel = opts.onUserChannel;
+    this.userJoinParams = opts.userJoinParams;
   }
 
   /** The `user:<id>` handle if something has joined it, else null. Never connects. */
@@ -263,7 +273,10 @@ export class PoolseRealtime {
       throw new PoolseError('socket not initialised — call connect() first');
     }
 
-    const channel = this.socket.channel(`user:${userId}`, {});
+    // Phoenix accepts a function for params and calls it on every
+    // (re)join, so a rejoin carries the device's current state.
+    const params = this.userJoinParams;
+    const channel = this.socket.channel(`user:${userId}`, params ? () => params() : {});
     const handle = new UserChannel(userId, channel);
     this.userChannel = handle;
     handle._join();
@@ -346,9 +359,17 @@ export class ConversationChannel {
     return this.subscribe('message:updated', fn as (p: unknown) => void);
   }
 
-  /** Tombstone for a soft-deleted message. */
+  /** Tombstone for a soft-deleted message (`thread_root_id` says which thread it was in). */
   onMessageDeleted(fn: (evt: MessageDeletedEvent) => void): Unsubscribe {
     return this.subscribe('message:deleted', fn as (p: unknown) => void);
+  }
+
+  /**
+   * A thread's summary changed (`thread:updated`): a reply was posted
+   * or deleted. Merge it into the root with `applyThreadUpdate`.
+   */
+  onThreadUpdated(fn: (evt: ThreadUpdatedEvent) => void): Unsubscribe {
+    return this.subscribe('thread:updated', fn as (p: unknown) => void);
   }
 
   /** An AI agent's reply as it's written (`message:stream`); see `MessageStreamEvent`. */
@@ -483,6 +504,7 @@ export class UserChannel {
   private conversationUpdatedBound = false;
   // One Phoenix binding per event, fanned out — as in ConversationChannel.
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
+  private readonly joinedListeners = new Set<() => void>();
 
   constructor(userId: string, channel: Channel) {
     this.userId = userId;
@@ -591,13 +613,60 @@ export class UserChannel {
     return this.subscribe('app:event', fn as (p: unknown) => void);
   }
 
+  /**
+   * Someone's presence changed (`presence:changed`). Most apps read
+   * presence through `poolse.presence` instead, which keeps a store.
+   */
+  onPresenceChanged(fn: (evt: PresenceChangedEvent) => void): Unsubscribe {
+    return this.subscribe('presence:changed', fn as (p: unknown) => void);
+  }
+
+  /**
+   * Report this device `active` or `idle` (`presence:set`). Rejects
+   * with a {@link ChannelReplyError} (`invalid_state`, `rate_limited` —
+   * 30 a minute per socket — or `timeout`).
+   */
+  setPresence(state: PresenceActivity): Promise<{ state: PresenceActivity }> {
+    return this.request('presence:set', { state });
+  }
+
+  /**
+   * Look up to 200 users' presence (`presence:get`) by internal id or
+   * `external_id`; from then on this socket also hears their
+   * `presence:changed`. Unknown ids are left out.
+   */
+  async getPresence(
+    lookup: { user_ids: string[] } | { external_ids: string[] },
+  ): Promise<Presence[]> {
+    const reply = await this.request<{ presences?: Presence[] }>('presence:get', lookup);
+    return reply?.presences ?? [];
+  }
+
+  /** Called after every successful join and rejoin of the channel. */
+  onJoined(fn: () => void): Unsubscribe {
+    this.joinedListeners.add(fn);
+    return () => {
+      this.joinedListeners.delete(fn);
+    };
+  }
+
+  /** Whether the channel is joined right now (pushes go out at once). */
+  isJoined(): boolean {
+    return (this.channel as { state?: string }).state === 'joined';
+  }
+
   /** @internal */
   _join(): void {
-    this.channel.join();
+    // The join push keeps its hooks across rejoins, so `ok` fires on
+    // every successful (re)join.
+    this.channel.join().receive('ok', () => {
+      this.joinedListeners.forEach((l) => l());
+    });
   }
 
   /** @internal */
   _destroy(): void {
+    this.joinedListeners.clear();
     this.listeners.clear();
     this.mentionListeners.clear();
     this.conversationCreatedListeners.clear();
@@ -618,6 +687,16 @@ export class UserChannel {
     return () => {
       set.delete(fn);
     };
+  }
+
+  private request<T>(event: string, payload: object): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.channel
+        .push(event, payload)
+        .receive('ok', (reply: unknown) => resolve(reply as T))
+        .receive('error', (reply: unknown) => reject(new ChannelReplyError(event, reply)))
+        .receive('timeout', () => reject(new ChannelReplyError(event, { reason: 'timeout' })));
+    });
   }
 }
 

@@ -10,6 +10,8 @@ import { ConversationsResource } from './resources/conversations.js';
 import { DevicesResource } from './resources/devices.js';
 import { MeResource } from './resources/me.js';
 import { MessagesResource } from './resources/messages.js';
+import { PresenceResource } from './resources/presence.js';
+import { NotificationActions } from './notification-actions.js';
 import { UsersResource } from './resources/users.js';
 import { CallTokensResource } from './resources/call-tokens.js';
 import { LiveCallsResource } from './resources/live-calls.js';
@@ -67,6 +69,17 @@ export class Poolse {
   public readonly liveCalls: LiveCallsResource;
   /** A conversation's drop-in room: voice or video, nobody rung. */
   public readonly rooms: RoomsResource;
+  /**
+   * Who is online, away, in a call or offline: `get` (REST), a live
+   * store (`subscribe` / `peek`), and this device's own activity
+   * (`setActivity`, `trackActivity`).
+   */
+  public readonly presence: PresenceResource;
+  /**
+   * Reply / mark read with a notification's grant (no session needed;
+   * see also `createNotificationActions`).
+   */
+  public readonly notificationActions: NotificationActions;
 
   private readonly resolved: ResolvedConfig;
   private readonly tokenCache: TokenCache;
@@ -95,12 +108,15 @@ export class Poolse {
     this.callTokens = new CallTokensResource(this.rest);
     this.liveCalls = new LiveCallsResource(this.rest);
     this.rooms = new RoomsResource(this.rest);
+    this.notificationActions = new NotificationActions(this.rest);
 
     this.realtime = new PoolseRealtime(cachedConfig, this.tokenCache, {
       ...(this.resolved.wsUrl !== undefined ? { wsUrl: this.resolved.wsUrl } : {}),
       socketPath: this.resolved.socketPath,
       onUserChannel: (channel) => this.bindUserChannel(channel),
+      userJoinParams: () => this.presence._joinParams(),
     });
+    this.presence = new PresenceResource(this.rest, this.realtime, this.me);
   }
 
   /**
@@ -172,10 +188,12 @@ export class Poolse {
    * being replaced.
    */
   destroy(): void {
+    this.presence._destroy();
     this.realtime.disconnect();
   }
 
   private bindUserChannel(channel: UserChannel): void {
+    this.presence._bind(channel);
     channel.onAppEvent((evt) => {
       if (evt?.type === 'member:updated') this.invalidateMember(evt.data);
       for (const fn of this.appEventListeners) fn(evt);

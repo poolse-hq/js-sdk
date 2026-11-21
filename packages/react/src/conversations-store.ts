@@ -2,6 +2,11 @@
 // `<PoolseProvider>` — so marking a conversation read in one view clears
 // its badge in every other (a sidebar, a tab bar, an inbox header).
 //
+// The list is paged (`GET /v1/conversations` → `next_cursor`): the store
+// loads the first page, and `loadMore()` appends the next. A quiet reload
+// (remount, reconnect) refreshes the first page and keeps the rows of any
+// further pages already loaded.
+//
 // The store wakes up with its first subscriber: it fetches the list and
 // listens on the user's `user:<id>` channel for `conversation:created`,
 // `conversation:updated` and `conversation:read`. With its last
@@ -21,14 +26,29 @@ export interface ConversationsSnapshot {
   conversations: Conversation[];
   loading: boolean;
   error: Error | null;
+  /** The server has another page (`loadMore()`). */
+  hasMore: boolean;
+  /** A `loadMore()` is in flight. */
+  loadingMore: boolean;
 }
 
 export class ConversationsStore {
-  private state: ConversationsSnapshot = { conversations: [], loading: true, error: null };
+  private state: ConversationsSnapshot = {
+    conversations: [],
+    loading: true,
+    error: null,
+    hasMore: false,
+    loadingMore: false,
+  };
   private readonly listeners = new Set<() => void>();
   private loaded = false;
   private inflight: Promise<void> | null = null;
+  private moreInflight: Promise<void> | null = null;
   private unbind: (() => void) | null = null;
+  /** Cursor of the next page not yet loaded; null when there is none. */
+  private nextCursor: string | null = null;
+  /** Whether rows beyond the first page are held. */
+  private pagedBeyondFirst = false;
 
   constructor(private readonly chat: Poolse) {}
 
@@ -48,6 +68,40 @@ export class ConversationsStore {
   /** Reload the list from REST. Shows `loading` until it lands. */
   refetch(): Promise<void> {
     return this.load(true);
+  }
+
+  /**
+   * Append the next page. Resolves at once when there is none or one
+   * is already loading. Rows already held (moved up by realtime) are
+   * not duplicated.
+   */
+  loadMore(): Promise<void> {
+    if (this.moreInflight) return this.moreInflight;
+    const cursor = this.nextCursor;
+    if (!cursor) return Promise.resolve();
+    this.set({ ...this.state, loadingMore: true });
+    // A failure rejects to the caller and leaves the cursor, so a
+    // retry asks for the same page.
+    const run = this.chat.conversations
+      .list({ cursor })
+      .then((page) => {
+        // A reload meanwhile may have moved the cursor on.
+        if (this.nextCursor !== cursor) return;
+        this.nextCursor = page.next_cursor ?? null;
+        this.pagedBeyondFirst = true;
+        const have = new Set(this.state.conversations.map((c) => c.id));
+        this.set({
+          ...this.state,
+          conversations: [...this.state.conversations, ...page.data.filter((c) => !have.has(c.id))],
+          hasMore: this.nextCursor !== null,
+        });
+      })
+      .finally(() => {
+        if (this.moreInflight === run) this.moreInflight = null;
+        this.set({ ...this.state, loadingMore: false });
+      });
+    this.moreInflight = run;
+    return run;
   }
 
   async create(attrs: ConversationCreateRequest): Promise<Conversation> {
@@ -150,7 +204,24 @@ export class ConversationsStore {
       .then(
         (list) => {
           this.loaded = true;
-          this.set({ conversations: list.data, loading: false, error: null });
+          let conversations = list.data;
+          if (this.pagedBeyondFirst) {
+            // Keep the later pages' rows, after the fresh first page.
+            const fresh = new Set(list.data.map((c) => c.id));
+            conversations = [
+              ...list.data,
+              ...this.state.conversations.filter((c) => !fresh.has(c.id)),
+            ];
+          } else {
+            this.nextCursor = list.next_cursor ?? null;
+          }
+          this.set({
+            ...this.state,
+            conversations,
+            loading: false,
+            error: null,
+            hasMore: this.nextCursor !== null,
+          });
         },
         (err: unknown) => {
           this.set({

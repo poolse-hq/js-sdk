@@ -1,5 +1,5 @@
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import { safeUuid } from '@poolse/sdk';
+import { markQuoteDeleted, mergeMessage, safeUuid, toTombstone } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePoolse } from './provider.js';
 
@@ -87,13 +87,19 @@ export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadS
       if (msg.thread_root_id !== rootMessageId) return;
       setReplies((prev) => upsertById(prev, msg));
     });
+    // Edits and link previews merge into the reply.
     const offUpdated = conv.onMessageUpdated((msg) => {
       if (msg.thread_root_id !== rootMessageId) return;
-      setReplies((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+      setReplies((prev) => prev.map((m) => (m.id === msg.id ? mergeMessage(m, msg) : m)));
     });
+    // A deleted reply stays as its tombstone; quotes of it read "deleted".
     const offDeleted = conv.onMessageDeleted((evt) => {
       setReplies((prev) =>
-        prev.map((m) => (m.id === evt.id ? { ...m, deleted_at: evt.deleted_at, body: null } : m)),
+        prev.map((m) =>
+          m.id === evt.id
+            ? toTombstone(m, evt.deleted_at)
+            : markQuoteDeleted(m, evt.id, evt.deleted_at),
+        ),
       );
     });
 
@@ -171,7 +177,7 @@ export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadS
 
       try {
         const updated = await chat.messages.one(messageId).update({ body });
-        setReplies((prev) => prev.map((m) => (m.id === messageId ? updated : m)));
+        setReplies((prev) => prev.map((m) => (m.id === messageId ? mergeMessage(m, updated) : m)));
         return updated;
       } catch (err) {
         if (previous) {
@@ -191,7 +197,7 @@ export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadS
         prev.map((m) => {
           if (m.id !== messageId) return m;
           previous = m;
-          return { ...m, body: null, deleted_at: new Date().toISOString() };
+          return toTombstone(m, new Date().toISOString());
         }),
       );
 

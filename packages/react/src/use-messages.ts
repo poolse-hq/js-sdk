@@ -1,5 +1,11 @@
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import { safeUuid } from '@poolse/sdk';
+import {
+  applyThreadUpdate,
+  markQuoteDeleted,
+  mergeMessage,
+  safeUuid,
+  toTombstone,
+} from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConversationsStore, usePoolse } from './provider.js';
 import { useMe } from './use-me.js';
@@ -62,7 +68,12 @@ const PAGE_SIZE = 50;
  *
  *   * Initial REST fetch (newest 50) on mount.
  *   * WebSocket subscription for `message:new`, `message:updated`,
- *     `message:deleted` — applied in-place to the cached array.
+ *     `message:deleted` and `thread:updated` — applied in-place to the
+ *     cached array: an update (an edit, or link previews arriving) is
+ *     merged into the row, a delete leaves the server's tombstone
+ *     (and marks quotes of it deleted), and a thread summary
+ *     (`reply_count`, `last_reply_at`, `thread_participants`) lands on
+ *     its root.
  *   * Optimistic-send via `send()` — the message appears immediately
  *     under the SAME id the server will assign (we pre-generate it
  *     client-side and pass it through), so the realtime echo and the
@@ -164,28 +175,32 @@ export function useMessages(conversationId: string): UseMessagesState {
       setMessages((prev) => upsertById(prev, msg));
     });
 
+    // An edit, or the link previews the server fetched after a send:
+    // merged, so fields an older server leaves out survive.
     const offUpdated = conv.onMessageUpdated((msg) => {
-      setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+      setMessages((prev) => patchById(prev, msg.id, (m) => mergeMessage(m, msg)));
     });
 
     const offDeleted = conv.onMessageDeleted((evt) => {
       setMessages((prev) => {
-        // Capture the pre-delete row so we can find the thread root if
-        // this message was a reply — the delete payload doesn't carry
-        // `thread_root_id`, so we have to look it up locally.
-        const target = prev.find((m) => m.id === evt.id);
-        const updated = prev.map((m) =>
-          m.id === evt.id ? { ...m, deleted_at: evt.deleted_at, body: null } : m,
-        );
-        if (target?.thread_root_id) {
-          return updated.map((m) =>
-            m.id === target.thread_root_id
-              ? { ...m, reply_count: Math.max(0, (m.reply_count ?? 0) - 1) }
-              : m,
-          );
-        }
-        return updated;
+        // The thread the message was in: the event says (newer servers),
+        // else a row we hold does. Replies aren't in this list, so
+        // without the event's field a reply's root isn't found.
+        const rootId = evt.thread_root_id ?? prev.find((m) => m.id === evt.id)?.thread_root_id;
+        return prev.map((m) => {
+          if (m.id === evt.id) return toTombstone(m, evt.deleted_at);
+          if (rootId && m.id === rootId) {
+            m = { ...m, reply_count: Math.max(0, (m.reply_count ?? 0) - 1) };
+          }
+          return markQuoteDeleted(m, evt.id, evt.deleted_at);
+        });
       });
+    });
+
+    // The server's own thread summary after a reply was posted or
+    // deleted — overrides the local +1 / -1 above.
+    const offThread = conv.onThreadUpdated((evt) => {
+      setMessages((prev) => patchById(prev, evt.message_id, (m) => applyThreadUpdate(m, evt)));
     });
 
     // Events sent while the socket was down (a network drop, or the app
@@ -216,6 +231,7 @@ export function useMessages(conversationId: string): UseMessagesState {
       offNew();
       offUpdated();
       offDeleted();
+      offThread();
       offStatus();
       // Don't leave the channel — another component may still be reading
       // this conversation. The Poolse.destroy() at provider-unmount
@@ -338,8 +354,8 @@ export function useMessages(conversationId: string): UseMessagesState {
 
       try {
         const updated = await chat.messages.one(messageId).update({ body });
-        // Replace with the canonical row (right edited_at, etc).
-        setMessages((prev) => prev.map((m) => (m.id === messageId ? updated : m)));
+        // Merge in the canonical row (right edited_at, etc).
+        setMessages((prev) => patchById(prev, messageId, (m) => mergeMessage(m, updated)));
         return updated;
       } catch (err) {
         if (previous) {
@@ -362,7 +378,7 @@ export function useMessages(conversationId: string): UseMessagesState {
         prev.map((m) => {
           if (m.id !== messageId) return m;
           previous = m;
-          return { ...m, body: null, deleted_at: new Date().toISOString() };
+          return toTombstone(m, new Date().toISOString());
         }),
       );
 
@@ -409,6 +425,14 @@ export function useMessages(conversationId: string): UseMessagesState {
     markReadUpTo,
     refetch,
   };
+}
+
+function patchById(prev: Message[], id: Uuid, fn: (m: Message) => Message): Message[] {
+  const idx = prev.findIndex((m) => m.id === id);
+  if (idx === -1) return prev;
+  const next = prev.slice();
+  next[idx] = fn(prev[idx]!);
+  return next;
 }
 
 function upsertById(prev: Message[], msg: Message): Message[] {

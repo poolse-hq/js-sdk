@@ -1,4 +1,4 @@
-import { Poolse, type PoolseConfig } from '@poolse/sdk';
+import { Poolse, type PoolseConfig, type TrackActivityOptions } from '@poolse/sdk';
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { ConversationsStore } from './conversations-store.js';
 
@@ -24,6 +24,16 @@ export interface PoolseProviderProps {
    * time); dev mode logs a warning when this happens.
    */
   config: PoolseConfig;
+  /**
+   * Report this device `active` / `idle` for presence from the browser
+   * (`poolse.presence.trackActivity`): idle while the page is hidden,
+   * the window is blurred, or after 5 minutes without input. On by
+   * default; does nothing without a `document` (React Native — call
+   * `usePoolse().presence.setActivity()` from `AppState` there). Pass
+   * `false` to report yourself, or options (`{ idleAfterMs }`). Read at
+   * mount.
+   */
+  trackActivity?: boolean | Omit<TrackActivityOptions, 'document' | 'window'>;
   children: ReactNode;
 }
 
@@ -40,7 +50,7 @@ export interface PoolseProviderProps {
  * The `Poolse` instance is destroyed on unmount — closes the WebSocket
  * and drops every joined channel.
  */
-export function PoolseProvider({ config, children }: PoolseProviderProps) {
+export function PoolseProvider({ config, trackActivity = true, children }: PoolseProviderProps) {
   // Hold the latest config in a ref so the SDK reads current callbacks
   // without us rebuilding the client. Without this, the standard call
   // site `<Provider config={{apiUrl, getToken}}>` re-creates `Poolse`
@@ -125,6 +135,14 @@ export function PoolseProvider({ config, children }: PoolseProviderProps) {
     return () => {
       chat.destroy();
     };
+  }, [chat]);
+
+  // Read at mount: the options object may be a fresh literal each render.
+  const trackActivityRef = useRef(trackActivity);
+  useEffect(() => {
+    const opts = trackActivityRef.current;
+    if (opts === false) return;
+    return chat.presence.trackActivity(opts === true ? {} : opts);
   }, [chat]);
 
   const value = useMemo(() => ({ chat, conversations: new ConversationsStore(chat) }), [chat]);
