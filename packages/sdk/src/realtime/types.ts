@@ -106,6 +106,81 @@ export interface CallFinishedEvent {
   conversation_id?: Uuid;
 }
 
+// ── Recording, consent and transcripts (docs/RECORDING.md §4) ────────
+
+/** `recording:started` — a call on the conversation is being recorded. */
+export interface RecordingStartedEvent {
+  cv: number;
+  call_id: string;
+  conversation_id: Uuid;
+  recording: import('../resources/calls.js').Recording;
+  /** Whoever hasn't accepted may not publish until they do (`calls.consent`). */
+  consent_required: boolean;
+  /**
+   * `spoken`: poolse's assistant also says it aloud in the call;
+   * `banner`: this server has no speech, so the app's banner is the notice.
+   */
+  notice: 'spoken' | 'banner';
+}
+
+/** `recording:stopped` (the file is still being stored) and `recording:ready` (stored: `status` `ready`, or `failed`). */
+export interface RecordingChangedEvent {
+  cv: number;
+  call_id: string;
+  conversation_id: Uuid;
+  recording: import('../resources/calls.js').Recording;
+}
+
+/** `recording:consent` — someone answered the consent prompt. */
+export interface RecordingConsentEvent {
+  cv: number;
+  call_id: string;
+  user_id: Uuid;
+  decision: import('../resources/calls.js').ConsentDecision;
+}
+
+/** `transcript:started` / `transcript:stopped` / `transcript:ready`. */
+export interface TranscriptChangedEvent {
+  cv: number;
+  call_id: string;
+  conversation_id: Uuid;
+  transcript: import('../resources/calls.js').Transcript;
+}
+
+/** `transcript:speakers` — someone renamed a speaker; the full list after it. */
+export interface TranscriptSpeakersEvent {
+  cv: number;
+  call_id: string;
+  transcript_id: string;
+  speakers: import('../resources/calls.js').TranscriptSpeaker[];
+}
+
+/**
+ * `transcript:segment` on `transcript:<call_id>`. An interim segment
+ * (`final: false`) is replaced by the next one from the same speaker
+ * (`applyLiveSegment`).
+ */
+export interface TranscriptSegmentEvent {
+  cv: number;
+  call_id: string;
+  transcript_id: string;
+  speaker: string;
+  speaker_user_id: Uuid | null;
+  speaker_name: string | null;
+  text: string;
+  start_ms: number;
+  end_ms: number;
+  final: boolean;
+  language: string | null;
+}
+
+/** The `transcript:<call_id>` join reply: the transcript so far (last 200 final segments). */
+export interface TranscriptJoinReply {
+  conversation_id: Uuid;
+  transcript: import('../resources/calls.js').Transcript | null;
+  segments: import('../resources/calls.js').TranscriptSegment[];
+}
+
 /**
  * Your ring for a call is over (`call:ring_ended` on `user:<id>`): stop
  * ringing on this device.

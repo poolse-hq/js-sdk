@@ -11,6 +11,7 @@ import type {
   LiveKitRoomHandle,
   LiveKitTrack,
 } from './livekit-types.js';
+import { isServiceParticipant } from '../recording.js';
 
 export type Unsubscribe = () => void;
 
@@ -107,6 +108,17 @@ export class CallRoom {
   private readonly errorListeners = new Set<(error: Error) => void>();
   private readonly aloneListeners = new Set<() => void>();
   private readonly deviceListeners = new Set<() => void>();
+  private readonly publishListeners = new Set<(canPublish: boolean) => void>();
+
+  /**
+   * What the user wants published, kept apart from what is: while the
+   * SFU withholds publish permission (recording consent not given) the
+   * tracks are off, and these say what to bring back when it returns.
+   */
+  private wantMic = false;
+  private wantCamera = false;
+  private lastCanPublish = true;
+  private readonly republishOnPermission: boolean;
 
   /** Bound once so `off()` in teardown removes the same references. */
   private readonly onRoomChange = () => this.emitParticipants();
@@ -131,6 +143,7 @@ export class CallRoom {
     this.tokenProvider = opts.tokenProvider;
     this.startWithVideo = opts.video ?? false;
     this.startMuted = opts.muted ?? false;
+    this.republishOnPermission = opts.republishOnPermission ?? true;
     this.facing = opts.facing ?? 'user';
     this.aloneGraceMs = opts.aloneGraceMs ?? 1500;
   }
@@ -178,9 +191,8 @@ export class CallRoom {
     if (!this.room) return [];
 
     const self = this.toParticipant(this.room.localParticipant, true);
-    const others = [...this.room.remoteParticipants.values()].map((p) =>
-      this.toParticipant(p, false),
-    );
+    // poolse's transcript assistant and the recorder are not people.
+    const others = this.peers().map((p) => this.toParticipant(p, false));
 
     return [self, ...others];
   }
@@ -236,6 +248,9 @@ export class CallRoom {
     try {
       await room.connect(connection.url, connection.token);
       this.selfId = room.localParticipant.identity;
+      this.wantMic = !this.startMuted;
+      this.wantCamera = this.startWithVideo;
+      this.lastCanPublish = this.canPublish();
 
       // Publish AFTER connecting: publishing first would acquire the
       // camera and microphone before we know the room will accept us,
@@ -251,11 +266,17 @@ export class CallRoom {
       //
       // Both report through `onError`, so the UI can say which half is
       // missing rather than leaving the user guessing.
-      await this.publish(
-        () => room.localParticipant.setMicrophoneEnabled(!this.startMuted),
-        'microphone',
-      );
-      if (this.startWithVideo) {
+      //
+      // Joining a call that is being recorded without having accepted
+      // consent: the token says no publishing. Publish nothing (and
+      // report nothing) — `republish` brings it back once allowed.
+      if (this.lastCanPublish) {
+        await this.publish(
+          () => room.localParticipant.setMicrophoneEnabled(!this.startMuted),
+          'microphone',
+        );
+      }
+      if (this.startWithVideo && this.lastCanPublish) {
         await this.publish(
           () => room.localParticipant.setCameraEnabled(true, { facingMode: this.facing }),
           'camera',
@@ -303,6 +324,9 @@ export class CallRoom {
    * renegotiates underneath.
    */
   async setCameraEnabled(enabled: boolean): Promise<void> {
+    this.wantCamera = enabled;
+    // Not allowed to publish right now: remembered for `republish`.
+    if (enabled && !this.canPublish()) return;
     await this.withLocal(
       (local) =>
         enabled
@@ -468,7 +492,45 @@ export class CallRoom {
 
   /** Mute or unmute the microphone. */
   async setMicrophoneEnabled(enabled: boolean): Promise<void> {
+    this.wantMic = enabled;
+    if (enabled && !this.canPublish()) return;
     await this.withLocal((local) => local.setMicrophoneEnabled(enabled), 'microphone');
+  }
+
+  /**
+   * Whether the SFU lets you publish right now. False while the call is
+   * captured and you haven't accepted consent (`calls.consent`): you
+   * still hear and see everyone.
+   */
+  canPublish(): boolean {
+    return this.room?.localParticipant.permissions?.canPublish !== false;
+  }
+
+  /**
+   * Publish permission changed — false when capture began without your
+   * consent, true again once you accept (or capture ends). With
+   * `republishOnPermission` (the default) the microphone and camera come
+   * back by themselves; otherwise call `republish()` here.
+   */
+  onPublishPermission(fn: (canPublish: boolean) => void): Unsubscribe {
+    this.publishListeners.add(fn);
+    return () => this.publishListeners.delete(fn);
+  }
+
+  /**
+   * Turn the microphone and camera back on as the user last wanted them
+   * — after publish permission returns. A no-op while still not allowed.
+   */
+  async republish(): Promise<void> {
+    const room = this.room;
+    if (!room || !this.canPublish()) return;
+    const local = room.localParticipant;
+    if (this.wantMic && !local.isMicrophoneEnabled) {
+      await this.withLocal((l) => l.setMicrophoneEnabled(true), 'microphone');
+    }
+    if (this.wantCamera && !local.isCameraEnabled) {
+      await this.withLocal((l) => l.setCameraEnabled(true, { facingMode: this.facing }), 'camera');
+    }
   }
 
   isCameraEnabled(): boolean {
@@ -554,6 +616,24 @@ export class CallRoom {
       room.on(devicesChanged, () => {
         for (const fn of this.deviceListeners) fn();
       });
+    }
+
+    // Consent: poolse revokes and restores the local participant's
+    // publish permission (LiveKit UpdateParticipant).
+    const permissions = RoomEvent['ParticipantPermissionsChanged'];
+    if (permissions) {
+      room.on(permissions, ((_prev: unknown, participant?: LiveKitParticipant) => {
+        if (participant && participant !== room.localParticipant) {
+          this.emitParticipants();
+          return;
+        }
+        const now = this.canPublish();
+        if (now === this.lastCanPublish) return;
+        this.lastCanPublish = now;
+        for (const fn of this.publishListeners) fn(now);
+        if (now && this.republishOnPermission) void this.republish();
+        this.emitParticipants();
+      }) as never);
     }
 
     const disconnected = RoomEvent['Disconnected'];
@@ -647,6 +727,7 @@ export class CallRoom {
     // stale `hasSeenPeer` would let the next call end itself while the
     // callee was still picking up.
     this.hasSeenPeer = false;
+    this.lastCanPublish = true;
     this.clearAloneTimer();
 
     for (const track of [...this.audioSinks.keys()]) this.stopAudio(track);
@@ -689,7 +770,7 @@ export class CallRoom {
   private checkAlone(): void {
     if (this.aloneGraceMs <= 0) return;
 
-    const others = this.room?.remoteParticipants.size ?? 0;
+    const others = this.peers().length;
 
     if (others > 0) {
       this.hasSeenPeer = true;
@@ -707,7 +788,7 @@ export class CallRoom {
       // Re-check rather than trusting the reading that armed the timer:
       // someone may have rejoined during the grace period, and the
       // roster is the authority, not the schedule.
-      if ((this.room?.remoteParticipants.size ?? 0) > 0) return;
+      if (this.peers().length > 0) return;
       if (this.status !== 'connected') return;
       for (const fn of this.aloneListeners) fn();
     }, this.aloneGraceMs);
@@ -717,6 +798,14 @@ export class CallRoom {
     if (!this.aloneTimer) return;
     clearTimeout(this.aloneTimer);
     this.aloneTimer = null;
+  }
+
+  /** The other people in the room — poolse's assistant and recorder left out. */
+  private peers(): LiveKitParticipant[] {
+    if (!this.room) return [];
+    return [...this.room.remoteParticipants.values()].filter(
+      (p) => !isServiceParticipant(p.identity, p.kind),
+    );
   }
 
   private emitError(error: Error): void {

@@ -85,6 +85,18 @@ export interface LiveKitParticipant {
   isCameraEnabled?: boolean;
   isScreenShareEnabled?: boolean;
   isSpeaking?: boolean;
+  /**
+   * LiveKit's participant kind (`'agent'`, `'egress'`, … or the
+   * protocol's number). poolse's own assistant joins as an agent and is
+   * left out of the roster.
+   */
+  kind?: unknown;
+  /**
+   * What the SFU lets this participant do. poolse turns `canPublish`
+   * off for someone who hasn't accepted recording consent (and back on
+   * when they do).
+   */
+  permissions?: { canPublish?: boolean } | undefined;
   getTrackPublication(source: string): LiveKitPublication | undefined;
 }
 
@@ -277,4 +289,11 @@ export interface CallRoomOptions {
    * itself during a half-second blip is worse than one that lingers.
    */
   aloneGraceMs?: number;
+  /**
+   * Republish the microphone and camera (as they were wanted) by itself
+   * when the SFU gives back publish permission — after the user accepts
+   * recording consent. Defaults to true; pass false to do it yourself
+   * with `republish()` from `onPublishPermission`.
+   */
+  republishOnPermission?: boolean;
 }

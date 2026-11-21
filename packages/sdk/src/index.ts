@@ -25,6 +25,44 @@ export {
 export { CallTokensResource } from './resources/call-tokens.js';
 export { LiveCallsResource } from './resources/live-calls.js';
 export type { LiveCall, LiveCallMember } from './resources/live-calls.js';
+export {
+  CallsResource,
+  CallRecordingApi,
+  CallTranscriptionApi,
+  CallTranscriptApi,
+  type CallRecordingState,
+  type CallTranscriptionState,
+  type CaptureStorage,
+  type ConsentDecision,
+  type ConsentPolicy,
+  type ConsentResult,
+  type ConversationRecordingSettings,
+  type ConversationRecordingSettingsUpdate,
+  type ListPageOptions,
+  type Recording,
+  type RecordingDownload,
+  type RecordingMode,
+  type RecordingStatus,
+  type Transcript,
+  type TranscriptSegment,
+  type TranscriptSpeaker,
+  type TranscriptStatus,
+  type TranscriptWithSegments,
+  type WhoMayRecord,
+} from './resources/calls.js';
+export {
+  POOLSE_SERVICE_IDENTITY_PREFIX,
+  applyLiveSegment,
+  describeRecordingNotice,
+  formatRecordingNoticePreview,
+  isServiceParticipant,
+  parseRecordingNotice,
+  parseRecordingNoticeBody,
+  recordingNoticeDisplayFor,
+  type LiveTranscriptSegment,
+  type RecordingNotice,
+  type RecordingNoticeDisplay,
+} from './recording.js';
 export { RoomsResource, type RoomSession } from './resources/rooms.js';
 export { CallRoom } from './voice/call-room.js';
 export type {
@@ -83,7 +121,12 @@ export {
 } from './resources/attachments.js';
 
 // Realtime / WebSocket layer.
-export { PoolseRealtime, ConversationChannel, UserChannel } from './realtime/realtime.js';
+export {
+  PoolseRealtime,
+  ConversationChannel,
+  TranscriptChannel,
+  UserChannel,
+} from './realtime/realtime.js';
 export type {
   CallFinishedEvent,
   CallParticipantsEvent,
@@ -105,6 +148,13 @@ export type {
   ThreadUpdatedEvent,
   ReactionEvent,
   RealtimeStatus,
+  RecordingChangedEvent,
+  RecordingConsentEvent,
+  RecordingStartedEvent,
+  TranscriptChangedEvent,
+  TranscriptJoinReply,
+  TranscriptSegmentEvent,
+  TranscriptSpeakersEvent,
   TypingEvent,
   Unsubscribe,
 } from './realtime/types.js';

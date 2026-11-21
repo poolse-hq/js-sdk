@@ -1,5 +1,6 @@
 import { ApiError } from '../errors.js';
 import type { RestClient } from '../rest-client.js';
+import type { CallRecordingState, CallTranscriptionState } from './calls.js';
 
 /** A member as a live call names them. */
 export interface LiveCallMember {
@@ -35,6 +36,14 @@ export interface LiveCall {
   screen_share_allowed?: boolean;
   /** How many people the call holds; one more joining is refused with `call_full`. */
   max_participants?: number;
+  /**
+   * Whether the call is being recorded, and who has answered the consent
+   * prompt — so every device, and anyone joining late, shows it at once.
+   * Absent on servers before recording.
+   */
+  recording?: CallRecordingState;
+  /** Whether a live transcript is running. Absent on servers before transcripts. */
+  transcription?: CallTranscriptionState;
 }
 
 /**

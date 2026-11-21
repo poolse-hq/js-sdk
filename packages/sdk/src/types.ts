@@ -599,6 +599,20 @@ export type ApiErrorCode =
   // A send's client `id` is already taken by another message (sender,
   // conversation or tenant): permanent, never retried.
   | 'message_id_conflict'
+  // Call recording, consent and transcripts (docs/RECORDING.md §3).
+  | 'recording_unavailable'
+  | 'recording_disabled'
+  | 'not_allowed'
+  | 'call_finished'
+  | 'not_recording'
+  | 'not_ready'
+  | 'egress_failed'
+  | 'invalid_mode'
+  | 'invalid_decision'
+  | 'transcription_unavailable'
+  | 'transcription_disabled'
+  | 'not_in_call'
+  | 'not_transcribing'
   | 'unknown_error'
   // Keeps autocomplete for the codes above while accepting any string.
   | (string & {});

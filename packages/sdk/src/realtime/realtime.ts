@@ -19,6 +19,7 @@ import type { ResolvedConfig } from '../config.js';
 import { ChannelReplyError, PoolseError } from '../errors.js';
 import type { TokenCache } from '../token-cache.js';
 import type { Presence, PresenceActivity } from '../types.js';
+import type { ConsentDecision, Recording, RecordingMode } from '../resources/calls.js';
 import type {
   AppEvent,
   CallFinishedEvent,
@@ -37,6 +38,13 @@ import type {
   PresenceSnapshot,
   ReactionEvent,
   RealtimeStatus,
+  RecordingChangedEvent,
+  RecordingConsentEvent,
+  RecordingStartedEvent,
+  TranscriptChangedEvent,
+  TranscriptJoinReply,
+  TranscriptSegmentEvent,
+  TranscriptSpeakersEvent,
   RingEndedEvent,
   ThreadUpdatedEvent,
   TypingEvent,
@@ -82,6 +90,7 @@ export class PoolseRealtime {
 
   private socket: Socket | null = null;
   private readonly conversations = new Map<string, ConversationChannel>();
+  private readonly transcripts = new Map<string, TranscriptChannel>();
   private userChannel: UserChannel | null = null;
 
   private status: RealtimeStatus = 'idle';
@@ -265,6 +274,8 @@ export class PoolseRealtime {
     this.setStatus('closed');
     this.conversations.forEach((c) => c._destroy());
     this.conversations.clear();
+    this.transcripts.forEach((t) => t._destroy());
+    this.transcripts.clear();
     this.userChannel?._destroy();
     this.userChannel = null;
     if (this.socket) {
@@ -322,6 +333,36 @@ export class PoolseRealtime {
     this.userChannel = handle;
     handle._join();
     this.onUserChannel?.(handle);
+    return handle;
+  }
+
+  /**
+   * Open a call's live transcript (`transcript:<call_id>`) — members of
+   * the call's conversation only. Each call takes a hold on one shared
+   * handle; `release()` each hold when done, and the channel is left
+   * once nobody holds it. Joining doesn't start transcription
+   * (`calls.transcription.start` does): it only streams what there is.
+   */
+  transcript(callId: string): TranscriptChannel {
+    const existing = this.transcripts.get(callId);
+    if (existing && !existing.closed) {
+      existing._hold();
+      return existing;
+    }
+
+    this.connect();
+
+    if (!this.socket) {
+      throw new PoolseError('socket not initialised — call connect() first');
+    }
+
+    const channel = this.socket.channel(`transcript:${callId}`, {});
+    const handle: TranscriptChannel = new TranscriptChannel(callId, channel, () => {
+      if (this.transcripts.get(callId) === handle) this.transcripts.delete(callId);
+    });
+    this.transcripts.set(callId, handle);
+    handle._hold();
+    handle._join();
     return handle;
   }
 
@@ -457,6 +498,73 @@ export class ConversationChannel {
     return this.subscribe('call:finished', fn as (p: unknown) => void);
   }
 
+  /** A call here started being recorded (`recording:started`). */
+  onRecordingStarted(fn: (evt: RecordingStartedEvent) => void): Unsubscribe {
+    return this.subscribe('recording:started', fn as (p: unknown) => void);
+  }
+
+  /** The recording stopped (`recording:stopped`); the file is still being stored. */
+  onRecordingStopped(fn: (evt: RecordingChangedEvent) => void): Unsubscribe {
+    return this.subscribe('recording:stopped', fn as (p: unknown) => void);
+  }
+
+  /** The recording's file is stored (`recording:ready`, `status: ready`) or it failed (`failed`). */
+  onRecordingReady(fn: (evt: RecordingChangedEvent) => void): Unsubscribe {
+    return this.subscribe('recording:ready', fn as (p: unknown) => void);
+  }
+
+  /** Someone answered the consent prompt (`recording:consent`). */
+  onRecordingConsent(fn: (evt: RecordingConsentEvent) => void): Unsubscribe {
+    return this.subscribe('recording:consent', fn as (p: unknown) => void);
+  }
+
+  /** A live transcript started (`transcript:started`). */
+  onTranscriptStarted(fn: (evt: TranscriptChangedEvent) => void): Unsubscribe {
+    return this.subscribe('transcript:started', fn as (p: unknown) => void);
+  }
+
+  /** The live transcript was switched off (`transcript:stopped`). */
+  onTranscriptStopped(fn: (evt: TranscriptChangedEvent) => void): Unsubscribe {
+    return this.subscribe('transcript:stopped', fn as (p: unknown) => void);
+  }
+
+  /** The call is over and its transcript is stored (`transcript:ready`). */
+  onTranscriptReady(fn: (evt: TranscriptChangedEvent) => void): Unsubscribe {
+    return this.subscribe('transcript:ready', fn as (p: unknown) => void);
+  }
+
+  /** A speaker was renamed (`transcript:speakers`). */
+  onTranscriptSpeakers(fn: (evt: TranscriptSpeakersEvent) => void): Unsubscribe {
+    return this.subscribe('transcript:speakers', fn as (p: unknown) => void);
+  }
+
+  /**
+   * Start recording over the socket (`recording:start`); the same rules
+   * and errors as `calls.recording.start`, as a {@link ChannelReplyError}
+   * `reason`. The call must be on this conversation.
+   */
+  startRecording(callId: string, mode?: RecordingMode): Promise<Recording> {
+    return this.request<{ recording: Recording }>('recording:start', {
+      call_id: callId,
+      ...(mode ? { mode } : {}),
+    }).then((r) => r.recording);
+  }
+
+  /** Stop recording over the socket (`recording:stop`). */
+  stopRecording(callId: string): Promise<Recording> {
+    return this.request<{ recording: Recording }>('recording:stop', { call_id: callId }).then(
+      (r) => r.recording,
+    );
+  }
+
+  /** Answer the consent prompt over the socket (`recording:consent`). */
+  sendConsent(
+    callId: string,
+    decision: ConsentDecision,
+  ): Promise<{ call_id: string; user_id: string; decision: ConsentDecision }> {
+    return this.request('recording:consent', { call_id: callId, decision });
+  }
+
   onPresenceState(fn: (state: PresenceSnapshot) => void): Unsubscribe {
     let set = this.listeners.get('presence_state');
     if (!set) {
@@ -505,6 +613,16 @@ export class ConversationChannel {
     this.channel.join();
   }
 
+  private request<T>(event: string, payload: object): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.channel
+        .push(event, payload)
+        .receive('ok', (reply: unknown) => resolve(reply as T))
+        .receive('error', (reply: unknown) => reject(new ChannelReplyError(event, reply)))
+        .receive('timeout', () => reject(new ChannelReplyError(event, { reason: 'timeout' })));
+    });
+  }
+
   /** @internal — called when the consumer leaves this conversation. */
   _destroy(): void {
     this.listeners.clear();
@@ -525,6 +643,126 @@ export class ConversationChannel {
     return () => {
       set.delete(fn);
     };
+  }
+}
+
+// ── TranscriptChannel ──────────────────────────────────────────────────
+
+/**
+ * A call's live transcript (`transcript:<call_id>`), from
+ * `realtime.transcript(callId)`. The join reply — the transcript so far,
+ * its last 200 final segments — arrives on every (re)join through
+ * `onJoined`, and is replayed to late subscribers; segments stream
+ * through `onSegment`.
+ */
+export class TranscriptChannel {
+  public readonly callId: string;
+  private readonly channel: Channel;
+  private readonly onGone: (() => void) | undefined;
+  private readonly segmentListeners = new Set<(evt: TranscriptSegmentEvent) => void>();
+  private readonly joinedListeners = new Set<(reply: TranscriptJoinReply) => void>();
+  private readonly errorListeners = new Set<(reason: string) => void>();
+  private lastReply: TranscriptJoinReply | null = null;
+  private holders = 0;
+  private _closed = false;
+
+  constructor(callId: string, channel: Channel, onGone?: () => void) {
+    this.callId = callId;
+    this.channel = channel;
+    this.onGone = onGone;
+    channel.on('transcript:segment', (payload: unknown) => {
+      this.segmentListeners.forEach((l) => l(payload as TranscriptSegmentEvent));
+    });
+    channel.onClose(() => this.finish());
+  }
+
+  /** True once the channel is gone (released, refused, or removed from the conversation). */
+  get closed(): boolean {
+    return this._closed;
+  }
+
+  /** Every pushed segment, interim and final (fold with `applyLiveSegment`). */
+  onSegment(fn: (evt: TranscriptSegmentEvent) => void): Unsubscribe {
+    this.segmentListeners.add(fn);
+    return () => {
+      this.segmentListeners.delete(fn);
+    };
+  }
+
+  /** The join reply, on every (re)join — resync from it. Replayed at once when already joined. */
+  onJoined(fn: (reply: TranscriptJoinReply) => void): Unsubscribe {
+    this.joinedListeners.add(fn);
+    if (this.lastReply) fn(this.lastReply);
+    return () => {
+      this.joinedListeners.delete(fn);
+    };
+  }
+
+  /**
+   * The join was refused (`forbidden`, `not_found`). The channel is left
+   * — it is not retried. Replayed to late subscribers.
+   */
+  onError(fn: (reason: string) => void): Unsubscribe {
+    this.errorListeners.add(fn);
+    if (this.refusedReason) fn(this.refusedReason);
+    return () => {
+      this.errorListeners.delete(fn);
+    };
+  }
+
+  private refusedReason: string | null = null;
+
+  /** Let go of one hold from `realtime.transcript(callId)`; the last one leaves the channel. */
+  release(): void {
+    this.holders = Math.max(0, this.holders - 1);
+    if (this.holders === 0) this._destroy();
+  }
+
+  /** @internal */
+  _hold(): void {
+    this.holders += 1;
+  }
+
+  /** @internal */
+  _join(): void {
+    this.channel
+      .join()
+      .receive('ok', (reply: unknown) => {
+        const r = (reply ?? {}) as Partial<TranscriptJoinReply>;
+        this.lastReply = {
+          conversation_id: r.conversation_id ?? '',
+          transcript: r.transcript ?? null,
+          segments: Array.isArray(r.segments) ? r.segments : [],
+        };
+        this.joinedListeners.forEach((l) => l(this.lastReply!));
+      })
+      .receive('error', (reply: unknown) => {
+        const reason =
+          reply &&
+          typeof reply === 'object' &&
+          typeof (reply as { reason?: unknown }).reason === 'string'
+            ? (reply as { reason: string }).reason
+            : 'error';
+        // Phoenix would rejoin forever; a refusal doesn't change by retrying.
+        this.refusedReason = reason;
+        this.errorListeners.forEach((l) => l(reason));
+        this._destroy();
+      });
+  }
+
+  /** @internal */
+  _destroy(): void {
+    if (this._closed) return;
+    this.channel.leave();
+    this.finish();
+  }
+
+  private finish(): void {
+    if (this._closed) return;
+    this._closed = true;
+    this.onGone?.();
+    this.segmentListeners.clear();
+    this.joinedListeners.clear();
   }
 }
 

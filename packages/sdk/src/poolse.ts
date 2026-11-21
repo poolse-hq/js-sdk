@@ -20,6 +20,7 @@ import { NotificationActions } from './notification-actions.js';
 import { UsersResource } from './resources/users.js';
 import { CallTokensResource } from './resources/call-tokens.js';
 import { LiveCallsResource } from './resources/live-calls.js';
+import { CallsResource } from './resources/calls.js';
 import { RoomsResource } from './resources/rooms.js';
 import { CallRoom } from './voice/call-room.js';
 import type { CallRoomOptions } from './voice/livekit-types.js';
@@ -103,6 +104,12 @@ export class Poolse {
   public readonly callTokens: CallTokensResource;
   /** Whether a call is running on a conversation — for a Join banner. */
   public readonly liveCalls: LiveCallsResource;
+  /**
+   * Recording, consent and transcripts of a call (docs/RECORDING.md):
+   * `calls.recording.start(callId, { mode })`, `calls.consent(callId, 'accepted')`,
+   * `calls.transcription.start(callId)`, `calls.transcript.get(callId)`.
+   */
+  public readonly calls: CallsResource;
   /** A conversation's drop-in room: voice or video, nobody rung. */
   public readonly rooms: RoomsResource;
   /**
@@ -171,6 +178,7 @@ export class Poolse {
     this.users = new UsersResource(cachedConfig);
     this.callTokens = new CallTokensResource(this.rest);
     this.liveCalls = new LiveCallsResource(this.rest);
+    this.calls = new CallsResource(this.rest);
     this.rooms = new RoomsResource(this.rest);
     this.notificationActions = new NotificationActions(this.rest);
 
