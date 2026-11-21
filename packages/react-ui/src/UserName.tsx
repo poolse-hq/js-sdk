@@ -13,7 +13,8 @@
 // map() doesn't violate the Rules of Hooks — each gets its own
 // useUser cell.
 
-import { useUser } from '@poolse/react';
+import { useAgent, useUser } from '@poolse/react';
+import { AgentBadge } from './AgentBadge.js';
 
 const MAX_NAME_CHARS = 24;
 
@@ -24,6 +25,8 @@ export interface UserNameProps {
   labelFor?: (externalId: string) => string;
   /** What to render when `externalId` itself is null (e.g. system messages). */
   emptyFallback?: string;
+  /** The Agent badge after an agent's name (AG1). Defaults to `true`. */
+  agentBadge?: boolean;
   className?: string;
 }
 
@@ -31,12 +34,21 @@ export function UserName({
   externalId,
   labelFor,
   emptyFallback = 'Unknown',
+  agentBadge = true,
   className,
 }: UserNameProps) {
   // Skip the resolver when labelFor is given OR externalId is missing.
   const { profile } = useUser(labelFor ? null : externalId);
+  // Agents are known without the resolver.
+  const isAgent = !!useAgent(agentBadge ? externalId : null);
   const name = resolveDisplayName(externalId, profile?.displayName, labelFor, emptyFallback);
-  return <span className={className}>{truncate(name)}</span>;
+  if (!isAgent) return <span className={className}>{truncate(name)}</span>;
+  return (
+    <span className={['poolse-username', className].filter(Boolean).join(' ')}>
+      <span className="poolse-username__name">{truncate(name)}</span>
+      <AgentBadge size="xs" />
+    </span>
+  );
 }
 
 /**

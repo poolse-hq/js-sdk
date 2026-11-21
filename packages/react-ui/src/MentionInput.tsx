@@ -6,7 +6,7 @@
 // with the message — dropped again if the `@name` is deleted first.
 
 import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import { useMembers, usePoolse, useUser } from '@poolse/react';
+import { agentFromWire, useMembers, usePoolse, useUser } from '@poolse/react';
 import {
   forwardRef,
   useEffect,
@@ -17,6 +17,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import { AgentBadge } from './AgentBadge.js';
 import { Avatar } from './Avatar.js';
 import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
 import { composerAction, DEFAULT_KEYMAP, type ComposerKeymap } from './keymap.js';
@@ -482,11 +483,13 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
 
 // One suggestion: avatar and display name.
 function MentionOption({ member, name }: { member: Membership; name: string }) {
-  const { profile } = useUser(member.external_id);
+  const { profile, agent: known } = useUser(member.external_id);
+  const agent = !!known || !!agentFromWire(member);
   return (
     <>
-      <Avatar src={profile?.avatarUrl ?? null} name={name} size="xs" />
+      <Avatar src={profile?.avatarUrl ?? null} name={name} size="xs" agent={agent} />
       <span className="poolse-mention-menu__name">{name}</span>
+      {agent ? <AgentBadge size="xs" /> : null}
     </>
   );
 }

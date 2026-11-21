@@ -2,8 +2,9 @@
 // with avatars, role badges, and an optional remove action.
 
 import type { MemberRole, Membership, Presence, Uuid } from '@poolse/sdk';
-import { useMembers, usePresenceMany } from '@poolse/react';
+import { agentFromWire, useAgent, useMembers, usePresenceMany } from '@poolse/react';
 import { type ReactNode } from 'react';
+import { AgentBadge } from './AgentBadge.js';
 import { Avatar } from './Avatar.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { presenceText } from './PresenceBadge.js';
@@ -148,15 +149,27 @@ function DefaultMemberRow({
   labelFor?: (externalId: string) => string;
 }) {
   const name = useDisplayName(membership.external_id, labelFor);
+  // The row itself says so, or anything else seen about this user did (AG1).
+  const known = useAgent(membership.external_id);
+  const agent = !!known || !!agentFromWire(membership);
   return (
     <div className="poolse-member-row">
       {typeof presence === 'boolean' ? (
-        <Avatar src={avatarUrl} name={name} online={presence} size="md" />
+        <Avatar src={avatarUrl} name={name} online={presence} size="md" agent={agent} />
       ) : (
-        <Avatar src={avatarUrl} name={name} presence={presence} size="md" />
+        <Avatar src={avatarUrl} name={name} presence={presence} size="md" agent={agent} />
       )}
       <div className="poolse-member-row__body">
-        <div className="poolse-member-row__name">{name}</div>
+        <div className="poolse-member-row__name">
+          {agent ? (
+            <span className="poolse-has-agent">
+              <span>{name}</span>
+              <AgentBadge size="xs" />
+            </span>
+          ) : (
+            name
+          )}
+        </div>
         {typeof presence === 'boolean' ? (
           <div className="poolse-member-row__sub">{presence ? 'online' : 'offline'}</div>
         ) : presence ? (

@@ -9,7 +9,7 @@
 // MessageActions + ReactionStrip + AttachmentPreview + ThreadView —
 // directly. ConversationView is just the canonical wiring.
 
-import type { LiveCall, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
+import type { Citation, LiveCall, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { MessageQueuedError, safeUuid } from '@poolse/sdk';
 import {
   ApiError,
@@ -58,6 +58,7 @@ import {
 import { LiveCallBanner } from './LiveCallBanner.js';
 import { MentionInput } from './MentionInput.js';
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
+import { MessageExtrasProvider, type MessageExtrasHandlers } from './messageExtras.js';
 import { MessageRow, type MessageUser } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { ThreadView } from './ThreadView.js';
@@ -308,6 +309,19 @@ export interface ConversationViewProps {
   /** The call this client is already on, if any — its banner is hidden. */
   currentCallId?: string | null;
   /**
+   * A source under an assistant's answer was pressed (AG5). Without it,
+   * message sources in this conversation are focused here; anything
+   * else needs this handler (open the other conversation, the file, or
+   * the call at `citation.startMs`).
+   */
+  onOpenCitation?: (citation: Citation, message: Message) => void;
+  /**
+   * A point in a call was pressed — a summary's moment or a clip
+   * (RT6, RT9): open its recording or transcript at `startMs` (ms since
+   * the transcript started). Without it they are plain text.
+   */
+  onOpenMoment?: (callId: string, startMs: number) => void;
+  /**
    * Keep an unsent draft per conversation — the composer's text and the
    * message being quoted (not files) — across conversation switches
    * and reloads, per user. Cleared when the message is sent. Defaults
@@ -365,6 +379,8 @@ export function ConversationView({
   onCallBack,
   onJoinCall,
   currentCallId = null,
+  onOpenCitation,
+  onOpenMoment,
   persistDrafts = TRUE,
   draftStorage,
   keymap: keymapOverrides,
@@ -773,6 +789,33 @@ export function ConversationView({
     highlightRow(el);
   }, [pendingFocusId, visibleMessages, focusMiss]);
 
+  // Sources, moments and assignees in agent and summary messages.
+  const focusCited = useCallback(
+    (id: Uuid) => {
+      setFocusMissing(false);
+      loadUntil(id)
+        .then((found) => (found ? setPendingFocusId(id) : focusMiss(id)))
+        .catch(() => focusMiss(id));
+    },
+    [loadUntil, focusMiss],
+  );
+  const extras = useMemo<MessageExtrasHandlers>(
+    () => ({
+      onOpenCitation:
+        onOpenCitation ??
+        ((c: Citation) => {
+          if (c.type === 'message' && (!c.conversationId || c.conversationId === conversationId)) {
+            focusCited(c.id);
+          }
+        }),
+      ...(onOpenMoment ? { onOpenMoment } : {}),
+      nameForUserId,
+      externalIdForUserId: (userId: string) =>
+        members.find((m) => m.user_id === userId)?.external_id ?? null,
+    }),
+    [onOpenCitation, onOpenMoment, conversationId, focusCited, nameForUserId, members],
+  );
+
   useEffect(() => {
     if (!focusMissing) return;
     const t = setTimeout(() => setFocusMissing(false), 4000);
@@ -1138,339 +1181,341 @@ export function ConversationView({
   );
 
   return (
-    <div className="poolse-conversation-shell">
-      <div
-        className={[
-          'poolse-conversation',
-          `poolse-conversation--layout-${layout}`,
-          `poolse-conversation--density-${density}`,
-          dragActive ? 'is-drag-active' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        onDragEnter={onDragEnter}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-      >
-        {onJoinCall && (
-          <JoinBanner
-            conversationId={conversationId}
-            meId={me?.id ?? null}
-            currentCallId={currentCallId}
-            onJoin={onJoinCall}
-          />
-        )}
-        {status !== 'connected' && status !== 'idle' && (
-          <div
-            className="poolse-conversation__status"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            {status === 'connecting' && 'Connecting…'}
-            {status === 'reconnecting' && 'Reconnecting…'}
-            {status === 'closed' && 'Disconnected'}
-          </div>
-        )}
-        {focusMissing && (
-          <div className="poolse-conversation__status" role="status" aria-live="polite">
-            That message isn't available.
-          </div>
-        )}
-        {sendNotice && (
-          <div
-            className="poolse-conversation__status poolse-conversation__status--error"
-            role="alert"
-          >
-            {sendNotice}
-          </div>
-        )}
-
+    <MessageExtrasProvider value={extras}>
+      <div className="poolse-conversation-shell">
         <div
-          className="poolse-conversation__messages"
-          ref={listRef}
-          role="log"
-          aria-label="Conversation messages"
-          aria-live="polite"
-          aria-relevant="additions"
-          tabIndex={0}
-          onKeyDown={onListKeyDown}
+          className={[
+            'poolse-conversation',
+            `poolse-conversation--layout-${layout}`,
+            `poolse-conversation--density-${density}`,
+            dragActive ? 'is-drag-active' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
         >
-          {/* Top sentinel for the auto-load IntersectionObserver.
-              Rendered only while there's more history to fetch so IO
-              doesn't observe a dead element. */}
-          {hasMore && <div ref={topSentinelRef} aria-hidden="true" style={{ height: 1 }} />}
-
-          {/* Sticky, zero-height: the pill floats at the top of the feed. */}
-          {showJump && (
-            <div className="poolse-conversation__jump-unread">
-              <button
-                type="button"
-                className="poolse-conversation__jump-unread-btn"
-                onClick={jumpToFirstUnread}
-                disabled={jump !== null}
-              >
-                <PoolseIcon name="chevron-up" size={14} label={null} />
-                {jump ? 'Loading…' : 'Jump to first unread'}
-              </button>
-              <button
-                type="button"
-                className="poolse-conversation__jump-unread-close"
-                aria-label="Dismiss"
-                onClick={() => setJumpDismissed(true)}
-              >
-                <PoolseIcon name="close" size={12} label={null} />
-              </button>
+          {onJoinCall && (
+            <JoinBanner
+              conversationId={conversationId}
+              meId={me?.id ?? null}
+              currentCallId={currentCallId}
+              onJoin={onJoinCall}
+            />
+          )}
+          {status !== 'connected' && status !== 'idle' && (
+            <div
+              className="poolse-conversation__status"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {status === 'connecting' && 'Connecting…'}
+              {status === 'reconnecting' && 'Reconnecting…'}
+              {status === 'closed' && 'Disconnected'}
+            </div>
+          )}
+          {focusMissing && (
+            <div className="poolse-conversation__status" role="status" aria-live="polite">
+              That message isn't available.
+            </div>
+          )}
+          {sendNotice && (
+            <div
+              className="poolse-conversation__status poolse-conversation__status--error"
+              role="alert"
+            >
+              {sendNotice}
             </div>
           )}
 
-          {loading && messages.length === 0 ? (
-            <div className="poolse-conversation__empty">Loading…</div>
-          ) : messages.length === 0 && !error ? (
-            typeof emptyState === 'function' ? (
-              emptyState({ readOnly: !showComposer })
-            ) : emptyState !== undefined ? (
-              <div className="poolse-conversation__empty">{emptyState}</div>
-            ) : (
-              <EmptyState
-                title="No messages yet"
-                {...(showComposer
-                  ? { hint: 'Write the first message below — everyone here will see it.' }
-                  : {})}
-              />
-            )
-          ) : (
-            visibleMessages.map((msg, idx) => {
-              const prev: Message | null = idx > 0 ? (visibleMessages[idx - 1] ?? null) : null;
-              const next: Message | null =
-                idx < visibleMessages.length - 1 ? (visibleMessages[idx + 1] ?? null) : null;
-              const groupPosition = grouping
-                ? computeGroupPosition(msg, prev, next, groupWindowMs)
-                : 'standalone';
-              const showDaySeparator =
-                daySeparators && (prev === null || !sameDay(msg.inserted_at, prev.inserted_at));
-              // Optimistic quote preview: a message we JUST sent has
-              // `quoted_message_id` set but no preloaded
-              // `quoted_message` yet (server echo brings that). Look it
-              // up in the local feed so the quote card renders
-              // immediately instead of flashing in once the realtime
-              // echo lands.
-              // When a message has a quote-reply target but the
-              // server-preloaded preview hasn't landed (optimistic temp
-              // pre-echo, or a long-lived chat where the original is
-              // paginated outside the loaded window), synthesize the
-              // preview from local state so the card renders
-              // immediately. `<MessageBubble>` falls back to a
-              // "Replying to a message · Loading preview…" placeholder
-              // when even the local lookup misses.
-              const enriched =
-                quotations && msg.quoted_message_id && !msg.quoted_message
-                  ? (() => {
-                      const original = messages.find((m) => m.id === msg.quoted_message_id);
-                      if (!original) return msg;
-                      return {
-                        ...msg,
-                        quoted_message: {
-                          id: original.id,
-                          sender_id: original.sender_id,
-                          sender_external_id: original.sender_external_id,
-                          body: original.body,
-                          deleted_at: original.deleted_at,
-                          inserted_at: original.inserted_at,
-                        },
-                      };
-                    })()
-                  : msg;
-              // Read-state per row: only self messages, and only when
-              // readReceipts is on. "read" if any other member's read
-              // cursor is at or past this message's sequence.
-              const isSelf = me !== null && msg.sender_id === me.id;
-              const readState =
-                showReadState && isSelf && maxReadByOthers !== null
-                  ? maxReadByOthers >= msg.sequence
-                    ? ('read' as const)
-                    : ('sent' as const)
-                  : undefined;
-              const renderDefault = () => (
-                <MessageRow
-                  msg={enriched}
-                  meId={me?.id ?? null}
-                  reactions={reactions}
-                  attachments={attachments}
-                  actions={actions}
-                  threads={threads}
-                  quotations={canQuote}
-                  groupPosition={groupPosition}
-                  maxBodyLength={maxBodyLength}
-                  markdown={markdown}
-                  showSenderName={showSenderLabelsResolved}
-                  showAvatar={showAvatarsResolved}
-                  {...(onSenderPress ? { onSenderPress } : {})}
-                  {...(onAvatarPress ? { onAvatarPress } : {})}
-                  {...(readState ? { readState } : {})}
-                  {...(labelFor ? { labelFor } : {})}
-                  editing={editingId === msg.id}
-                  {...(canEditOwnMessage({
-                    isSelf,
-                    deleted: !!msg.deleted_at,
-                    receiptsVisible,
-                    readState,
-                    insertedAt: msg.inserted_at,
-                  })
-                    ? { onStartEdit: () => setEditingId(msg.id) }
+          <div
+            className="poolse-conversation__messages"
+            ref={listRef}
+            role="log"
+            aria-label="Conversation messages"
+            aria-live="polite"
+            aria-relevant="additions"
+            tabIndex={0}
+            onKeyDown={onListKeyDown}
+          >
+            {/* Top sentinel for the auto-load IntersectionObserver.
+              Rendered only while there's more history to fetch so IO
+              doesn't observe a dead element. */}
+            {hasMore && <div ref={topSentinelRef} aria-hidden="true" style={{ height: 1 }} />}
+
+            {/* Sticky, zero-height: the pill floats at the top of the feed. */}
+            {showJump && (
+              <div className="poolse-conversation__jump-unread">
+                <button
+                  type="button"
+                  className="poolse-conversation__jump-unread-btn"
+                  onClick={jumpToFirstUnread}
+                  disabled={jump !== null}
+                >
+                  <PoolseIcon name="chevron-up" size={14} label={null} />
+                  {jump ? 'Loading…' : 'Jump to first unread'}
+                </button>
+                <button
+                  type="button"
+                  className="poolse-conversation__jump-unread-close"
+                  aria-label="Dismiss"
+                  onClick={() => setJumpDismissed(true)}
+                >
+                  <PoolseIcon name="close" size={12} label={null} />
+                </button>
+              </div>
+            )}
+
+            {loading && messages.length === 0 ? (
+              <div className="poolse-conversation__empty">Loading…</div>
+            ) : messages.length === 0 && !error ? (
+              typeof emptyState === 'function' ? (
+                emptyState({ readOnly: !showComposer })
+              ) : emptyState !== undefined ? (
+                <div className="poolse-conversation__empty">{emptyState}</div>
+              ) : (
+                <EmptyState
+                  title="No messages yet"
+                  {...(showComposer
+                    ? { hint: 'Write the first message below — everyone here will see it.' }
                     : {})}
-                  onCancelEdit={() => setEditingId(null)}
-                  onSaveEdit={async (body: string) => {
-                    await edit(msg.id, body);
-                    setEditingId(null);
-                  }}
-                  onDelete={() => void deleteMsg(msg.id)}
-                  onOpenThread={() => setThreadRootId(msg.id)}
-                  onQuote={() => setReplyingTo(msg)}
-                  {...(!isSelf && msg.sequence !== Number.MAX_SAFE_INTEGER
-                    ? { onMarkUnread: () => void markUnreadFrom(msg) }
-                    : {})}
-                  onQuotedClick={scrollToOriginal}
-                  {...(msg.local_status
-                    ? {
-                        onRetrySend: () => void retrySend(msg.id).catch(() => undefined),
-                        onDiscardSend: () => discardSend(msg.id),
-                      }
-                    : {})}
-                  {...(onCallBack ? { onCallBack } : {})}
-                  nameForUserId={nameForUserId}
-                  {...layoutProps}
-                  mentionsMe={mentionsViewer(msg, me?.id ?? null)}
                 />
-              );
-              const divider =
-                unread.firstId === msg.id ? (
-                  <div
-                    ref={dividerRef}
-                    className="poolse-unread-divider"
-                    role="separator"
-                    aria-label="New messages"
-                  >
-                    <span>New messages</span>
-                  </div>
-                ) : null;
-              if (renderMessage) {
+              )
+            ) : (
+              visibleMessages.map((msg, idx) => {
+                const prev: Message | null = idx > 0 ? (visibleMessages[idx - 1] ?? null) : null;
+                const next: Message | null =
+                  idx < visibleMessages.length - 1 ? (visibleMessages[idx + 1] ?? null) : null;
+                const groupPosition = grouping
+                  ? computeGroupPosition(msg, prev, next, groupWindowMs)
+                  : 'standalone';
+                const showDaySeparator =
+                  daySeparators && (prev === null || !sameDay(msg.inserted_at, prev.inserted_at));
+                // Optimistic quote preview: a message we JUST sent has
+                // `quoted_message_id` set but no preloaded
+                // `quoted_message` yet (server echo brings that). Look it
+                // up in the local feed so the quote card renders
+                // immediately instead of flashing in once the realtime
+                // echo lands.
+                // When a message has a quote-reply target but the
+                // server-preloaded preview hasn't landed (optimistic temp
+                // pre-echo, or a long-lived chat where the original is
+                // paginated outside the loaded window), synthesize the
+                // preview from local state so the card renders
+                // immediately. `<MessageBubble>` falls back to a
+                // "Replying to a message · Loading preview…" placeholder
+                // when even the local lookup misses.
+                const enriched =
+                  quotations && msg.quoted_message_id && !msg.quoted_message
+                    ? (() => {
+                        const original = messages.find((m) => m.id === msg.quoted_message_id);
+                        if (!original) return msg;
+                        return {
+                          ...msg,
+                          quoted_message: {
+                            id: original.id,
+                            sender_id: original.sender_id,
+                            sender_external_id: original.sender_external_id,
+                            body: original.body,
+                            deleted_at: original.deleted_at,
+                            inserted_at: original.inserted_at,
+                          },
+                        };
+                      })()
+                    : msg;
+                // Read-state per row: only self messages, and only when
+                // readReceipts is on. "read" if any other member's read
+                // cursor is at or past this message's sequence.
+                const isSelf = me !== null && msg.sender_id === me.id;
+                const readState =
+                  showReadState && isSelf && maxReadByOthers !== null
+                    ? maxReadByOthers >= msg.sequence
+                      ? ('read' as const)
+                      : ('sent' as const)
+                    : undefined;
+                const renderDefault = () => (
+                  <MessageRow
+                    msg={enriched}
+                    meId={me?.id ?? null}
+                    reactions={reactions}
+                    attachments={attachments}
+                    actions={actions}
+                    threads={threads}
+                    quotations={canQuote}
+                    groupPosition={groupPosition}
+                    maxBodyLength={maxBodyLength}
+                    markdown={markdown}
+                    showSenderName={showSenderLabelsResolved}
+                    showAvatar={showAvatarsResolved}
+                    {...(onSenderPress ? { onSenderPress } : {})}
+                    {...(onAvatarPress ? { onAvatarPress } : {})}
+                    {...(readState ? { readState } : {})}
+                    {...(labelFor ? { labelFor } : {})}
+                    editing={editingId === msg.id}
+                    {...(canEditOwnMessage({
+                      isSelf,
+                      deleted: !!msg.deleted_at,
+                      receiptsVisible,
+                      readState,
+                      insertedAt: msg.inserted_at,
+                    })
+                      ? { onStartEdit: () => setEditingId(msg.id) }
+                      : {})}
+                    onCancelEdit={() => setEditingId(null)}
+                    onSaveEdit={async (body: string) => {
+                      await edit(msg.id, body);
+                      setEditingId(null);
+                    }}
+                    onDelete={() => void deleteMsg(msg.id)}
+                    onOpenThread={() => setThreadRootId(msg.id)}
+                    onQuote={() => setReplyingTo(msg)}
+                    {...(!isSelf && msg.sequence !== Number.MAX_SAFE_INTEGER
+                      ? { onMarkUnread: () => void markUnreadFrom(msg) }
+                      : {})}
+                    onQuotedClick={scrollToOriginal}
+                    {...(msg.local_status
+                      ? {
+                          onRetrySend: () => void retrySend(msg.id).catch(() => undefined),
+                          onDiscardSend: () => discardSend(msg.id),
+                        }
+                      : {})}
+                    {...(onCallBack ? { onCallBack } : {})}
+                    nameForUserId={nameForUserId}
+                    {...layoutProps}
+                    mentionsMe={mentionsViewer(msg, me?.id ?? null)}
+                  />
+                );
+                const divider =
+                  unread.firstId === msg.id ? (
+                    <div
+                      ref={dividerRef}
+                      className="poolse-unread-divider"
+                      role="separator"
+                      aria-label="New messages"
+                    >
+                      <span>New messages</span>
+                    </div>
+                  ) : null;
+                if (renderMessage) {
+                  return (
+                    <Fragment key={msg.id}>
+                      {divider}
+                      {renderMessage(msg, me?.id ?? null, {
+                        layout,
+                        groupPosition,
+                        isRunStart:
+                          layout === 'compact' ||
+                          groupPosition === 'first' ||
+                          groupPosition === 'standalone',
+                        renderDefault,
+                      })}
+                    </Fragment>
+                  );
+                }
                 return (
                   <Fragment key={msg.id}>
+                    {showDaySeparator && (
+                      <div className="poolse-day-separator" aria-hidden="false">
+                        <span>{formatDayLabel(msg.inserted_at)}</span>
+                      </div>
+                    )}
                     {divider}
-                    {renderMessage(msg, me?.id ?? null, {
-                      layout,
-                      groupPosition,
-                      isRunStart:
-                        layout === 'compact' ||
-                        groupPosition === 'first' ||
-                        groupPosition === 'standalone',
-                      renderDefault,
-                    })}
+                    {renderDefault()}
                   </Fragment>
                 );
-              }
-              return (
-                <Fragment key={msg.id}>
-                  {showDaySeparator && (
-                    <div className="poolse-day-separator" aria-hidden="false">
-                      <span>{formatDayLabel(msg.inserted_at)}</span>
-                    </div>
-                  )}
-                  {divider}
-                  {renderDefault()}
-                </Fragment>
-              );
-            })
-          )}
+              })
+            )}
 
-          {visibleStreams.map((stream) =>
-            stream.status === 'failed' ? (
-              <div key={stream.id} className="poolse-stream-failed" role="status">
-                {stream.error
-                  ? `The agent couldn't reply: ${stream.error}`
-                  : "The agent couldn't reply."}
-              </div>
-            ) : (
-              <div key={stream.id} className="poolse-stream" aria-busy="true">
-                <MessageRow
-                  msg={streamingMessage(stream)}
-                  meId={me?.id ?? null}
-                  reactions={false}
-                  actions={false}
-                  threads={false}
-                  quotations={false}
-                  markdown={markdown}
-                  showSenderName={showSenderLabelsResolved}
-                  showAvatar={showAvatarsResolved}
-                  {...(labelFor ? { labelFor } : {})}
-                  {...layoutProps}
-                />
-              </div>
-            ),
-          )}
+            {visibleStreams.map((stream) =>
+              stream.status === 'failed' ? (
+                <div key={stream.id} className="poolse-stream-failed" role="status">
+                  {stream.error
+                    ? `The agent couldn't reply: ${stream.error}`
+                    : "The agent couldn't reply."}
+                </div>
+              ) : (
+                <div key={stream.id} className="poolse-stream" aria-busy="true">
+                  <MessageRow
+                    msg={streamingMessage(stream)}
+                    meId={me?.id ?? null}
+                    reactions={false}
+                    actions={false}
+                    threads={false}
+                    quotations={false}
+                    markdown={markdown}
+                    showSenderName={showSenderLabelsResolved}
+                    showAvatar={showAvatarsResolved}
+                    {...(labelFor ? { labelFor } : {})}
+                    {...layoutProps}
+                  />
+                </div>
+              ),
+            )}
 
-          {error && (
-            <div className="poolse-conversation__empty">Failed to load: {error.message}</div>
-          )}
+            {error && (
+              <div className="poolse-conversation__empty">Failed to load: {error.message}</div>
+            )}
 
-          {/* Bottom sentinel for the IntersectionObserver. Lives at the
+            {/* Bottom sentinel for the IntersectionObserver. Lives at the
               very end so its visibility ≡ "scroller is at bottom". */}
-          <div ref={bottomSentinelRef} aria-hidden="true" style={{ height: 1 }} />
-        </div>
+            <div ref={bottomSentinelRef} aria-hidden="true" style={{ height: 1 }} />
+          </div>
 
-        {!atBottom && newCountWhileAway > 0 && (
-          <button
-            type="button"
-            className="poolse-conversation__scroll-to-new"
-            onClick={scrollToBottom}
-          >
-            ↓ {newCountWhileAway} new {newCountWhileAway === 1 ? 'message' : 'messages'}
-          </button>
-        )}
+          {!atBottom && newCountWhileAway > 0 && (
+            <button
+              type="button"
+              className="poolse-conversation__scroll-to-new"
+              onClick={scrollToBottom}
+            >
+              ↓ {newCountWhileAway} new {newCountWhileAway === 1 ? 'message' : 'messages'}
+            </button>
+          )}
 
-        <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
+          <TypingIndicator typing={typing} {...(labelFor ? { labelFor } : {})} />
 
-        {/* Composer owns the paperclip + upload-queue chips internally
+          {/* Composer owns the paperclip + upload-queue chips internally
             now (text + attachments sent as one message). The drag-drop
             overlay on the conversation pane forwards dropped files
             into it via `composerRef.addFiles`. */}
-        {showComposer && (
-          <div className="poolse-conversation__composer-row">
-            <div className="poolse-conversation__composer-flex">{Composer}</div>
-          </div>
-        )}
+          {showComposer && (
+            <div className="poolse-conversation__composer-row">
+              <div className="poolse-conversation__composer-flex">{Composer}</div>
+            </div>
+          )}
 
-        {dragActive && (
-          <div className="poolse-conversation__drop-overlay" aria-hidden="true">
-            <div className="poolse-conversation__drop-overlay-inner">
-              <PoolseIcon name="attachment" size={40} label={null} />
-              <div className="poolse-conversation__drop-overlay-title">Drop files to upload</div>
-              <div className="poolse-conversation__drop-overlay-hint">
-                They'll be sent in one message
+          {dragActive && (
+            <div className="poolse-conversation__drop-overlay" aria-hidden="true">
+              <div className="poolse-conversation__drop-overlay-inner">
+                <PoolseIcon name="attachment" size={40} label={null} />
+                <div className="poolse-conversation__drop-overlay-title">Drop files to upload</div>
+                <div className="poolse-conversation__drop-overlay-hint">
+                  They'll be sent in one message
+                </div>
               </div>
             </div>
+          )}
+        </div>
+
+        {threads && threadRoot && (
+          <div className="poolse-conversation-shell__thread">
+            <ThreadView
+              conversationId={conversationId}
+              rootMessage={threadRoot}
+              onClose={() => setThreadRootId(null)}
+              layout={layout}
+              {...(timeFormat ? { timeFormat } : {})}
+              showAvatars={showAvatarsResolved}
+              showPresence={showPresence}
+              linkPreviews={linkPreviews}
+              {...attachmentRules}
+            />
           </div>
         )}
       </div>
-
-      {threads && threadRoot && (
-        <div className="poolse-conversation-shell__thread">
-          <ThreadView
-            conversationId={conversationId}
-            rootMessage={threadRoot}
-            onClose={() => setThreadRootId(null)}
-            layout={layout}
-            {...(timeFormat ? { timeFormat } : {})}
-            showAvatars={showAvatarsResolved}
-            showPresence={showPresence}
-            linkPreviews={linkPreviews}
-            {...attachmentRules}
-          />
-        </div>
-      )}
-    </div>
+    </MessageExtrasProvider>
   );
 }
 

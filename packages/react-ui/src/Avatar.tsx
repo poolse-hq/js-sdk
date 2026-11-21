@@ -30,6 +30,11 @@ export interface AvatarProps {
   userId?: string | null;
   /** Size variant; defaults to `md` (40px). `xs` is 20px. */
   size?: 'xs' | 'sm' | 'md' | 'lg';
+  /**
+   * An agent, not a person (AG1): a rounded-square avatar with a small
+   * agent mark, and "(agent)" in its label. Pass `useUser(id).agent`.
+   */
+  agent?: boolean;
   className?: string;
 }
 
@@ -40,13 +45,20 @@ export function Avatar({
   presence,
   userId,
   size = 'md',
+  agent = false,
   className,
 }: AvatarProps) {
   const initials = computeInitials(name);
 
-  const classes = ['poolse-avatar', size !== 'md' ? `poolse-avatar--${size}` : null, className]
+  const classes = [
+    'poolse-avatar',
+    size !== 'md' ? `poolse-avatar--${size}` : null,
+    agent ? 'poolse-avatar--agent' : null,
+    className,
+  ]
     .filter(Boolean)
     .join(' ');
+  const label = agent ? `${name ?? 'Agent'} (agent)` : (name ?? 'avatar');
 
   const badge =
     presence === true ? (
@@ -69,8 +81,9 @@ export function Avatar({
     ) : null;
 
   return (
-    <span className={classes} aria-label={name ?? 'avatar'} role="img">
+    <span className={classes} aria-label={label} role="img">
       {src ? <img src={src} alt={name ?? ''} /> : <span aria-hidden="true">{initials}</span>}
+      {agent && size !== 'xs' ? <span className="poolse-avatar__agent" aria-hidden="true" /> : null}
       {badge}
     </span>
   );

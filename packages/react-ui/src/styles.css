@@ -5677,3 +5677,794 @@
   font: 500 13px / 1.4 var(--poolse-font-body);
   color: var(--poolse-error);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Agents (AG1, AG4, AG5) — badge, approval card, sources
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-agent-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  font: 700 11px / 1.4 var(--poolse-font-body);
+  letter-spacing: 0.02em;
+  color: var(--poolse-info);
+  background: color-mix(in srgb, var(--poolse-info) 14%, transparent);
+  border-radius: var(--poolse-radius-pill);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.poolse-agent-badge--xs {
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+/* A name followed by the badge: the name truncates, the badge never does. */
+.poolse-has-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: bottom;
+}
+
+.poolse-has-agent > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-username {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.poolse-username__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-mention-menu__name + .poolse-agent-badge {
+  margin-inline-start: auto;
+}
+
+.poolse-avatar--agent {
+  border-radius: 28%;
+  background: linear-gradient(135deg, var(--poolse-info), var(--poolse-brand-strong));
+}
+
+.poolse-avatar__agent {
+  position: absolute;
+  left: -2px;
+  bottom: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: var(--poolse-info);
+  border: 2px solid var(--poolse-surface);
+}
+
+.poolse-avatar--sm .poolse-avatar__agent {
+  width: 9px;
+  height: 9px;
+}
+
+/* Full-width cards in a message list (approvals, summaries). */
+.poolse-card-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px 12px;
+  max-width: 100%;
+}
+
+.poolse-card-row__sender {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font: 700 12px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+}
+
+.poolse-card-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-approval,
+.poolse-summary {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 520px;
+  padding: 12px 14px;
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-lg);
+  font-family: var(--poolse-font-body);
+  overflow-wrap: anywhere;
+}
+
+.poolse-approval--pending {
+  border-color: color-mix(in srgb, var(--poolse-warning) 55%, var(--poolse-border));
+}
+
+.poolse-approval__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.poolse-approval__agent {
+  min-width: 0;
+  font: 700 13px / 1.3 var(--poolse-font-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-approval__status {
+  flex: none;
+  margin-inline-start: auto;
+  padding: 1px 8px;
+  font: 600 11px / 1.5 var(--poolse-font-body);
+  border-radius: var(--poolse-radius-pill);
+  color: var(--poolse-ink-2);
+  background: var(--poolse-surface-2);
+  white-space: nowrap;
+}
+
+.poolse-approval__status--pending {
+  color: var(--poolse-warning);
+  background: color-mix(in srgb, var(--poolse-warning) 14%, transparent);
+}
+
+.poolse-approval__status--approved {
+  color: var(--poolse-success);
+  background: color-mix(in srgb, var(--poolse-success) 14%, transparent);
+}
+
+.poolse-approval__status--denied {
+  color: var(--poolse-error);
+  background: color-mix(in srgb, var(--poolse-error) 12%, transparent);
+}
+
+.poolse-approval__summary {
+  margin: 8px 0 0;
+  font: 600 14px / 1.4 var(--poolse-font-body);
+}
+
+.poolse-approval__details {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 4px;
+}
+
+.poolse-approval__detail {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) 1fr;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.poolse-approval__detail--text {
+  grid-template-columns: 1fr;
+}
+
+.poolse-approval__detail dt {
+  color: var(--poolse-ink-3);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-approval__detail dd {
+  margin: 0;
+  white-space: pre-wrap;
+  max-height: 9.8em;
+  overflow: auto;
+}
+
+.poolse-approval__expiry,
+.poolse-approval__reason {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--poolse-ink-2);
+}
+
+.poolse-approval__reason span {
+  color: var(--poolse-ink-3);
+}
+
+.poolse-approval__reason-input {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  font: 400 13px / 1.4 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: var(--poolse-surface-2);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-sm);
+  resize: vertical;
+}
+
+.poolse-approval__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.poolse-approval__btn {
+  padding: 6px 14px;
+  font: 600 13px / 1.2 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: var(--poolse-surface-2);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  cursor: pointer;
+}
+
+.poolse-approval__btn--approve {
+  color: var(--poolse-on-brand);
+  background: var(--poolse-brand);
+  border-color: var(--poolse-brand);
+}
+
+.poolse-approval__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.poolse-approval__link,
+.poolse-approval__more {
+  padding: 0;
+  margin-top: 6px;
+  font: 600 12px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-brand-strong);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.poolse-approval__actions .poolse-approval__link {
+  margin-top: 0;
+}
+
+.poolse-approval__error,
+.poolse-ask__error,
+.poolse-clip__error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--poolse-error);
+}
+
+.poolse-approval-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.poolse-approval-list__empty {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  color: var(--poolse-ink-3);
+  font-size: 13px;
+}
+
+.poolse-approval__btn:focus-visible,
+.poolse-approval__link:focus-visible,
+.poolse-approval__more:focus-visible,
+.poolse-citations__link:focus-visible,
+.poolse-summary__moment:focus-visible,
+.poolse-player__rate:focus-visible,
+.poolse-player__chapter:focus-visible,
+.poolse-player__line button:focus-visible,
+.poolse-ask__btn:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 1px;
+}
+
+.poolse-citations {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--poolse-border);
+  min-width: 0;
+}
+
+.poolse-citations__title {
+  display: block;
+  font: 700 11px / 1.3 var(--poolse-font-body);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-citations__list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.poolse-citations__link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 4px;
+  font: 500 12px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-brand-strong);
+  text-align: start;
+  background: none;
+  border: none;
+  border-radius: var(--poolse-radius-sm);
+  cursor: pointer;
+}
+
+.poolse-citations__link:hover:not(.poolse-citations__link--static) {
+  background: var(--poolse-surface-2);
+}
+
+.poolse-citations__link--static {
+  color: var(--poolse-ink-2);
+  cursor: default;
+}
+
+.poolse-citations__num {
+  flex: none;
+  min-width: 16px;
+  font-weight: 700;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-citations__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-citations__time {
+  flex: none;
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--poolse-ink-3);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Meetings (RT6, RT8, RT9, RT13) — summary, ask, clip, player
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-summary__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-summary__title {
+  font: 700 14px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink);
+}
+
+.poolse-summary__style {
+  padding: 1px 8px;
+  font: 600 11px / 1.5 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+  background: var(--poolse-surface-2);
+  border-radius: var(--poolse-radius-pill);
+}
+
+.poolse-summary__overview,
+.poolse-summary__empty {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--poolse-ink-2);
+}
+
+.poolse-summary__section {
+  margin-top: 10px;
+}
+
+.poolse-summary__section-title {
+  margin: 0 0 4px;
+  font: 700 11px / 1.3 var(--poolse-font-body);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-summary__list {
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.poolse-summary__list--tasks {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.poolse-summary__task {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.poolse-summary__task-box {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 1.5px solid var(--poolse-ink-3);
+  border-radius: 4px;
+}
+
+.poolse-summary__task-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.poolse-summary__task-meta {
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-summary__assignee {
+  font-weight: 600;
+  color: var(--poolse-ink-2);
+}
+
+.poolse-summary__moments,
+.poolse-ask__links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.poolse-summary__moment {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 4px;
+  font: 500 13px / 1.35 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  text-align: start;
+  background: none;
+  border: none;
+  border-radius: var(--poolse-radius-sm);
+  cursor: pointer;
+}
+
+.poolse-summary__moment:hover:not(.poolse-summary__moment--static) {
+  background: var(--poolse-surface-2);
+}
+
+.poolse-summary__moment--static {
+  cursor: default;
+}
+
+.poolse-summary__time {
+  flex: none;
+  min-width: 40px;
+  font: 600 12px / 1.35 var(--poolse-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-summary__moment-label,
+.poolse-ask__snippet {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-ask {
+  font-family: var(--poolse-font-body);
+  color: var(--poolse-ink);
+}
+
+.poolse-ask__form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+  color: var(--poolse-ink-3);
+  background: var(--poolse-surface-2);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+}
+
+.poolse-ask__form input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0;
+  font: 400 14px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.poolse-ask__btn {
+  flex: none;
+  padding: 6px 14px;
+  font: 600 13px / 1.2 var(--poolse-font-body);
+  color: var(--poolse-on-brand);
+  background: var(--poolse-brand);
+  border: none;
+  border-radius: var(--poolse-radius-pill);
+  cursor: pointer;
+}
+
+.poolse-ask__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.poolse-ask__result {
+  margin-top: 8px;
+}
+
+.poolse-ask__status,
+.poolse-ask__question {
+  margin: 0;
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-ask__answer {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.poolse-clip {
+  box-sizing: border-box;
+  margin: 4px 0;
+  padding: 8px;
+  max-width: 100%;
+  width: 360px;
+  background: var(--poolse-surface-2);
+  border-radius: var(--poolse-radius-md);
+}
+
+.poolse-clip--compact {
+  width: 100%;
+  max-width: 320px;
+}
+
+.poolse-clip__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font: 600 12px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+}
+
+.poolse-clip__range,
+.poolse-clip__length {
+  font-variant-numeric: tabular-nums;
+  color: var(--poolse-ink-3);
+  white-space: nowrap;
+}
+
+.poolse-clip__length {
+  margin-inline-start: auto;
+}
+
+.poolse-clip__media {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  border-radius: var(--poolse-radius-sm);
+}
+
+.poolse-clip__loading {
+  padding: 10px 0;
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-player {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  color: var(--poolse-ink);
+  font-family: var(--poolse-font-body);
+}
+
+.poolse-player__stage {
+  background: var(--poolse-surface-2);
+  border-radius: var(--poolse-radius-md);
+  overflow: hidden;
+}
+
+.poolse-player__media {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+}
+
+audio.poolse-player__media {
+  background: transparent;
+}
+
+.poolse-player__note {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-player__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.poolse-player__rates {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--poolse-surface-2);
+  border-radius: var(--poolse-radius-pill);
+}
+
+.poolse-player__rate {
+  min-width: 44px;
+  padding: 4px 8px;
+  font: 600 12px / 1.2 var(--poolse-font-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--poolse-ink-2);
+  background: none;
+  border: none;
+  border-radius: var(--poolse-radius-pill);
+  cursor: pointer;
+}
+
+.poolse-player__rate[aria-pressed='true'] {
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  box-shadow: var(--poolse-shadow-sm);
+}
+
+.poolse-player__skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--poolse-ink-2);
+  cursor: pointer;
+}
+
+.poolse-player__chapters ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.poolse-player__chapter {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 10px;
+  font: 500 12px / 1.3 var(--poolse-font-body);
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  cursor: pointer;
+}
+
+.poolse-player__chapter[aria-current='true'] {
+  border-color: var(--poolse-brand);
+  background: var(--poolse-brand-soft);
+}
+
+.poolse-player__chapter-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-player__transcript {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+}
+
+.poolse-player__line button {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 6px 10px;
+  font: 400 13px / 1.45 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+  text-align: start;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.poolse-player__line.is-active button {
+  color: var(--poolse-ink);
+  background: var(--poolse-brand-soft);
+}
+
+.poolse-player__speaker {
+  grid-column: 1 / -1;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--poolse-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-player__time {
+  font: 500 12px / 1.45 var(--poolse-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-player__text {
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poolse-player__transcript {
+    scroll-behavior: auto;
+  }
+}

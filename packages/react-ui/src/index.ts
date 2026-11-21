@@ -83,6 +83,36 @@ export {
   type LiveTranscriptPanelProps,
   type TranscriptViewerProps,
 } from './Transcript.js';
+// Agents (AG1, AG4, AG5) and meetings (RT6, RT8, RT9, RT13).
+export { AgentBadge, type AgentBadgeProps } from './AgentBadge.js';
+export {
+  ApprovalCard,
+  ApprovalList,
+  ApprovalMessageRow,
+  MessageCitations,
+  type ApprovalCardProps,
+  type ApprovalListProps,
+  type ApprovalMessageRowProps,
+  type MessageCitationsProps,
+} from './Agents.js';
+export {
+  AskMeetings,
+  ClipPlayer,
+  RecordingPlayer,
+  SummaryCard,
+  SummaryMessageRow,
+  type AskMeetingsProps,
+  type ClipPlayerProps,
+  type RecordingPlayerHandle,
+  type RecordingPlayerProps,
+  type SummaryCardProps,
+  type SummaryMessageRowProps,
+} from './Meetings.js';
+export {
+  MessageExtrasProvider,
+  useMessageExtras,
+  type MessageExtrasHandlers,
+} from './messageExtras.js';
 export { EditedLabel, useEditHistory, type EditedLabelProps } from './EditedLabel.js';
 export { EditableMessageBubble, type EditableMessageBubbleProps } from './EditableMessageBubble.js';
 export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';

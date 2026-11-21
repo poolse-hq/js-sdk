@@ -1,9 +1,12 @@
 import type { Attachment, Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
-import { useUser } from '@poolse/react';
+import { citationsOf, clipOf, messageAgent, useUser } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { AgentBadge } from './AgentBadge.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { MessageCitations } from './Agents.js';
+import { ClipPlayer } from './Meetings.js';
 import { useEditHistory } from './EditedLabel.js';
 import { hasLinkPreviews, MessageLinkPreviews } from './LinkPreviewCard.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
@@ -144,7 +147,10 @@ export function MessageBubble({
   // you are; pass null to short-circuit the hook. The resolver is keyed
   // by `external_id` (the tenant's own user id), not the poolse uuid,
   // so customers never need a `poolse_user_id` column on their side.
-  const { profile: sender } = useUser(!isSelf ? message.sender_external_id : null);
+  const { profile: sender, agent: knownAgent } = useUser(
+    !isSelf ? message.sender_external_id : null,
+  );
+  const senderIsAgent = !isSelf && (!!knownAgent || !!messageAgent(message));
   const senderFallbackName = message.sender_external_id ?? 'Unknown';
   const senderName = sender?.displayName ?? senderFallbackName;
   const senderColorKey = message.sender_external_id ?? message.sender_id ?? '';
@@ -172,8 +178,14 @@ export function MessageBubble({
       ? message.attachments
       : [];
   const imageAttachments = attachmentList.filter((a) => isImageContentType(a.content_type));
-  const fileAttachments = attachmentList.filter((a) => !isImageContentType(a.content_type));
-  const hasAnyAttachment = imageAttachments.length > 0 || fileAttachments.length > 0;
+  // Clips cut from a recording (RT9) play inline instead of a file card.
+  const clipAttachments = attachmentList.filter((a) => !!clipOf(a));
+  const fileAttachments = attachmentList.filter(
+    (a) => !isImageContentType(a.content_type) && !clipOf(a),
+  );
+  const hasAnyAttachment =
+    imageAttachments.length > 0 || fileAttachments.length > 0 || clipAttachments.length > 0;
+  const citations = citationsOf(message);
   const hasVisibleBody = !message.deleted_at && rawBody.length > 0;
   // Image-only (no body, no file cards) → meta floats over the
   // bottom-right of the last image as a pill overlay (WhatsApp style).
@@ -197,6 +209,7 @@ export function MessageBubble({
   const inlineMeta =
     hasVisibleBody &&
     !showPreviews &&
+    citations.length === 0 &&
     jumboCount === 0 &&
     !trimToggleVisible &&
     (!markdown || !hasMarkdown(displayBody));
@@ -247,11 +260,25 @@ export function MessageBubble({
               style={{ color: senderColorHex }}
               onClick={onSenderPress}
             >
-              {senderName}
+              {senderIsAgent ? (
+                <span className="poolse-has-agent">
+                  <span>{senderName}</span>
+                  <AgentBadge size="xs" />
+                </span>
+              ) : (
+                senderName
+              )}
             </button>
           ) : (
             <div className="poolse-message__sender" style={{ color: senderColorHex }}>
-              {senderName}
+              {senderIsAgent ? (
+                <span className="poolse-has-agent">
+                  <span>{senderName}</span>
+                  <AgentBadge size="xs" />
+                </span>
+              ) : (
+                senderName
+              )}
             </div>
           )
         ) : null,
@@ -280,6 +307,9 @@ export function MessageBubble({
                 ))}
               </div>
             )}
+            {clipAttachments.map((att) => (
+              <ClipPlayer key={att.id} attachment={att} compact />
+            ))}
           </>
         ) : null,
       )}
@@ -388,6 +418,9 @@ export function MessageBubble({
         return (
           <>
             {renderSlot(slots?.body, slotContext, body)}
+            {citations.length > 0 ? (
+              <MessageCitations message={message} citations={citations} />
+            ) : null}
             {showPreviews ? <MessageLinkPreviews message={message} canRemove={isSelf} /> : null}
             <span className={metaClass}>{metaContent}</span>
             {editHistory.popover}

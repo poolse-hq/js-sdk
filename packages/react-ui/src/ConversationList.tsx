@@ -13,6 +13,8 @@ import {
   filterConversations,
   formatCallLogPreview,
   formatRecordingNoticePreview,
+  formatApprovalPreview,
+  formatCallSummaryPreview,
   useConversations,
   useMe,
   useUser,
@@ -392,6 +394,8 @@ function DefaultRow({
   const preview =
     formatCallLogPreview(conv.last_message_preview, meId) ??
     formatRecordingNoticePreview(conv.last_message_preview, meId) ??
+    formatApprovalPreview(conv.last_message_preview) ??
+    formatCallSummaryPreview(conv.last_message_preview) ??
     conv.last_message_preview ??
     (conv.last_sequence > 0
       ? `${conv.last_sequence} message${conv.last_sequence === 1 ? '' : 's'}`

@@ -11,11 +11,14 @@
 // read receipts and the accent bar on messages that mention the viewer.
 
 import type { Attachment } from '@poolse/sdk';
-import { useReactions, useUser } from '@poolse/react';
+import { citationsOf, clipOf, messageAgent, useReactions, useUser } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { AgentBadge } from './AgentBadge.js';
+import { MessageCitations } from './Agents.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
+import { ClipPlayer } from './Meetings.js';
 import { hasLinkPreviews, MessageLinkPreviews } from './LinkPreviewCard.js';
 import { Avatar } from './Avatar.js';
 import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './bubbleText.js';
@@ -69,7 +72,8 @@ export function FlatMessageRow({
 }: MessageRowProps & { layout: 'list' | 'compact' }) {
   const compact = layout === 'compact';
   const isSelf = meId !== null && msg.sender_id === meId;
-  const { profile } = useUser(msg.sender_external_id);
+  const { profile, agent: knownAgent } = useUser(msg.sender_external_id);
+  const senderIsAgent = !!knownAgent || !!messageAgent(msg);
   const senderName =
     profile?.displayName ??
     msg.sender_external_id ??
@@ -113,6 +117,7 @@ export function FlatMessageRow({
       src={sender.avatarUrl}
       name={senderName}
       size={avatarSize}
+      agent={senderIsAgent}
       {...(showPresence && msg.sender_external_id
         ? { presence: true as const, userId: msg.sender_external_id }
         : {})}
@@ -142,11 +147,25 @@ export function FlatMessageRow({
         style={nameStyle}
         onClick={() => onSenderPress(sender)}
       >
-        {senderName}
+        {senderIsAgent ? (
+          <span className="poolse-has-agent">
+            <span>{senderName}</span>
+            <AgentBadge size="xs" />
+          </span>
+        ) : (
+          senderName
+        )}
       </button>
     ) : (
       <span className="poolse-row__name" style={nameStyle}>
-        {senderName}
+        {senderIsAgent ? (
+          <span className="poolse-has-agent">
+            <span>{senderName}</span>
+            <AgentBadge size="xs" />
+          </span>
+        ) : (
+          senderName
+        )}
       </span>
     );
 
@@ -173,7 +192,9 @@ export function FlatMessageRow({
   const attachmentList: Attachment[] =
     attachments && !deleted && Array.isArray(msg.attachments) ? msg.attachments : [];
   const images = attachmentList.filter((a) => isImageContentType(a.content_type));
-  const files = attachmentList.filter((a) => !isImageContentType(a.content_type));
+  const clips = attachmentList.filter((a) => !!clipOf(a));
+  const files = attachmentList.filter((a) => !isImageContentType(a.content_type) && !clipOf(a));
+  const citations = citationsOf(msg);
   const attachmentsEl =
     images.length > 0 || files.length > 0 ? (
       <div className="poolse-row__attachments">
@@ -272,6 +293,12 @@ export function FlatMessageRow({
       {quote}
       {renderSlot(slots?.attachments, ctx, attachmentsEl)}
       {renderSlot(slots?.body, ctx, body)}
+      {clips.map((att) => (
+        <ClipPlayer key={att.id} attachment={att} compact />
+      ))}
+      {citations.length > 0 && !editing ? (
+        <MessageCitations message={msg} citations={citations} />
+      ) : null}
       {linkPreviews && !editing && hasLinkPreviews(msg) ? (
         <MessageLinkPreviews message={msg} canRemove={isSelf} />
       ) : null}

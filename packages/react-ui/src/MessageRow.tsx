@@ -13,10 +13,20 @@
 // and the same `slots`.
 
 import type { Message, Uuid } from '@poolse/sdk';
-import { callLogDisplayFor, recordingNoticeDisplayFor, useReactions, useUser } from '@poolse/react';
+import {
+  callLogDisplayFor,
+  messageAgent,
+  parseApproval,
+  parseCallSummary,
+  recordingNoticeDisplayFor,
+  useReactions,
+  useUser,
+} from '@poolse/react';
 import { type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
+import { ApprovalMessageRow } from './Agents.js';
 import { CallLogRow } from './CallLogRow.js';
+import { SummaryMessageRow } from './Meetings.js';
 import { RecordingNoticeRow } from './Recording.js';
 import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { FlatMessageRow } from './FlatMessageRow.js';
@@ -158,6 +168,20 @@ export function MessageRow(props: MessageRowProps) {
       />
     ) : null;
   }
+  // An agent asking before it acts (AG4), and a call's summary (RT6):
+  // full-width cards with the sender above them.
+  if (parseApproval(props.msg)) {
+    return <ApprovalMessageRow msg={props.msg} meId={props.meId} />;
+  }
+  if (parseCallSummary(props.msg)) {
+    return (
+      <SummaryMessageRow
+        msg={props.msg}
+        meId={props.meId}
+        {...(props.nameForUserId ? { nameForUserId: props.nameForUserId } : {})}
+      />
+    );
+  }
   if (props.layout === 'list' || props.layout === 'compact') {
     return <FlatMessageRow {...props} layout={props.layout} />;
   }
@@ -201,7 +225,8 @@ function BubbleMessageRow({
   // (rendered here) and the bubble's inline sender label (rendered
   // by `<MessageBubble>` which calls `useUser` itself) hit the same
   // dedup'd cache — keyed, like every resolver lookup, by external id.
-  const { profile: senderProfile } = useUser(msg.sender_external_id);
+  const { profile: senderProfile, agent: senderAgent } = useUser(msg.sender_external_id);
+  const senderIsAgent = !!senderAgent || !!messageAgent(msg);
   const senderFallbackName =
     msg.sender_external_id ?? (msg.sender_id ? `User ${msg.sender_id.slice(0, 6)}` : 'Unknown');
   const senderName = senderProfile?.displayName ?? senderFallbackName;
@@ -285,6 +310,7 @@ function BubbleMessageRow({
           showAvatar={showAvatar}
           groupPosition={groupPosition}
           senderName={senderName}
+          agent={senderIsAgent}
           avatarUrl={senderProfile?.avatarUrl ?? null}
           presenceId={showPresence ? msg.sender_external_id : null}
           {...(onAvatarPress ? { onAvatarPress: () => onAvatarPress(sender) } : {})}
@@ -420,6 +446,7 @@ function BubbleWithAvatar({
   showAvatar,
   groupPosition,
   senderName,
+  agent,
   avatarUrl,
   presenceId,
   onAvatarPress,
@@ -429,6 +456,7 @@ function BubbleWithAvatar({
   showAvatar: boolean;
   groupPosition: BubbleGroupPosition;
   senderName: string;
+  agent: boolean;
   avatarUrl: string | null;
   presenceId: string | null;
   onAvatarPress?: () => void;
@@ -442,6 +470,7 @@ function BubbleWithAvatar({
       src={avatarUrl}
       name={senderName}
       size="sm"
+      agent={agent}
       {...(presenceId ? { presence: true as const, userId: presenceId } : {})}
     />
   );

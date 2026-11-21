@@ -4,8 +4,17 @@
 // for groups. Renders a back button when `onBack` is provided so a
 // composed inbox can navigate back to its list.
 
-import { useConversation, useMe, useMembers, usePresence, useUserPresence } from '@poolse/react';
+import {
+  agentFromWire,
+  useAgent,
+  useConversation,
+  useMe,
+  useMembers,
+  usePresence,
+  useUserPresence,
+} from '@poolse/react';
 import { type ReactNode } from 'react';
+import { AgentBadge } from './AgentBadge.js';
 import { Avatar } from './Avatar.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { presenceText } from './PresenceBadge.js';
@@ -83,6 +92,9 @@ export function ChatHeader({
     : `${members.length} member${members.length === 1 ? '' : 's'}`;
 
   const isPressable = typeof onPress === 'function';
+  // A DM with an agent says so (AG1).
+  const knownAgent = useAgent(isDirect ? otherExtId : null);
+  const otherIsAgent = isDirect && (!!knownAgent || !!agentFromWire(otherMember));
 
   const titleContent = (
     <>
@@ -91,9 +103,19 @@ export function ChatHeader({
         name={title}
         presence={presence ?? (otherOnline ? 'online' : null)}
         size="md"
+        agent={otherIsAgent}
       />
       <div className="poolse-chat-header__titles">
-        <div className="poolse-chat-header__title">{title}</div>
+        <div className="poolse-chat-header__title">
+          {otherIsAgent ? (
+            <span className="poolse-has-agent">
+              <span>{title}</span>
+              <AgentBadge size="xs" />
+            </span>
+          ) : (
+            title
+          )}
+        </div>
         {subtitle ? <div className="poolse-chat-header__subtitle">{subtitle}</div> : null}
       </div>
     </>
