@@ -8,6 +8,21 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ### Added
 
+- `useUserPresence(id)` → `Presence | null` and `usePresenceMany(ids)` →
+  `Record<id, Presence>`: people's presence (`online` / `away` / `in_call` /
+  `offline`) by user id or external id, from the one `poolse.presence` store
+  per provider — hooks mounted together make a single lookup, and
+  `presence:changed` keeps them live.
+- `<PoolseProvider trackActivity>`: reports the browser tab `active` / `idle`
+  for presence (`poolse.presence.trackActivity`). On by default; a no-op
+  without `document` (React Native: call `usePoolse().presence.setActivity()`
+  from `AppState`); `false` turns it off, or pass `{ idleAfterMs }`.
+- `useConversationPresence(conversationId)`, the same hook as
+  `usePresence(conversationId)` under a name that says what it lists (who has
+  the conversation open).
+- Re-exported `Presence`, `PresenceState`, `PresenceActivity`,
+  `PresenceChangedEvent`, `TrackActivityOptions`.
+
 - Conversation list paging: `useConversations().loadMore()`, `hasMore` and
   `loadingMore`. The first page loads as before; `loadMore()` appends the
   next (deduped by id, one request at a time; a failure rejects and keeps the

@@ -62,27 +62,29 @@ new `key` to switch user.
 
 ## Hooks
 
-| Hook                                                                             | Returns                                                                                                                          |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `usePoolse()`                                                                    | The `Poolse` instance.                                                                                                           |
-| `useMe()`                                                                        | `{ me, loading, error }`                                                                                                         |
-| `useConversation(id \| null)`                                                    | `{ conversation, loading, error, refetch }`                                                                                      |
-| `useConversations()`                                                             | `{ conversations, loading, error, refetch, create, unreadCounts, mentionUnreadCounts, markConversationRead }`                    |
-| `useMessages(conversationId)`                                                    | `{ messages, loading, error, hasMore, loadMore, loadUntil(messageId), send, edit, delete, markReadUpTo, refetch }`, oldest first |
-| `useThread(conversationId, rootId)`                                              | `{ replies, loading, error, hasMore, loadMore, sendReply, edit, delete }`                                                        |
-| `useReactions(messageId, { conversationId, initialReactions?, currentUserId? })` | `{ reactions, addReaction, removeReaction }`                                                                                     |
-| `useTyping(conversationId)`                                                      | `{ typing: Set<externalId>, signalTyping }`                                                                                      |
-| `usePresence(conversationId)`                                                    | `{ online: Set<externalId> }`                                                                                                    |
-| `useMembers(conversationId)`                                                     | `{ members, loading, error, refetch, addMembers(externalIds, { role? }), removeMember(externalId) }`                             |
-| `useAttachmentUpload()`                                                          | `{ queue, attachment, uploading, error, upload(input), uploadAll(inputs), cancel(localId), remove(localId), reset }`             |
-| `useAttachmentUrl(id \| null)`                                                   | `{ url, loading, error }` (not renewed; URLs last one hour)                                                                      |
-| `useUser(externalId)`                                                            | `{ profile, loading }`                                                                                                           |
-| `useAppEvent(handler)`                                                           | Calls `handler({ type, data })` for each `app:event` sent to the user                                                            |
-| `useRealtimeStatus()`                                                            | `'idle' \| 'connecting' \| 'connected' \| 'reconnecting' \| 'closed'`                                                            |
-| `useReadReceipts()`                                                              | `{ visible, mode, shared, canChange, setShared }`                                                                                |
-| `useLiveCall(conversationId \| null)`                                            | `{ call, participantIds, refresh }`                                                                                              |
-| `useRoom(conversationId \| null, { livekit })`                                   | `{ live, presentIds, joined, joining, join, leave, media, error }`                                                               |
-| `useCallRoom(conversationId \| null, { livekit, … })`                            | Call media: participants, mic, camera, devices                                                                                   |
+| Hook                                                                             | Returns                                                                                                                                       |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `usePoolse()`                                                                    | The `Poolse` instance.                                                                                                                        |
+| `useMe()`                                                                        | `{ me, loading, error }`                                                                                                                      |
+| `useConversation(id \| null)`                                                    | `{ conversation, loading, error, refetch }`                                                                                                   |
+| `useConversations()`                                                             | `{ conversations, loading, error, refetch, hasMore, loadingMore, loadMore, create, unreadCounts, mentionUnreadCounts, markConversationRead }` |
+| `useMessages(conversationId)`                                                    | `{ messages, loading, error, hasMore, loadMore, loadUntil(messageId), send, edit, delete, markReadUpTo, refetch }`, oldest first              |
+| `useThread(conversationId, rootId)`                                              | `{ replies, loading, error, hasMore, loadMore, sendReply, edit, delete }`                                                                     |
+| `useReactions(messageId, { conversationId, initialReactions?, currentUserId? })` | `{ reactions, addReaction, removeReaction }`                                                                                                  |
+| `useTyping(conversationId)`                                                      | `{ typing: Set<externalId>, signalTyping }`                                                                                                   |
+| `usePresence(conversationId)` / `useConversationPresence`                        | `{ online: Set<externalId> }` — who has the conversation open                                                                                 |
+| `useUserPresence(id \| null)`                                                    | `Presence \| null` — `state`: `online`, `away`, `in_call`, `offline`                                                                          |
+| `usePresenceMany(ids)`                                                           | `Record<id, Presence>` (known ids only)                                                                                                       |
+| `useMembers(conversationId)`                                                     | `{ members, loading, error, refetch, addMembers(externalIds, { role? }), removeMember(externalId) }`                                          |
+| `useAttachmentUpload()`                                                          | `{ queue, attachment, uploading, error, upload(input), uploadAll(inputs), cancel(localId), remove(localId), reset }`                          |
+| `useAttachmentUrl(id \| null)`                                                   | `{ url, loading, error }` (not renewed; URLs last one hour)                                                                                   |
+| `useUser(externalId)`                                                            | `{ profile, loading }`                                                                                                                        |
+| `useAppEvent(handler)`                                                           | Calls `handler({ type, data })` for each `app:event` sent to the user                                                                         |
+| `useRealtimeStatus()`                                                            | `'idle' \| 'connecting' \| 'connected' \| 'reconnecting' \| 'closed'`                                                                         |
+| `useReadReceipts()`                                                              | `{ visible, mode, shared, canChange, setShared }`                                                                                             |
+| `useLiveCall(conversationId \| null)`                                            | `{ call, participantIds, refresh }`                                                                                                           |
+| `useRoom(conversationId \| null, { livekit })`                                   | `{ live, presentIds, joined, joining, join, leave, media, error }`                                                                            |
+| `useCallRoom(conversationId \| null, { livekit, … })`                            | Call media: participants, mic, camera, devices                                                                                                |
 
 Helpers: `canEditOwnMessage`, `EDIT_WINDOW_MS`, `receiptsOf`,
 `computeGroupPosition`, `sameGroup`, `sameDay`, `formatDayLabel`, plus
@@ -108,6 +110,17 @@ Notes that trip people up:
   screen until the new one lands.
 - If the user is removed from a conversation, its mounted hooks stop
   updating; hooks mounted later join a fresh channel.
+- `useUserPresence` / `usePresenceMany` take user ids or external ids and
+  share one store per provider: hooks mounted together make one lookup, and
+  `presence:changed` keeps them live. `<PoolseProvider>` reports the browser
+  tab `active` / `idle` (`trackActivity`, on by default; a no-op in React
+  Native, where you call `usePoolse().presence.setActivity()` from `AppState`).
+- `useConversations` loads the first page (50); call `loadMore()` while
+  `hasMore` for the rest.
+- `useMessages` / `useThread` merge `message:updated` (edits, link previews
+  arriving in `link_previews`), keep deleted messages as tombstones
+  (`deleted_at` set, `body: null`) and apply `thread:updated` to the root's
+  `reply_count`, `last_reply_at` and `thread_participants`.
 
 ## Links
 

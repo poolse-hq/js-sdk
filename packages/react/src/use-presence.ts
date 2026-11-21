@@ -26,9 +26,13 @@ function externalIdsFrom(state: PresenceSnapshot): string[] {
 }
 
 /**
- * Who's currently joined to `conversationId`'s channel. Backed by
- * Phoenix.Presence broadcasts (`presence_state` snapshot on join,
- * `presence_diff` on changes).
+ * Who's currently joined to `conversationId`'s channel — who has the
+ * conversation open. Backed by Phoenix.Presence broadcasts
+ * (`presence_state` snapshot on join, `presence_diff` on changes).
+ * Also exported as `useConversationPresence`.
+ *
+ * For whether a person is online, away, in a call or offline anywhere,
+ * use `useUserPresence(id)` / `usePresenceMany(ids)`.
  */
 export function usePresence(conversationId: string): UsePresenceState {
   const chat = usePoolse();
@@ -65,3 +69,6 @@ export function usePresence(conversationId: string): UsePresenceState {
 
   return { online };
 }
+
+/** Who has `conversationId` open right now — the same hook as `usePresence`. */
+export const useConversationPresence = usePresence;
