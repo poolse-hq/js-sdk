@@ -4,6 +4,83 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Presence: `PresenceBadge` (`state`, `doNotDisturb`, `size`, `ringColor`) —
+  online in `success`, away in `warning`, in a call in `accent` with a phone,
+  do not disturb as a moon, nothing for offline. `Avatar` takes `presence`
+  (a `PresenceState`, or `true` to look it up with `useUserPresence` for
+  `userId` / `seed`) and `doNotDisturb`. `ChatHeader` (direct chats) says
+  "Online", "Away", "In a call" or "Last seen …" and badges the avatar.
+  `showPresence` on `ConversationView` (message avatars, default off),
+  `ConversationList`, `MemberList` and `PoolseInbox` (default on).
+- `useAppStatePresence(enabled?)`: `presence.setActivity('active' | 'idle')`
+  from `AppState`. `useAppStateLifecycle()` does it too (`{ presence: false }`
+  to opt out) and `PoolseInbox` by default (`trackActivity`).
+- `LinkPreviewCard` (`preview`, `onRemove`, `maxWidth`, `tone`,
+  `onLongPress`) under the text in every layout; "Remove preview" in the
+  sender's long-press sheet (`chat.messages.update(id, { remove_link_previews:
+[url] })`). Props `linkPreviews` on `ConversationView`, `ThreadView`,
+  `MessageRow`, `MessageBubble`; `onRemoveLinkPreview` on `MessageRow`.
+- `ThreadSummary`: "N replies · last reply 5m ago" with up to three stacked
+  avatars of `thread_participants`; replaces the "N replies" link.
+- "New messages" line (`NewMessagesDivider`) above the first message unread
+  when the conversation opened, and a pill that jumps to it, loading older
+  pages, while it's off screen (`ConversationView newMessagesDivider`).
+- "Mark unread" on other people's messages (`chat.conversations.one(id)
+.markUnread(messageId)`); auto mark-read pauses until the next send.
+  `ConversationView markUnread`, `onMarkedUnread`; `MessageRow onMarkUnread`;
+  `MessageActions onMarkUnread`.
+- Drafts per conversation (text and quote target) in memory across switches,
+  persisted with `ConversationView draftStorage` (`DraftStorage`: `get`,
+  `set`, `remove`; async allowed) unless `persistDrafts={false}`; cleared on
+  send. Types `DraftStorage`, `ConversationDraft`.
+- `EmojiPicker` (`visible`, `onClose`, `onPick`, `keepOpen`, `title`): a
+  built-in sheet with search, recently used and categories. Opened from the
+  composer's emoji button (`emojiPicker` on `ConversationView` /
+  `MessageComposer`), from "+" in the long-press reactions
+  (`MessageActions onMoreReactions`) and after reaction chips
+  (`ReactionStrip onMorePress`).
+- `EditHistorySheet` (`messageId`, `currentBody`, `onForbidden`): tap
+  "edited" for earlier versions (`chat.messages.edits`); a 403 closes it and
+  hides the affordance. `MessageRow editHistory`, `MessageBubble
+onEditedPress`.
+- `ConversationList`: `header`, `sections` (`ConversationSection`:
+  `{ title, filter }`) or `groupBy="type"` (`ConversationGroupBy`; "Channels"
+  then "Direct messages") through a `SectionList`, infinite scroll on
+  `useConversations().loadMore` (controlled: `hasMore`, `loadingMore`,
+  `onLoadMore`), `density`, a relative time per row. `PoolseInbox` pages its
+  list.
+- Attachments: `maxFileSize` and `acceptedFileTypes` on `ConversationView`
+  (`maxFileSize`, `acceptedTypes`, `onError`, `multiple` on
+  `AttachmentPicker`); refused files and a denied camera show a notice.
+  Several photos can be picked at once.
+- `MessageComposer`: `value` / `onChangeText` (controlled), `onSelectionChange`,
+  `accessory`, `emojiPicker`; `MessageComposerHandle.setSelection`, and the
+  handle type is exported. `MessageList onVisibleItemsChange`.
+
+### Changed
+
+- A deleted message reads "This message was deleted" and has no actions,
+  reactions, quote or swipe-to-reply in any layout; its thread link stays.
+- A failed send keeps the text in the composer and shows why above the list;
+  `quoted_message_deleted` reads "The message you replied to was deleted." and
+  drops the quote.
+- Editing a message no longer touches the unsent draft.
+- The typing indicator also shows in an empty conversation.
+- `MemberList` badges come from `useUserPresence` (workspace presence) rather
+  than who has the conversation open, unless `onlineExternalIds` is passed.
+- The picker's "Photo or video" item is "Photo library" (it only ever picked
+  photos).
+
+### Fixed
+
+- `MentionInput`: typing `@` never opened the member list and picking a member
+  didn't reach the input. Suggestions now appear inline as you type `@name`,
+  and `mentions` carries the ids whose `@Name` is still in the text.
+
 ## [3.5.0] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.5.0.

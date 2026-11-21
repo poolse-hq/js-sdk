@@ -1,4 +1,4 @@
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import type { Message, Uuid } from '@poolse/sdk';
 import { useMemo, useRef, useState } from 'react';
 // Static import — Metro's bundle graph can only trace literal
@@ -10,6 +10,8 @@ import * as Clipboard from 'expo-clipboard';
 
 import { Avatar } from './primitives/Avatar.js';
 import { CallLogRow } from './CallLogRow.js';
+import { canShowEditHistory, EditHistorySheet } from './EditHistorySheet.js';
+import { EmojiPicker } from './EmojiPicker.js';
 import { FlatMessageRow } from './FlatMessageRow.js';
 import {
   renderSlot,
@@ -23,8 +25,9 @@ import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { ReactionStrip } from './Reactions.js';
+import { ThreadSummary } from './ThreadSummary.js';
 import { useTheme } from './theme/PoolseTheme.js';
-import { callLogDisplayFor, useReactions, useUser } from '@poolse/react';
+import { callLogDisplayFor, isTombstone, useReactions, useUser } from '@poolse/react';
 
 // Swipe-to-reply triggers at this much horizontal pull. iOS / WhatsApp
 // use 50–60px; the lower bound feels lighter for one-handed thumb use.
@@ -104,6 +107,119 @@ export interface MessageRowProps {
    * with an accent bar.
    */
   mentionsMe?: boolean;
+  /** Presence badge on the sender's avatar (needs `showAvatar`). */
+  showPresence?: boolean;
+  /** Show the message's link previews as cards under the text. Defaults to true. */
+  linkPreviews?: boolean;
+  /**
+   * Long-press → "Remove preview" on your own message (one per link).
+   * Receives the preview's url — `chat.messages.update(id, { remove_link_previews: [url] })`.
+   */
+  onRemoveLinkPreview?: (url: string) => void;
+  /** Long-press → "Mark unread" on other people's messages. */
+  onMarkUnread?: () => void;
+  /** The "edited" label opens the edit history (`chat.messages.edits`). Defaults to true. */
+  editHistory?: boolean;
+}
+
+/**
+ * The long-press sheet both row layouts open: same items, same order.
+ * Exported for FlatMessageRow.
+ */
+export function RowActionsSheet({
+  msg,
+  isSelf,
+  close,
+  reactions,
+  addReaction,
+  onMoreReactions,
+  threads,
+  quotations,
+  onStartEdit,
+  onDelete,
+  onOpenThread,
+  onQuote,
+  onMarkUnread,
+  onRemoveLinkPreview,
+  linkPreviews,
+}: {
+  msg: Message;
+  isSelf: boolean;
+  close: () => void;
+  reactions: boolean;
+  addReaction: (emoji: string) => void;
+  onMoreReactions: () => void;
+  threads: boolean;
+  quotations: boolean;
+  onStartEdit: (() => void) | undefined;
+  onDelete: (() => void) | undefined;
+  onOpenThread: (() => void) | undefined;
+  onQuote: (() => void) | undefined;
+  onMarkUnread: (() => void) | undefined;
+  onRemoveLinkPreview: ((url: string) => void) | undefined;
+  linkPreviews: boolean;
+}) {
+  const then = (fn: () => void) => () => {
+    close();
+    fn();
+  };
+  const previewUrls = linkPreviews ? (msg.link_previews ?? []).map((p) => p.url) : [];
+  return (
+    <MessageActions
+      visible
+      onClose={close}
+      isSelf={isSelf}
+      {...(reactions ? { onPickReaction: addReaction, onMoreReactions } : {})}
+      {...(msg.body ? { onCopy: then(() => void Clipboard.setStringAsync(msg.body ?? '')) } : {})}
+      {...(onStartEdit ? { onEdit: then(onStartEdit) } : {})}
+      {...(onDelete ? { onDelete: then(onDelete) } : {})}
+      {...(threads && onOpenThread ? { onReplyInThread: then(onOpenThread) } : {})}
+      {...(quotations && onQuote ? { onQuote: then(onQuote) } : {})}
+      {...(onMarkUnread ? { onMarkUnread: then(onMarkUnread) } : {})}
+      {...(onRemoveLinkPreview && previewUrls.length > 0
+        ? {
+            previewUrls,
+            onRemovePreview: (url: string) => {
+              close();
+              onRemoveLinkPreview(url);
+            },
+          }
+        : {})}
+    />
+  );
+}
+
+/** The emoji picker and edit-history sheets a row opens. Exported for FlatMessageRow. */
+export function RowSheets({
+  msg,
+  emojiOpen,
+  onCloseEmoji,
+  onPickEmoji,
+  historyOpen,
+  onCloseHistory,
+}: {
+  msg: Message;
+  emojiOpen: boolean;
+  onCloseEmoji: () => void;
+  onPickEmoji: (emoji: string) => void;
+  historyOpen: boolean;
+  onCloseHistory: () => void;
+}) {
+  return (
+    <>
+      {emojiOpen ? (
+        <EmojiPicker visible onClose={onCloseEmoji} onPick={onPickEmoji} title="Add a reaction" />
+      ) : null}
+      {historyOpen ? (
+        <EditHistorySheet
+          visible
+          onClose={onCloseHistory}
+          messageId={msg.id}
+          currentBody={msg.body}
+        />
+      ) : null}
+    </>
+  );
 }
 
 export function MessageRow(props: MessageRowProps) {
@@ -155,10 +271,20 @@ function BubbleMessageRow({
   density = 'comfortable',
   timeFormat,
   slots,
+  showPresence = false,
+  linkPreviews = true,
+  onRemoveLinkPreview,
+  onMarkUnread,
+  editHistory = true,
 }: MessageRowProps) {
   const theme = useTheme();
   const isSelf = meId !== null && msg.sender_id === meId;
+  // A deleted message: "This message was deleted", nothing to act on,
+  // react to or quote — only its thread stays reachable.
+  const tombstone = isTombstone(msg);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Per-row useReactions subscription so the long-press → React picker
   // and the inline ReactionStrip share the same realtime state. Adds
@@ -178,7 +304,7 @@ function BubbleMessageRow({
   // Animation runs on the JS thread because we need to read the value
   // synchronously on release — native driver would prevent that.
   const translateX = useRef(new Animated.Value(0)).current;
-  const swipeEnabled = quotations && !!onQuote && !isEditing;
+  const swipeEnabled = quotations && !!onQuote && !isEditing && !tombstone;
 
   const panResponder = useMemo(
     () =>
@@ -298,6 +424,7 @@ function BubbleMessageRow({
       name={senderLabel}
       seed={msg.sender_external_id ?? null}
       size="sm"
+      {...(showPresence && msg.sender_external_id ? { presence: true as const } : {})}
     />
   );
 
@@ -354,7 +481,7 @@ function BubbleMessageRow({
         >
           <Pressable
             onLongPress={() => {
-              if (!actions) return;
+              if (!actions || tombstone) return;
               setActionsOpen(true);
             }}
             accessibilityRole="button"
@@ -385,8 +512,12 @@ function BubbleMessageRow({
               // image tiles — Pressables of their own, which win the
               // gesture — still open the sheet on an image-only message.
               onLongPress={() => {
-                if (actions) setActionsOpen(true);
+                if (actions && !tombstone) setActionsOpen(true);
               }}
+              linkPreviews={linkPreviews}
+              {...(editHistory && canShowEditHistory(msg.id)
+                ? { onEditedPress: () => setHistoryOpen(true) }
+                : {})}
             />
           </Pressable>
         </Animated.View>
@@ -394,25 +525,28 @@ function BubbleMessageRow({
         {renderSlot(
           slots?.thread,
           slotContext,
-          threads && (msg.reply_count ?? 0) > 0 && onOpenThread ? (
-            <Pressable onPress={onOpenThread} style={styles.threadPill}>
-              <Text style={[styles.threadPillText, { color: theme.colors.accent }]}>
-                💬 {msg.reply_count} {msg.reply_count === 1 ? 'reply' : 'replies'}
-              </Text>
-            </Pressable>
+          threads && !msg.thread_root_id && (msg.reply_count ?? 0) > 0 && onOpenThread ? (
+            <ThreadSummary
+              message={msg}
+              onPress={onOpenThread}
+              alignEnd={isSelf}
+              {...(labelFor ? { labelFor } : {})}
+              {...(avatarFor ? { avatarFor } : {})}
+            />
           ) : null,
         )}
 
         {renderSlot(
           slots?.reactions,
           slotContext,
-          reactions ? (
+          reactions && !tombstone ? (
             <View style={[styles.reactionsRow, { alignSelf: isSelf ? 'flex-end' : 'flex-start' }]}>
               <ReactionStrip
                 messageId={msg.id}
                 conversationId={msg.conversation_id}
                 meId={meId}
                 {...(msg.reactions ? { initialReactions: msg.reactions } : {})}
+                {...(actions ? { onMorePress: () => setEmojiOpen(true) } : {})}
               />
             </View>
           ) : null,
@@ -422,63 +556,34 @@ function BubbleMessageRow({
       {renderSlot(
         slots?.actions,
         slotContext,
-        actions && actionsOpen ? (
-          <MessageActions
-            visible={actionsOpen}
-            onClose={() => setActionsOpen(false)}
+        actions && actionsOpen && !tombstone ? (
+          <RowActionsSheet
+            msg={msg}
             isSelf={isSelf}
-            {...(reactions
-              ? {
-                  // Inline quick-react row at the top of the sheet —
-                  // one tap = react + close, no second modal needed.
-                  onPickReaction: (emoji: string) => {
-                    void reactionsApi.addReaction(emoji);
-                  },
-                }
-              : {})}
-            {...(msg.body && !msg.deleted_at
-              ? {
-                  onCopy: () => {
-                    setActionsOpen(false);
-                    void Clipboard.setStringAsync(msg.body ?? '');
-                  },
-                }
-              : {})}
-            {...(onStartEdit
-              ? {
-                  onEdit: () => {
-                    setActionsOpen(false);
-                    onStartEdit();
-                  },
-                }
-              : {})}
-            {...(onDelete
-              ? {
-                  onDelete: () => {
-                    setActionsOpen(false);
-                    onDelete();
-                  },
-                }
-              : {})}
-            {...(onOpenThread
-              ? {
-                  onReplyInThread: () => {
-                    setActionsOpen(false);
-                    onOpenThread();
-                  },
-                }
-              : {})}
-            {...(quotations && onQuote
-              ? {
-                  onQuote: () => {
-                    setActionsOpen(false);
-                    onQuote();
-                  },
-                }
-              : {})}
+            close={() => setActionsOpen(false)}
+            reactions={reactions}
+            addReaction={(emoji) => void reactionsApi.addReaction(emoji)}
+            onMoreReactions={() => setEmojiOpen(true)}
+            threads={threads}
+            quotations={quotations}
+            onStartEdit={onStartEdit}
+            onDelete={onDelete}
+            onOpenThread={onOpenThread}
+            onQuote={onQuote}
+            onMarkUnread={onMarkUnread}
+            onRemoveLinkPreview={onRemoveLinkPreview}
+            linkPreviews={linkPreviews}
           />
         ) : null,
       )}
+      <RowSheets
+        msg={msg}
+        emojiOpen={emojiOpen}
+        onCloseEmoji={() => setEmojiOpen(false)}
+        onPickEmoji={(emoji) => void reactionsApi.addReaction(emoji)}
+        historyOpen={historyOpen}
+        onCloseHistory={() => setHistoryOpen(false)}
+      />
     </View>
   );
 }
@@ -530,16 +635,6 @@ const styles = StyleSheet.create({
   },
   replyHintRight: {
     right: -44,
-  },
-  threadPill: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  threadPillText: {
-    fontSize: 11,
-    fontWeight: '600',
   },
   reactionsRow: {
     marginTop: 2,

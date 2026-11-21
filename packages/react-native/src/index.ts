@@ -23,6 +23,7 @@ export {
 
 // ── Chat surface (composed conversation view) ─────────────────
 export { ConversationView, type ConversationViewProps } from './ConversationView.js';
+export type { ConversationDraft, DraftStorage } from './internal/drafts.js';
 export { ChatHeader, type ChatHeaderProps } from './ChatHeader.js';
 export { GroupDetailsSheet, type GroupDetailsSheetProps } from './GroupDetailsSheet.js';
 
@@ -40,20 +41,35 @@ export type {
 } from './layout.js';
 export { CallLogRow, type CallLogRowProps } from './CallLogRow.js';
 export { LiveCallBanner, type LiveCallBannerProps } from './LiveCallBanner.js';
-export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';
+export {
+  MessageComposer,
+  type MessageComposerProps,
+  type MessageComposerHandle,
+} from './MessageComposer.js';
 export { MessageActions, type MessageActionsProps } from './MessageActions.js';
 export { MessageList, type MessageListProps, type MessageListItem } from './MessageList.js';
 export { DaySeparator, type DaySeparatorProps } from './DaySeparator.js';
 export { TypingIndicator, type TypingIndicatorProps } from './TypingIndicator.js';
 export { ThreadView, type ThreadViewProps } from './ThreadView.js';
+export { ThreadSummary, type ThreadSummaryProps } from './ThreadSummary.js';
+export { NewMessagesDivider, type NewMessagesDividerProps } from './NewMessagesDivider.js';
+export { EditHistorySheet, type EditHistorySheetProps } from './EditHistorySheet.js';
 export { UserName, useDisplayName, type UserNameProps } from './UserName.js';
 
 // ── Conversation + member panels ──────────────────────────────
-export { ConversationList, type ConversationListProps } from './ConversationList.js';
+export {
+  ConversationList,
+  type ConversationListProps,
+  type ConversationSection,
+  type ConversationGroupBy,
+} from './ConversationList.js';
 export { MemberList, type MemberListProps } from './MemberList.js';
+export { PresenceBadge, type PresenceBadgeProps } from './PresenceBadge.js';
 
 // ── Rich content ──────────────────────────────────────────────
 export { AttachmentPreview, type AttachmentPreviewProps } from './AttachmentPreview.js';
+export { LinkPreviewCard, type LinkPreviewCardProps } from './LinkPreviewCard.js';
+export { EmojiPicker, type EmojiPickerProps } from './EmojiPicker.js';
 export { UploadQueueStrip } from './UploadQueueStrip.js';
 export {
   ReactionStrip,
@@ -90,6 +106,7 @@ export type {
 
 // ── Lifecycle ─────────────────────────────────────────────────
 export { useAppStateLifecycle } from './lifecycle/useAppStateLifecycle.js';
+export { useAppStatePresence } from './lifecycle/useAppStatePresence.js';
 
 // ── Call building blocks ──────────────────────────────────────
 // Calls themselves run in the native call core (@poolse/native),

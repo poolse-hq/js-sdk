@@ -2,6 +2,7 @@ import type { Uuid } from '@poolse/sdk';
 import { useReactions } from '@poolse/react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { useTheme } from './theme/PoolseTheme.js';
@@ -14,6 +15,8 @@ export interface ReactionStripProps {
   meId: string | null;
   /** Seed map from a known message (e.g. `useMessages`). */
   initialReactions?: Record<string, Uuid[]>;
+  /** A "+" chip after the reactions — open an emoji picker (see `<EmojiPicker>`). */
+  onMorePress?: () => void;
 }
 
 export function ReactionStrip({
@@ -21,6 +24,7 @@ export function ReactionStrip({
   conversationId,
   meId,
   initialReactions,
+  onMorePress,
 }: ReactionStripProps) {
   const theme = useTheme();
   const { reactions, addReaction, removeReaction } = useReactions(messageId, {
@@ -65,6 +69,24 @@ export function ReactionStrip({
           </Pressable>
         );
       })}
+      {onMorePress ? (
+        <Pressable
+          onPress={onMorePress}
+          hitSlop={4}
+          style={[
+            styles.chip,
+            {
+              backgroundColor: theme.colors.surfaceAlt,
+              borderColor: theme.colors.border,
+              borderWidth: 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Add reaction"
+        >
+          <PoolseIcon name="plus" size={14} color={theme.colors.textMuted} label={null} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }

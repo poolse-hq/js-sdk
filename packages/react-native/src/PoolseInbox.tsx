@@ -1,5 +1,11 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { formatCallLogPreview, useConversations, useMe, useUser } from '@poolse/react';
+import {
+  formatCallLogPreview,
+  useConversations,
+  useMe,
+  useUser,
+  useUserPresence,
+} from '@poolse/react';
 import {
   forwardRef,
   useCallback,
@@ -13,7 +19,6 @@ import {
 import {
   Animated,
   Easing,
-  Image,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -24,6 +29,7 @@ import {
 
 import { ChatHeader } from './ChatHeader.js';
 import { ConversationList } from './ConversationList.js';
+import { useAppStatePresence } from './lifecycle/useAppStatePresence.js';
 import { ConversationView } from './ConversationView.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { Avatar } from './primitives/Avatar.js';
@@ -77,6 +83,14 @@ export interface PoolseInboxProps {
 
   /** Forwarded to `<ConversationView>` — set if you have a nav header above. */
   keyboardOffset?: number;
+
+  /**
+   * Report this device as `active` / `idle` for presence from
+   * `AppState` (see `useAppStatePresence`). Defaults to `true`.
+   */
+  trackActivity?: boolean;
+  /** Presence badges on direct chats in the list. Defaults to `true`. */
+  showPresence?: boolean;
 }
 
 export interface PoolseInboxHandle {
@@ -121,7 +135,11 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
       renderConversationRow,
       emptyState,
       keyboardOffset = 0,
+      trackActivity = true,
+      showPresence = true,
     } = props;
+
+    useAppStatePresence(trackActivity);
 
     const theme = useTheme();
     const { width: screenWidth } = useWindowDimensions();
@@ -132,6 +150,9 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
       unreadCounts,
       markConversationRead,
       refetch: refetchConversations,
+      hasMore: conversationsHaveMore,
+      loadingMore: conversationsLoadingMore,
+      loadMore: loadMoreConversations,
     } = useConversations();
     const meExternalId = me?.external_id ?? null;
     const meId = me?.id ?? null;
@@ -303,13 +324,14 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
             meExternalId={meExternalId}
             meId={meId}
             unread={unread}
+            showPresence={showPresence}
             {...(labelFor ? { labelFor } : {})}
             {...(avatarFor ? { avatarFor } : {})}
             onPress={() => setActiveId(conv.id)}
           />
         );
       },
-      [renderConversationRow, meExternalId, meId, labelFor, avatarFor, unreadCounts],
+      [renderConversationRow, meExternalId, meId, labelFor, avatarFor, unreadCounts, showPresence],
     );
 
     return (
@@ -357,6 +379,9 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
 
           <ConversationList
             conversations={conversations}
+            hasMore={conversationsHaveMore}
+            loadingMore={conversationsLoadingMore}
+            onLoadMore={() => void loadMoreConversations().catch(() => undefined)}
             renderItem={renderRow}
             {...(emptyState !== undefined ? { emptyState } : {})}
           />
@@ -473,6 +498,7 @@ function DefaultConversationRow({
   meExternalId,
   meId = null,
   unread,
+  showPresence,
   labelFor,
   avatarFor,
   onPress,
@@ -482,6 +508,7 @@ function DefaultConversationRow({
   meExternalId: string | null;
   meId?: string | null;
   unread: number;
+  showPresence: boolean;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
   onPress: () => void;
@@ -502,6 +529,7 @@ function DefaultConversationRow({
   // for a conversation, so the resolver must run here too — not only
   // inside ConversationView's bubbles.
   const resolvedOther = useUser(isDirect ? (otherExtId ?? null) : null);
+  const presence = useUserPresence(showPresence && isDirect ? (otherExtId ?? null) : null);
   const title = isDirect
     ? otherExtId
       ? (labelFor?.(otherExtId) ?? resolvedOther.profile?.displayName ?? otherExtId)
@@ -525,11 +553,13 @@ function DefaultConversationRow({
         },
       ]}
     >
-      {avatarUrl ? (
-        <Image source={{ uri: avatarUrl }} style={styles.rowAvatar} />
-      ) : (
-        <Avatar src={null} name={title} seed={avatarSeed} size="md" />
-      )}
+      <Avatar
+        src={avatarUrl}
+        name={title}
+        seed={avatarSeed}
+        size="md"
+        {...(presence ? { presence: presence.state, doNotDisturb: !!presence.do_not_disturb } : {})}
+      />
       <View style={styles.rowBody}>
         <Text
           style={[styles.rowTitle, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
@@ -591,11 +621,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
-  },
-  rowAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
   },
   rowBody: {
     flex: 1,

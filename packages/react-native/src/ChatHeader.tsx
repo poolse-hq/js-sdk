@@ -1,10 +1,18 @@
 import type { Uuid } from '@poolse/sdk';
-import { useConversation, useMe, useMembers, usePresence, useUser } from '@poolse/react';
-import { useState } from 'react';
+import {
+  useConversation,
+  useMe,
+  useMembers,
+  usePresence,
+  useUser,
+  useUserPresence,
+} from '@poolse/react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from './primitives/Avatar.js';
 import { GroupDetailsSheet } from './GroupDetailsSheet.js';
+import { presenceText } from './internal/presence.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
@@ -41,7 +49,8 @@ export interface ChatHeaderProps {
 
 /**
  * Top-of-chat header bar.
- *   * 1:1 direct  → other user's display name + avatar + presence dot.
+ *   * 1:1 direct  → other user's display name + avatar + presence badge,
+ *     and "Online" / "Away" / "In a call" / "Last seen …" under the name.
  *   * Group       → conversation name + "N members" + group-tile avatar.
  *
  * Sits above `<MessageList>` inside `<ConversationView>` by default;
@@ -68,6 +77,18 @@ export function ChatHeader({
   // useUser is safe with null — short-circuits to no-op state. Keeps the
   // hook unconditional regardless of conversation type.
   const otherUser = useUser(otherExtId);
+  // Workspace-wide presence of the other person (online / away / in a
+  // call / last seen). The conversation's own presence list (who has
+  // it open) stays as the fallback for servers without it.
+  const otherPresence = useUserPresence(isDirect ? otherExtId : null);
+  // "Last seen 5m ago" ages; re-render once a minute while it shows.
+  const [, setTick] = useState(0);
+  const showsLastSeen = otherPresence?.state === 'offline';
+  useEffect(() => {
+    if (!showsLastSeen) return;
+    const t = setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, [showsLastSeen]);
 
   if (!conversation) {
     return (
@@ -91,9 +112,7 @@ export function ChatHeader({
 
   const isOnline = isDirect && otherExtId ? online.has(otherExtId) : false;
   const subtitle = isDirect
-    ? isOnline
-      ? 'Online'
-      : null
+    ? (presenceText(otherPresence) ?? (isOnline ? 'Online' : null))
     : `${members.length} ${members.length === 1 ? 'member' : 'members'}`;
 
   const avatarUrl =
@@ -128,7 +147,18 @@ export function ChatHeader({
             <PoolseIcon name="reply" size={20} color={theme.colors.text} />
           </Pressable>
         ) : null}
-        <Avatar src={avatarUrl} name={title} seed={avatarSeed} online={isOnline} size="md" />
+        <Avatar
+          src={avatarUrl}
+          name={title}
+          seed={avatarSeed}
+          {...(otherPresence
+            ? {
+                presence: otherPresence.state,
+                doNotDisturb: !!otherPresence.do_not_disturb,
+              }
+            : { online: isOnline })}
+          size="md"
+        />
         <View style={styles.titleCol}>
           <Text
             style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.display }]}

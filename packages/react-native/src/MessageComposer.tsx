@@ -1,8 +1,16 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AttachmentUploadInput, Message, Uuid } from '@poolse/sdk';
 import { useUser } from '@poolse/react';
 
+import { EmojiPicker } from './EmojiPicker.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
 import { useSharedUpload } from './internal/uploadContext.js';
@@ -54,6 +62,20 @@ export interface MessageComposerProps {
   editingMessage?: Message | null;
   onCancelEdit?: () => void;
   onSaveEdit?: (body: string) => Promise<unknown> | void;
+  /**
+   * Controlled text. With `value`, the composer shows it and reports
+   * keystrokes through `onChangeText` (ConversationView uses this for
+   * drafts). Edit mode keeps its own text either way.
+   */
+  value?: string;
+  /** Every change to the (non-edit) text, typed or programmatic. */
+  onChangeText?: (text: string) => void;
+  /** The cursor / selection moved. */
+  onSelectionChange?: (selection: { start: number; end: number }) => void;
+  /** An emoji button that opens `<EmojiPicker>` and inserts at the cursor. Defaults to true. */
+  emojiPicker?: boolean;
+  /** Rendered above the input row — e.g. `<MentionInput>`'s suggestions. */
+  accessory?: ReactNode;
 }
 
 /**
@@ -66,6 +88,8 @@ export interface MessageComposerHandle {
   addFiles: (inputs: AttachmentUploadInput[]) => void;
   focus: () => void;
   clear: () => void;
+  /** Move the cursor (`start === end`) or select a range. */
+  setSelection: (start: number, end: number) => void;
 }
 
 export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposerProps>(
@@ -84,13 +108,37 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       editingMessage = null,
       onCancelEdit,
       onSaveEdit,
+      value: valueProp,
+      onChangeText,
+      onSelectionChange,
+      emojiPicker = true,
+      accessory,
     },
     ref,
   ) {
     const theme = useTheme();
     const inputRef = useRef<TextInput>(null);
-    const [value, setValue] = useState('');
+    const [innerValue, setInnerValue] = useState('');
+    // Edit mode has its own text, so editing never overwrites (or gets
+    // saved as) the draft.
+    const [editValue, setEditValue] = useState('');
     const [sending, setSending] = useState(false);
+    const [emojiOpen, setEmojiOpen] = useState(false);
+    const selectionRef = useRef<{ start: number; end: number } | null>(null);
+    const isEditing = !!editingMessage;
+    const draftValue = valueProp ?? innerValue;
+    const value = isEditing ? editValue : draftValue;
+    const onChangeTextRef = useRef(onChangeText);
+    onChangeTextRef.current = onChangeText;
+    const controlled = valueProp !== undefined;
+    const setDraft = (text: string) => {
+      if (!controlled) setInnerValue(text);
+      onChangeTextRef.current?.(text);
+    };
+    const setValue = (text: string) => {
+      if (isEditing) setEditValue(text);
+      else setDraft(text);
+    };
     const keyboardOpen = useKeyboardOpen();
     const upload = useSharedUpload();
     const insets = useSafeInsets();
@@ -105,9 +153,16 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           }
         },
         focus: () => inputRef.current?.focus(),
-        clear: () => setValue(''),
+        clear: () => {
+          if (!controlled) setInnerValue('');
+          onChangeTextRef.current?.('');
+        },
+        setSelection: (start, end) => {
+          selectionRef.current = { start, end };
+          inputRef.current?.setSelection?.(start, end);
+        },
       }),
-      [attachments, upload],
+      [attachments, upload, controlled],
     );
 
     const readyAttachmentIds = upload.queue
@@ -117,35 +172,20 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       (item) => item.status === 'uploading' || item.status === 'pending',
     );
 
-    // Stash the user's in-progress draft when edit mode opens so we
-    // can put it back when they cancel. Without this, cancelling
-    // would either wipe what they were typing or leave the edited
-    // body in the input.
-    const previousDraftRef = useRef<string | null>(null);
+    // Entering edit mode for a message: prefill its body and focus so
+    // the keyboard pops up with the cursor at the end. The draft is
+    // untouched and shows again when editing ends.
     const editingIdRef = useRef<string | null>(null);
     useEffect(() => {
       const id = editingMessage?.id ?? null;
       if (id === editingIdRef.current) return;
-      if (id) {
-        // Entering edit mode for a new message: snapshot whatever
-        // the user was drafting, then prefill with the body.
-        previousDraftRef.current = value;
-        setValue(editingMessage?.body ?? '');
-        // Focus so the keyboard pops up and the cursor lands at the
-        // end of the prefilled body.
-        inputRef.current?.focus();
-      } else {
-        // Leaving edit mode — restore the prior draft.
-        setValue(previousDraftRef.current ?? '');
-        previousDraftRef.current = null;
-      }
       editingIdRef.current = id;
-      // value intentionally omitted: we only want this to fire when
-      // the editingMessage identity changes, not on every keystroke.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (id) {
+        setEditValue(editingMessage?.body ?? '');
+        inputRef.current?.focus();
+      }
     }, [editingMessage?.id, editingMessage?.body]);
 
-    const isEditing = !!editingMessage;
     const editChanged = isEditing && value.trim() !== (editingMessage?.body?.trim() ?? '');
 
     const submitDisabled =
@@ -174,13 +214,23 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         } else {
           const replyId = replyingTo?.id;
           const attachmentIds = readyAttachmentIds;
-          setValue('');
+          setDraft('');
           upload.reset();
-          await onSend(body, {
-            ...(replyId ? { quoted_message_id: replyId } : {}),
-            ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
-          });
+          try {
+            await onSend(body, {
+              ...(replyId ? { quoted_message_id: replyId } : {}),
+              ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+            });
+          } catch (err) {
+            // Put the text back so nothing typed is lost (the parent
+            // shows why it failed). Uncontrolled: only if nothing new
+            // was typed meanwhile; controlled: the parent decides.
+            if (!controlled) setInnerValue((now) => (now ? now : body));
+            console.warn('[poolse/composer] send failed:', err);
+          }
         }
+      } catch (err) {
+        console.warn('[poolse/composer] save failed:', err);
       } finally {
         setSending(false);
       }
@@ -224,6 +274,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
 
         {attachments && !isEditing ? <UploadQueueStrip /> : null}
 
+        {isEditing ? null : accessory}
+
         <View style={styles.row}>
           {attachments && onAttachPress ? (
             <Pressable
@@ -236,12 +288,28 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             </Pressable>
           ) : null}
 
+          {emojiPicker ? (
+            <Pressable
+              onPress={() => setEmojiOpen(true)}
+              hitSlop={8}
+              style={styles.iconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Insert emoji"
+            >
+              <PoolseIcon name="emoji" size={22} color={theme.colors.textMuted} label={null} />
+            </Pressable>
+          ) : null}
+
           <TextInput
             ref={inputRef}
             value={value}
             onChangeText={(text) => {
               setValue(text);
               onTyping?.();
+            }}
+            onSelectionChange={(e) => {
+              selectionRef.current = e.nativeEvent.selection;
+              if (!isEditing) onSelectionChange?.(e.nativeEvent.selection);
             }}
             placeholder={placeholder}
             placeholderTextColor={theme.colors.textSubtle}
@@ -274,6 +342,27 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             <PoolseIcon name="send" size={18} color={theme.colors.accentText} />
           </Pressable>
         </View>
+
+        {emojiPicker && emojiOpen ? (
+          <EmojiPicker
+            visible
+            keepOpen
+            title="Insert emoji"
+            onClose={() => {
+              setEmojiOpen(false);
+              inputRef.current?.focus();
+            }}
+            onPick={(emoji) => {
+              const sel = selectionRef.current ?? { start: value.length, end: value.length };
+              const start = Math.min(sel.start, value.length);
+              const end = Math.min(Math.max(sel.end, start), value.length);
+              const next = value.slice(0, start) + emoji + value.slice(end);
+              const cursor = start + emoji.length;
+              selectionRef.current = { start: cursor, end: cursor };
+              setValue(next);
+            }}
+          />
+        ) : null}
       </View>
     );
   },

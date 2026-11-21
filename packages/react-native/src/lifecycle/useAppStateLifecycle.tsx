@@ -24,19 +24,40 @@ import { usePoolse } from '@poolse/react';
  *       useAppStateLifecycle();
  *       return ...;
  *     }
+ *
+ * It also reports this device's activity for presence (foreground →
+ * `active`, background / inactive → `idle`, which others see as away);
+ * pass `{ presence: false }` to leave that to you.
  */
-export function useAppStateLifecycle() {
+export function useAppStateLifecycle(options: { presence?: boolean } = {}) {
   const poolse = usePoolse();
+  const presence = options.presence ?? true;
 
   useEffect(() => {
+    const setActivity = (activity: 'active' | 'idle') => {
+      if (!presence) return;
+      try {
+        poolse.presence.setActivity(activity);
+      } catch {
+        // Presence is best-effort.
+      }
+    };
+    setActivity(AppState.currentState === 'active' ? 'active' : 'idle');
     // Only 'background' pauses: iOS reports 'inactive' for the
     // notification centre or the app switcher, which is no reason to drop
-    // the connection.
+    // the connection. Idle is reported before the socket closes.
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
-      if (next === 'background') poolse.realtime.pause();
-      else if (next === 'active') poolse.realtime.resume();
+      if (next === 'background') {
+        setActivity('idle');
+        poolse.realtime.pause();
+      } else if (next === 'active') {
+        poolse.realtime.resume();
+        setActivity('active');
+      } else {
+        setActivity('idle');
+      }
     });
 
     return () => sub.remove();
-  }, [poolse]);
+  }, [poolse, presence]);
 }

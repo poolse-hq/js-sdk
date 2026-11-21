@@ -75,6 +75,72 @@ highlight it) with `onFocusMessageNotFound`, `onSenderPress` and
 `readOnly`) to hide the composer. Tapping a quoted message jumps to the
 original.
 
+### Chat features
+
+```tsx
+<ConversationView
+  conversationId={id}
+  showPresence
+  draftStorage={{
+    get: (k) => storage.getString(k), // MMKV, AsyncStorage, …
+    set: (k, v) => storage.set(k, v),
+    remove: (k) => storage.delete(k),
+  }}
+  maxFileSize={25 * 1024 * 1024}
+  acceptedFileTypes={['image/*', 'application/pdf']}
+/>
+```
+
+- **Drafts.** Unsent text and the quote target stay with each conversation
+  while you switch (in memory, always). With `draftStorage` (`get` / `set` /
+  `remove` over strings, sync or async) they are also saved under
+  `poolse:draft:<conversationId>` and come back after a restart;
+  `persistDrafts={false}` keeps them in memory only. Sending clears them.
+- **New messages.** A "New messages" line sits above the first message that
+  was unread when the conversation opened; while it is off screen a pill jumps
+  to it, loading older pages as needed. `newMessagesDivider={false}` turns
+  both off.
+- **Mark unread.** Long-press someone else's message → "Mark unread"
+  (`conversations.one(id).markUnread(messageId)`); the view stops marking
+  messages read until you send or reopen it. `markUnread={false}` hides it;
+  `onMarkedUnread(conversationId, messageId)` fires after it succeeds.
+- **Link previews.** `message.link_previews` show as `<LinkPreviewCard>`s under
+  the text (website: image, site name and favicon, title, description; image
+  links inline), and tapping opens the link. The sender can long-press →
+  "Remove preview". `linkPreviews={false}` turns them off.
+- **Deleted messages** read "This message was deleted" without actions,
+  reactions or quoting; their thread link stays. Quotes of a deleted message
+  read "Original message deleted". A send whose quote was deleted meanwhile
+  shows "The message you replied to was deleted." and keeps your text.
+- **Threads** show as "3 replies · last reply 5m ago" with the last repliers'
+  avatars (`<ThreadSummary>`); tap opens the thread.
+- **Edit history.** Tap "edited" to see earlier versions (`<EditHistorySheet>`,
+  `chat.messages.edits`); when the workspace keeps history from you (403) the
+  label stops offering it.
+- **Emoji.** A built-in `<EmojiPicker>` (search, recently used, categories; no
+  extra dependency) opens from the composer's emoji button
+  (`emojiPicker={false}` hides it), from "+" in the long-press reactions and
+  after a message's reaction chips.
+- **Mentions.** Type `@` in `<MentionInput>` (the default composer) to get
+  matching members above the input; picking one inserts `@Name` and sends
+  their id in `mentions`.
+- **Attachments.** Camera, photo library (several at once) and files, with
+  previews before sending. `maxFileSize` / `acceptedFileTypes` (MIME types,
+  `'image/*'`, or `'.pdf'`) refuse files with a message; so does a denied
+  camera permission. Needs `expo-image-picker`, `expo-document-picker` and
+  `expo-image-manipulator` (pass `attachments={false}` to leave them out).
+- **Presence.** `showPresence` adds badges to message avatars; the header of a
+  direct chat says "Online", "Away", "In a call" or "Last seen 5m ago".
+
+### Presence
+
+`<PresenceBadge state doNotDisturb>` draws online (`success`), away
+(`warning`), in a call (`accent` with a phone) or do not disturb (a moon), and
+nothing for offline. `<Avatar presence="online">` takes a state, or
+`presence={true}` to look the user up live with `useUserPresence` (by
+`userId`, else `seed`). `ConversationList`, `PoolseInbox` and `MemberList`
+show badges by default (`showPresence={false}` to hide).
+
 ## `useAppStateLifecycle()`
 
 Call it once inside `<PoolseProvider>`. From 3.1 it pauses the socket when
@@ -83,6 +149,28 @@ channels and listeners survive, and `useMessages` / `useConversations`
 reload from REST after the reconnect. The iOS `inactive` state doesn't pause
 anything. (In 3.0 it destroyed every channel instead, which left mounted
 hooks silent until they remounted.)
+
+It also reports the device as `active` / `idle` for presence
+(`presence.setActivity`), so others see you as away while the app is in the
+background; `useAppStateLifecycle({ presence: false })` leaves that out.
+`useAppStatePresence()` does only that part, and `<PoolseInbox>` does it by
+default (`trackActivity={false}` to stop).
+
+## `ConversationList`
+
+```tsx
+<ConversationList
+  header={<SearchField />}
+  groupBy="type" // "Channels", then "Direct messages"
+  density="compact"
+  onSelect={(c) => open(c.id)}
+/>
+```
+
+`sections={[{ title, filter }]}` makes your own sections (a conversation goes
+to the first one that takes it; empty sections are hidden). The list pages
+through `useConversations()` as you scroll; with `conversations` passed in,
+give it `hasMore`, `loadingMore` and `onLoadMore`.
 
 ## Components
 
@@ -97,8 +185,10 @@ hooks silent until they remounted.)
   size of the bytes it uploads; a custom `onPickInputs` must set `byteSize`
   to the size of `body`, because the server refuses a file bigger than
   declared.
-- Lists: `ConversationList`, `MemberList`.
-- Reactions: `ReactionStrip`, `ReactionPicker`.
+- Lists: `ConversationList`, `MemberList`, `PresenceBadge`.
+- Message parts: `LinkPreviewCard`, `ThreadSummary`, `NewMessagesDivider`,
+  `EditHistorySheet`.
+- Reactions: `ReactionStrip` (`onMorePress`), `ReactionPicker`, `EmojiPicker`.
 - Identity and brand: `UserName`, `useDisplayName`, `Avatar`, `PoolseIcon`,
   `PoolseLogo`, `Primitives`.
 - Call screen: `CallControlButton`, `CallAvatar`, `AudioRouteSheet`,

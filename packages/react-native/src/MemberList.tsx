@@ -15,6 +15,12 @@ export interface MemberListProps {
   canRemove?: (m: Membership) => boolean;
   renderItem?: (m: Membership) => ReactNode;
   emptyState?: ReactNode | string;
+  /**
+   * Presence badges on the avatars (online / away / in a call / do not
+   * disturb, via `useUserPresence`). Defaults to `true`. With
+   * `onlineExternalIds` given, those drive a plain online dot instead.
+   */
+  showPresence?: boolean;
 }
 
 export function MemberList({
@@ -25,11 +31,12 @@ export function MemberList({
   canRemove,
   renderItem,
   emptyState,
+  showPresence = true,
 }: MemberListProps) {
   const theme = useTheme();
   const { members, loading, error, removeMember } = useMembers(conversationId);
   const { online: presenceOnline } = usePresence(
-    onlineExternalIds === undefined ? conversationId : '',
+    onlineExternalIds === undefined && !showPresence ? conversationId : '',
   );
   const effectiveOnline = onlineExternalIds ?? presenceOnline;
 
@@ -84,6 +91,7 @@ export function MemberList({
             externalId={item.external_id}
             role={item.role}
             online={isOnline}
+            livePresence={showPresence && onlineExternalIds === undefined}
             {...(labelFor ? { labelFor } : {})}
             {...(avatarFor ? { avatarFor } : {})}
             {...(showRemove ? { onRemove: () => removeMember(item.external_id) } : {})}
@@ -98,6 +106,7 @@ function MemberRow({
   externalId,
   role,
   online,
+  livePresence,
   labelFor,
   avatarFor,
   onRemove,
@@ -105,6 +114,7 @@ function MemberRow({
   externalId: string;
   role: MemberRole;
   online: boolean;
+  livePresence: boolean;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
   onRemove?: () => void;
@@ -120,7 +130,13 @@ function MemberRow({
   const avatarUrl = avatarFor?.(externalId) ?? resolved.profile?.avatarUrl ?? null;
   return (
     <View style={styles.row}>
-      <Avatar src={avatarUrl} name={name} seed={externalId} online={online} size="md" />
+      <Avatar
+        src={avatarUrl}
+        name={name}
+        seed={externalId}
+        {...(livePresence ? { presence: true as const } : { online })}
+        size="md"
+      />
       <View style={styles.body}>
         <Text
           style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.body }]}

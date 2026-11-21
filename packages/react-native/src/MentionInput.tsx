@@ -1,26 +1,27 @@
 import type { Membership, Uuid } from '@poolse/sdk';
-import { useMembers } from '@poolse/react';
-import { useMemo, useState } from 'react';
-import {
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useMe, useMembers, usePoolse, useUser } from '@poolse/react';
+import { useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import {
+  activeMentionQuery,
+  filterMentionCandidates,
+  insertMention,
+  mentionedUserIds,
+  type MentionQuery,
+} from './internal/mentions.js';
 import { Avatar } from './primitives/Avatar.js';
-import { MessageComposer, type MessageComposerProps } from './MessageComposer.js';
-import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
-import { useSafeInsets } from './internal/safeArea.js';
-import { useKeyboardOpen } from './internal/useKeyboardOpen.js';
+import { PoolseIcon } from './primitives/PoolseIcon.js';
+import {
+  MessageComposer,
+  type MessageComposerHandle,
+  type MessageComposerProps,
+} from './MessageComposer.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 export interface MentionInputProps extends Omit<MessageComposerProps, 'onSend'> {
   conversationId: Uuid;
-  /** Same callback as MessageComposer.onSend, plus optional mention user_ids. */
+  /** Same callback as MessageComposer.onSend, plus the mentioned user_ids. */
   onSend: (
     body: string,
     opts?: {
@@ -29,150 +30,207 @@ export interface MentionInputProps extends Omit<MessageComposerProps, 'onSend'> 
       mentions?: Uuid[];
     },
   ) => Promise<unknown> | void;
+  /** Most suggestions shown at once. Defaults to 6. */
+  maxSuggestions?: number;
+}
+
+interface Candidate {
+  member: Membership;
+  label: string;
+  externalId: string;
 }
 
 /**
- * Composer with an inline `@`-trigger that opens a modal sheet of
- * conversation members. Selecting a member inserts their
- * `external_id` into the text, and the wire `mentions` array (sent
- * to the backend) carries the corresponding internal `user_id`s.
+ * Composer with @-mentions: typing `@` (at the start or after a space)
+ * shows matching conversation members above the input, filtered by
+ * name or id as you type. Picking one inserts `@Name ` and the send
+ * carries their user id in `mentions` — for as long as `@Name` is
+ * still in the text.
  */
-export function MentionInput({ conversationId, onSend, ...composerProps }: MentionInputProps) {
+export function MentionInput({
+  conversationId,
+  onSend,
+  maxSuggestions = 6,
+  labelFor,
+  value: valueProp,
+  onChangeText,
+  onSelectionChange,
+  ...composerProps
+}: MentionInputProps) {
   const theme = useTheme();
-  const insets = useSafeInsets();
-  const keyboardOpen = useKeyboardOpen();
+  const chat = usePoolse();
+  const { me } = useMe();
   const { members } = useMembers(conversationId);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerQuery, _setPickerQuery] = useState('');
-  const [pendingMentionUuids, setPendingMentionUuids] = useState<Uuid[]>([]);
-  const [text, setText] = useState('');
+  const composerRef = useRef<MessageComposerHandle>(null);
+  const [innerText, setInnerText] = useState('');
+  const text = valueProp ?? innerText;
+  const [cursor, setCursor] = useState(0);
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const pickedRef = useRef<Array<{ userId: Uuid; label: string }>>([]);
 
-  const filteredMembers = useMemo(() => {
-    if (!pickerQuery) return members;
-    const q = pickerQuery.toLowerCase();
-    return members.filter((m) => m.external_id.toLowerCase().includes(q));
-  }, [members, pickerQuery]);
-
-  const handleSend: MessageComposerProps['onSend'] = async (body, opts) => {
-    await onSend(body, {
-      ...opts,
-      ...(pendingMentionUuids.length > 0 ? { mentions: pendingMentionUuids } : {}),
-    });
-    setPendingMentionUuids([]);
-    setText('');
+  const setText = (next: string) => {
+    if (valueProp === undefined) setInnerText(next);
+    onChangeText?.(next);
   };
 
-  return (
-    <>
-      <MessageComposer
-        {...composerProps}
-        onSend={handleSend}
-        onTyping={() => {
-          composerProps.onTyping?.();
-          // Watch for an `@` token to open the picker.
-          const lastChar = text.slice(-1);
-          if (lastChar === '@') setPickerOpen(true);
-        }}
-      />
+  const query: MentionQuery | null = useMemo(() => {
+    const q = activeMentionQuery(text, cursor);
+    return q && q.start !== dismissedAt ? q : null;
+  }, [text, cursor, dismissedAt]);
 
-      <Modal
-        visible={pickerOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPickerOpen(false)}
-        // Edge-to-edge on Android like the host app, so the inset and
-        // keyboard maths below hold on every device.
-        {...EDGE_TO_EDGE_MODAL}
+  const candidates = useMemo<Candidate[]>(() => {
+    if (!query) return [];
+    const all = members
+      .filter((m) => m.user_id !== me?.id)
+      .map((m) => ({
+        member: m,
+        externalId: m.external_id,
+        label:
+          labelFor?.(m.external_id) ?? chat.users.peek(m.external_id)?.displayName ?? m.external_id,
+      }));
+    return filterMentionCandidates(all, query.query, maxSuggestions);
+  }, [query, members, me?.id, labelFor, chat, maxSuggestions]);
+
+  const pick = (c: Candidate) => {
+    if (!query) return;
+    const next = insertMention(text, query.start, cursor, c.label);
+    pickedRef.current = [...pickedRef.current, { userId: c.member.user_id, label: c.label }];
+    setText(next.text);
+    setCursor(next.cursor);
+    // After React applies the new text, put the cursor after the mention.
+    setTimeout(() => composerRef.current?.setSelection(next.cursor, next.cursor), 0);
+  };
+
+  const handleSend: MessageComposerProps['onSend'] = async (body, opts) => {
+    const mentions = mentionedUserIds(body, pickedRef.current);
+    await onSend(body, { ...opts, ...(mentions.length > 0 ? { mentions } : {}) });
+    pickedRef.current = [];
+  };
+
+  const suggestions =
+    query && candidates.length > 0 ? (
+      <View
+        style={[
+          styles.suggestions,
+          {
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
+            borderRadius: theme.radii.md,
+          },
+          theme.shadows.md,
+        ]}
+        accessibilityRole="menu"
+        accessibilityLabel="Mention suggestions"
       >
-        {/* The picker opens while the composer's keyboard is usually
-            still up. The modal is full-screen and never resized, so a
-            `padding` KAV (on both platforms) lifts the sheet exactly
-            above the keyboard. */}
-        <KeyboardAvoidingView style={styles.kav} behavior="padding">
-          <Pressable style={styles.backdrop} onPress={() => setPickerOpen(false)}>
-            <View
-              style={[
-                styles.sheet,
-                {
-                  backgroundColor: theme.colors.surface,
-                  borderTopLeftRadius: theme.radii.lg,
-                  borderTopRightRadius: theme.radii.lg,
-                  // Clear the nav bar — unless the keyboard is covering
-                  // it, where the inset would just be a gap.
-                  paddingBottom: 12 + (keyboardOpen ? 0 : insets.bottom),
-                  paddingLeft: insets.left,
-                  paddingRight: insets.right,
-                },
-              ]}
-            >
-              <Text
-                style={[styles.title, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
-              >
-                Mention a member
-              </Text>
-              <FlatList
-                data={filteredMembers}
-                keyExtractor={(m) => m.user_id}
-                // First tap picks a member even with the keyboard up.
-                keyboardShouldPersistTaps="handled"
-                renderItem={({ item }) => (
-                  <MentionRow
-                    member={item}
-                    onPress={() => {
-                      setPendingMentionUuids((prev) => [...prev, item.user_id]);
-                      setText((prev) => `${prev}${item.external_id} `);
-                      setPickerOpen(false);
-                    }}
-                  />
-                )}
-              />
-            </View>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
-    </>
+        <ScrollView keyboardShouldPersistTaps="always" style={styles.suggestionScroll}>
+          {candidates.map((c) => (
+            <MentionRow
+              key={c.member.user_id}
+              externalId={c.externalId}
+              label={c.label}
+              onPress={() => pick(c)}
+            />
+          ))}
+        </ScrollView>
+        <Pressable
+          onPress={() => setDismissedAt(query.start)}
+          style={styles.dismiss}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss suggestions"
+          hitSlop={6}
+        >
+          <PoolseIcon name="close" size={14} color={theme.colors.textSubtle} label={null} />
+        </Pressable>
+      </View>
+    ) : null;
+
+  return (
+    <MessageComposer
+      ref={composerRef}
+      {...composerProps}
+      {...(labelFor ? { labelFor } : {})}
+      value={text}
+      onChangeText={(next) => {
+        setText(next);
+        // A fresh `@` re-opens suggestions after a dismiss.
+        if (dismissedAt !== null && !next.includes('@', dismissedAt)) setDismissedAt(null);
+      }}
+      onSelectionChange={(sel) => {
+        setCursor(sel.end);
+        onSelectionChange?.(sel);
+      }}
+      onSend={handleSend}
+      accessory={suggestions}
+    />
   );
 }
 
-function MentionRow({ member, onPress }: { member: Membership; onPress: () => void }) {
+function MentionRow({
+  externalId,
+  label,
+  onPress,
+}: {
+  externalId: string;
+  label: string;
+  onPress: () => void;
+}) {
   const theme = useTheme();
+  const resolved = useUser(externalId);
+  const name = resolved.profile?.displayName ?? label;
   return (
-    <Pressable onPress={onPress} style={styles.row}>
-      <Avatar src={null} name={member.external_id} seed={member.external_id} size="sm" />
-      <Text style={[styles.rowText, { color: theme.colors.text, fontFamily: theme.fonts.body }]}>
-        {member.external_id}
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? theme.colors.surfaceAlt : 'transparent' },
+      ]}
+      accessibilityRole="menuitem"
+      accessibilityLabel={`Mention ${name}`}
+    >
+      <Avatar src={resolved.profile?.avatarUrl ?? null} name={name} seed={externalId} size="sm" />
+      <Text
+        style={[styles.rowText, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
+        numberOfLines={1}
+      >
+        {name}
       </Text>
+      {name !== externalId ? (
+        <Text style={[styles.rowId, { color: theme.colors.textSubtle }]} numberOfLines={1}>
+          {externalId}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  kav: {
-    flex: 1,
+  suggestions: {
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 8,
+    overflow: 'hidden',
   },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    maxHeight: '60%',
-    paddingVertical: 12,
-  },
-  title: {
-    fontSize: 14,
-    fontWeight: '600',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+  suggestionScroll: {
+    maxHeight: 220,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     gap: 10,
   },
   rowText: {
     fontSize: 14,
+    fontWeight: '500',
+    flexShrink: 1,
+  },
+  rowId: {
+    fontSize: 12,
+    flexShrink: 1,
+  },
+  dismiss: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
   },
 });
