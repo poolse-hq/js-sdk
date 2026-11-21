@@ -1,0 +1,62 @@
+{
+  "name": "@poolse/crypto",
+  "version": "3.8.0",
+  "description": "End-to-end encryption for poolse personal data on WebCrypto only: device key pairs, an account key wrapped per device and per recovery key, per-item keys, sharing by key wrapping, rotation on revoke, chunked attachments, signed QR device approval, and encrypted sync over an opaque blob store. No dependencies.",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": [
+    "e2ee",
+    "end-to-end-encryption",
+    "webcrypto",
+    "aes-gcm",
+    "ecdh",
+    "notes",
+    "react-native",
+    "typescript",
+    "poolse"
+  ],
+  "homepage": "https://poolse.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/poolse-hq/js-sdk.git",
+    "directory": "packages/crypto"
+  },
+  "bugs": {
+    "url": "https://github.com/poolse-hq/js-sdk/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
