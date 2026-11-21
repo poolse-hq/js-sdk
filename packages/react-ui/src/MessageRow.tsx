@@ -30,6 +30,7 @@ import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { InlineReactions, useRowActions } from './rowParts.js';
+import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
 
 /** Who sent a message — what `onSenderPress` / `onAvatarPress` receive. */
@@ -119,6 +120,10 @@ export interface MessageRowProps {
    * with an accent bar.
    */
   mentionsMe?: boolean;
+  /** Unsent message (queued or failed in the outbox): the Retry under it. */
+  onRetrySend?: () => void;
+  /** Unsent message: the Delete under it. */
+  onDiscardSend?: () => void;
 }
 
 export function MessageRow(props: MessageRowProps) {
@@ -173,6 +178,8 @@ function BubbleMessageRow({
   onAvatarPress,
   timeFormat,
   slots,
+  onRetrySend,
+  onDiscardSend,
 }: MessageRowProps) {
   // Resolve the sender once at the row level so both the avatar slot
   // (rendered here) and the bubble's inline sender label (rendered
@@ -199,8 +206,10 @@ function BubbleMessageRow({
     currentUserId: meId,
   });
 
-  const showReactions = reactions && !msg.deleted_at;
-  const showActions = actions && !msg.deleted_at && !editing;
+  // Not on the server yet: nothing to react to, reply to or edit.
+  const unsent = !!msg.local_status;
+  const showReactions = reactions && !msg.deleted_at && !unsent;
+  const showActions = actions && !msg.deleted_at && !editing && !unsent;
   // Thread pill: only show on the root message of an existing thread
   // (i.e. when reply_count > 0 AND this message isn't itself a reply).
   // ThreadView passes threads={false} so the pill won't show inside the
@@ -233,10 +242,14 @@ function BubbleMessageRow({
         // last) and widen it between clusters (standalone or the
         // first of a new run).
         `poolse-message-row--${groupPosition}`,
+        unsent ? 'poolse-message-row--unsent' : '',
       ]
         .filter(Boolean)
         .join(' ')}
       data-message-id={msg.id}
+      role="article"
+      aria-label={`Message from ${isSelf ? 'you' : senderName}`}
+      tabIndex={-1}
       data-actions-open={actionsOpen || undefined}
       data-avatar={showAvatar && !isSelf ? true : undefined}
       onClick={onRowClick}
@@ -299,6 +312,13 @@ function BubbleMessageRow({
           />
         </BubbleWithAvatar>
       )}
+
+      <SendStatus
+        message={msg}
+        align={isSelf ? 'right' : 'left'}
+        {...(onRetrySend ? { onRetry: onRetrySend } : {})}
+        {...(onDiscardSend ? { onDiscard: onDiscardSend } : {})}
+      />
 
       {renderSlot(
         slots?.reactions,

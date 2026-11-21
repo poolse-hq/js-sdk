@@ -19,6 +19,7 @@ import {
 } from 'react';
 import { Avatar } from './Avatar.js';
 import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
+import { composerAction, DEFAULT_KEYMAP, type ComposerKeymap } from './keymap.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
@@ -71,6 +72,18 @@ export interface MentionInputProps {
    * extensions (`'.pdf'`). Other files show an error chip instead.
    */
   acceptFileTypes?: string[];
+  /**
+   * Composer shortcuts (send, new line, edit last, cancel) — see
+   * `ComposerKeymap`. Defaults: Enter / Cmd+Enter send, Shift+Enter new
+   * line, ↑ in an empty composer edits your last message, Esc cancels
+   * the reply.
+   */
+  keymap?: ComposerKeymap;
+  /**
+   * ↑ in an empty composer: edit your last message. Return `false`
+   * when there's none to edit (the caret then moves as usual).
+   */
+  onEditLast?: () => boolean | void;
 }
 
 /** Most suggestions shown at once. */
@@ -99,6 +112,8 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       maxFileSize,
       acceptFileTypes,
       onValueChange,
+      keymap = DEFAULT_KEYMAP.composer,
+      onEditLast,
     },
     ref,
   ) {
@@ -288,13 +303,30 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
         }
       }
 
-      if (e.key === 'Enter' && !e.shiftKey) {
+      const action = composerAction(e, keymap);
+      if (action === 'editLast') {
+        if (value === '' && onEditLast && onEditLast() !== false) e.preventDefault();
+        return;
+      }
+      if (action === 'newline' && e.key === 'Enter' && !e.shiftKey) {
+        const result = handleListEnter(value, e.currentTarget.selectionStart);
+        if (result) {
+          e.preventDefault();
+          setValue(result.value);
+          requestAnimationFrame(() => {
+            taRef.current?.setSelectionRange(result.caret, result.caret);
+          });
+        }
+        return;
+      }
+      if (action === 'send') {
         // Smart list continuation — same behavior as MessageComposer.
         // Only kicks in when the mention menu is closed (the menu's own
         // Enter handler is in the block above and returns early).
         const ta = e.currentTarget;
         const caret = ta.selectionStart;
-        const result = handleListEnter(value, caret);
+        const result =
+          e.key === 'Enter' && !e.metaKey && !e.ctrlKey ? handleListEnter(value, caret) : null;
         if (result) {
           e.preventDefault();
           setValue(result.value);
@@ -308,7 +340,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       }
       // Esc clears the reply chip when one is active (and the mention
       // menu is closed — that branch is handled above).
-      if (e.key === 'Escape' && replyingTo && onCancelReply && !mention) {
+      if (action === 'cancel' && replyingTo && onCancelReply && !mention) {
         e.preventDefault();
         onCancelReply();
       }
@@ -365,6 +397,8 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
                 multiple
                 {...(uploads.accept ? { accept: uploads.accept } : {})}
                 className="poolse-attach-input"
+                aria-label="Attach files"
+                tabIndex={-1}
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? []);
                   if (files.length > 0) addFiles(files);
@@ -394,12 +428,12 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
             placeholder={placeholder}
             disabled={disabled || sending}
             aria-label={placeholder}
-            role="combobox"
-            aria-expanded={Boolean(mention && filtered.length > 0)}
-            aria-controls={menuId}
             aria-autocomplete="list"
             {...(mention && filtered.length > 0
-              ? { 'aria-activedescendant': `${menuId}-opt-${activeIdx}` }
+              ? {
+                  'aria-controls': menuId,
+                  'aria-activedescendant': `${menuId}-opt-${activeIdx}`,
+                }
               : {})}
           />
           {emojiPicker && (

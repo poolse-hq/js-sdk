@@ -27,6 +27,7 @@ import { ImageMosaic, isImageContentType, QuotedCard, QuotedPlaceholder } from '
 import type { MessageRowProps, MessageUser } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { InlineReactions, useRowActions } from './rowParts.js';
+import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
 import { userColor } from './userColor.js';
 
@@ -63,6 +64,8 @@ export function FlatMessageRow({
   timeFormat,
   slots,
   mentionsMe = false,
+  onRetrySend,
+  onDiscardSend,
 }: MessageRowProps & { layout: 'list' | 'compact' }) {
   const compact = layout === 'compact';
   const isSelf = meId !== null && msg.sender_id === meId;
@@ -93,7 +96,9 @@ export function FlatMessageRow({
   const replyCount = msg.reply_count ?? 0;
   // A deleted root keeps its thread link: the replies are still there.
   const showThreadLink = threads && !msg.thread_root_id && replyCount > 0;
-  const showActions = actions && !deleted && !editing;
+  // Not on the server yet: nothing to react to, reply to or edit.
+  const unsent = !!msg.local_status;
+  const showActions = actions && !deleted && !editing && !unsent;
 
   const timeEl = (className: string) => (
     <time className={className} dateTime={msg.inserted_at}>
@@ -223,7 +228,7 @@ export function FlatMessageRow({
   );
 
   const reactionsEl =
-    reactions && !deleted ? (
+    reactions && !deleted && !unsent ? (
       <InlineReactions
         reactions={reactionsHook.reactions}
         currentUserId={meId}
@@ -272,6 +277,12 @@ export function FlatMessageRow({
       ) : null}
       {renderSlot(slots?.reactions, ctx, reactionsEl)}
       {renderSlot(slots?.thread, ctx, threadEl)}
+      <SendStatus
+        message={msg}
+        align="left"
+        {...(onRetrySend ? { onRetry: onRetrySend } : {})}
+        {...(onDiscardSend ? { onDiscard: onDiscardSend } : {})}
+      />
     </div>
   );
 
@@ -285,10 +296,14 @@ export function FlatMessageRow({
         isSelf ? 'poolse-row--self' : '',
         mentionsMe ? 'poolse-row--mention' : '',
         editing ? 'poolse-row--editing' : '',
+        unsent ? 'poolse-row--unsent' : '',
       ]
         .filter(Boolean)
         .join(' ')}
       data-message-id={msg.id}
+      role="article"
+      aria-label={`Message from ${isSelf ? 'you' : senderName}`}
+      tabIndex={-1}
       data-actions-open={actionsOpen || undefined}
       onClick={onRowClick}
     >

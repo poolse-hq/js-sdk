@@ -34,7 +34,27 @@ export type {
   TimeFormat,
 } from './layout.js';
 export { ChatHeader, type ChatHeaderProps } from './ChatHeader.js';
-export { localDraftStorage, type ConversationDraft, type DraftStorage } from './drafts.js';
+export {
+  localDraftStorage,
+  draftsOf,
+  DraftScope,
+  type ConversationDraft,
+  type DraftStorage,
+} from './drafts.js';
+export { EmptyState, type EmptyStateProps } from './EmptyState.js';
+export { SendStatus, type SendStatusProps } from './SendStatus.js';
+export {
+  DEFAULT_KEYMAP,
+  MOD_ENTER_COMPOSER,
+  matchesKey,
+  matchesAny,
+  resolveKeymap,
+  type ComposerKeymap,
+  type KeyBinding,
+  type MessageListKeymap,
+  type PoolseKeymap,
+  type PoolseKeymapOverrides,
+} from './keymap.js';
 
 // ── Inbox shell (composed list + detail) ──────────────────────
 export { PoolseInbox, type PoolseInboxProps, type PoolseInboxHandle } from './PoolseInbox.js';

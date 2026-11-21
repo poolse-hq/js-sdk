@@ -12,6 +12,7 @@ import type { Conversation, Uuid } from '@poolse/sdk';
 import { formatCallLogPreview, useConversations, useMe, useUser } from '@poolse/react';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
+import { EmptyState } from './EmptyState.js';
 
 export interface ConversationListProps {
   /** Currently selected conversation id — sets `aria-current` + selected styling. */
@@ -20,8 +21,19 @@ export interface ConversationListProps {
   onSelect?: (conv: Conversation) => void;
   /** Optional override for each row's rendering. */
   renderItem?: (conv: Conversation, selected: boolean) => ReactNode;
-  /** Custom empty state when there are no conversations. */
+  /**
+   * What an empty list shows. Defaults to "No conversations yet" with a
+   * hint at the next step.
+   */
   emptyState?: ReactNode;
+  /**
+   * Show only conversations matching this text (name, the other
+   * person in a direct chat via `labelFor`, the last message). For a
+   * search field in `header`. Empty = everything.
+   */
+  query?: string;
+  /** What shows when `query` matches nothing. Receives the query. */
+  noResultsState?: ReactNode | ((query: string) => ReactNode);
   /**
    * Controlled mode — when provided, render from these props instead
    * of calling `useConversations()` internally. Lets parent components
@@ -91,6 +103,8 @@ export function ConversationList({
   onSelect,
   renderItem,
   emptyState,
+  query = '',
+  noResultsState,
   conversations: controlledConversations,
   loading: controlledLoading,
   error: controlledError,
@@ -111,7 +125,15 @@ export function ConversationList({
   const meExternalId = me?.external_id ?? null;
   const meId = me?.id ?? null;
   const isControlled = controlledConversations !== undefined;
-  const conversations = isControlled ? controlledConversations : auto.conversations;
+  const allConversations = isControlled ? controlledConversations : auto.conversations;
+  const needle = query.trim().toLowerCase();
+  const conversations = useMemo(
+    () =>
+      needle
+        ? allConversations.filter((c) => matchesQuery(c, needle, meExternalId, labelFor))
+        : allConversations,
+    [allConversations, needle, meExternalId, labelFor],
+  );
   const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
   const error = isControlled ? (controlledError ?? null) : auto.error;
   // Fall back to the hook's own unreadCounts when in uncontrolled mode
@@ -178,11 +200,26 @@ export function ConversationList({
         </div>
       );
     }
+    if (conversations.length === 0 && needle && allConversations.length > 0) {
+      return typeof noResultsState === 'function' ? (
+        noResultsState(query.trim())
+      ) : noResultsState !== undefined ? (
+        <div className="poolse-list poolse-list--placeholder">{noResultsState}</div>
+      ) : (
+        <EmptyState
+          title={`Nothing matches “${query.trim()}”`}
+          hint="Check the spelling, or search by a person's or channel's name."
+        />
+      );
+    }
     if (conversations.length === 0) {
-      return (
-        <div className="poolse-list poolse-list--placeholder">
-          {emptyState ?? 'No conversations yet.'}
-        </div>
+      return emptyState !== undefined ? (
+        <div className="poolse-list poolse-list--placeholder">{emptyState}</div>
+      ) : (
+        <EmptyState
+          title="No conversations yet"
+          hint="Start a chat with someone, or join a channel — it shows up here."
+        />
       );
     }
 
@@ -230,13 +267,15 @@ export function ConversationList({
         {groups === null
           ? conversations.map(row)
           : groups.map((g) => (
-              <li key={g.title} role="group" aria-label={g.title} className="poolse-list__section">
-                <div className="poolse-list__section-title" aria-hidden="true">
-                  {g.title}
+              <li key={g.title} role="presentation" className="poolse-list__section">
+                <div role="group" aria-label={g.title}>
+                  <div className="poolse-list__section-title" aria-hidden="true">
+                    {g.title}
+                  </div>
+                  <ul className="poolse-list__section-items" role="presentation">
+                    {g.conversations.map(row)}
+                  </ul>
                 </div>
-                <ul className="poolse-list__section-items" role="presentation">
-                  {g.conversations.map(row)}
-                </ul>
               </li>
             ))}
         {loadingMore && (
@@ -273,6 +312,21 @@ const TYPE_SECTIONS: ConversationListSection[] = [
 
 // Each conversation goes under the first section that takes it; empty
 // sections are left out. `null` = no sections, one flat list.
+function matchesQuery(
+  conv: Conversation,
+  needle: string,
+  meExternalId: string | null,
+  labelFor: ((externalId: string) => string) | undefined,
+): boolean {
+  const hay: string[] = [conv.name ?? '', conv.last_message_preview ?? ''];
+  for (const ext of conv.member_external_ids ?? []) {
+    if (ext === meExternalId) continue;
+    hay.push(ext);
+    if (labelFor) hay.push(labelFor(ext));
+  }
+  return hay.some((h) => h.toLowerCase().includes(needle));
+}
+
 function groupConversations(
   conversations: Conversation[],
   sections: ConversationListSection[] | null,

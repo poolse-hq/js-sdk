@@ -13,6 +13,7 @@ import React, { Fragment, useEffect, useRef, useState, type ReactNode } from 're
 import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
 import type { ChatDensity, ChatLayout, TimeFormat } from './layout.js';
+import { EmptyState } from './EmptyState.js';
 import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
@@ -131,19 +132,20 @@ export function ThreadView({
     if (el) el.scrollTop = el.scrollHeight;
   }, [replies]);
 
-  // Focus the close button on open + ESC closes the pane. We do NOT
-  // restore focus to the previously-focused element on close — that's
-  // the parent's job (ConversationView focuses the message that
-  // spawned the thread), since the trigger isn't owned here.
+  // Focus the close button on open; Esc inside the pane closes it. Esc
+  // is heard on the pane itself, not the document, so a thread beside
+  // another view (or a second thread) only closes when it has focus —
+  // and an Esc a child already used (cancelling a reply or an edit)
+  // doesn't close it. We do NOT restore focus on close — that's the
+  // parent's job, since the trigger isn't owned here.
   useEffect(() => {
     closeBtnRef.current?.focus();
-    if (!onClose) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
+  const onPaneKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Escape' || e.defaultPrevented || !onClose) return;
+    e.preventDefault();
+    onClose();
+  };
 
   // Default reply renderer — uses MessageRow with the same feature
   // surface as the main feed (chevron-triggered action popover with
@@ -186,6 +188,7 @@ export function ThreadView({
       }`}
       role="complementary"
       aria-label="Message thread"
+      onKeyDown={onPaneKeyDown}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -213,7 +216,7 @@ export function ThreadView({
       </div>
 
       {/* Replies list */}
-      <div className="poolse-thread__messages" ref={listRef}>
+      <div className="poolse-thread__messages" ref={listRef} role="log" aria-label="Replies">
         {hasMore && !loading && replies.length > 0 && (
           <button type="button" className="poolse-conversation__load-more" onClick={loadMore}>
             Load older replies
@@ -223,7 +226,7 @@ export function ThreadView({
         {loading && replies.length === 0 ? (
           <div className="poolse-conversation__empty">Loading replies…</div>
         ) : replies.length === 0 ? (
-          <div className="poolse-conversation__empty">No replies yet — start the thread.</div>
+          <EmptyState title="No replies yet" hint="Write a reply below to start the thread." />
         ) : (
           // Same Fragment trick as ConversationView so MessageBubble
           // remains the direct flex child for align-self to work.

@@ -88,7 +88,9 @@ describe('mention suggestions', () => {
         <ConversationView conversationId="c-1" loadFonts={false} />
       </PoolseProvider>,
     );
-    await waitFor(() => expect(container.querySelector('[role="combobox"]')).not.toBeNull());
+    await waitFor(() =>
+      expect(container.querySelector('textarea[aria-autocomplete="list"]')).not.toBeNull(),
+    );
     const input = container.querySelector('textarea')!;
     act(() => {
       fireEvent.change(input, { target: { value: '@', selectionStart: 1 } });

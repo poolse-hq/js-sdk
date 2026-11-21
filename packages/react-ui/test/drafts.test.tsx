@@ -28,9 +28,13 @@ describe('drafts', () => {
     fireEvent.click(container.querySelector('[data-message-id="m1"] [aria-label="Reply"]')!);
     fireEvent.change(textarea(container), { target: { value: 'half a thought' } });
     await waitFor(() =>
-      expect(localStorage.getItem('poolse:draft:u-me:c-1')).toContain('half a thought'),
+      expect(localStorage.getItem('poolse:v1:https://chat.test#u-me:draft:c-1')).toContain(
+        'half a thought',
+      ),
     );
-    expect(JSON.parse(localStorage.getItem('poolse:draft:u-me:c-1')!).replyTo.id).toBe('m1');
+    expect(
+      JSON.parse(localStorage.getItem('poolse:v1:https://chat.test#u-me:draft:c-1')!).replyTo.id,
+    ).toBe('m1');
 
     rerender(<ConversationView conversationId="c-2" loadFonts={false} />);
     await waitFor(() => expect(container.textContent).toContain('message 7'));
@@ -43,10 +47,12 @@ describe('drafts', () => {
 
     // Sending clears it.
     fireEvent.submit(container.querySelector('form.poolse-composer')!);
-    await waitFor(() => expect(localStorage.getItem('poolse:draft:u-me:c-1')).toBeNull());
+    await waitFor(() =>
+      expect(localStorage.getItem('poolse:v1:https://chat.test#u-me:draft:c-1')).toBeNull(),
+    );
   });
 
-  it('uses draftStorage (async) and restores from it', async () => {
+  it('uses draftStorage (async) and restores from it, moving a pre-3.8 key', async () => {
     const store = new Map<string, string>([
       ['poolse:draft:u-me:c-2', JSON.stringify({ v: 1, text: 'from storage', replyTo: null })],
     ]);
@@ -62,7 +68,9 @@ describe('drafts', () => {
     await waitFor(() => expect(textarea(container).value).toBe('from storage'));
     fireEvent.change(textarea(container), { target: { value: 'from storage, edited' } });
     await waitFor(() => expect(draftStorage.set).toHaveBeenCalled());
-    expect(store.get('poolse:draft:u-me:c-2')).toContain('edited');
+    // The pre-3.8 key was moved under the client's namespace.
+    expect(store.get('poolse:v1:https://chat.test#u-me:draft:c-2')).toContain('edited');
+    expect(store.has('poolse:draft:u-me:c-2')).toBe(false);
   });
 
   it('persistDrafts={false} keeps nothing', async () => {

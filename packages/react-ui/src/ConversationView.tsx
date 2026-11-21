@@ -10,6 +10,7 @@
 // directly. ConversationView is just the canonical wiring.
 
 import type { LiveCall, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
+import { MessageQueuedError, safeUuid } from '@poolse/sdk';
 import {
   ApiError,
   canEditOwnMessage,
@@ -36,14 +37,15 @@ import React, {
 } from 'react';
 import { usePoolseFonts } from './fonts.js';
 import {
-  clearDraft,
   draftKey,
+  draftsOf,
   localDraftStorage,
-  readDraft,
-  writeDraft,
   type ConversationDraft,
   type DraftStorage,
 } from './drafts.js';
+import { EmptyState } from './EmptyState.js';
+import { isTypingTarget, matchesAny, resolveKeymap, type PoolseKeymapOverrides } from './keymap.js';
+import { prefersReducedMotion } from './motion.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
 import {
   mentionsViewer,
@@ -64,8 +66,36 @@ import { TypingIndicator } from './TypingIndicator.js';
 export interface ConversationViewProps {
   conversationId: Uuid;
 
-  /** Placeholder when there are no messages. */
-  emptyState?: ReactNode;
+  /**
+   * What an empty conversation shows. Defaults to "No messages yet"
+   * with a hint to write the first one (or none, read-only). A
+   * function receives `{ readOnly }`.
+   */
+  emptyState?: ReactNode | ((ctx: { readOnly: boolean }) => ReactNode);
+
+  /**
+   * Keyboard shortcuts, scoped to this view (an app's own shortcuts
+   * never collide). Composer: Enter sends (see `sendOn`), Shift+Enter
+   * makes a new line, ↑ in an empty composer edits your last message,
+   * Esc cancels a reply. Message list (focus it with Tab or a click):
+   * j / k or ↓ / ↑ move between messages, Home / End jump, r replies,
+   * t opens the thread, e edits, Delete deletes (yours, after a
+   * confirm), Esc goes back to the composer. Override any binding;
+   * `[]` turns one off. See `DEFAULT_KEYMAP`.
+   */
+  keymap?: PoolseKeymapOverrides;
+  /**
+   * `'enter'` (default): Enter sends, Shift+Enter is a new line.
+   * `'mod+enter'`: Enter is a new line, Cmd/Ctrl+Enter sends.
+   */
+  sendOn?: 'enter' | 'mod+enter';
+  /** The message-list shortcuts (j / k / r / t / e / Delete). Defaults to `true`. */
+  keyboardShortcuts?: boolean;
+  /**
+   * Asked before the Delete shortcut deletes a message. Defaults to
+   * `window.confirm`. Return false to keep it.
+   */
+  confirmDelete?: (message: Message) => boolean | Promise<boolean>;
 
   /**
    * Render-prop escape hatch for individual messages. When set,
@@ -337,6 +367,10 @@ export function ConversationView({
   currentCallId = null,
   persistDrafts = TRUE,
   draftStorage,
+  keymap: keymapOverrides,
+  sendOn = 'enter',
+  keyboardShortcuts = TRUE,
+  confirmDelete,
 }: ConversationViewProps) {
   usePoolseFonts(loadFonts);
   const showComposer = composer && !readOnly;
@@ -353,10 +387,13 @@ export function ConversationView({
     loadMore,
     loadUntil,
     send,
+    retry: retrySend,
+    discard: discardSend,
     edit,
     delete: deleteMsg,
     markReadUpTo,
   } = useMessages(conversationId);
+  const keymap = useMemo(() => resolveKeymap(keymapOverrides, sendOn), [keymapOverrides, sendOn]);
   const { typing: typingPeople, signalTyping } = useTyping(conversationId);
   // AI agent replies being written. Before the first words arrive the
   // agent shows as typing; then its reply streams into a bubble.
@@ -786,21 +823,24 @@ export function ConversationView({
   // The composer is keyed by conversation, so switching starts it empty;
   // the effect below fills it back from the draft. Text changes and
   // reply-target changes write the draft; a send clears it.
+  // Drafts belong to this client (server + user): two workspaces side
+  // by side never share them.
   const meIdForDrafts = me?.id ?? null;
   const draftsOn = persistDrafts && showComposer;
   const storage = draftStorage ?? localDraftStorage;
+  const drafts = draftsOf(chat);
   const draftRef = useRef<ConversationDraft>({ text: '', replyTo: null });
   const draftKeyFor = useCallback(
-    () => (draftsOn && meIdForDrafts ? draftKey(meIdForDrafts, conversationIdRef.current) : null),
-    [draftsOn, meIdForDrafts],
+    () => (draftsOn && meIdForDrafts ? drafts.key(conversationIdRef.current) : null),
+    [draftsOn, meIdForDrafts, drafts],
   );
   const saveDraft = useCallback(
     (patch: Partial<ConversationDraft>) => {
       draftRef.current = { ...draftRef.current, ...patch };
       const key = draftKeyFor();
-      if (key) writeDraft(storage, key, draftRef.current);
+      if (key) drafts.write(storage, key, draftRef.current);
     },
-    [draftKeyFor, storage],
+    [draftKeyFor, storage, drafts],
   );
   const setReplyingTo = useCallback(
     (m: Message | null) => {
@@ -821,7 +861,8 @@ export function ConversationView({
       draftRef.current = { text: composer?.getText() || d.text, replyTo: d.replyTo };
       if (d.replyTo && canQuote) setReplyingToState((cur) => cur ?? d.replyTo);
     };
-    const found = readDraft(storage, key);
+    const legacy = meIdForDrafts ? draftKey(meIdForDrafts, conversationIdRef.current) : undefined;
+    const found = drafts.read(storage, key, legacy);
     if (found instanceof Promise) void found.then(apply);
     else apply(found);
     return () => {
@@ -829,7 +870,7 @@ export function ConversationView({
     };
     // `conversationId` via draftKeyFor's ref; re-run when it changes, and
     // when the composer is swapped (MentionInput once members load).
-  }, [conversationId, draftKeyFor, storage, canQuote, mentionComposer]);
+  }, [conversationId, draftKeyFor, storage, canQuote, mentionComposer, drafts, meIdForDrafts]);
   const onComposerChange = useCallback((text: string) => saveDraft({ text }), [saveDraft]);
   // The message being quoted was deleted meanwhile: a tombstone can't be
   // quoted, so drop the chip.
@@ -906,11 +947,14 @@ export function ConversationView({
   // Sends, and maps the refusals the user can fix to a notice: quoting
   // a message deleted meanwhile drops the quote and puts the text back
   // so it can go out without it. Anything else is rethrown.
-  const sendRequest = async (req: MessageCreateRequest) => {
+  const sendRequest = async (input: MessageCreateRequest) => {
+    const req = { ...input, id: input.id ?? safeUuid() };
     try {
       await send(req);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'quoted_message_deleted') {
+        // Not worth a Retry: the text goes back into the composer.
+        discardSend(req.id);
         setReplyingTo(null);
         setSendNotice('The message you replied to was deleted.');
         // After the composer has finished its own post-send reset.
@@ -923,14 +967,110 @@ export function ConversationView({
         }
         return;
       }
-      throw err;
+      // Offline: it's queued and goes out by itself. Refused: the row
+      // stays with Retry / Delete. Either way the composer is done.
+      if (!(err instanceof MessageQueuedError) && !chat.outboxEnabled) throw err;
     }
     setReplyingToState(null);
     // Sending is reading: the divider goes.
     setUnreadMarker(null);
     draftRef.current = { text: '', replyTo: null };
     const key = draftKeyFor();
-    if (key) clearDraft(storage, key);
+    if (key) drafts.clear(storage, key);
+  };
+
+  // ↑ in an empty composer: edit the last message you can still edit.
+  const editLast = () => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]!;
+      if (!me || m.sender_id !== me.id || m.deleted_at || m.local_status) continue;
+      if (m.thread_root_id) continue;
+      const isRead = maxReadByOthers !== null && maxReadByOthers >= m.sequence;
+      const editable = canEditOwnMessage({
+        isSelf: true,
+        deleted: false,
+        receiptsVisible,
+        readState:
+          showReadState && maxReadByOthers !== null ? (isRead ? 'read' : 'sent') : undefined,
+        insertedAt: m.inserted_at,
+      });
+      if (!editable) return false;
+      setEditingId(m.id);
+      return true;
+    }
+    return false;
+  };
+
+  // ── Message-list shortcuts ─────────────────────────────────────────
+  // Only while focus is in this list (and not in a text field inside
+  // it, like an inline edit), so the app's shortcuts and a second view
+  // beside this one are unaffected.
+  const rowsInList = (): HTMLElement[] =>
+    Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-message-id]') ?? []).filter(
+      (el) => el.closest('.poolse-conversation__messages') === listRef.current,
+    );
+  const focusRow = (el: HTMLElement | undefined) => {
+    if (!el) return;
+    el.focus();
+    if (typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'nearest', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    }
+  };
+  const onListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!keyboardShortcuts || isTypingTarget(e.target)) return;
+    const km = keymap.messageList;
+    const rows = rowsInList();
+    if (rows.length === 0) return;
+    const focused = (e.target as HTMLElement).closest?.('[data-message-id]') as HTMLElement | null;
+    const idx = focused ? rows.indexOf(focused) : -1;
+    const focusedMsg = focused
+      ? (messages.find((m) => m.id === focused.dataset['messageId']) ?? null)
+      : null;
+    const handled = () => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    if (matchesAny(e, km.next)) {
+      handled();
+      focusRow(rows[idx === -1 ? rows.length - 1 : Math.min(rows.length - 1, idx + 1)]);
+    } else if (matchesAny(e, km.prev)) {
+      handled();
+      focusRow(rows[idx === -1 ? rows.length - 1 : Math.max(0, idx - 1)]);
+    } else if (matchesAny(e, km.last)) {
+      handled();
+      focusRow(rows[rows.length - 1]);
+    } else if (matchesAny(e, km.first)) {
+      handled();
+      focusRow(rows[0]);
+    } else if (matchesAny(e, km.composer)) {
+      if (!showComposer) return;
+      handled();
+      composerRef.current?.focus();
+    } else if (focusedMsg && !focusedMsg.deleted_at && !focusedMsg.local_status) {
+      const isSelf = me !== null && focusedMsg.sender_id === me.id;
+      if (matchesAny(e, km.reply) && canQuote) {
+        handled();
+        setReplyingTo(focusedMsg);
+        composerRef.current?.focus();
+      } else if (matchesAny(e, km.thread) && threads) {
+        handled();
+        setThreadRootId(focusedMsg.id);
+      } else if (matchesAny(e, km.edit) && isSelf && showComposer) {
+        handled();
+        setEditingId(focusedMsg.id);
+      } else if (matchesAny(e, km.delete) && isSelf && actions) {
+        handled();
+        const ask =
+          confirmDelete ??
+          ((): boolean =>
+            typeof globalThis.confirm === 'function'
+              ? globalThis.confirm('Delete this message?')
+              : false);
+        void Promise.resolve(ask(focusedMsg)).then((ok) => {
+          if (ok) void deleteMsg(focusedMsg.id).catch(() => undefined);
+        });
+      }
+    }
   };
 
   const onSendBody = (body: string, opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] }) =>
@@ -961,6 +1101,8 @@ export function ConversationView({
       conversationId={conversationId}
       onSend={onSendWithMentions}
       onTyping={signalTyping}
+      keymap={keymap.composer}
+      onEditLast={editLast}
       attachments={attachments}
       emojiPicker={emojiPicker}
       {...attachmentRules}
@@ -974,6 +1116,8 @@ export function ConversationView({
       onValueChange={onComposerChange}
       onSend={onSendBody}
       onTyping={signalTyping}
+      keymap={keymap.composer}
+      onEditLast={editLast}
       attachments={attachments}
       emojiPicker={emojiPicker}
       {...attachmentRules}
@@ -1039,6 +1183,8 @@ export function ConversationView({
           aria-label="Conversation messages"
           aria-live="polite"
           aria-relevant="additions"
+          tabIndex={0}
+          onKeyDown={onListKeyDown}
         >
           {/* Top sentinel for the auto-load IntersectionObserver.
               Rendered only while there's more history to fetch so IO
@@ -1070,8 +1216,19 @@ export function ConversationView({
 
           {loading && messages.length === 0 ? (
             <div className="poolse-conversation__empty">Loading…</div>
-          ) : messages.length === 0 ? (
-            <div className="poolse-conversation__empty">{emptyState ?? 'No messages yet.'}</div>
+          ) : messages.length === 0 && !error ? (
+            typeof emptyState === 'function' ? (
+              emptyState({ readOnly: !showComposer })
+            ) : emptyState !== undefined ? (
+              <div className="poolse-conversation__empty">{emptyState}</div>
+            ) : (
+              <EmptyState
+                title="No messages yet"
+                {...(showComposer
+                  ? { hint: 'Write the first message below — everyone here will see it.' }
+                  : {})}
+              />
+            )
           ) : (
             visibleMessages.map((msg, idx) => {
               const prev: Message | null = idx > 0 ? (visibleMessages[idx - 1] ?? null) : null;
@@ -1164,6 +1321,12 @@ export function ConversationView({
                     ? { onMarkUnread: () => void markUnreadFrom(msg) }
                     : {})}
                   onQuotedClick={scrollToOriginal}
+                  {...(msg.local_status
+                    ? {
+                        onRetrySend: () => void retrySend(msg.id).catch(() => undefined),
+                        onDiscardSend: () => discardSend(msg.id),
+                      }
+                    : {})}
                   {...(onCallBack ? { onCallBack } : {})}
                   {...layoutProps}
                   mentionsMe={mentionsViewer(msg, me?.id ?? null)}
@@ -1312,14 +1475,14 @@ const NO_MESSAGE = '00000000-0000-0000-0000-000000000000';
 
 function scrollDividerIntoView(el: HTMLElement | null): void {
   if (el && typeof el.scrollIntoView === 'function') {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
   }
 }
 
 // Scroll a message row into view and flash it.
 function highlightRow(el: HTMLElement): void {
   if (typeof el.scrollIntoView === 'function') {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' });
   }
   el.classList.add('poolse-message-row--highlight');
   setTimeout(() => el.classList.remove('poolse-message-row--highlight'), 1600);

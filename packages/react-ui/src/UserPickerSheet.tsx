@@ -139,7 +139,9 @@ export function UserPickerSheet({
 
           <ul className="poolse-user-picker" role="listbox" aria-label="Users">
             {filtered.length === 0 ? (
-              <li className="poolse-user-picker__empty">No matching users.</li>
+              <li className="poolse-user-picker__empty">
+                No one matches that. Try part of a first or last name.
+              </li>
             ) : (
               filtered.map((u) => {
                 const isSelected = selected.has(u.externalId);

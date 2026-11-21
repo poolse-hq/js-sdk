@@ -102,10 +102,9 @@ describe('<ConversationList> S6', () => {
       expect(container.querySelectorAll('.poolse-list__section')).toHaveLength(2),
     );
     const sections = Array.from(container.querySelectorAll('.poolse-list__section'));
-    expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual([
-      'Channels',
-      'Direct messages',
-    ]);
+    expect(
+      sections.map((s) => s.querySelector('[role="group"]')?.getAttribute('aria-label')),
+    ).toEqual(['Channels', 'Direct messages']);
     expect(sections[0]!.querySelectorAll('[role="option"]')).toHaveLength(2);
     expect(sections[1]!.querySelectorAll('[role="option"]')).toHaveLength(1);
     expect(container.querySelector('.poolse-conversation-list__header')?.textContent).toBe('Chats');
