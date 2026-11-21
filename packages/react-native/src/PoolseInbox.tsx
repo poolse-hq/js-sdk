@@ -142,6 +142,9 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
       unreadCounts,
       markConversationRead,
       refetch: refetchConversations,
+      hasMore: conversationsHaveMore,
+      loadingMore: conversationsLoadingMore,
+      loadMore: loadMoreConversations,
     } = useConversations();
     const meExternalId = me?.external_id ?? null;
     const meId = me?.id ?? null;
@@ -367,6 +370,9 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
 
           <ConversationList
             conversations={conversations}
+            hasMore={conversationsHaveMore}
+            loadingMore={conversationsLoadingMore}
+            onLoadMore={() => void loadMoreConversations().catch(() => undefined)}
             renderItem={renderRow}
             {...(emptyState !== undefined ? { emptyState } : {})}
           />

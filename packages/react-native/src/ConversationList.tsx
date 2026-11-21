@@ -1,18 +1,33 @@
 import type { Conversation, Uuid } from '@poolse/sdk';
-import { formatCallLogPreview, useConversations, useMe, useUser } from '@poolse/react';
-import { type ReactNode } from 'react';
+import {
+  formatCallLogPreview,
+  useConversations,
+  useMe,
+  useUser,
+  useUserPresence,
+} from '@poolse/react';
+import { useCallback, useMemo, type ReactElement, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
+  SectionList,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
+import {
+  buildConversationSections,
+  type ConversationGroupBy,
+  type ConversationSection,
+} from './internal/conversationSections.js';
+import { relativeTime } from './internal/time.js';
+import type { ChatDensity } from './layout.js';
 import { Avatar } from './primitives/Avatar.js';
 import { useTheme } from './theme/PoolseTheme.js';
+
+export type { ConversationGroupBy, ConversationSection };
 
 export interface ConversationListProps {
   selectedId?: string | null;
@@ -25,6 +40,15 @@ export interface ConversationListProps {
   conversations?: Conversation[];
   loading?: boolean;
   error?: Error | null;
+  /**
+   * Controlled mode paging: more conversations exist. Uncontrolled, the
+   * list pages through `useConversations()` itself.
+   */
+  hasMore?: boolean;
+  /** Controlled mode paging: a page is loading (a spinner shows at the end). */
+  loadingMore?: boolean;
+  /** Controlled mode paging: called near the end of the list while `hasMore`. */
+  onLoadMore?: () => void;
   /** Per-conversation unread counts rendered as a Pulse Coral pill. */
   unreadCounts?: Record<Uuid, number>;
   /**
@@ -34,6 +58,20 @@ export interface ConversationListProps {
    */
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
+  /** Scrolls with the list, above the first row (a search field, a title). */
+  header?: ReactElement | null;
+  /**
+   * Split the list into titled sections; each conversation goes to the
+   * first section whose `filter` takes it, empty sections are hidden.
+   * Overrides `groupBy`.
+   */
+  sections?: ConversationSection[];
+  /** `'type'` → "Channels" (groups), then "Direct messages". */
+  groupBy?: ConversationGroupBy;
+  /** `'comfortable'` (default) or `'compact'` rows (smaller avatar, one line). */
+  density?: ChatDensity;
+  /** Presence badges on direct chats' avatars. Defaults to `true`. */
+  showPresence?: boolean;
 }
 
 export function ConversationList({
@@ -44,9 +82,17 @@ export function ConversationList({
   conversations: controlled,
   loading: controlledLoading,
   error: controlledError,
+  hasMore: controlledHasMore,
+  loadingMore: controlledLoadingMore,
+  onLoadMore,
   unreadCounts,
   labelFor,
   avatarFor,
+  header = null,
+  sections,
+  groupBy,
+  density = 'comfortable',
+  showPresence = true,
 }: ConversationListProps) {
   const theme = useTheme();
   const auto = useConversations();
@@ -58,62 +104,126 @@ export function ConversationList({
   const loading = isControlled ? (controlledLoading ?? false) : auto.loading;
   const error = isControlled ? (controlledError ?? null) : auto.error;
   const counts = unreadCounts ?? (isControlled ? undefined : auto.unreadCounts);
+  const hasMore = isControlled ? (controlledHasMore ?? false) : auto.hasMore;
+  const loadingMore = isControlled ? (controlledLoadingMore ?? false) : auto.loadingMore;
+  const autoLoadMore = auto.loadMore;
+  const loadMore = useCallback(() => {
+    if (!hasMore || loadingMore) return;
+    if (isControlled) onLoadMore?.();
+    // A failed page keeps its cursor; the next scroll retries.
+    else void autoLoadMore().catch(() => undefined);
+  }, [hasMore, loadingMore, isControlled, onLoadMore, autoLoadMore]);
+
+  const built = useMemo(
+    () => buildConversationSections(conversations, sections, groupBy),
+    [conversations, sections, groupBy],
+  );
+
+  const renderRow = useCallback(
+    (item: Conversation) => {
+      const selected = selectedId === item.id;
+      if (renderItem) return <>{renderItem(item, selected)}</>;
+      return (
+        <ConversationRow
+          conv={item}
+          selected={selected}
+          meExternalId={meExternalId}
+          meId={meId}
+          unread={counts?.[item.id] ?? 0}
+          density={density}
+          showPresence={showPresence}
+          {...(labelFor ? { labelFor } : {})}
+          {...(avatarFor ? { avatarFor } : {})}
+          {...(onSelect ? { onSelect } : {})}
+        />
+      );
+    },
+    [
+      selectedId,
+      renderItem,
+      meExternalId,
+      meId,
+      counts,
+      density,
+      showPresence,
+      labelFor,
+      avatarFor,
+      onSelect,
+    ],
+  );
+
+  const placeholder = (node: ReactNode) => (
+    <View style={[styles.flex, { backgroundColor: theme.colors.background }]}>
+      {header}
+      <View style={styles.placeholder}>{node}</View>
+    </View>
+  );
 
   if (loading && conversations.length === 0) {
-    return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
-        <ActivityIndicator color={theme.colors.accent} />
-      </View>
-    );
+    return placeholder(<ActivityIndicator color={theme.colors.accent} />);
   }
 
-  if (error) {
-    return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
-        <Text style={{ color: theme.colors.danger, fontFamily: theme.fonts.body }}>
-          Failed to load conversations.
-        </Text>
-      </View>
+  if (error && conversations.length === 0) {
+    return placeholder(
+      <Text style={{ color: theme.colors.danger, fontFamily: theme.fonts.body }}>
+        Failed to load conversations.
+      </Text>,
     );
   }
 
   if (conversations.length === 0) {
+    return placeholder(
+      typeof emptyState === 'string' || emptyState == null ? (
+        <Text style={{ color: theme.colors.textSubtle, fontFamily: theme.fonts.body }}>
+          {(emptyState as string) ?? 'No conversations yet.'}
+        </Text>
+      ) : (
+        emptyState
+      ),
+    );
+  }
+
+  const footer = loadingMore ? (
+    <ActivityIndicator color={theme.colors.textSubtle} style={styles.footerSpinner} />
+  ) : null;
+  const common = {
+    style: { backgroundColor: theme.colors.background },
+    onEndReached: hasMore ? loadMore : undefined,
+    onEndReachedThreshold: 0.5,
+    ListHeaderComponent: header,
+    ListFooterComponent: footer,
+  };
+
+  if (built) {
     return (
-      <View style={[styles.placeholder, { backgroundColor: theme.colors.background }]}>
-        {typeof emptyState === 'string' || emptyState == null ? (
-          <Text style={{ color: theme.colors.textSubtle, fontFamily: theme.fonts.body }}>
-            {(emptyState as string) ?? 'No conversations yet.'}
+      <SectionList
+        {...common}
+        sections={built}
+        keyExtractor={(c) => c.id}
+        stickySectionHeadersEnabled={false}
+        renderItem={({ item }) => renderRow(item)}
+        renderSectionHeader={({ section }) => (
+          <Text
+            style={[
+              styles.sectionTitle,
+              density === 'compact' ? styles.sectionTitleDense : null,
+              { color: theme.colors.textMuted, fontFamily: theme.fonts.body },
+            ]}
+            accessibilityRole="header"
+          >
+            {section.title}
           </Text>
-        ) : (
-          emptyState
         )}
-      </View>
+      />
     );
   }
 
   return (
     <FlatList
+      {...common}
       data={conversations}
       keyExtractor={(c) => c.id}
-      style={{ backgroundColor: theme.colors.background }}
-      renderItem={({ item }) => {
-        const selected = selectedId === item.id;
-        if (renderItem) {
-          return <>{renderItem(item, selected)}</>;
-        }
-        return (
-          <ConversationRow
-            conv={item}
-            selected={selected}
-            meExternalId={meExternalId}
-            meId={meId}
-            unread={counts?.[item.id] ?? 0}
-            {...(labelFor ? { labelFor } : {})}
-            {...(avatarFor ? { avatarFor } : {})}
-            {...(onSelect ? { onSelect } : {})}
-          />
-        );
-      }}
+      renderItem={({ item }) => renderRow(item)}
     />
   );
 }
@@ -124,6 +234,8 @@ function ConversationRow({
   meExternalId,
   meId = null,
   unread,
+  density,
+  showPresence,
   labelFor,
   avatarFor,
   onSelect,
@@ -133,11 +245,14 @@ function ConversationRow({
   meExternalId: string | null;
   meId?: string | null;
   unread: number;
+  density: ChatDensity;
+  showPresence: boolean;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
   onSelect?: (conv: Conversation) => void;
 }) {
   const theme = useTheme();
+  const dense = density === 'compact';
 
   // For direct conversations the row title + avatar come from the OTHER
   // member, NOT the conversation itself (which has `name: null` for
@@ -149,6 +264,7 @@ function ConversationRow({
       ? ((conv.member_external_ids ?? []).find((x) => x !== meExternalId) ?? null)
       : null;
   const resolvedOther = useUser(isDirect ? otherExtId : null);
+  const presence = useUserPresence(showPresence && isDirect ? otherExtId : null);
 
   const title = isDirect
     ? otherExtId
@@ -158,38 +274,77 @@ function ConversationRow({
   const avatarUrl =
     isDirect && otherExtId
       ? (avatarFor?.(otherExtId) ?? resolvedOther.profile?.avatarUrl ?? null)
-      : null;
+      : (conv.avatar_url ?? null);
   const avatarSeed = isDirect ? (otherExtId ?? conv.id) : conv.id;
+  const preview = conv.last_message_preview
+    ? (formatCallLogPreview(conv.last_message_preview, meId) ?? conv.last_message_preview)
+    : null;
+  const when = relativeTime(conv.last_message_at, Date.now(), 'short');
+  const bold = unread > 0;
 
   return (
     <Pressable
       onPress={() => onSelect?.(conv)}
-      style={[
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={unread > 0 ? `${title}, ${unread} unread` : title}
+      style={({ pressed }) => [
         styles.row,
         {
-          backgroundColor: selected ? theme.colors.surfaceAlt : 'transparent',
+          paddingHorizontal: theme.spacing.md,
+          paddingVertical: dense ? theme.spacing.xs + 2 : theme.spacing.sm + 2,
+          gap: dense ? theme.spacing.sm : theme.spacing.sm + 2,
+          backgroundColor: selected
+            ? theme.colors.accentSoft
+            : pressed
+              ? theme.colors.surfaceAlt
+              : 'transparent',
         },
       ]}
     >
-      {avatarUrl ? (
-        <Image source={{ uri: avatarUrl }} style={styles.rowAvatar} />
-      ) : (
-        <Avatar src={null} name={title} seed={avatarSeed} size="md" />
-      )}
+      <Avatar
+        src={avatarUrl}
+        name={title}
+        seed={avatarSeed}
+        size={dense ? 'sm' : 'md'}
+        {...(presence ? { presence: presence.state, doNotDisturb: !!presence.do_not_disturb } : {})}
+      />
       <View style={styles.body}>
-        <Text
-          style={[styles.name, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-        {conv.last_message_preview ? (
-          <Text style={[styles.preview, { color: theme.colors.textSubtle }]} numberOfLines={1}>
-            {formatCallLogPreview(conv.last_message_preview, meId) ?? conv.last_message_preview}
+        <View style={styles.titleLine}>
+          <Text
+            style={[
+              styles.name,
+              dense ? styles.nameDense : null,
+              {
+                color: theme.colors.text,
+                fontFamily: theme.fonts.body,
+                fontWeight: bold ? '700' : '600',
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {title}
           </Text>
-        ) : conv.last_message_at ? (
-          <Text style={[styles.preview, { color: theme.colors.textSubtle }]} numberOfLines={1}>
-            {formatRelative(conv.last_message_at)}
+          {when ? (
+            <Text
+              style={[
+                styles.time,
+                { color: bold ? theme.colors.accentStrong : theme.colors.textSubtle },
+              ]}
+            >
+              {when}
+            </Text>
+          ) : null}
+        </View>
+        {!dense && preview ? (
+          <Text
+            style={[
+              styles.preview,
+              { color: bold ? theme.colors.textMuted : theme.colors.textSubtle },
+            ]}
+            numberOfLines={1}
+          >
+            {preview}
           </Text>
         ) : null}
       </View>
@@ -204,21 +359,10 @@ function ConversationRow({
   );
 }
 
-function formatRelative(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const now = Date.now();
-    const diff = now - d.getTime();
-    if (diff < 60_000) return 'just now';
-    if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m`;
-    if (diff < 86_400_000) return `${Math.floor(diff / 3600_000)}h`;
-    return `${Math.floor(diff / 86_400_000)}d`;
-  } catch {
-    return '';
-  }
-}
-
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   placeholder: {
     flex: 1,
     alignItems: 'center',
@@ -228,25 +372,46 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 10,
-  },
-  rowAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
   },
   body: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
+  titleLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
   name: {
+    flex: 1,
     fontSize: 15,
-    fontWeight: '600',
+  },
+  nameDense: {
+    fontSize: 14,
+  },
+  time: {
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
   },
   preview: {
+    fontSize: 13,
+  },
+  sectionTitle: {
     fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 6,
+  },
+  sectionTitleDense: {
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  footerSpinner: {
+    marginVertical: 12,
   },
   unreadPill: {
     minWidth: 22,
