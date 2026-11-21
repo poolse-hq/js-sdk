@@ -56,6 +56,17 @@ export type {
 export { ConversationMessages, MessageHandle, MessagesResource } from './resources/messages.js';
 export { UsersResource } from './resources/users.js';
 export {
+  NotificationActions,
+  createNotificationActions,
+  parseNotificationActions,
+  type MessagePushData,
+  type MessageReadPushData,
+  type NotificationActionId,
+  type NotificationActionsOptions,
+  type NotificationReadRequest,
+  type NotificationReplyRequest,
+} from './notification-actions.js';
+export {
   PRESENCE_MAX_LOOKUP,
   PresenceResource,
   type PresenceLookup,

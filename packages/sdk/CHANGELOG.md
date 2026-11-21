@@ -27,6 +27,16 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
   `PresenceChangedEvent`, `PresenceLookup`, `TrackActivityOptions`;
   `PRESENCE_MAX_LOOKUP`.
 
+- Notification actions without a session: `createNotificationActions({ apiUrl?,
+  fetch?, … })` and `poolse.notificationActions` (`NotificationActions`) with
+  `reply({ token, text, id? })` (`POST /v1/notification-actions/reply`; `id`
+  defaults to a fresh UUID and doubles as the idempotency key, so a retry
+  returns the original message) and `read({ token })`. The push's
+  `reply_grant` is sent as the bearer; 401 (`device_signed_out`, expired grant)
+  is not retried.
+- Push payload types `MessagePushData` (`reply_grant`, `actions`,
+  `unread_total`, …) and `MessageReadPushData`; `NotificationActionId` and
+  `parseNotificationActions(actions)`.
 - Message actions: `messages.get(id)` / `messages.one(id).get()` (a deleted
   message comes back as its tombstone), `messages.edits(id)` /
   `messages.one(id).edits()` (`MessageEditList`, `MessageEdit`), and the
