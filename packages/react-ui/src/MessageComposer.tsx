@@ -1,4 +1,11 @@
-import { forwardRef, useImperativeHandle, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import type { Message, Uuid } from '@poolse/sdk';
 import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
 import { handleListEnter } from './listAutocomplete.js';
@@ -42,6 +49,11 @@ export interface MessageComposerProps {
   attachments?: boolean;
   /** An emoji button that opens `<EmojiPicker>` and inserts at the caret. Default `true`. */
   emojiPicker?: boolean;
+  /**
+   * The text changed (typing, an emoji, a restored draft, the reset after
+   * a send). Not called for the initial empty value.
+   */
+  onValueChange?: (value: string) => void;
   /** Largest attachment accepted, in bytes; bigger files show an error chip instead. */
   maxFileSize?: number;
   /**
@@ -91,6 +103,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       emojiPicker = true,
       maxFileSize,
       acceptFileTypes,
+      onValueChange,
     },
     ref,
   ) {
@@ -113,6 +126,15 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
 
     const valueRef = useRef(value);
     valueRef.current = value;
+    // Report text changes (drafts), skipping the first, empty render.
+    const onValueChangeRef = useRef(onValueChange);
+    onValueChangeRef.current = onValueChange;
+    const reportedRef = useRef(value);
+    useEffect(() => {
+      if (reportedRef.current === value) return;
+      reportedRef.current = value;
+      onValueChangeRef.current?.(value);
+    }, [value]);
     useImperativeHandle(
       ref,
       () => ({

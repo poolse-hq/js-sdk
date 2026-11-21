@@ -34,6 +34,15 @@ import React, {
   type ReactNode,
 } from 'react';
 import { usePoolseFonts } from './fonts.js';
+import {
+  clearDraft,
+  draftKey,
+  localDraftStorage,
+  readDraft,
+  writeDraft,
+  type ConversationDraft,
+  type DraftStorage,
+} from './drafts.js';
 import { computeGroupPosition, formatDayLabel, sameDay } from './grouping.js';
 import {
   mentionsViewer,
@@ -267,6 +276,19 @@ export interface ConversationViewProps {
   onJoinCall?: (call: LiveCall) => void;
   /** The call this client is already on, if any — its banner is hidden. */
   currentCallId?: string | null;
+  /**
+   * Keep an unsent draft per conversation — the composer's text and the
+   * message being quoted (not files) — across conversation switches
+   * and reloads, per user. Cleared when the message is sent. Defaults
+   * to `true`.
+   */
+  persistDrafts?: boolean;
+  /**
+   * Where drafts persist between page loads. Defaults to
+   * `localStorage` (guarded; memory only when it's unavailable). Sync or
+   * async `get` / `set` / `remove` with string values.
+   */
+  draftStorage?: DraftStorage;
 }
 
 const TRUE = true;
@@ -312,6 +334,8 @@ export function ConversationView({
   onCallBack,
   onJoinCall,
   currentCallId = null,
+  persistDrafts = TRUE,
+  draftStorage,
 }: ConversationViewProps) {
   usePoolseFonts(loadFonts);
   const showComposer = composer && !readOnly;
@@ -614,20 +638,72 @@ export function ConversationView({
   // Quote-reply state — caller-owned per the MessageComposer contract.
   // Lifted here so any row's "Reply" action can flip the composer into
   // quote mode, and so the chip dismisses when the conversation changes.
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [replyingTo, setReplyingToState] = useState<Message | null>(null);
+  // MentionInput once members are known, else the plain composer.
+  const mentionComposer = mentions && members.length > 0;
   useEffect(() => {
-    setReplyingTo(null);
+    setReplyingToState(null);
     setEditingId(null);
     setThreadRootId(null);
     setSendNotice(null);
   }, [conversationId]);
+
+  // ── Drafts ─────────────────────────────────────────────────────────
+  // The composer is keyed by conversation, so switching starts it empty;
+  // the effect below fills it back from the draft. Text changes and
+  // reply-target changes write the draft; a send clears it.
+  const meIdForDrafts = me?.id ?? null;
+  const draftsOn = persistDrafts && showComposer;
+  const storage = draftStorage ?? localDraftStorage;
+  const draftRef = useRef<ConversationDraft>({ text: '', replyTo: null });
+  const draftKeyFor = useCallback(
+    () => (draftsOn && meIdForDrafts ? draftKey(meIdForDrafts, conversationIdRef.current) : null),
+    [draftsOn, meIdForDrafts],
+  );
+  const saveDraft = useCallback(
+    (patch: Partial<ConversationDraft>) => {
+      draftRef.current = { ...draftRef.current, ...patch };
+      const key = draftKeyFor();
+      if (key) writeDraft(storage, key, draftRef.current);
+    },
+    [draftKeyFor, storage],
+  );
+  const setReplyingTo = useCallback(
+    (m: Message | null) => {
+      setReplyingToState(m);
+      saveDraft({ replyTo: m });
+    },
+    [saveDraft],
+  );
+  useEffect(() => {
+    draftRef.current = { text: '', replyTo: null };
+    const key = draftKeyFor();
+    if (!key) return;
+    let live = true;
+    const apply = (d: ConversationDraft | null) => {
+      if (!live || !d) return;
+      const composer = composerRef.current;
+      if (d.text && composer && composer.getText() === '') composer.setText(d.text);
+      draftRef.current = { text: composer?.getText() || d.text, replyTo: d.replyTo };
+      if (d.replyTo && canQuote) setReplyingToState((cur) => cur ?? d.replyTo);
+    };
+    const found = readDraft(storage, key);
+    if (found instanceof Promise) void found.then(apply);
+    else apply(found);
+    return () => {
+      live = false;
+    };
+    // `conversationId` via draftKeyFor's ref; re-run when it changes, and
+    // when the composer is swapped (MentionInput once members load).
+  }, [conversationId, draftKeyFor, storage, canQuote, mentionComposer]);
+  const onComposerChange = useCallback((text: string) => saveDraft({ text }), [saveDraft]);
   // The message being quoted was deleted meanwhile: a tombstone can't be
   // quoted, so drop the chip.
   useEffect(() => {
     if (!replyingTo) return;
     const current = messages.find((m) => m.id === replyingTo.id);
     if (current?.deleted_at) setReplyingTo(null);
-  }, [messages, replyingTo]);
+  }, [messages, replyingTo, setReplyingTo]);
 
   // A short notice over the feed when a send is refused for a reason
   // the user can act on (the quoted message was deleted).
@@ -715,7 +791,10 @@ export function ConversationView({
       }
       throw err;
     }
-    setReplyingTo(null);
+    setReplyingToState(null);
+    draftRef.current = { text: '', replyTo: null };
+    const key = draftKeyFor();
+    if (key) clearDraft(storage, key);
   };
 
   const onSendBody = (body: string, opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] }) =>
@@ -738,31 +817,34 @@ export function ConversationView({
   // the plain composer otherwise. Both variants accept the same
   // `replyingTo` / `onCancelReply` props for the quote-reply chip, and
   // both expose the same `addFiles` imperative handle for drag-drop.
-  const Composer =
-    mentions && members.length > 0 ? (
-      <MentionInput
-        ref={composerRef}
-        conversationId={conversationId}
-        onSend={onSendWithMentions}
-        onTyping={signalTyping}
-        attachments={attachments}
-        emojiPicker={emojiPicker}
-        {...attachmentRules}
-        {...(labelFor ? { labelFor } : {})}
-        {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
-      />
-    ) : (
-      <MessageComposer
-        ref={composerRef}
-        onSend={onSendBody}
-        onTyping={signalTyping}
-        attachments={attachments}
-        emojiPicker={emojiPicker}
-        {...attachmentRules}
-        {...(labelFor ? { labelFor } : {})}
-        {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
-      />
-    );
+  const Composer = mentionComposer ? (
+    <MentionInput
+      key={conversationId}
+      ref={composerRef}
+      onValueChange={onComposerChange}
+      conversationId={conversationId}
+      onSend={onSendWithMentions}
+      onTyping={signalTyping}
+      attachments={attachments}
+      emojiPicker={emojiPicker}
+      {...attachmentRules}
+      {...(labelFor ? { labelFor } : {})}
+      {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
+    />
+  ) : (
+    <MessageComposer
+      key={conversationId}
+      ref={composerRef}
+      onValueChange={onComposerChange}
+      onSend={onSendBody}
+      onTyping={signalTyping}
+      attachments={attachments}
+      emojiPicker={emojiPicker}
+      {...attachmentRules}
+      {...(labelFor ? { labelFor } : {})}
+      {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
+    />
+  );
 
   return (
     <div className="poolse-conversation-shell">

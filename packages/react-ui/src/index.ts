@@ -34,6 +34,7 @@ export type {
   TimeFormat,
 } from './layout.js';
 export { ChatHeader, type ChatHeaderProps } from './ChatHeader.js';
+export { localDraftStorage, type ConversationDraft, type DraftStorage } from './drafts.js';
 
 // ── Inbox shell (composed list + detail) ──────────────────────
 export { PoolseInbox, type PoolseInboxProps, type PoolseInboxHandle } from './PoolseInbox.js';

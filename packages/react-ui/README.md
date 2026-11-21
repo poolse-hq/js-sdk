@@ -100,6 +100,9 @@ preview>` draws one on its own.
 - **Uploads**: the paperclip, pasting into the composer, or dropping on the
   conversation; chips (with image thumbnails) until sent. `maxFileSize` and
   `acceptFileTypes` refuse other files with an error chip.
+- **Drafts** per conversation (text and quote) survive switching and reloads;
+  `persistDrafts={false}` turns them off, `draftStorage={{ get, set, remove }}`
+  stores them elsewhere.
 - **Deleted messages** read "This message was deleted" and keep their thread
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.

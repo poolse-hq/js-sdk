@@ -58,6 +58,15 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   files before upload with an error chip ("Larger than 25 MB", "This file type
   isn't allowed"). Dropping files on the conversation (overlay) goes through
   the same checks.
+- Drafts: `ConversationView` keeps an unsent draft per user and conversation —
+  the text and the message being quoted, not files — in memory across
+  conversation switches and in `localStorage` (guarded; key
+  `poolse:draft:<userId>:<conversationId>`), cleared on send. Props
+  `persistDrafts` (default `true`) and `draftStorage` (`DraftStorage`: sync or
+  async `get` / `set` / `remove`); `localDraftStorage`, `ConversationDraft`
+  exported. The composer is now keyed by conversation, so its text no longer
+  carries over to the next conversation.
+- `MessageComposer` / `MentionInput` `onValueChange(text)`.
 - `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
   `getText()`, `setText(text)` and `focus()`.
 - `ConversationView` shows a notice when a send is refused because the quoted
