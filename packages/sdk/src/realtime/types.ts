@@ -200,6 +200,8 @@ export interface MentionEvent {
   message_id: Uuid;
   conversation_id: Uuid;
   sender_id: Uuid | null;
+  /** The mention came from an agent. */
+  sender_is_agent?: boolean;
 }
 
 /**

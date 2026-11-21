@@ -20,7 +20,7 @@
 // swap).
 
 import type { ResolvedConfig } from '../config.js';
-import { agentFromWire, type AgentInfo } from '../agents.js';
+import { agentFromWire, type AgentInfo, type AgentProfile } from '../agents.js';
 import type { PoolseUserProfile } from '../types.js';
 
 type Listener = () => void;
@@ -156,6 +156,20 @@ export class UsersResource {
       }
       this.agents.set(id, next);
       this.notify(id);
+    }
+  }
+
+  /** Remember the directory's agents (`agents.list()` does it): id, name, template. */
+  noteAgentProfiles(profiles: ReadonlyArray<AgentProfile>): void {
+    for (const p of profiles) {
+      if (!p.externalId) continue;
+      const next: AgentInfo = { id: p.id, name: p.name, kind: p.template };
+      const prev = this.agents.get(p.externalId);
+      if (prev && prev.id === next.id && prev.name === next.name && prev.kind === next.kind) {
+        continue;
+      }
+      this.agents.set(p.externalId, next);
+      this.notify(p.externalId);
     }
   }
 

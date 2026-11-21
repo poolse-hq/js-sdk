@@ -23,6 +23,8 @@ export interface Me {
   read_receipts?: ReadReceiptsState;
   /** The user's own notification preferences. Absent on older servers. */
   notifications?: NotificationPreferences;
+  /** This user is an agent. */
+  is_agent?: boolean;
 }
 
 /**
@@ -239,8 +241,6 @@ export interface Membership {
   role: MemberRole;
   /** The member is an agent (AG1): show the Agent badge. Absent on older servers. */
   is_agent?: boolean;
-  /** Set when `is_agent` is true. */
-  agent?: AgentWire | null;
   last_read_message_id: Uuid | null;
   last_read_sequence: number | null;
   last_read_at: IsoDateTime | null;
@@ -311,14 +311,13 @@ export interface Message {
   type: MessageType;
   body: string | null;
   /** The sender is an agent (AG1): its avatar and name carry the Agent badge. */
-  is_agent?: boolean;
-  /** The sending agent, when `is_agent` is true. */
-  agent?: AgentWire | null;
+  sender_is_agent?: boolean;
   /**
-   * An assistant's sources (AG5): messages, files and meeting moments
-   * the answer comes from. Read with `citationsOf(message)`.
+   * Null except on an agent's message: `{kind, citations?, approval_id?,
+   * followup_id?, standup_id?}`. Read with `agentMetaOf(message)` /
+   * `citationsOf` / `approvalIdOf`.
    */
-  citations?: CitationWire[];
+  agent_meta?: Record<string, unknown> | null;
   reply_to_id: Uuid | null;
   thread_root_id: Uuid | null;
   /**
@@ -438,23 +437,6 @@ export interface MessageEditList {
  * concurrent lookups) so a 50-message render only fires one
  * resolver call per unique sender.
  */
-/** An agent as the server sends it (`agent` on users, members and messages). */
-export interface AgentWire {
-  id?: string | null;
-  name?: string | null;
-  kind?: string | null;
-}
-
-/** One source of an assistant's answer, as sent (`Message.citations`). */
-export interface CitationWire {
-  type: 'message' | 'file' | 'transcript';
-  id: string;
-  conversation_id?: string | null;
-  call_id?: string | null;
-  start_ms?: number | null;
-  snippet?: string | null;
-}
-
 export interface PoolseUserProfile {
   /**
    * The name shown in sender labels, mention dropdowns, member
@@ -584,7 +566,7 @@ export interface Attachment {
    * Set on a clip cut from a call recording (RT9): what it was cut
    * from. Read with `clipOf(attachment)`.
    */
-  clip?: { recording_id: string; start_ms: number; end_ms: number } | null;
+  clip?: { clip_id?: string; recording_id: string; start_ms: number; end_ms: number } | null;
   inserted_at: IsoDateTime;
   updated_at: IsoDateTime;
 }

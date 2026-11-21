@@ -549,6 +549,31 @@ export class ConversationChannel {
     return this.subscribe('transcript:ready', fn as (p: unknown) => void);
   }
 
+  /**
+   * A call's summary was written, failed or was skipped (`summary:ready`
+   * `{cv, call_id, conversation_id, summary}`); read it with
+   * `summaryFromWire(evt.summary)` or `meetings.summary(callId)`.
+   */
+  onSummaryReady(
+    fn: (evt: { call_id: string; conversation_id: string; summary: unknown }) => void,
+  ): Unsubscribe {
+    return this.subscribe('summary:ready', fn as (p: unknown) => void);
+  }
+
+  /** A clip was cut (or failed): `clip:ready` `{cv, call_id, conversation_id, clip}`. */
+  onClipReady(
+    fn: (evt: { call_id: string; conversation_id: string; clip: unknown }) => void,
+  ): Unsubscribe {
+    return this.subscribe('clip:ready', fn as (p: unknown) => void);
+  }
+
+  /** A clip was deleted: `clip:deleted` `{cv, call_id, conversation_id, clip}`. */
+  onClipDeleted(
+    fn: (evt: { call_id: string; conversation_id: string; clip: unknown }) => void,
+  ): Unsubscribe {
+    return this.subscribe('clip:deleted', fn as (p: unknown) => void);
+  }
+
   /** A speaker was renamed (`transcript:speakers`). */
   onTranscriptSpeakers(fn: (evt: TranscriptSpeakersEvent) => void): Unsubscribe {
     return this.subscribe('transcript:speakers', fn as (p: unknown) => void);
@@ -923,20 +948,12 @@ export class UserChannel {
   }
 
   /**
-   * An agent's approval request was created or answered
-   * (`approval:created` / `approval:updated`, or an app event of those
-   * types). Payload: the approval row — `poolse.approvals` reads it.
+   * An agent's approval request for you was made or decided
+   * (`agent:approval` `{event: "requested" | "decided", approval}`) —
+   * `poolse.approvals` follows it.
    */
-  onApproval(fn: (payload: unknown) => void): Unsubscribe {
-    const offs = [
-      this.subscribe('approval:created', fn),
-      this.subscribe('approval:updated', fn),
-      this.subscribe('app:event', (evt) => {
-        const e = evt as AppEvent | null;
-        if (e && typeof e.type === 'string' && e.type.startsWith('approval:')) fn(e.data);
-      }),
-    ];
-    return () => offs.forEach((off) => off());
+  onAgentApproval(fn: (evt: { event: string; approval: unknown }) => void): Unsubscribe {
+    return this.subscribe('agent:approval', fn as (p: unknown) => void);
   }
 
   /**

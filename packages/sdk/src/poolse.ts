@@ -22,7 +22,7 @@ import { CallTokensResource } from './resources/call-tokens.js';
 import { LiveCallsResource } from './resources/live-calls.js';
 import { CallsResource } from './resources/calls.js';
 import { RoomsResource } from './resources/rooms.js';
-import { ApprovalsResource } from './agents.js';
+import { AgentsResource, ApprovalsResource } from './agents.js';
 import { MeetingsResource } from './meetings.js';
 import { CallRoom } from './voice/call-room.js';
 import type { CallRoomOptions } from './voice/livekit-types.js';
@@ -120,6 +120,12 @@ export class Poolse {
    * { reason })`; `subscribe` for a live view (AG4).
    */
   public readonly approvals: ApprovalsResource;
+  /**
+   * The agent directory (`list()`), an agent's scope in a conversation
+   * (`inConversation`, `setScope`, `resetScope`), "What we know"
+   * (`memory`, `addMemory`…) and follow-ups (`followups`, `followupDone`…).
+   */
+  public readonly agents: AgentsResource;
   /** Ask what was said in your meetings: `meetings.ask({ question, callId })` (RT8). */
   public readonly meetings: MeetingsResource;
   /**
@@ -207,7 +213,14 @@ export class Poolse {
     });
     this.presence = new PresenceResource(this.rest, this.realtime, this.me);
     this.unread = new UnreadResource(this.rest, this.realtime, this.me);
-    this.approvals = new ApprovalsResource(this.rest, this.realtime, this.me);
+    this.agents = new AgentsResource(this.rest, (list) => {
+      this.users.noteAgentProfiles(list);
+      this.approvals._refreshAgents();
+    });
+    this.approvals = new ApprovalsResource(this.rest, this.realtime, this.me, (agentId) => {
+      const a = this.agents.peek(agentId);
+      return a ? { id: a.id, name: a.name, kind: a.template } : null;
+    });
     this.meetings = new MeetingsResource(this.rest);
     const scope = () => this.storageScope();
     this.cache = new LocalCache(scope, this.resolved.cache);

@@ -41,9 +41,12 @@ export interface Recording {
   size_bytes: number | null;
   content_type: string | null;
   storage: CaptureStorage;
-  /** Chapters for playback (RT13); read with `chaptersOf(recording)`. Absent until generated. */
-  chapters?: Array<{ title: string; start_ms: number }>;
-  /** Stretches without speech, for "Skip silence"; read with `silencesOf(recording)`. Optional. */
+  /**
+   * Chapters (RT13), recording time, from the summary's moments; empty
+   * until the summary is ready. Read with `chaptersOf(recording)`.
+   */
+  chapters?: Array<{ title: string; start_ms: number; end_ms?: number | null }>;
+  /** Stretches without speech (not sent by the server yet); `silencesOf(recording)`. */
   silences?: Array<{ start_ms: number; end_ms: number }>;
 }
 
