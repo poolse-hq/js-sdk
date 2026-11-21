@@ -53,6 +53,8 @@ public class PoolseCallsModule: Module {
         ringback: options?["ringback"] as? String,
         apnsEnvironment: env
       )
+      CallRingtone.configure(options?["ringtone"] as? String)
+      CallKitController.shared.refreshRingtone()
       // Materialise the core now (and PushKit, if launch did not), so a
       // call already in flight (cold answer) is visible to getCallState.
       PoolseCallsSetup.registerVoipEarly()

@@ -11,6 +11,9 @@
  *   ringback          a sound file shipped in both bundles under its base
  *                     name; pass that name to configure({ ringback }).
  *                     Without one the caller hears silence while it rings.
+ *   ringtone          the incoming-call ring: a file path, or
+ *                     { ios, android } (iOS caf/aiff/wav ≤ 30 s; Android
+ *                     ogg/mp3/wav). Default: the system ringtone.
  *   pictureInPicture  Android: let the activity float during a video call
  *                     (default true).
  *   lockscreen        Android: show the app over the lock screen when it
@@ -35,6 +38,7 @@ const withMessageReplyUnlock = require('./withMessageReplyUnlock');
 const withNativeCallMedia = require('./withNativeCallMedia');
 const withPictureInPicture = require('./withPictureInPicture');
 const withRingback = require('./withRingback');
+const withRingtone = require('./withRingtone');
 const withScreenShare = require('./withScreenShare');
 
 const pkg = require('../package.json');
@@ -42,6 +46,7 @@ const pkg = require('../package.json');
 function withPoolseCalls(config, options = {}) {
   const {
     ringback,
+    ringtone,
     pictureInPicture = true,
     lockscreen = true,
     screenShare = false,
@@ -52,6 +57,7 @@ function withPoolseCalls(config, options = {}) {
   if (lockscreen) config = withLockscreenCalls(config);
   if (pictureInPicture) config = withPictureInPicture(config);
   if (ringback) config = withRingback(config, ringback);
+  if (ringtone) config = withRingtone(config, ringtone, ringback);
   config = withMessageReplyUnlock(config, messageReplyRequiresUnlock);
   if (screenShare) config = withScreenShare(config, screenShare === true ? {} : screenShare);
   return config;

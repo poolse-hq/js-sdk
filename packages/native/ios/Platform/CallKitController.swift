@@ -74,9 +74,21 @@ final class CallKitController: NSObject, CXProviderDelegate {
     config.supportedHandleTypes = [.generic]
     config.includesCallsInRecents = false
     if let icon = UIImage(named: "CallKitIcon")?.pngData() { config.iconTemplateImageData = icon }
+    // Read here, at the first push of a cold wake, from what was persisted
+    // or the Info.plist — JS has not run yet.
+    config.ringtoneSound = CallRingtone.soundFileName()
     provider = CXProvider(configuration: config)
     super.init()
     provider.setDelegate(self, queue: nil) // nil = main queue
+  }
+
+  /// `configure({ ringtone })` changed it: the next ring uses the new sound.
+  func refreshRingtone() {
+    let sound = CallRingtone.soundFileName()
+    guard provider.configuration.ringtoneSound != sound else { return }
+    let config = provider.configuration
+    config.ringtoneSound = sound
+    provider.configuration = config
   }
 
   // MARK: - lookup

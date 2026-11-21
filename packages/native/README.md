@@ -40,6 +40,7 @@ In `app.json`, after `expo-notifications`:
 | Option                       | Default | What it does                                                                                                                                                                                                                                                                                   |
 | ---------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ringback`                   | none    | Ships this sound in both apps; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only.                                                                                                                                                                |
+| `ringtone`                   | system  | The incoming-call ring: a file path, or `{ "ios": "…", "android": "…" }`. iOS: caf, aiff or wav, 30 s or shorter (CallKit rings with the system tone otherwise). Android: ogg, mp3 or wav. Lowercase letters, digits and underscores in the name, not the same name as `ringback`. See [Ringtone](#ringtone).                       |
 | `pictureInPicture`           | `true`  | Android: the activity may float as a picture-in-picture window.                                                                                                                                                                                                                                |
 | `lockscreen`                 | `true`  | Android: the app shows over the lock screen when opened for a call.                                                                                                                                                                                                                            |
 | `messageReplyRequiresUnlock` | `false` | Both: a chat notification's Reply asks for the passcode / Face ID / fingerprint before it sends. Off, Reply works straight from the lock screen (as in WhatsApp). Mark as read never asks.                                                                                                     |
@@ -112,6 +113,39 @@ The full API:
   userChannel.onRingEnded((e) => calls.onRingEnded(e.call_id, e.reason));
   userChannel.onCallFinished((e) => calls.onCallFinished(e.call_id, e.reason));
   ```
+
+## Ringtone
+
+```json
+["@poolse/native", { "ringtone": "./assets/sounds/ring.wav" }]
+["@poolse/native", { "ringtone": { "ios": "./assets/sounds/ring.caf", "android": "./assets/sounds/ring.ogg" } }]
+```
+
+`expo prebuild` copies the file into the iOS app bundle and Android's
+`res/raw`, and records its name (Info.plist `PoolseRingtone`, application
+meta-data `dev.poolse.calls.ringtone`) so a ring that wakes a closed app uses
+it before any JS runs. Convert an mp3 for iOS with
+`afconvert -f caff -d LEI16 ring.mp3 ring.caf`.
+
+To switch at runtime (a ringtone picker), ship each sound with the app (for
+example as extra `res/raw` files and bundle resources) and pass its name:
+
+```ts
+await calls.configure(apiOrigin, { ringtone: 'ring_classic' }); // Android: res/raw name; iOS: 'ring_classic.caf' or the base name
+```
+
+Leaving `ringtone` out of `configure` falls back to the plugin's sound, and
+without that to the system ringtone. A name the app doesn't contain also rings
+with the system ringtone.
+
+Android plays the sound itself, looping on the ringtone stream (so it follows
+the ringer volume), and stops it the moment the ring resolves. The
+`poolse_incoming_calls` notification channel has no sound of its own on
+purpose: Android fixes a channel's sound once the channel exists, and a
+channel sound would ring twice and could not be stopped. Changing the
+ringtone therefore never needs a new channel id, and an existing install picks
+up a new sound on its next ring. Silent and vibrate modes silence it like the
+system ringtone.
 
 ## Reply and Mark as read from a notification
 

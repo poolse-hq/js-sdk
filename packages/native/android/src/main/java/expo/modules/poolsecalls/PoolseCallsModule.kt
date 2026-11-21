@@ -85,6 +85,7 @@ class PoolseCallsModule : Module() {
         apiBaseUrl,
         options?.get("smallIcon") as? String,
         options?.get("ringback") as? String,
+        options?.get("ringtone") as? String,
       )
       // Materialise the core now, so a call already in flight (cold
       // answer) is visible to the first getCallState.

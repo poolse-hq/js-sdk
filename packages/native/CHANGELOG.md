@@ -2,6 +2,17 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## [Unreleased]
+
+- Custom incoming ringtone. Plugin option `ringtone` (a file path, or
+  `{ ios, android }`) ships the sound in both apps; `configure({ ringtone })`
+  overrides it at runtime and is persisted for closed-app rings. iOS: CallKit's
+  `ringtoneSound` (caf/aiff/wav, 30 s or shorter, read from Info.plist
+  `PoolseRingtone` at a PushKit cold wake). Android: the module plays
+  `res/raw/<name>` looping on the ringtone stream; the incoming-call channel
+  stays silent, so the sound can change without a new channel. Default is
+  still the system ringtone.
+
 ## 3.6.2 — 2026-11-21
 
 - Android: `takeNotificationActions` compiles (3.6.1's

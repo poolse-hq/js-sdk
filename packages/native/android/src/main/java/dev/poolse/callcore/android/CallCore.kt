@@ -408,6 +408,8 @@ class CallCore private constructor(context: Context) {
     const val EXTRA_LAUNCH_CALL = "poolse_launch_call"
     private const val TAG = "PoolseCallCore"
     private const val PREFS = "dev.poolse.callcore"
+    /** Plugin `ringtone`: the raw resource name. */
+    internal const val META_RINGTONE = "dev.poolse.calls.ringtone"
 
     @Volatile private var instance: CallCore? = null
     @Volatile private var config: CallCoreConfig? = null
@@ -432,14 +434,22 @@ class CallCore private constructor(context: Context) {
      * ring surface read it per use, so a new API origin takes effect on
      * the next request.
      */
-    fun configure(context: Context, apiBaseUrl: String, smallIconName: String?, ringbackName: String?) {
+    fun configure(
+      context: Context,
+      apiBaseUrl: String,
+      smallIconName: String?,
+      ringbackName: String?,
+      /** Raw resource NAME of the incoming ringtone; null = the plugin's, else the system's. */
+      ringtoneName: String? = null,
+    ) {
       val ctx = context.applicationContext
       ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
         .putString("apiBaseUrl", apiBaseUrl)
         .putString("smallIcon", smallIconName)
         .putString("ringback", ringbackName)
+        .putString("ringtone", ringtoneName)
         .apply()
-      config = build(ctx, apiBaseUrl, smallIconName, ringbackName)
+      config = build(ctx, apiBaseUrl, smallIconName, ringbackName, ringtoneName)
     }
 
     /** The core; throws if never configured (not even persisted). Prefer [getOrNull]. */
@@ -481,24 +491,43 @@ class CallCore private constructor(context: Context) {
     private fun restoreConfig(context: Context) {
       val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
       val url = p.getString("apiBaseUrl", null) ?: return
-      config = build(context, url, p.getString("smallIcon", null), p.getString("ringback", null))
+      config = build(
+        context,
+        url,
+        p.getString("smallIcon", null),
+        p.getString("ringback", null),
+        p.getString("ringtone", null),
+      )
     }
+
+    /** Application meta-data the config plugin writes (`dev.poolse.calls.*`), or null. */
+    internal fun manifestValue(context: Context, name: String): String? = runCatching {
+      context.packageManager
+        .getApplicationInfo(context.packageName, android.content.pm.PackageManager.GET_META_DATA)
+        .metaData?.get(name)?.toString()
+    }.getOrNull()?.ifEmpty { null }
 
     private fun build(
       context: Context,
       apiBaseUrl: String,
       smallIconName: String?,
       ringbackName: String?,
+      ringtoneName: String?,
     ): CallCoreConfig {
       val iconId = smallIconName
         ?.let { context.resources.getIdentifier(it, "drawable", context.packageName) } ?: 0
       val ringbackId = ringbackName
+        ?.let { context.resources.getIdentifier(it, "raw", context.packageName) } ?: 0
+      // Runtime name first, then the plugin's; an unknown name (0) rings
+      // with the system ringtone rather than not at all.
+      val ringtoneId = (ringtoneName?.ifEmpty { null } ?: manifestValue(context, META_RINGTONE))
         ?.let { context.resources.getIdentifier(it, "raw", context.packageName) } ?: 0
       return CallCoreConfig(
         apiBaseUrl = apiBaseUrl.trimEnd('/'),
         // Fall back to the app's launcher icon rather than crash on a typo.
         smallIcon = if (iconId != 0) iconId else context.applicationInfo.icon,
         ringbackRawRes = ringbackId,
+        ringtoneRawRes = ringtoneId,
         mediaFactory = resolveMediaFactory(),
       )
     }
@@ -542,6 +571,8 @@ data class CallCoreConfig(
   val apiBaseUrl: String,
   val smallIcon: Int,
   val ringbackRawRes: Int,
+  /** The incoming ringtone, `res/raw`; 0 = the system ringtone. */
+  val ringtoneRawRes: Int = 0,
   /**
    * Builds the media engine for a call. Injected so the core carries no
    * SFU dependency; pass `::LiveKitMediaPortFactory` (the shipped
@@ -549,7 +580,7 @@ data class CallCoreConfig(
    */
   val mediaFactory: (Context, MediaEvents) -> MediaPort,
 ) {
-  internal val ringSurface get() = RingSurfaceConfig(smallIcon, ringbackRawRes)
+  internal val ringSurface get() = RingSurfaceConfig(smallIcon, ringbackRawRes, ringtoneRawRes)
 }
 
 /** Media-level signals the SFU adapter reports back to the core. */

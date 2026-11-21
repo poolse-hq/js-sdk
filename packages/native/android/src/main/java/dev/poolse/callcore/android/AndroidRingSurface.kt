@@ -3,6 +3,7 @@ package dev.poolse.callcore.android
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
@@ -13,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -279,7 +281,16 @@ internal class AndroidRingSurface(
   override fun ringtoneStart() {
     ringtoneStop()
     runCatching {
-      val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE) ?: return
+      // The app's own sound (configure / plugin `ringtone`), else the
+      // user's system ringtone. Played here, not by the notification
+      // channel, so it loops until the ring resolves and can change at
+      // any time — channel sounds are fixed once the channel exists.
+      val custom = config.ringtoneRawRes
+      val uri = if (custom != 0) {
+        Uri.parse("${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.packageName}/$custom")
+      } else {
+        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE) ?: return
+      }
       ringtone = RingtoneManager.getRingtone(context, uri)?.apply {
         audioAttributes = AudioAttributes.Builder()
           .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
@@ -380,4 +391,6 @@ data class RingSurfaceConfig(
   val smallIcon: Int,
   /** `R.raw.incallmanager_ringback`, or 0 to fall back to silence. */
   val ringbackRawRes: Int,
+  /** The app's incoming ringtone in `res/raw`, or 0 for the system ringtone. */
+  val ringtoneRawRes: Int = 0,
 )

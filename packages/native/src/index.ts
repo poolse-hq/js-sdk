@@ -132,6 +132,16 @@ export interface ConfigureOptions {
   /** Ringback tone: raw resource NAME (Android); main-bundle sound name, mp3/caf/wav (iOS). */
   ringback?: string;
   /**
+   * Incoming ringtone, overriding the config plugin's `ringtone` (leave it
+   * out to use the plugin's, or the system ringtone without one).
+   * Android: raw resource NAME (`ring` for `res/raw/ring.ogg`), played by
+   * the module. iOS: a main-bundle sound CallKit plays — `ring.caf`, or the
+   * base name looked up as caf/aiff/aif/wav; 30 s or shorter. Persisted, so
+   * a ring that wakes a closed app uses it too. A name that is not in the
+   * app rings with the system ringtone.
+   */
+  ringtone?: string;
+  /**
    * iOS: the APNs environment of this build's `aps-environment`
    * entitlement. Echoed back with the VoIP token so the server pushes to
    * the right gateway. Ignored on Android.
