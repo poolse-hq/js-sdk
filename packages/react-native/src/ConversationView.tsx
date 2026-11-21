@@ -13,6 +13,7 @@ import {
   useRealtimeStatus,
   useLiveCall,
   useTyping,
+  type GroupPosition,
   type MessageStream,
 } from '@poolse/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
@@ -37,13 +38,21 @@ import { MessageRow, type MessageUser } from './MessageRow.js';
 import { ThreadView } from './ThreadView.js';
 import { TypingIndicator } from './TypingIndicator.js';
 import { latestMarkableId } from './internal/messageFocus.js';
+import {
+  mentionsViewer,
+  type ChatDensity,
+  type ChatLayout,
+  type MessageSlots,
+  type RenderMessageContext,
+  type TimeFormat,
+} from './layout.js';
 import { UploadProvider } from './internal/uploadContext.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
-// Two messages from the same sender within this window collapse
-// into a visual cluster (tight margin, grouped bubble corners).
-// Matches the react-ui default.
-const GROUPING_WINDOW_MS = 5 * 60 * 1000;
+// Two messages from the same sender within this many minutes collapse
+// into a visual cluster (tight margin, grouped bubble corners; one
+// header in `list`). Matches the react-ui default.
+const GROUP_WINDOW_MINUTES = 5;
 
 export interface ConversationViewProps {
   conversationId: Uuid;
@@ -51,9 +60,49 @@ export interface ConversationViewProps {
   /**
    * Custom row renderer. Return `null` / `undefined` to fall back to
    * the default row for that message (so you can override just the
-   * message kinds you care about).
+   * message kinds you care about). The third argument carries the
+   * layout and `renderDefault()`, the row this view would have drawn.
    */
-  renderMessage?: (msg: Message, currentUserId: string | null) => ReactElement | null | undefined;
+  renderMessage?: (
+    msg: Message,
+    currentUserId: string | null,
+    context: RenderMessageContext,
+  ) => ReactElement | null | undefined;
+
+  /**
+   * How messages are drawn:
+   *   * `'bubbles'` (default) — chat bubbles, yours on the right.
+   *   * `'list'` — Slack-style full-width rows; avatar, name and time
+   *     once per run, later messages' time dimmed in the gutter,
+   *     "N replies" under threads. Long-press for actions.
+   *   * `'compact'` — Discord/IRC-style dense lines: time, the name in
+   *     the sender's colour, the text; an accent bar on messages that
+   *     mention you.
+   */
+  layout?: ChatLayout;
+  /** `'comfortable'` (default) or `'compact'` spacing, in any layout. */
+  density?: ChatDensity;
+  /**
+   * Show avatars. Defaults: `list` on, `compact` off, `bubbles` per
+   * `avatars` (others' messages in group chats). Overrides `avatars`.
+   */
+  showAvatars?: boolean;
+  /** `'12h'`, `'24h'` or a formatter. Defaults to the locale's. */
+  timeFormat?: TimeFormat;
+  /**
+   * Same-sender messages less than this many minutes apart form one
+   * run (one bubble cluster, one `list` header). Default 5.
+   */
+  groupWindowMinutes?: number;
+  /** Day dividers between messages on different days. Defaults to `true`. */
+  daySeparators?: boolean;
+  /**
+   * Replace or wrap one part of every message — `header`, `body`,
+   * `attachments`, `reactions`, `thread`, `actions` — in any layout.
+   * Each receives the message, sender, layout and its default
+   * rendering as `children`.
+   */
+  slots?: MessageSlots;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
 
@@ -185,6 +234,13 @@ export function ConversationView({
   onCallBack,
   onJoinCall,
   currentCallId = null,
+  layout = 'bubbles',
+  density = 'comfortable',
+  showAvatars: showAvatarsProp,
+  timeFormat,
+  groupWindowMinutes = GROUP_WINDOW_MINUTES,
+  daySeparators = true,
+  slots,
 }: ConversationViewProps) {
   const theme = useTheme();
   const showComposer = composer && !readOnly;
@@ -253,7 +309,23 @@ export function ConversationView({
   const { members } = useMembers(wantsMembers ? conversationId : '');
   const isGroupChat = members.length > 2;
   const showSenderLabels = senderLabels === 'always' || (senderLabels === 'auto' && isGroupChat);
-  const showAvatars = avatars === 'always' || (avatars === 'auto' && isGroupChat);
+  const showAvatars =
+    showAvatarsProp ??
+    (layout === 'list'
+      ? true
+      : layout === 'compact'
+        ? false
+        : avatars === 'always' || (avatars === 'auto' && isGroupChat));
+  // Props every row gets, whatever the layout.
+  const layoutProps = useMemo(
+    () => ({
+      layout,
+      density,
+      ...(timeFormat ? { timeFormat } : {}),
+      ...(slots ? { slots } : {}),
+    }),
+    [layout, density, timeFormat, slots],
+  );
 
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -371,18 +443,13 @@ export function ConversationView({
       if (!msg) continue;
       const prev = i > 0 ? (visibleMessages[i - 1] ?? null) : null;
       const next = i < visibleMessages.length - 1 ? (visibleMessages[i + 1] ?? null) : null;
-      map.set(msg.id, computeGroupPosition(msg, prev, next, GROUPING_WINDOW_MS));
+      map.set(msg.id, computeGroupPosition(msg, prev, next, groupWindowMinutes * 60 * 1000));
     }
     return map;
-  }, [visibleMessages]);
+  }, [visibleMessages, groupWindowMinutes]);
 
-  const renderItem = useCallback(
-    (msg: Message): ReactElement => {
-      if (renderMessage) {
-        // null / undefined → fall through to the default row.
-        const custom = renderMessage(msg, meId);
-        if (custom !== null && custom !== undefined) return custom;
-      }
+  const defaultRow = useCallback(
+    (msg: Message, groupPosition: GroupPosition): ReactElement => {
       const readState: 'sent' | 'read' | undefined =
         showReadState && meId !== null && msg.sender_id === meId
           ? readStateForMessage(msg, members, meId, sequenceByMessageId)
@@ -403,7 +470,6 @@ export function ConversationView({
         readState,
         insertedAt: msg.inserted_at,
       });
-      const groupPosition = groupPositionById.get(msg.id) ?? 'standalone';
       const row = (
         <MessageRow
           msg={msg}
@@ -430,6 +496,8 @@ export function ConversationView({
           groupPosition={groupPosition}
           markdown={markdown}
           {...(onCallBack ? { onCallBack } : {})}
+          {...layoutProps}
+          mentionsMe={mentionsViewer(msg, meId)}
         />
       );
       if (msg.id !== highlightId) return row;
@@ -443,7 +511,6 @@ export function ConversationView({
       highlightId,
       theme.colors.accentSoft,
       canQuote,
-      renderMessage,
       meId,
       showReadState,
       receiptsVisible,
@@ -460,9 +527,28 @@ export function ConversationView({
       showAvatars,
       maxBodyLength,
       sequenceByMessageId,
-      groupPositionById,
       markdown,
+      layoutProps,
     ],
+  );
+
+  const renderItem = useCallback(
+    (msg: Message): ReactElement => {
+      const groupPosition = groupPositionById.get(msg.id) ?? 'standalone';
+      if (renderMessage) {
+        // null / undefined → fall through to the default row.
+        const custom = renderMessage(msg, meId, {
+          layout,
+          groupPosition,
+          isRunStart:
+            layout === 'compact' || groupPosition === 'first' || groupPosition === 'standalone',
+          renderDefault: () => defaultRow(msg, groupPosition),
+        });
+        if (custom !== null && custom !== undefined) return custom;
+      }
+      return defaultRow(msg, groupPosition);
+    },
+    [renderMessage, meId, layout, groupPositionById, defaultRow],
   );
 
   const editingMessage = useMemo(
@@ -477,19 +563,19 @@ export function ConversationView({
     const out: MessageListItem[] = [];
     let prev: Message | null = null;
     for (const msg of visibleMessages) {
-      if (prev === null || !sameDay(msg.inserted_at, prev.inserted_at)) {
+      if (daySeparators && (prev === null || !sameDay(msg.inserted_at, prev.inserted_at))) {
         const label = formatDayLabel(msg.inserted_at);
         out.push({
           kind: 'separator',
           id: `sep-${msg.id}`,
-          node: <DaySeparator label={label} />,
+          node: <DaySeparator label={label} variant={layout === 'bubbles' ? 'pill' : 'rule'} />,
         });
       }
       out.push({ kind: 'msg', msg });
       prev = msg;
     }
     return out;
-  }, [visibleMessages]);
+  }, [visibleMessages, daySeparators, layout]);
 
   const composerProps = useMemo(
     () => ({
@@ -621,6 +707,7 @@ export function ConversationView({
                       showSenderName={showSenderLabels}
                       showAvatar={showAvatars}
                       markdown={markdown}
+                      {...layoutProps}
                     />
                   ),
                 )}
@@ -659,6 +746,8 @@ export function ConversationView({
             conversationId={conversationId}
             rootMessage={threadRoot}
             {...(labelFor ? { labelFor } : {})}
+            layout={layout}
+            {...(timeFormat ? { timeFormat } : {})}
           />
         ) : null}
       </KeyboardAvoidingView>

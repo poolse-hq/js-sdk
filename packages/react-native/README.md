@@ -108,6 +108,23 @@ The names follow `@poolse/react-ui`, but the props differ in places (for
 example `ThreadView` needs `visible` and `onClose`, and there is no
 `EditableMessageBubble`); see the docs for each component's props.
 
+## Layouts
+
+```tsx
+<ConversationView conversationId={id} layout="list" density="compact" timeFormat="24h" />
+```
+
+`layout` is `'bubbles'` (default), `'list'` (Slack-style rows: avatar, name and
+time once per run of messages, `groupWindowMinutes` apart at most) or
+`'compact'` (IRC-style lines: time, coloured name, text). Long-press opens the
+same actions sheet in every layout, and reactions, threads, quotes, edits,
+deletes, attachments, read ticks, typing, the new-messages button,
+`focusMessageId` and `onSenderPress` / `onAvatarPress` behave the same. Messages
+that mention you get an accent bar in `list` and `compact`. Use
+`slots={{ header, body, attachments, reactions, thread, actions }}` to replace
+or wrap one part of every message (each slot gets the default as `children`),
+or `renderMessage(msg, meId, { layout, renderDefault })` for whole rows.
+
 ## Theming
 
 ```tsx

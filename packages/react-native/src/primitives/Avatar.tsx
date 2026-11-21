@@ -12,18 +12,18 @@ export interface AvatarProps {
   seed?: string | null;
   /** Show a green presence dot in the bottom-right corner. */
   online?: boolean;
-  /** Size variant. `md` → 40px, `sm` → 28px, `lg` → 56px. */
-  size?: 'sm' | 'md' | 'lg';
+  /** Size variant. `md` → 40px, `sm` → 28px, `xs` → 20px, `lg` → 56px. */
+  size?: 'xs' | 'sm' | 'md' | 'lg';
 }
 
-const SIZES = { sm: 28, md: 40, lg: 56 } as const;
+const SIZES = { xs: 20, sm: 28, md: 40, lg: 56 } as const;
 
 export function Avatar({ src, name, seed, online, size = 'md' }: AvatarProps) {
   const theme = useTheme();
   const dim = SIZES[size];
   const initials = computeInitials(name);
   const tint = seed ? userColor(seed) : theme.colors.accent;
-  const fontSize = size === 'sm' ? 11 : size === 'lg' ? 22 : 15;
+  const fontSize = size === 'xs' ? 9 : size === 'sm' ? 11 : size === 'lg' ? 22 : 15;
 
   return (
     <View

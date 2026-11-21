@@ -19,6 +19,29 @@ versions follow [semver](https://semver.org).
   `radii.bubble`, …). Every component now reads its tokens from it.
 - Re-exports `BUILT_IN_THEME_IDS`, `DEFAULT_THEME_ID`, `createTheme`,
   `encodeTheme`, `decodeTheme` and the theme types from `@poolse/theme`.
+- `ConversationView` chat layouts: `layout="bubbles" | "list" | "compact"`
+  (default `bubbles`, unchanged). `list` is Slack-style — full-width
+  left-aligned rows, avatar + name + time once per run, later messages' time
+  dimmed in the gutter, "N replies" under thread roots. `compact` is
+  Discord/IRC-style — time, the name in the sender's `userColor` and the text
+  on one line, 20px avatars only with `showAvatars`. Both mark messages that
+  @-mention the viewer with an accent bar, draw day dividers as a rule, and
+  open the same long-press actions sheet as bubbles.
+- `ConversationView` props `density` (`'comfortable' | 'compact'`),
+  `showAvatars` (overrides `avatars`; defaults `list` on, `compact` off),
+  `timeFormat` (`'12h' | '24h' | (date) => string`), `groupWindowMinutes`
+  (default 5, was fixed), `daySeparators` (default `true`), and `slots` —
+  `header`, `body`, `attachments`, `reactions`, `thread`, `actions`, each
+  `(props) => ReactNode` receiving the message, sender, layout, `isRunStart`
+  and its default rendering as `children`, in every layout. Types
+  `ChatLayout`, `ChatDensity`, `TimeFormat`, `MessageSlots`, `MessageSlot`,
+  `MessageSlotProps`, `RenderMessageContext`.
+- `renderMessage` gets a third argument, `{ layout, groupPosition, isRunStart,
+renderDefault }`.
+- `MessageRow` `layout`, `density`, `timeFormat`, `slots`, `mentionsMe`;
+  `MessageBubble` `timeFormat`, `density`, `slots` / `slotContext`;
+  `ThreadView` `layout`, `timeFormat`; `DaySeparator` `variant="rule"`;
+  `Avatar` `size="xs"` (20px).
 
 ### Deprecated
 

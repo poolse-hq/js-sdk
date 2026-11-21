@@ -21,6 +21,7 @@ import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { UploadProvider } from './internal/uploadContext.js';
 import { useDismissableSheet } from './internal/useDismissableSheet.js';
+import type { ChatLayout, TimeFormat } from './layout.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 export interface ThreadViewProps {
@@ -30,6 +31,9 @@ export interface ThreadViewProps {
   rootMessage: Message;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
+  /** Row layout for the root and replies — see `ChatLayout`. Defaults to `'bubbles'`. */
+  layout?: ChatLayout;
+  timeFormat?: TimeFormat;
 }
 
 // Sheet covers the bottom 88% of the screen. The remaining 12% is the
@@ -58,6 +62,8 @@ export function ThreadView({
   rootMessage,
   labelFor,
   avatarFor,
+  layout,
+  timeFormat,
 }: ThreadViewProps) {
   return (
     <Modal
@@ -80,6 +86,8 @@ export function ThreadView({
           rootMessage={rootMessage}
           {...(labelFor ? { labelFor } : {})}
           {...(avatarFor ? { avatarFor } : {})}
+          {...(layout ? { layout } : {})}
+          {...(timeFormat ? { timeFormat } : {})}
         />
       </UploadProvider>
     </Modal>
@@ -92,12 +100,16 @@ function ThreadSheet({
   rootMessage,
   labelFor,
   avatarFor,
+  layout,
+  timeFormat,
 }: {
   onClose: () => void;
   conversationId: Uuid;
   rootMessage: Message;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
+  layout?: ChatLayout;
+  timeFormat?: TimeFormat;
 }) {
   const theme = useTheme();
   const { me } = useMe();
@@ -151,10 +163,12 @@ function ThreadSheet({
           }}
           {...(labelFor ? { labelFor } : {})}
           {...(avatarFor ? { avatarFor } : {})}
+          {...(layout ? { layout } : {})}
+          {...(timeFormat ? { timeFormat } : {})}
         />
       );
     },
-    [meId, editingId, deleteReply, labelFor, avatarFor],
+    [meId, editingId, deleteReply, labelFor, avatarFor, layout, timeFormat],
   );
 
   const editingMessage = useMemo(
@@ -174,9 +188,11 @@ function ThreadSheet({
         quotations={false}
         {...(labelFor ? { labelFor } : {})}
         {...(avatarFor ? { avatarFor } : {})}
+        {...(layout ? { layout } : {})}
+        {...(timeFormat ? { timeFormat } : {})}
       />
     ),
-    [rootMessage, meId, labelFor, avatarFor],
+    [rootMessage, meId, labelFor, avatarFor, layout, timeFormat],
   );
 
   return (

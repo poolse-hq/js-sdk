@@ -4,6 +4,12 @@ import { useTheme } from './theme/PoolseTheme.js';
 
 export interface DaySeparatorProps {
   label: string;
+  /**
+   * `'pill'` (default) — a centred chip, for bubbles. `'rule'` — a
+   * hairline across the row with the chip on it, for the `list` and
+   * `compact` layouts.
+   */
+  variant?: 'pill' | 'rule';
 }
 
 /**
@@ -12,10 +18,15 @@ export interface DaySeparatorProps {
  * with `formatDayLabel` from `@poolse/react` to compute the label
  * ("Today" / "Yesterday" / weekday / "26 May 2024").
  */
-export function DaySeparator({ label }: DaySeparatorProps) {
+export function DaySeparator({ label, variant = 'pill' }: DaySeparatorProps) {
   const theme = useTheme();
+  const rule =
+    variant === 'rule' ? (
+      <View style={[styles.rule, { backgroundColor: theme.colors.border }]} />
+    ) : null;
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, rule ? styles.wrapRule : null]}>
+      {rule}
       <View
         style={[
           styles.chip,
@@ -37,6 +48,7 @@ export function DaySeparator({ label }: DaySeparatorProps) {
           {label}
         </Text>
       </View>
+      {rule}
     </View>
   );
 }
@@ -45,6 +57,15 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     marginVertical: 8,
+  },
+  wrapRule: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 12,
+  },
+  rule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
   },
   chip: {
     paddingHorizontal: 12,

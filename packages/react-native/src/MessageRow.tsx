@@ -10,6 +10,15 @@ import * as Clipboard from 'expo-clipboard';
 
 import { Avatar } from './primitives/Avatar.js';
 import { CallLogRow } from './CallLogRow.js';
+import { FlatMessageRow } from './FlatMessageRow.js';
+import {
+  renderSlot,
+  type ChatDensity,
+  type ChatLayout,
+  type MessageSlotContext,
+  type MessageSlots,
+  type TimeFormat,
+} from './layout.js';
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
@@ -82,6 +91,19 @@ export interface MessageRowProps {
   onAvatarPress?: (user: MessageUser) => void;
   /** Call-log rows: offer "Call back" (see `<CallLogRow onCallBack>`). */
   onCallBack?: (media: 'audio' | 'video') => void;
+  /** `'bubbles'` (default), `'list'` or `'compact'` — see `ChatLayout`. */
+  layout?: ChatLayout;
+  /** `'comfortable'` (default) or `'compact'` spacing. */
+  density?: ChatDensity;
+  /** `'12h'`, `'24h'` or a formatter for timestamps. Defaults to the locale's. */
+  timeFormat?: TimeFormat;
+  /** Replace or wrap parts of the row — see `MessageSlots`. */
+  slots?: MessageSlots;
+  /**
+   * The message @-mentions the viewer: `list` and `compact` mark it
+   * with an accent bar.
+   */
+  mentionsMe?: boolean;
 }
 
 export function MessageRow(props: MessageRowProps) {
@@ -99,6 +121,9 @@ export function MessageRow(props: MessageRowProps) {
         {...(props.onCallBack ? { onCallBack: props.onCallBack } : {})}
       />
     ) : null;
+  }
+  if (props.layout === 'list' || props.layout === 'compact') {
+    return <FlatMessageRow {...props} layout={props.layout} />;
   }
   return <BubbleMessageRow {...props} />;
 }
@@ -127,6 +152,9 @@ function BubbleMessageRow({
   avatarFor,
   onSenderPress,
   onAvatarPress,
+  density = 'comfortable',
+  timeFormat,
+  slots,
 }: MessageRowProps) {
   const theme = useTheme();
   const isSelf = meId !== null && msg.sender_id === meId;
@@ -257,6 +285,13 @@ function BubbleMessageRow({
     displayName: senderLabel ?? 'Unknown',
     avatarUrl,
   };
+  const slotContext: MessageSlotContext = {
+    message: msg,
+    isSelf,
+    sender,
+    layout: 'bubbles',
+    isRunStart: groupPosition === 'first' || groupPosition === 'standalone',
+  };
   const avatar = (
     <Avatar
       src={avatarUrl ?? null}
@@ -271,6 +306,7 @@ function BubbleMessageRow({
       style={[
         styles.row,
         { alignSelf: isSelf ? 'flex-end' : 'flex-start' },
+        density === 'compact' ? styles.rowDense : null,
         // Lift this row above the dim backdrop the parent renders
         // during edit mode. zIndex covers iOS / web; elevation does
         // the equivalent on Android.
@@ -336,6 +372,9 @@ function BubbleMessageRow({
               {...(onSenderPress ? { onSenderPress: () => onSenderPress(sender) } : {})}
               showAttachments={attachments}
               markdown={markdown}
+              density={density}
+              {...(timeFormat ? { timeFormat } : {})}
+              {...(slots ? { slots, slotContext } : {})}
               // No actionsTrigger: the always-visible chevron stamped
               // into the bubble corner fought the bubble shape and
               // duplicated affordances a phone already has — long-press
@@ -352,82 +391,94 @@ function BubbleMessageRow({
           </Pressable>
         </Animated.View>
 
-        {threads && (msg.reply_count ?? 0) > 0 && onOpenThread ? (
-          <Pressable onPress={onOpenThread} style={styles.threadPill}>
-            <Text style={[styles.threadPillText, { color: theme.colors.accent }]}>
-              💬 {msg.reply_count} {msg.reply_count === 1 ? 'reply' : 'replies'}
-            </Text>
-          </Pressable>
-        ) : null}
+        {renderSlot(
+          slots?.thread,
+          slotContext,
+          threads && (msg.reply_count ?? 0) > 0 && onOpenThread ? (
+            <Pressable onPress={onOpenThread} style={styles.threadPill}>
+              <Text style={[styles.threadPillText, { color: theme.colors.accent }]}>
+                💬 {msg.reply_count} {msg.reply_count === 1 ? 'reply' : 'replies'}
+              </Text>
+            </Pressable>
+          ) : null,
+        )}
 
-        {reactions ? (
-          <View style={[styles.reactionsRow, { alignSelf: isSelf ? 'flex-end' : 'flex-start' }]}>
-            <ReactionStrip
-              messageId={msg.id}
-              conversationId={msg.conversation_id}
-              meId={meId}
-              {...(msg.reactions ? { initialReactions: msg.reactions } : {})}
-            />
-          </View>
-        ) : null}
+        {renderSlot(
+          slots?.reactions,
+          slotContext,
+          reactions ? (
+            <View style={[styles.reactionsRow, { alignSelf: isSelf ? 'flex-end' : 'flex-start' }]}>
+              <ReactionStrip
+                messageId={msg.id}
+                conversationId={msg.conversation_id}
+                meId={meId}
+                {...(msg.reactions ? { initialReactions: msg.reactions } : {})}
+              />
+            </View>
+          ) : null,
+        )}
       </View>
 
-      {actions && actionsOpen ? (
-        <MessageActions
-          visible={actionsOpen}
-          onClose={() => setActionsOpen(false)}
-          isSelf={isSelf}
-          {...(reactions
-            ? {
-                // Inline quick-react row at the top of the sheet —
-                // one tap = react + close, no second modal needed.
-                onPickReaction: (emoji: string) => {
-                  void reactionsApi.addReaction(emoji);
-                },
-              }
-            : {})}
-          {...(msg.body && !msg.deleted_at
-            ? {
-                onCopy: () => {
-                  setActionsOpen(false);
-                  void Clipboard.setStringAsync(msg.body ?? '');
-                },
-              }
-            : {})}
-          {...(onStartEdit
-            ? {
-                onEdit: () => {
-                  setActionsOpen(false);
-                  onStartEdit();
-                },
-              }
-            : {})}
-          {...(onDelete
-            ? {
-                onDelete: () => {
-                  setActionsOpen(false);
-                  onDelete();
-                },
-              }
-            : {})}
-          {...(onOpenThread
-            ? {
-                onReplyInThread: () => {
-                  setActionsOpen(false);
-                  onOpenThread();
-                },
-              }
-            : {})}
-          {...(quotations && onQuote
-            ? {
-                onQuote: () => {
-                  setActionsOpen(false);
-                  onQuote();
-                },
-              }
-            : {})}
-        />
-      ) : null}
+      {renderSlot(
+        slots?.actions,
+        slotContext,
+        actions && actionsOpen ? (
+          <MessageActions
+            visible={actionsOpen}
+            onClose={() => setActionsOpen(false)}
+            isSelf={isSelf}
+            {...(reactions
+              ? {
+                  // Inline quick-react row at the top of the sheet —
+                  // one tap = react + close, no second modal needed.
+                  onPickReaction: (emoji: string) => {
+                    void reactionsApi.addReaction(emoji);
+                  },
+                }
+              : {})}
+            {...(msg.body && !msg.deleted_at
+              ? {
+                  onCopy: () => {
+                    setActionsOpen(false);
+                    void Clipboard.setStringAsync(msg.body ?? '');
+                  },
+                }
+              : {})}
+            {...(onStartEdit
+              ? {
+                  onEdit: () => {
+                    setActionsOpen(false);
+                    onStartEdit();
+                  },
+                }
+              : {})}
+            {...(onDelete
+              ? {
+                  onDelete: () => {
+                    setActionsOpen(false);
+                    onDelete();
+                  },
+                }
+              : {})}
+            {...(onOpenThread
+              ? {
+                  onReplyInThread: () => {
+                    setActionsOpen(false);
+                    onOpenThread();
+                  },
+                }
+              : {})}
+            {...(quotations && onQuote
+              ? {
+                  onQuote: () => {
+                    setActionsOpen(false);
+                    onQuote();
+                  },
+                }
+              : {})}
+          />
+        ) : null,
+      )}
     </View>
   );
 }
@@ -445,6 +496,9 @@ const styles = StyleSheet.create({
     // on every device.
     paddingHorizontal: 10,
     maxWidth: '95%',
+  },
+  rowDense: {
+    marginVertical: 0,
   },
   rowEditing: {
     // Above ConversationView's editBackdrop (zIndex 5). Elevation
