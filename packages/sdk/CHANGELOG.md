@@ -18,7 +18,7 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 - This device's activity: `presence.setActivity('active' | 'idle')` (sends
   `presence:set`; unchanged states are skipped, `active` re-sent at most once a
   minute), `presence.getActivity()`, and `presence.trackActivity({ idleAfterMs?,
-  document?, window? })` for browsers (hidden / blur / no input for 5 min →
+document?, window? })` for browsers (hidden / blur / no input for 5 min →
   idle; a no-op without `document`). The `user:<id>` join carries
   `presence: 'active' | 'idle'`.
 - `UserChannel.onPresenceChanged`, `setPresence`, `getPresence`, `onJoined`,
@@ -28,7 +28,7 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
   `PRESENCE_MAX_LOOKUP`.
 
 - Notification actions without a session: `createNotificationActions({ apiUrl?,
-  fetch?, … })` and `poolse.notificationActions` (`NotificationActions`) with
+fetch?, … })` and `poolse.notificationActions` (`NotificationActions`) with
   `reply({ token, text, id? })` (`POST /v1/notification-actions/reply`; `id`
   defaults to a fresh UUID and doubles as the idempotency key, so a retry
   returns the original message) and `read({ token })`. The push's
