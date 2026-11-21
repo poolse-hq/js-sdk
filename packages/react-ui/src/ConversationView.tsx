@@ -134,8 +134,19 @@ export interface ConversationViewProps {
   /** Swap the plain composer for one with `@`-autocomplete drawn from members. */
   mentions?: boolean;
 
-  /** Paperclip → file picker → presigned upload → send-with-attachment. */
+  /**
+   * Paperclip → file picker → presigned upload → send-with-attachment.
+   * Files can also be pasted into the composer or dropped on the view;
+   * they show as chips (images with a thumbnail) until sent.
+   */
   attachments?: boolean;
+  /** Largest attachment accepted, in bytes; bigger files show an error chip instead. */
+  maxFileSize?: number;
+  /**
+   * Accepted attachment types — MIME types, wildcards (`'image/*'`) or
+   * extensions (`'.pdf'`). Other files show an error chip instead.
+   */
+  acceptFileTypes?: string[];
 
   /** An emoji button in the composer (`<EmojiPicker>`). Defaults to `true`. */
   emojiPicker?: boolean;
@@ -269,6 +280,8 @@ export function ConversationView({
   reactions = TRUE,
   mentions = TRUE,
   attachments = TRUE,
+  maxFileSize,
+  acceptFileTypes,
   emojiPicker = TRUE,
   actions = TRUE,
   threads = TRUE,
@@ -716,6 +729,11 @@ export function ConversationView({
 
   const onSendWithMentions = (req: MessageCreateRequest) => sendRequest(req);
 
+  const attachmentRules = {
+    ...(maxFileSize !== undefined ? { maxFileSize } : {}),
+    ...(acceptFileTypes ? { acceptFileTypes } : {}),
+  };
+
   // Mention input is only ergonomic when members are loaded. Falls back to
   // the plain composer otherwise. Both variants accept the same
   // `replyingTo` / `onCancelReply` props for the quote-reply chip, and
@@ -729,6 +747,7 @@ export function ConversationView({
         onTyping={signalTyping}
         attachments={attachments}
         emojiPicker={emojiPicker}
+        {...attachmentRules}
         {...(labelFor ? { labelFor } : {})}
         {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />
@@ -739,6 +758,7 @@ export function ConversationView({
         onTyping={signalTyping}
         attachments={attachments}
         emojiPicker={emojiPicker}
+        {...attachmentRules}
         {...(labelFor ? { labelFor } : {})}
         {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
       />
@@ -1011,6 +1031,7 @@ export function ConversationView({
             onClose={() => setThreadRootId(null)}
             layout={layout}
             {...(timeFormat ? { timeFormat } : {})}
+            {...attachmentRules}
           />
         </div>
       )}

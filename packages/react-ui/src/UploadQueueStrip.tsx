@@ -1,10 +1,12 @@
 import type { UploadItem } from '@poolse/react';
 import { PoolseIcon } from './PoolseIcon.js';
 
-interface UploadQueueStripProps {
+export interface UploadQueueStripProps {
   items: UploadItem[];
   onCancel: (localId: string) => void;
   onDismiss: (localId: string) => void;
+  /** A thumbnail URL for an item (e.g. an object URL of a picked image), or null. */
+  previewFor?: (item: UploadItem) => string | null;
 }
 
 /**
@@ -14,7 +16,12 @@ interface UploadQueueStripProps {
  * press send" — the composer parent sweeps them out only after the
  * send completes successfully.
  */
-export function UploadQueueStrip({ items, onCancel, onDismiss }: UploadQueueStripProps) {
+export function UploadQueueStrip({
+  items,
+  onCancel,
+  onDismiss,
+  previewFor,
+}: UploadQueueStripProps) {
   if (items.length === 0) return null;
   return (
     <div className="poolse-upload-strip" role="status" aria-live="polite">
@@ -22,6 +29,7 @@ export function UploadQueueStrip({ items, onCancel, onDismiss }: UploadQueueStri
         <UploadChip
           key={item.localId}
           item={item}
+          thumbnail={previewFor?.(item) ?? null}
           onCancel={() => onCancel(item.localId)}
           onDismiss={() => onDismiss(item.localId)}
         />
@@ -32,10 +40,12 @@ export function UploadQueueStrip({ items, onCancel, onDismiss }: UploadQueueStri
 
 function UploadChip({
   item,
+  thumbnail,
   onCancel,
   onDismiss,
 }: {
   item: UploadItem;
+  thumbnail: string | null;
   onCancel: () => void;
   onDismiss: () => void;
 }) {
@@ -49,9 +59,13 @@ function UploadChip({
       className={`poolse-upload-chip poolse-upload-chip--${item.status}`}
       data-status={item.status}
     >
-      <div className="poolse-upload-chip__icon" aria-hidden="true">
-        <PoolseIcon name={isReady ? 'check' : 'attachment'} size={18} label={null} />
-      </div>
+      {thumbnail && !isError ? (
+        <img className="poolse-upload-chip__thumb" src={thumbnail} alt="" aria-hidden="true" />
+      ) : (
+        <div className="poolse-upload-chip__icon" aria-hidden="true">
+          <PoolseIcon name={isReady ? 'check' : 'attachment'} size={18} label={null} />
+        </div>
+      )}
       <div className="poolse-upload-chip__body">
         <div className="poolse-upload-chip__filename" title={item.filename}>
           {item.filename}

@@ -1,14 +1,6 @@
-import {
-  forwardRef,
-  useCallback,
-  useImperativeHandle,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, type KeyboardEvent } from 'react';
 import type { Message, Uuid } from '@poolse/sdk';
-import { useAttachmentUpload } from '@poolse/react';
-import { ComposerEmojiButton, insertAtCaret } from './composerParts.js';
+import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
@@ -50,6 +42,13 @@ export interface MessageComposerProps {
   attachments?: boolean;
   /** An emoji button that opens `<EmojiPicker>` and inserts at the caret. Default `true`. */
   emojiPicker?: boolean;
+  /** Largest attachment accepted, in bytes; bigger files show an error chip instead. */
+  maxFileSize?: number;
+  /**
+   * Accepted attachment types — MIME types, wildcards (`'image/*'`) or
+   * extensions (`'.pdf'`). Other files show an error chip instead.
+   */
+  acceptFileTypes?: string[];
 }
 
 /**
@@ -90,6 +89,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       labelFor,
       attachments = true,
       emojiPicker = true,
+      maxFileSize,
+      acceptFileTypes,
     },
     ref,
   ) {
@@ -99,32 +100,16 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     useAutogrow(taRef, value);
 
-    const { queue, uploadAll, cancel: cancelUpload, remove: removeUpload } = useAttachmentUpload();
-
-    // Show every staged chip — pending, uploading, ready, errored.
-    // Ready chips are the user's "queued and waiting on send" signal;
-    // without them visible after upload, picking a file feels like
-    // nothing happened. They get swept out after the send completes.
-    const visibleUploads = queue.filter((it) => it.status !== 'cancelled');
-    const readyCount = queue.filter((it) => it.status === 'ready').length;
-    const uploading = queue.some((it) => it.status === 'pending' || it.status === 'uploading');
-
-    const addFiles = useCallback(
-      (files: File[]) => {
-        if (!attachments || files.length === 0) return;
-        void uploadAll(
-          files.map((f) => ({
-            body: f,
-            contentType: f.type || 'application/octet-stream',
-            byteSize: f.size,
-            filename: f.name,
-          })),
-        ).catch(() => {
-          // Per-item error stays on its chip; the user dismisses.
-        });
-      },
-      [attachments, uploadAll],
-    );
+    // Every staged chip shows — pending, uploading, ready, errored, and
+    // files refused before upload (too big, wrong type). Ready chips
+    // are the "goes out on send" signal; they're swept after the send.
+    const uploads = useComposerAttachments(attachments, {
+      ...(maxFileSize !== undefined ? { maxFileSize } : {}),
+      ...(acceptFileTypes ? { acceptFileTypes } : {}),
+    });
+    const { addFiles, uploading } = uploads;
+    const visibleUploads = uploads.items;
+    const readyCount = uploads.ready.length;
 
     const valueRef = useRef(value);
     valueRef.current = value;
@@ -141,7 +126,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
 
     const submit = async () => {
       const trimmed = value.trim();
-      const ready = queue.filter((it) => it.status === 'ready');
+      const ready = uploads.ready;
       const hasReady = ready.length > 0;
       // Allow attachment-only sends (no body).
       if ((!trimmed && !hasReady) || sending || uploading) return;
@@ -156,7 +141,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       setValue('');
       // Sweep ready chips out of the queue now that they've been
       // attached + sent. Errored chips stay until dismissed.
-      for (const it of ready) removeUpload(it.localId);
+      for (const it of ready) uploads.remove(it.localId);
+      uploads.clearRejected();
       setSending(true);
       try {
         // Pass `undefined` (not an empty object) when there are no
@@ -219,8 +205,9 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         {attachments && visibleUploads.length > 0 && (
           <UploadQueueStrip
             items={visibleUploads}
-            onCancel={cancelUpload}
-            onDismiss={removeUpload}
+            onCancel={uploads.cancel}
+            onDismiss={uploads.dismiss}
+            previewFor={uploads.previewFor}
           />
         )}
         <div className="poolse-composer__row">
@@ -230,6 +217,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
                 ref={fileInputRef}
                 type="file"
                 multiple
+                {...(uploads.accept ? { accept: uploads.accept } : {})}
                 className="poolse-attach-input"
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? []);
@@ -257,6 +245,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             value={value}
             onChange={onChange}
             onKeyDown={onKeyDown}
+            onPaste={uploads.onPaste}
             placeholder={placeholder}
             disabled={disabled || sending}
             aria-label={placeholder}

@@ -97,6 +97,9 @@ preview>` draws one on its own.
 - **Emoji.** `<EmojiPicker>` (search, recent, categories; its data loads on
   first open) behind the reaction "+" and a composer button
   (`emojiPicker={false}` hides it).
+- **Uploads**: the paperclip, pasting into the composer, or dropping on the
+  conversation; chips (with image thumbnails) until sent. `maxFileSize` and
+  `acceptFileTypes` refuse other files with an error chip.
 - **Deleted messages** read "This message was deleted" and keep their thread
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.

@@ -30,6 +30,10 @@ export interface ThreadViewProps {
   /** Row layout for the replies — see `ChatLayout`. Defaults to `'bubbles'`. */
   layout?: ChatLayout;
   timeFormat?: TimeFormat;
+  /** Largest attachment accepted, in bytes (see `MessageComposer`). */
+  maxFileSize?: number;
+  /** Accepted attachment types (see `MessageComposer`). */
+  acceptFileTypes?: string[];
 }
 
 export function ThreadView({
@@ -39,6 +43,8 @@ export function ThreadView({
   renderMessage,
   layout,
   timeFormat,
+  maxFileSize,
+  acceptFileTypes,
 }: ThreadViewProps) {
   const { me } = useMe();
   const {
@@ -221,6 +227,8 @@ export function ThreadView({
           })
         }
         placeholder="Reply in thread…"
+        {...(maxFileSize !== undefined ? { maxFileSize } : {})}
+        {...(acceptFileTypes ? { acceptFileTypes } : {})}
       />
 
       {dragActive && (

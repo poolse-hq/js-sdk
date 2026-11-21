@@ -49,6 +49,15 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 - An emoji button in `MessageComposer` and `MentionInput` (`emojiPicker`,
   default `true`) inserts at the caret; `ConversationView emojiPicker` passes
   it through.
+- Uploads: pasting files (a screenshot, files copied in the OS) into
+  `MessageComposer` / `MentionInput` queues them like the paperclip; image
+  chips show a local thumbnail before sending (`UploadQueueStrip previewFor`,
+  `UploadQueueStripProps` exported). `maxFileSize` (bytes) and
+  `acceptFileTypes` (MIME types, `image/*`, `.ext`; also the picker's
+  `accept`) on both composers, `ThreadView` and `ConversationView` refuse other
+  files before upload with an error chip ("Larger than 25 MB", "This file type
+  isn't allowed"). Dropping files on the conversation (overlay) goes through
+  the same checks.
 - `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
   `getText()`, `setText(text)` and `focus()`.
 - `ConversationView` shows a notice when a send is refused because the quoted

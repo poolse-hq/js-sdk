@@ -4862,3 +4862,13 @@
   color: var(--poolse-ink-3);
   white-space: nowrap;
 }
+
+/* Image thumbnail on an upload chip, before the message is sent. */
+.poolse-upload-chip__thumb {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: var(--poolse-radius-sm);
+  background: var(--poolse-surface-2);
+}
