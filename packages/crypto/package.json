@@ -1,6 +1,6 @@
 {
   "name": "@poolse/crypto",
-  "version": "3.8.0",
+  "version": "3.9.0",
   "description": "End-to-end encryption for poolse personal data on WebCrypto only: device key pairs, an account key wrapped per device and per recovery key, per-item keys, sharing by key wrapping, rotation on revoke, chunked attachments, signed QR device approval, and encrypted sync over an opaque blob store. No dependencies.",
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [

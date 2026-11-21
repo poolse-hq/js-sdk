@@ -1,6 +1,6 @@
 {
   "name": "@poolse/theme",
-  "version": "3.8.0",
+  "version": "3.9.0",
   "description": "Design tokens and built-in themes for the poolse UI packages: typed tokens, eight light/dark themes, CSS variables for the web, a plain object for React Native, and shareable theme codes. No dependencies.",
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [

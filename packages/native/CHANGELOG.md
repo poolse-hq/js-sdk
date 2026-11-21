@@ -2,7 +2,7 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
-## [Unreleased]
+## 3.9.0 — 2026-11-22
 
 - Recording and transcripts (server docs/RECORDING.md). poolse's transcript
   assistant (`poolse:…`, LiveKit kind agent) and LiveKit Egress's recorder

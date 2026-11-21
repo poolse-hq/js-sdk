@@ -72,7 +72,7 @@ importers:
   packages/react:
     dependencies:
       '@poolse/sdk':
-        specifier: ^3.8.0
+        specifier: ^3.9.0
         version: link:../sdk
     devDependencies:
       '@testing-library/react':
@@ -94,13 +94,13 @@ importers:
   packages/react-native:
     dependencies:
       '@poolse/react':
-        specifier: ^3.8.0
+        specifier: ^3.9.0
         version: link:../react
       '@poolse/sdk':
-        specifier: ^3.8.0
+        specifier: ^3.9.0
         version: link:../sdk
       '@poolse/theme':
-        specifier: ^3.8.0
+        specifier: ^3.9.0
         version: link:../theme
       expo-clipboard:
         specifier: '*'
@@ -140,13 +140,13 @@ importers:
   packages/react-ui:
     dependencies:
       '@poolse/react':
-        specifier: ^3.8.0
+        specifier: ^3.9.0
         version: link:../react
       '@poolse/sdk':
-        specifier: ^3.8.0
+        specifier: ^3.9.0
         version: link:../sdk
       '@poolse/theme':
-        specifier: ^3.8.0
+        specifier: ^3.9.0
         version: link:../theme
       react-markdown:
         specifier: ^9.0.1
