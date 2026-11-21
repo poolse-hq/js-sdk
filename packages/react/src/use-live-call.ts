@@ -1,5 +1,6 @@
 import type { LiveCall } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { applyCaptureEvent, subscribeCapture } from './capture-state.js';
 import { usePoolse } from './provider.js';
 
 export interface UseLiveCall {
@@ -59,6 +60,23 @@ export function useLiveCall(conversationId: string | null): UseLiveCall {
       // A roster for a call we never heard start (joined mid-call): read it.
       else refresh();
     });
+    // Recording and transcript state: the snapshot's `recording` /
+    // `transcription` follow the events too.
+    const offCapture = subscribeCapture(chat, conversationId, null, (e) => {
+      if (e.evt.call_id !== callIdRef.current) return;
+      setCall((c) => {
+        if (!c) return c;
+        const next = applyCaptureEvent(
+          { recording: c.recording ?? null, transcription: c.transcription ?? null },
+          e,
+        );
+        return {
+          ...c,
+          ...(next.recording ? { recording: next.recording } : {}),
+          ...(next.transcription ? { transcription: next.transcription } : {}),
+        };
+      });
+    });
     const offFinished = conv.onCallFinished((evt) => {
       if (evt.call_id !== callIdRef.current) return;
       seq.current++;
@@ -76,6 +94,7 @@ export function useLiveCall(conversationId: string | null): UseLiveCall {
       offStarted();
       offParticipants();
       offFinished();
+      offCapture();
       offStatus();
     };
   }, [chat, conversationId, apply, refresh]);

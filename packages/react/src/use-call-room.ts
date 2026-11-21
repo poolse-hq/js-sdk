@@ -35,6 +35,12 @@ export interface UseCallRoomOptions {
    * Pass `0` to never report it.
    */
   aloneGraceMs?: number;
+  /**
+   * Bring the microphone and camera back by themselves when publish
+   * permission returns (after accepting recording consent). Defaults to
+   * true; false: call `republish` yourself.
+   */
+  republishOnPermission?: boolean;
 }
 
 export interface UseCallRoom {
@@ -117,6 +123,18 @@ export interface UseCallRoom {
   /** Share a screen (the platform's picker opens) or stop sharing. */
   setScreenShareEnabled: (enabled: boolean) => Promise<void>;
   toggleScreenShare: () => Promise<void>;
+  /**
+   * The SFU lets you publish. False while the call is recorded or
+   * transcribed under `consent: "required"` and you haven't accepted —
+   * show the consent prompt; you still hear and see everyone.
+   */
+  canPublish: boolean;
+  /**
+   * Turn the microphone and camera back on as you last had them. Done
+   * for you when publish permission returns unless
+   * `republishOnPermission: false`.
+   */
+  republish: () => Promise<void>;
 }
 
 /**
@@ -152,6 +170,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   const [activeDevices, setActiveDevices] = useState<Partial<Record<CallDeviceKind, string>>>({});
   const [error, setError] = useState<Error | null>(null);
   const [sfuAvailable, setSfuAvailable] = useState<boolean | null>(null);
+  const [canPublish, setCanPublish] = useState(true);
 
   // Kept current, but read only when a room is built.
   //
@@ -199,6 +218,9 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       ...(optsRef.current.aloneGraceMs !== undefined
         ? { aloneGraceMs: optsRef.current.aloneGraceMs }
         : {}),
+      ...(optsRef.current.republishOnPermission !== undefined
+        ? { republishOnPermission: optsRef.current.republishOnPermission }
+        : {}),
     });
   }, [poolse, conversationId]);
 
@@ -233,6 +255,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     setScreen(target.isScreenShareEnabled());
     setCanShare(target.canShareScreen());
     setFacing(target.getFacingMode());
+    setCanPublish(target.canPublish());
   }, []);
 
   useEffect(() => {
@@ -261,6 +284,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
 
     const offDevices = room.onDevices(() => refreshDevices(room));
     const offError = room.onError(setError);
+    const offPublish = room.onPublishPermission(() => sync(room));
 
     return () => {
       offStatus();
@@ -268,6 +292,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       offAlone();
       offDevices();
       offError();
+      offPublish();
       held.current = null;
       // Unmounting mid-call must disconnect, or the SFU keeps publishing
       // a participant nobody is behind.
@@ -388,6 +413,12 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     [room],
   );
 
+  const republish = useCallback(async () => {
+    if (!room) return;
+    await room.republish();
+    sync(room);
+  }, [room, sync]);
+
   return {
     status,
     participants,
@@ -413,5 +444,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     toggleMic,
     setScreenShareEnabled,
     toggleScreenShare,
+    canPublish,
+    republish,
   };
 }

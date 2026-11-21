@@ -135,6 +135,49 @@ export type {
 export { useCallRoom, type UseCallRoom, type UseCallRoomOptions } from './use-call-room.js';
 export { useLiveCall, type UseLiveCall } from './use-live-call.js';
 export { useRoom, type UseRoom, type UseRoomOptions } from './use-room.js';
+
+// ── Recording, consent and transcripts ───────────────────────────
+export { useRecording, type UseRecording } from './use-recording.js';
+export {
+  useLiveTranscript,
+  type UseLiveTranscript,
+  type UseLiveTranscriptOptions,
+} from './use-live-transcript.js';
+export {
+  useTranscript,
+  useTranscripts,
+  useRecordings,
+  type UseTranscript,
+  type UseCaptureList,
+} from './use-transcript.js';
+export { applyCaptureEvent, type CaptureState, type CaptureEvent } from './capture-state.js';
+export {
+  applyLiveSegment,
+  describeRecordingNotice,
+  formatRecordingNoticePreview,
+  isServiceParticipant,
+  parseRecordingNotice,
+  parseRecordingNoticeBody,
+  recordingNoticeDisplayFor,
+  POOLSE_SERVICE_IDENTITY_PREFIX,
+} from '@poolse/sdk';
+export type {
+  CallRecordingState,
+  CallTranscriptionState,
+  ConsentDecision,
+  ConversationRecordingSettings,
+  LiveTranscriptSegment,
+  Recording,
+  RecordingDownload,
+  RecordingMode,
+  RecordingNotice,
+  RecordingNoticeDisplay,
+  RecordingStatus,
+  Transcript,
+  TranscriptSegment,
+  TranscriptSpeaker,
+  TranscriptWithSegments,
+} from '@poolse/sdk';
 export {
   useReadReceipts,
   receiptsOf,
