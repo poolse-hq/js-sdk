@@ -27,6 +27,11 @@ import UserNotifications
 /// `PoolseMessageReplyRequiresUnlock` (the config plugin's
 /// `messageReplyRequiresUnlock` option) to make Reply demand Face ID /
 /// the passcode first.
+///
+/// Several workspaces: a notification's `tenant_id` picks its server
+/// (ServerRegistry) — the action goes to that server's API, and the
+/// result names it (`serverId`). Clearing a conversation only touches
+/// that workspace's notifications.
 final class MessageNotifications: NSObject, NotificationDelegate {
   static let shared = MessageNotifications()
 
@@ -98,6 +103,14 @@ final class MessageNotifications: NSObject, NotificationDelegate {
     }
     let grant = (info["reply_grant"] as? String).flatMap(nilIfEmpty)
     let payloadUnread = Self.int(info["unread_total"])
+    let tenantId = (info["tenant_id"] as? String).flatMap(nilIfEmpty)
+    let server = ServerRegistry.shared.servers.resolve(tenantId: tenantId)
+    let thread = content.threadIdentifier
+    func tagged(_ e: [String: Any]) -> [String: Any] {
+      var e = e
+      if let id = server?.id { e["serverId"] = id }
+      return e
+    }
 
     // Started before anything async: expo-notifications calls the
     // completion handler as soon as we return, and iOS may suspend a
@@ -108,14 +121,15 @@ final class MessageNotifications: NSObject, NotificationDelegate {
       // Optimistic: the notifications go now, the server catches up. A
       // failed read is only logged — the message stays unread, nothing
       // was lost.
-      Self.clear(conversationId: conversationId, fallbackUnread: payloadUnread, adjustBadge: true)
+      Self.clear(conversationId: conversationId, tenantId: tenantId, fallbackUnread: payloadUnread, adjustBadge: true)
       guard let grant = grant else {
-        Self.report(["action": "mark_read", "conversationId": conversationId, "ok": false, "error": "no_grant"])
+        Self.report(tagged(["action": "mark_read", "conversationId": conversationId, "ok": false, "error": "no_grant"]))
         background.end()
         return true
       }
-      send(path: "/v1/notification-actions/read", grant: grant, body: [:], background: background) { result in
-        Self.report(result.event(action: "mark_read", conversationId: conversationId))
+      send(path: "/v1/notification-actions/read", base: server?.apiBaseUrl, grant: grant, body: [:],
+           background: background) { result in
+        Self.report(tagged(result.event(action: "mark_read", conversationId: conversationId)))
         background.end()
       }
       return true
@@ -132,25 +146,27 @@ final class MessageNotifications: NSObject, NotificationDelegate {
     // repeat with the original message (200), never a second one.
     let clientId = UUID().uuidString.lowercased()
     guard let grant = grant else {
-      Self.postFailure(conversationId: conversationId, text: text, reason: "Open the app to reply.", userInfo: info)
-      Self.report(["action": "reply", "conversationId": conversationId, "ok": false, "text": text,
-                   "clientId": clientId, "error": "no_grant"])
+      Self.postFailure(conversationId: conversationId, thread: thread, text: text, reason: "Open the app to reply.",
+                       userInfo: info)
+      Self.report(tagged(["action": "reply", "conversationId": conversationId, "ok": false, "text": text,
+                          "clientId": clientId, "error": "no_grant"]))
       background.end()
       return true
     }
-    send(path: "/v1/notification-actions/reply", grant: grant,
+    send(path: "/v1/notification-actions/reply", base: server?.apiBaseUrl, grant: grant,
          body: ["text": text, "id": clientId], background: background) { result in
-      var event = result.event(action: "reply", conversationId: conversationId)
+      var event = tagged(result.event(action: "reply", conversationId: conversationId))
       event["text"] = text
       event["clientId"] = clientId
       if result.ok {
         event["messageId"] = (result.json?["id"] as? String) ?? clientId
         // Replying marked the conversation read on the server.
-        Self.clear(conversationId: conversationId, fallbackUnread: payloadUnread, adjustBadge: true)
+        Self.clear(conversationId: conversationId, tenantId: tenantId, fallbackUnread: payloadUnread, adjustBadge: true)
         Self.report(event)
         background.end()
       } else {
-        Self.postFailure(conversationId: conversationId, text: text, reason: result.reason, userInfo: info)
+        Self.postFailure(conversationId: conversationId, thread: thread, text: text, reason: result.reason,
+                         userInfo: info)
         Self.report(event)
         // Give the failure notification a moment to be scheduled.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { background.end() }
@@ -164,7 +180,8 @@ final class MessageNotifications: NSObject, NotificationDelegate {
                   completionHandler: @escaping (UIBackgroundFetchResult) -> Void) -> Bool {
     guard userInfo["type"] as? String == "message_read",
           let conversationId = userInfo["conversation_id"] as? String else { return false }
-    Self.clear(conversationId: conversationId, fallbackUnread: nil, adjustBadge: false)
+    Self.clear(conversationId: conversationId, tenantId: (userInfo["tenant_id"] as? String).flatMap(nilIfEmpty),
+               fallbackUnread: nil, adjustBadge: false)
     if let unread = Self.int(userInfo["unread_total"]) {
       Self.setBadge(unread)
     }
@@ -179,12 +196,24 @@ final class MessageNotifications: NSObject, NotificationDelegate {
   /// sends in its read-sync push) the badge becomes the newest delivered
   /// message's `unread_total` less this conversation's notifications — the
   /// read-sync push, when it reaches a running app, sets the exact value.
-  static func clear(conversationId: String, fallbackUnread: Int? = nil, adjustBadge: Bool = false) {
+  ///
+  /// `tenantId`: only that workspace's (a notification without one, from
+  /// an older server, still matches). A thread id may be the bare
+  /// conversation id or `<tenant_id>:<conversation_id>`.
+  static func clear(conversationId: String, tenantId: String? = nil, fallbackUnread: Int? = nil,
+                    adjustBadge: Bool = false) {
     let center = UNUserNotificationCenter.current()
     center.getDeliveredNotifications { delivered in
       let mine = delivered.filter {
-        $0.request.content.threadIdentifier == conversationId ||
-          ($0.request.content.userInfo["conversation_id"] as? String) == conversationId
+        let content = $0.request.content
+        let thread = content.threadIdentifier
+        let sameConversation = thread == conversationId || thread.hasSuffix(":\(conversationId)") ||
+          (content.userInfo["conversation_id"] as? String) == conversationId
+        guard sameConversation else { return false }
+        guard let tenantId = tenantId, let theirs = content.userInfo["tenant_id"] as? String, !theirs.isEmpty else {
+          return true
+        }
+        return theirs == tenantId
       }
       let ids = mine.map { $0.request.identifier }
       if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
@@ -195,6 +224,16 @@ final class MessageNotifications: NSObject, NotificationDelegate {
       guard let total = newest.flatMap({ Self.int($0.request.content.userInfo["unread_total"]) }) ?? fallbackUnread else { return }
       let cleared = mine.filter { $0.request.content.userInfo["poolse_reply_failed"] == nil }.count
       Self.setBadge(total - max(cleared, 1))
+    }
+  }
+
+  /// A workspace signed out: its notifications go (those of a tenant).
+  static func clearTenant(_ tenantId: String) {
+    let center = UNUserNotificationCenter.current()
+    center.getDeliveredNotifications { delivered in
+      let ids = delivered.filter { ($0.request.content.userInfo["tenant_id"] as? String) == tenantId }
+        .map { $0.request.identifier }
+      if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
     }
   }
 
@@ -209,25 +248,35 @@ final class MessageNotifications: NSObject, NotificationDelegate {
   /// "Couldn't send" — in the conversation's stack, with the same Reply
   /// action (and the grant it came with) so the user can try again
   /// right there, or tap to open the chat.
-  private static func postFailure(conversationId: String, text: String, reason: String, userInfo: [AnyHashable: Any]) {
+  private static func postFailure(conversationId: String, thread: String, text: String, reason: String,
+                                  userInfo: [AnyHashable: Any]) {
     let content = UNMutableNotificationContent()
     content.title = "Couldn't send your reply"
     content.body = "\u{201C}\(text)\u{201D} — \(reason)"
-    content.threadIdentifier = conversationId
+    content.threadIdentifier = thread.isEmpty ? conversationId : thread
     content.sound = .default
+    var body: [String: Any] = ["type": "message", "conversation_id": conversationId]
     var info: [String: Any] = [
       "type": "message",
       "conversation_id": conversationId,
       "poolse_reply_failed": "1",
-      // expo-notifications reads a push's data from `body`; keep tap routing working.
-      "body": ["type": "message", "conversation_id": conversationId],
     ]
+    // The workspace it belongs to, so a tap opens the right one.
+    for key in ["tenant_id", "workspace_name", "workspace_icon_url"] {
+      if let v = userInfo[key] as? String, !v.isEmpty { info[key] = v; body[key] = v }
+    }
+    if let name = userInfo["workspace_name"] as? String, !name.isEmpty, ServerRegistry.shared.servers.isMulti {
+      content.subtitle = name
+    }
+    // expo-notifications reads a push's data from `body`; keep tap routing working.
+    info["body"] = body
     if let grant = userInfo["reply_grant"] as? String, !grant.isEmpty {
       info["reply_grant"] = grant
       content.categoryIdentifier = Self.category
     }
     content.userInfo = info
-    let request = UNNotificationRequest(identifier: "poolse-reply-failed-\(conversationId)", content: content, trigger: nil)
+    let request = UNNotificationRequest(identifier: "poolse-reply-failed-\(content.threadIdentifier)", content: content,
+                                        trigger: nil)
     UNUserNotificationCenter.current().add(request) { error in
       if let error = error { pcTrace("reply failure notification refused: \(error)") }
     }
@@ -303,9 +352,12 @@ final class MessageNotifications: NSObject, NotificationDelegate {
   /// A grant-authorized POST, retried with the SAME body (so the same
   /// reply id) on a network error, a 5xx or a 429 while the background
   /// task has time left. The grant rides as the bearer and as `token`.
-  private func send(path: String, grant: String, body: [String: Any], background: BackgroundTask,
+  /// `base`: the notification's server; nil = the default one.
+  private func send(path: String, base: String?, grant: String, body: [String: Any], background: BackgroundTask,
                     attempt: Int = 1, done: @escaping (ActionResult) -> Void) {
-    guard let base = CallCore.persistedApiBaseUrl(), let url = URL(string: base + path) else {
+    var origin = base ?? ServerRegistry.shared.baseUrl(nil)
+    if origin.isEmpty { origin = CallCore.persistedApiBaseUrl() ?? "" }
+    guard !origin.isEmpty, let url = URL(string: origin + path) else {
       pcTrace("notification action \(path): never configured")
       done(ActionResult(ok: false, status: 0, code: "not_configured", json: nil))
       return
@@ -341,7 +393,8 @@ final class MessageNotifications: NSObject, NotificationDelegate {
           return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-          self.send(path: path, grant: grant, body: body, background: background, attempt: attempt + 1, done: done)
+          self.send(path: path, base: base, grant: grant, body: body, background: background, attempt: attempt + 1,
+                    done: done)
         }
       }
     }.resume()

@@ -115,7 +115,7 @@ internal class AndroidRingSurface(
       PendingIntent.getActivity(
         context,
         ring.callId.hashCode() + 6,
-        PoolseIncomingCall.fill(custom, ring)
+        PoolseIncomingCall.fill(context, custom, ring)
           .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
       )
@@ -130,7 +130,7 @@ internal class AndroidRingSurface(
     val answer = incomingActivity(autoAnswer = true, requestOffset = 2)
 
     val caller = Person.Builder()
-      .setName(ring.conversationName ?: ring.callerName ?: "Incoming call")
+      .setName(ServerRegistry.ringTitle(context, ring, ring.conversationName ?: ring.callerName) ?: "Incoming call")
       .setImportant(true)
       .build()
 
@@ -210,7 +210,7 @@ internal class AndroidRingSurface(
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    val who = ring.conversationName ?: ring.callerName ?: "Someone"
+    val who = ServerRegistry.ringTitle(context, ring, ring.conversationName ?: ring.callerName) ?: "Someone"
     val what = if (ring.media == "video") "video call" else "call"
     val notification = NotificationCompat.Builder(context, WAITING_CHANNEL_ID)
       .setSmallIcon(config.smallIcon)

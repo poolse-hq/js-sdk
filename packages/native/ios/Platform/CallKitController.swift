@@ -127,7 +127,10 @@ final class CallKitController: NSObject, CXProviderDelegate {
 
   func reportIncoming(ring: RingContext) {
     let hasVideo = ring.media == "video"
-    let title = ring.conversationName ?? ring.callerName
+    let title = CallServers.title(
+      ring.conversationName ?? ring.callerName,
+      workspace: ServerRegistry.shared.servers.workspaceLabel(serverId: ring.serverId, pushName: ring.workspaceName)
+    )
     if let existing = calls.values.first(where: { $0.callId == ring.callId && !$0.ended }) {
       provider.reportNewIncomingCall(with: existing.uuid, update: update(title: title, handle: ring.conversationId, video: hasVideo)) { _ in }
       return

@@ -97,6 +97,17 @@ export interface Snapshot {
   videoPaused?: boolean;
   /** You are sharing your screen. Absent before 3.2. */
   screenSharing?: boolean;
+  /**
+   * The server (workspace) this call runs on — the `id` given to
+   * `addServer`, or `DEFAULT_SERVER_ID` for the one `configure` set.
+   * Absent before 3.8.
+   */
+  serverId?: string | null;
+  /**
+   * That workspace's name: the ring push's `workspace_name`, else the
+   * server's `name`. Absent before 3.8.
+   */
+  workspaceName?: string | null;
 }
 
 /** `good` covers good and excellent; `unknown` until the SFU has measured. */
@@ -111,6 +122,10 @@ export interface WaitingCall {
   conversationName: string | null;
   callerName: string | null;
   media: 'audio' | 'video';
+  /** The server (workspace) it rings from — may differ from the current call's. Absent before 3.8. */
+  serverId?: string | null;
+  /** That workspace's name ("Ana · Acme"). Absent before 3.8. */
+  workspaceName?: string | null;
 }
 
 /** One place call audio can play. */
@@ -191,6 +206,37 @@ export interface PlaceOptions {
   media: 'audio' | 'video';
   /** The user's session token — authorizes placing/joining (CALL_CONTRACT.md §3.2). */
   sessionToken: string;
+  /**
+   * The server (workspace) the session token belongs to — an `addServer`
+   * id. Leave it out for the default server (`configure`'s).
+   */
+  serverId?: string;
+}
+
+/** The server `configure(apiBaseUrl)` sets; what everything defaults to. */
+export const DEFAULT_SERVER_ID = 'default';
+
+/**
+ * One server (workspace) the app is signed in to. No secrets: rings
+ * carry their own grant, and place / join take the session token.
+ */
+export interface CallServer {
+  /**
+   * Your id for it, 1–64 of `A–Z a–z 0–9 . _ : -` — what `serverId`
+   * says everywhere (snapshots, notification taps and actions).
+   */
+  id: string;
+  /** Its API origin, as for `configure`. */
+  apiBaseUrl: string;
+  /**
+   * The poolse tenant this sign-in belongs to (`tenant_id` of `me` or of
+   * the registered device). Pushes carry it: it is how a ring or a
+   * notification finds its server. Needed as soon as two servers are
+   * added; without it a push goes to the default server.
+   */
+  tenantId?: string;
+  /** The workspace's name — shown when a push carries none ("Ana · Acme"). */
+  name?: string;
 }
 
 /**
@@ -203,6 +249,8 @@ export interface CallAction {
   conversationId: string;
   callId: string | null;
   media: 'audio' | 'video';
+  /** The server (workspace) it belongs to — open that one. Absent before 3.8. */
+  serverId?: string | null;
 }
 
 /**
@@ -215,6 +263,8 @@ export interface CallAction {
 export interface NotificationActionResult {
   action: 'reply' | 'mark_read';
   conversationId: string;
+  /** The server (workspace) the conversation is on. Absent before 3.8. */
+  serverId?: string;
   /** Whether the server accepted it. */
   ok: boolean;
   /** Reply only: what the user typed. */
@@ -241,9 +291,23 @@ type NativeSnapshot = { snapshot: Snapshot | null };
 
 interface PoolseCallsNative {
   configure(apiBaseUrl: string, options: ConfigureOptions | null): Promise<void>;
+  addServer?(server: CallServer): Promise<void>;
+  removeServer?(id: string): Promise<void>;
+  listServers?(): CallServer[];
+  serverForTenant?(tenantId: string | null): string | null;
   getCallState(): NativeSnapshot;
-  place(conversationId: string, media: string, sessionToken: string): Promise<void>;
-  join(callId: string, conversationId: string | null, sessionToken: string): Promise<void>;
+  place(
+    conversationId: string,
+    media: string,
+    sessionToken: string,
+    serverId: string | null,
+  ): Promise<void>;
+  join(
+    callId: string,
+    conversationId: string | null,
+    sessionToken: string,
+    serverId: string | null,
+  ): Promise<void>;
   answer(): void;
   decline(): void;
   hangUp(): void;
@@ -257,7 +321,12 @@ interface PoolseCallsNative {
   stopScreenShare?(): void;
   setSpeaker(on: boolean): void;
   setAudioOutput?(id: string): void;
-  callControl?(): Promise<{ callId: string; controlToken: string } | null>;
+  callControl?(): Promise<{
+    callId: string;
+    controlToken: string;
+    serverId?: string | null;
+    apiBaseUrl?: string | null;
+  } | null>;
   setPictureInPictureEnabled?(on: boolean): void;
   isInPictureInPicture?(): boolean;
   pictureInPictureSupported?(): boolean;
@@ -268,7 +337,7 @@ interface PoolseCallsNative {
   setShowOnLockscreen?(enabled: boolean): void;
   getVoipToken?(): VoipToken | null;
   takeCallAction?(): CallAction | null;
-  setActiveConversation?(conversationId: string | null): void;
+  setActiveConversation?(conversationId: string | null, serverId: string | null): void;
   takeNotificationActions?(): NotificationActionResult[];
   observeNotificationActions?(on: boolean): void;
   addListener(event: 'onCallState', cb: (payload: NativeSnapshot) => void): { remove(): void };
@@ -292,10 +361,88 @@ export const nativeCallsAvailable = native != null;
 // Kept for startRoom, the one command that talks to the server from JS.
 let apiOrigin: string | null = null;
 
-/** Configure once, before any call can arrive. No secrets — just the API origin. */
-export async function configure(apiBaseUrl: string, options?: ConfigureOptions): Promise<void> {
-  apiOrigin = apiBaseUrl.replace(/\/+$/, '');
-  await native?.configure(apiBaseUrl, options ?? null);
+/**
+ * Configure once, before any call can arrive. No secrets — just the API
+ * origin, which becomes the default server (`DEFAULT_SERVER_ID`).
+ *
+ * `configure(options)` sets the options alone, for an app whose servers
+ * all come from `addServer`.
+ */
+export async function configure(
+  apiBaseUrlOrOptions: string | ConfigureOptions,
+  options?: ConfigureOptions,
+): Promise<void> {
+  if (typeof apiBaseUrlOrOptions !== 'string') {
+    await native?.configure('', apiBaseUrlOrOptions ?? null);
+    return;
+  }
+  apiOrigin = apiBaseUrlOrOptions.replace(/\/+$/, '');
+  await native?.configure(apiBaseUrlOrOptions, options ?? null);
+}
+
+// ── several servers (workspaces) ──────────────────────────────────────
+
+const SERVER_ID = /^[A-Za-z0-9._:-]{1,64}$/;
+
+/**
+ * Sign the call core in to one more server (workspace) — or update one
+ * (same `id`). Rings from it ring here, answered and declined on that
+ * server; its chat notifications post (Android) and act (Reply, Mark as
+ * read) against it. Persisted: a closed app woken by its push finds it.
+ *
+ * Register the device's push tokens with that server too (the SDK's
+ * `devices.register`, per client): this only tells the core where it is.
+ * Calls `configure` with default options first if it never ran.
+ */
+export async function addServer(server: CallServer): Promise<void> {
+  if (!SERVER_ID.test(server.id))
+    throw new Error(`addServer: invalid id ${JSON.stringify(server.id)}.`);
+  if (!/^https?:\/\/[^\s]+$/.test(server.apiBaseUrl))
+    throw new Error('addServer: apiBaseUrl must be http(s).');
+  const entry: CallServer = { id: server.id, apiBaseUrl: server.apiBaseUrl.replace(/\/+$/, '') };
+  if (server.tenantId) entry.tenantId = server.tenantId;
+  if (server.name) entry.name = server.name;
+  if (server.id === DEFAULT_SERVER_ID) apiOrigin = entry.apiBaseUrl;
+  await native?.addServer?.(entry);
+}
+
+/**
+ * Signed out of one server: the core forgets it and takes its
+ * notifications down; the others are untouched. A call in progress on
+ * it carries on to its end. Unregister its push tokens with that server
+ * yourself (before signing out there).
+ */
+export async function removeServer(id: string): Promise<void> {
+  if (id === DEFAULT_SERVER_ID) apiOrigin = null;
+  await native?.removeServer?.(id);
+}
+
+/** The servers the core knows, in the order they were added (`configure`'s is `default`). */
+export function listServers(): CallServer[] {
+  return native?.listServers?.() ?? [];
+}
+
+/**
+ * The server a notification (its data) belongs to, by its `tenant_id` —
+ * the same rule the core routes rings and actions by. Use it on a tapped
+ * iOS notification to open the right workspace. `null` with no server.
+ */
+export function serverOfNotification(
+  data: Record<string, unknown> | undefined | null,
+): string | null {
+  const tenant = data && typeof data['tenant_id'] === 'string' ? data['tenant_id'] : null;
+  if (native?.serverForTenant) return native.serverForTenant(tenant);
+  return apiOrigin ? DEFAULT_SERVER_ID : null;
+}
+
+/** The API origin of `serverId` (the default server when absent). */
+function originOf(serverId: string | null | undefined): string | null {
+  if (!serverId || serverId === DEFAULT_SERVER_ID) {
+    if (apiOrigin) return apiOrigin;
+  }
+  const id = serverId ?? DEFAULT_SERVER_ID;
+  const server = listServers().find((s) => s.id === id);
+  return server?.apiBaseUrl ?? null;
 }
 
 /** The current snapshot — safe to read at any moment, including cold answer and before configure. */
@@ -313,15 +460,20 @@ export function onCallState(cb: (snapshot: Snapshot | null) => void): Unsubscrib
 }
 
 export function place(conversationId: string, options: PlaceOptions): Promise<void> {
-  return native?.place(conversationId, options.media, options.sessionToken) ?? Promise.resolve();
+  return (
+    native?.place(conversationId, options.media, options.sessionToken, options.serverId ?? null) ??
+    Promise.resolve()
+  );
 }
 
+/** `serverId`: the server the session token is for — leave it out for the default one. */
 export function join(
   callId: string,
   conversationId: string | null,
   sessionToken: string,
+  serverId?: string,
 ): Promise<void> {
-  return native?.join(callId, conversationId, sessionToken) ?? Promise.resolve();
+  return native?.join(callId, conversationId, sessionToken, serverId ?? null) ?? Promise.resolve();
 }
 
 export interface StartRoomResult {
@@ -348,18 +500,16 @@ export async function startRoom(
   options: PlaceOptions,
 ): Promise<StartRoomResult> {
   if (!native) throw new Error('The native call core is not in this build.');
-  if (!apiOrigin) throw new Error('Call configure() before startRoom().');
-  const res = await fetch(
-    `${apiOrigin}/v1/conversations/${encodeURIComponent(conversationId)}/room`,
-    {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${options.sessionToken}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ media: options.media }),
+  const origin = originOf(options.serverId);
+  if (!origin) throw new Error('Call configure() (or addServer) before startRoom().');
+  const res = await fetch(`${origin}/v1/conversations/${encodeURIComponent(conversationId)}/room`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${options.sessionToken}`,
+      'content-type': 'application/json',
     },
-  );
+    body: JSON.stringify({ media: options.media }),
+  });
   const body = (await res.json().catch(() => null)) as {
     created?: boolean;
     call?: { id?: string };
@@ -371,7 +521,7 @@ export async function startRoom(
   }
   // The core joins with its own request: it owns the session from here,
   // exactly as when the room is joined from the banner.
-  await native.join(callId, conversationId, options.sessionToken);
+  await native.join(callId, conversationId, options.sessionToken, options.serverId ?? null);
   return { callId, created: body?.created === true };
 }
 
@@ -393,10 +543,12 @@ export interface RingIntoCallOptions {
  */
 export async function ringIntoCall(people: RingIntoCallOptions): Promise<string[]> {
   if (!native?.callControl) throw new Error('This build cannot ring people into a call.');
-  if (!apiOrigin) throw new Error('Call configure() before ringIntoCall().');
   const control = await native.callControl();
   if (!control) throw new Error('There is no call in progress.');
-  const res = await fetch(`${apiOrigin}/v1/calls/${encodeURIComponent(control.callId)}/ring`, {
+  // The call's own server: it may be another workspace than the default.
+  const origin = control.apiBaseUrl || originOf(control.serverId);
+  if (!origin) throw new Error('Call configure() before ringIntoCall().');
+  const res = await fetch(`${origin}/v1/calls/${encodeURIComponent(control.callId)}/ring`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${control.controlToken}`,
@@ -536,16 +688,19 @@ export function onCallAction(cb: (action: CallAction) => void): Unsubscribe {
 // ── chat notifications ─────────────────────────────────────────────────
 
 let activeConversation: string | null = null;
+let activeServer: string | null = null;
 
 /**
  * Tell the core which conversation is on screen (`null` when none, and
  * when the app goes to the background). Its messages are not notified —
  * the user is reading them — and opening it clears the notifications
- * already shown for it.
+ * already shown for it. Signed in to several servers, pass the one it is
+ * on (`serverId`); without it, the conversation id alone decides.
  */
-export function setActiveConversation(conversationId: string | null): void {
+export function setActiveConversation(conversationId: string | null, serverId?: string): void {
   activeConversation = conversationId;
-  native?.setActiveConversation?.(conversationId);
+  activeServer = conversationId ? (serverId ?? null) : null;
+  native?.setActiveConversation?.(conversationId, activeServer);
 }
 
 /**
@@ -556,14 +711,16 @@ export function setActiveConversation(conversationId: string | null): void {
  */
 export function shouldPresentMessage(data: Record<string, unknown> | undefined | null): boolean {
   if (!data || data['type'] !== 'message') return true;
-  return data['conversation_id'] !== activeConversation;
+  if (data['conversation_id'] !== activeConversation) return true;
+  return activeServer != null && serverOfNotification(data) !== activeServer;
 }
 
 /**
  * The conversation a tapped notification belongs to — a chat message
  * (`type: 'message'`) or a missed call (`call_missed`) — from its data.
  * iOS hands the tap to your notification library; Android delivers it
- * through `takeCallAction` / `onCallAction` (type `open`).
+ * through `takeCallAction` / `onCallAction` (type `open`). Its server:
+ * `serverOfNotification`.
  */
 export function conversationOfNotification(
   data: Record<string, unknown> | undefined | null,
@@ -577,7 +734,7 @@ export function conversationOfNotification(
 /**
  * Reply and Mark as read from a chat notification are handled natively —
  * from the lock screen, with the app closed — using the grant the push
- * carried and the API origin given to `configure` (which persists it).
+ * carried and its server's API origin (`configure` / `addServer`, persisted).
  * This fires once each finishes while the app is running. Read the ones
  * that finished while it was not with `takeNotificationActions` on mount.
  */

@@ -61,16 +61,48 @@ public class PoolseCallsModule: Module {
       _ = CallCore.getOrNull()
     }.runOnQueue(.main)
 
+    // Several workspaces: each server the app is signed in to. Persisted,
+    // so a ring or a notification action with no JS finds its server.
+    AsyncFunction("addServer") { (server: [String: Any]) in
+      guard let s = CallServer(dict: server) else { return }
+      var entry = s
+      while entry.apiBaseUrl.hasSuffix("/") { entry.apiBaseUrl.removeLast() }
+      CallCore.ensureConfigured()
+      ServerRegistry.shared.upsert(entry)
+      PoolseCallsSetup.registerVoipEarly()
+      _ = CallCore.getOrNull()
+    }.runOnQueue(.main)
+
+    // Signed out of one workspace: forget it and take its notifications
+    // down. A call in progress on it carries on to its end.
+    AsyncFunction("removeServer") { (id: String) in
+      let tenant = ServerRegistry.shared.servers.get(id)?.tenantId
+      ServerRegistry.shared.remove(id)
+      if let tenant = tenant { MessageNotifications.clearTenant(tenant) }
+    }.runOnQueue(.main)
+
+    Function("listServers") { () -> [[String: Any]] in
+      ServerRegistry.shared.servers.all.map(\.dict)
+    }
+
+    // The server a push / notification of `tenantId` belongs to — the
+    // same rule the native side routes rings and actions by.
+    Function("serverForTenant") { (tenantId: String?) -> String? in
+      ServerRegistry.shared.servers.resolve(tenantId: tenantId.flatMap { $0.isEmpty ? nil : $0 })?.id
+    }
+
     Function("getCallState") { () -> [String: Any] in
       ["snapshot": CallCore.peek()?.snapshot() ?? NSNull()]
     }
 
-    AsyncFunction("place") { (conversationId: String, media: String, sessionToken: String) in
-      CallCore.getOrNull()?.place(conversationId: conversationId, media: media, sessionToken: sessionToken)
+    AsyncFunction("place") { (conversationId: String, media: String, sessionToken: String, serverId: String?) in
+      CallCore.getOrNull()?.place(conversationId: conversationId, media: media, sessionToken: sessionToken,
+                                  serverId: serverId)
     }.runOnQueue(.main)
 
-    AsyncFunction("join") { (callId: String, conversationId: String?, sessionToken: String) in
-      CallCore.getOrNull()?.join(callId: callId, conversationId: conversationId, sessionToken: sessionToken)
+    AsyncFunction("join") { (callId: String, conversationId: String?, sessionToken: String, serverId: String?) in
+      CallCore.getOrNull()?.join(callId: callId, conversationId: conversationId, sessionToken: sessionToken,
+                                 serverId: serverId)
     }.runOnQueue(.main)
 
     Function("answer") { onCore { $0.answer() } }
@@ -106,15 +138,23 @@ public class PoolseCallsModule: Module {
 
     // What authorizes acting on the call itself (ringing people in).
     AsyncFunction("callControl") { () -> [String: String]? in
-      guard let c = CallCore.getOrNull()?.control else { return nil }
-      return ["callId": c.callId, "controlToken": c.controlToken]
+      guard let core = CallCore.getOrNull(), let c = core.control else { return nil }
+      var out = ["callId": c.callId, "controlToken": c.controlToken]
+      // Where the call runs: ringing people in goes to that server.
+      if let id = core.currentServerId {
+        out["serverId"] = id
+        out["apiBaseUrl"] = ServerRegistry.shared.baseUrl(id)
+      }
+      return out
     }.runOnQueue(.main)
 
     // The chat on screen: opening it clears what was already shown for it.
     // (Suppressing new ones while it is open happens in the app's
     // notification handler — see shouldPresentMessage in src/index.ts.)
-    Function("setActiveConversation") { (conversationId: String?) in
-      if let conversationId = conversationId { MessageNotifications.clear(conversationId: conversationId) }
+    Function("setActiveConversation") { (conversationId: String?, serverId: String?) in
+      guard let conversationId = conversationId else { return }
+      let tenant = serverId.flatMap { ServerRegistry.shared.servers.get($0)?.tenantId }
+      MessageNotifications.clear(conversationId: conversationId, tenantId: tenant)
     }
 
     // Reply / Mark as read done from a notification while JS was not

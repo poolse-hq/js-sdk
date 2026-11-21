@@ -12,6 +12,7 @@ import android.util.Log
 import dev.poolse.callcore.android.CallCore
 import dev.poolse.callcore.android.MessageNotifications
 import dev.poolse.callcore.android.MissedCallNotification
+import dev.poolse.callcore.android.ServerRegistry
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -97,15 +98,47 @@ class PoolseCallsModule : Module() {
       null
     }
 
+    // Several workspaces: each server the app is signed in to. Persisted,
+    // so a ring or a notification action with no JS finds its server.
+    AsyncFunction("addServer") { server: Map<String, Any?> ->
+      val ctx = context ?: return@AsyncFunction null
+      val entry = ServerRegistry.fromMap(server) ?: return@AsyncFunction null
+      CallCore.ensureConfigured(ctx)
+      ServerRegistry.upsert(ctx, entry)
+      CallCore.getOrNull(ctx)
+      null
+    }
+
+    // Signed out of one workspace: forget it and take its notifications
+    // down. A call in progress on it carries on to its end.
+    AsyncFunction("removeServer") { id: String ->
+      val ctx = context ?: return@AsyncFunction null
+      MessageNotifications.removeServer(ctx, id)
+      ServerRegistry.remove(ctx, id)
+      null
+    }
+
+    Function("listServers") {
+      context?.let { ctx -> ServerRegistry.servers(ctx).all.map(ServerRegistry::toMap) } ?: emptyList<Map<String, Any?>>()
+    }
+
+    // The server a push / notification of `tenantId` belongs to — the
+    // same rule the native side routes rings and actions by.
+    Function("serverForTenant") { tenantId: String? ->
+      context?.let { ServerRegistry.resolve(it, tenantId)?.id }
+    }
+
     Function("getCallState") {
       mapOf("snapshot" to (CallCore.peek() ?: context?.let(CallCore::getOrNull))?.snapshot())
     }
 
-    AsyncFunction("place") { conversationId: String, media: String, sessionToken: String ->
-      core()?.place(conversationId, media, sessionToken)
+    AsyncFunction("place") { conversationId: String, media: String, sessionToken: String, serverId: String? ->
+      core()?.place(conversationId, media, sessionToken, serverId)
+      null
     }
-    AsyncFunction("join") { callId: String, conversationId: String?, sessionToken: String ->
-      core()?.join(callId, conversationId, sessionToken)
+    AsyncFunction("join") { callId: String, conversationId: String?, sessionToken: String, serverId: String? ->
+      core()?.join(callId, conversationId, sessionToken, serverId)
+      null
     }
     Function("answer") { core()?.answer() }
     Function("decline") { core()?.decline() }
@@ -157,7 +190,17 @@ class PoolseCallsModule : Module() {
 
     // What authorizes acting on the call itself (ringing people in).
     AsyncFunction("callControl") {
-      core()?.control?.let { (callId, token) -> mapOf("callId" to callId, "controlToken" to token) }
+      val core = core() ?: return@AsyncFunction null
+      core.control?.let { (callId, token) ->
+        // Where the call runs: ringing people in goes to that server.
+        val serverId = core.currentServerId
+        mapOf(
+          "callId" to callId,
+          "controlToken" to token,
+          "serverId" to serverId,
+          "apiBaseUrl" to context?.let { ServerRegistry.baseUrl(it, serverId) }?.ifEmpty { null },
+        )
+      }
     }
 
     // Socket forwarding (open app): idempotent with the FCM path.
@@ -176,9 +219,10 @@ class PoolseCallsModule : Module() {
 
     // The chat on screen: its messages are not notified, and opening it
     // clears what was already shown for it.
-    Function("setActiveConversation") { conversationId: String? ->
+    Function("setActiveConversation") { conversationId: String?, serverId: String? ->
+      MessageNotifications.activeServerId = serverId
       MessageNotifications.activeConversationId = conversationId
-      if (conversationId != null) context?.let { MessageNotifications.clear(it, conversationId) }
+      if (conversationId != null) context?.let { MessageNotifications.clear(it, conversationId, serverId) }
     }
 
     // Reply / Mark as read done from a notification while JS was not
@@ -243,7 +287,11 @@ class PoolseCallsModule : Module() {
     val conversationId = intent.getStringExtra(MissedCallNotification.EXTRA_CONVERSATION_ID) ?: return null
     val callId = intent.getStringExtra(MissedCallNotification.EXTRA_CALL_ID)
     val media = intent.getStringExtra(MissedCallNotification.EXTRA_MEDIA) ?: "audio"
+    // Null on a notification posted before servers: the default one.
+    val serverId = intent.getStringExtra(MissedCallNotification.EXTRA_SERVER_ID)
+      ?: context?.let { ServerRegistry.servers(it).get(null)?.id }
     for (key in listOf(
+      MissedCallNotification.EXTRA_SERVER_ID,
       MissedCallNotification.EXTRA_ACTION,
       MissedCallNotification.EXTRA_CONVERSATION_ID,
       MissedCallNotification.EXTRA_CALL_ID,
@@ -255,6 +303,7 @@ class PoolseCallsModule : Module() {
       "conversationId" to conversationId,
       "callId" to callId,
       "media" to media,
+      "serverId" to serverId,
     )
   }
 

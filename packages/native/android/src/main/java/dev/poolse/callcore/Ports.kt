@@ -112,6 +112,14 @@ data class RingContext(
   val ringDeadlineEpochMs: Long,
   /** The caller's picture for the ring screen, if the push or the app's template gives one. */
   val callerAvatarUrl: String? = null,
+  /**
+   * The server (workspace) the ring came from — the host's id from
+   * `addServer`, resolved from the push's `tenant_id`. Its answer and
+   * decline go to that server. Null: the default server.
+   */
+  val serverId: String? = null,
+  /** The push's `workspace_name`, for "Ana · Acme" when several servers are signed in. */
+  val workspaceName: String? = null,
 )
 
 /** Android: the phoneCall foreground service. iOS: the CallKit session. */

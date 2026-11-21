@@ -11,6 +11,8 @@ import UIKit
 /// The host-supplied configuration, persisted so a PushKit cold wake
 /// (no JS, no configure call) rebuilds the same core from disk.
 struct CallCoreConfig {
+  /// The default server's origin ("" when the app only uses `addServer`);
+  /// every server, this one included, lives in ServerRegistry.
   var apiBaseUrl: String
   var ringback: String?
   /// `production` | `sandbox` — the APNs environment the VoIP token
@@ -44,9 +46,20 @@ final class CallCore {
   static var listener: (([String: Any]?) -> Void)?
 
   /// Configure and PERSIST (see CallCore.kt). Re-configuring swaps in place:
-  /// HTTP and the ringback read the config per use.
+  /// HTTP and the ringback read the config per use. A non-empty
+  /// `apiBaseUrl` is the `default` server; "" sets the options only and
+  /// keeps whatever default server there is.
   static func configure(apiBaseUrl: String, ringback: String?, apnsEnvironment: String?) {
-    let trimmed = apiBaseUrl.hasSuffix("/") ? String(apiBaseUrl.dropLast()) : apiBaseUrl
+    var trimmed = apiBaseUrl
+    while trimmed.hasSuffix("/") { trimmed.removeLast() }
+    if trimmed.isEmpty {
+      trimmed = ServerRegistry.shared.servers.get(CallServers.defaultId)?.apiBaseUrl ?? ""
+    } else {
+      var server = ServerRegistry.shared.servers.get(CallServers.defaultId)
+        ?? CallServer(id: CallServers.defaultId, apiBaseUrl: trimmed)
+      server.apiBaseUrl = trimmed
+      ServerRegistry.shared.upsert(server)
+    }
     defaults.set(trimmed, forKey: "apiBaseUrl")
     defaults.set(ringback, forKey: "ringback")
     defaults.set(apnsEnvironment, forKey: "apnsEnvironment")
@@ -54,6 +67,22 @@ final class CallCore {
     configLock.lock()
     _config = CallCoreConfig(apiBaseUrl: trimmed, ringback: ringback, apnsEnvironment: apnsEnvironment)
     configLock.unlock()
+  }
+
+  /// `addServer` before any `configure`: the core still has to exist
+  /// (it carries the rings), with the default options.
+  static func ensureConfigured() {
+    restoreConfig()
+    if config == nil { configure(apiBaseUrl: "", ringback: nil, apnsEnvironment: nil) }
+  }
+
+  /// A single-server build's persisted origin, for the registry's
+  /// one-time migration. Reads the stores directly: the registry is not
+  /// loaded yet. Any thread.
+  static func persistedLegacyApiBaseUrl() -> String? {
+    if let url = defaults.string(forKey: "apiBaseUrl"), !url.isEmpty { return url }
+    if let url = readConfigFile()?.apiBaseUrl, !url.isEmpty { return url }
+    return nil
   }
 
   /// The APNs environment last configured (persisted), if any.
@@ -119,7 +148,7 @@ final class CallCore {
   private static func readConfigFile() -> CallCoreConfig? {
     guard let url = configFileURL, let data = try? Data(contentsOf: url),
           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-          let api = obj["apiBaseUrl"] as? String, !api.isEmpty else { return nil }
+          let api = obj["apiBaseUrl"] as? String else { return nil }
     return CallCoreConfig(apiBaseUrl: api, ringback: obj["ringback"] as? String,
                           apnsEnvironment: obj["apnsEnvironment"] as? String)
   }
@@ -140,6 +169,7 @@ final class CallCore {
   // MARK: parts
 
   private let callKit = CallKitController.shared
+  private var router: RoutedHttpPort!
   private var mediaPort: LiveKitMediaPort!
   private var runtime: CallCoreRuntime!
   private var ringback: Ringback!
@@ -169,14 +199,29 @@ final class CallCore {
 
   private let snapshotLock = NSLock()
   private var lastSnapshot: [String: Any]?
+  /// The push's `workspace_name` per ringing call (under snapshotLock).
+  private var ringWorkspaces: [String: String] = [:]
+
+  private func ringWorkspaceName(_ callId: String?) -> String? {
+    guard let id = callId else { return nil }
+    snapshotLock.lock(); defer { snapshotLock.unlock() }
+    return ringWorkspaces[id]
+  }
 
   private init() {
     ringback = Ringback(resourceName: { CallCore.config?.ringback })
     eventsAdapter = EventsAdapter()
     mediaPort = LiveKitMediaPort(events: eventsAdapter)
     surfaceAdapter = SurfaceAdapter()
+    // One HTTP client per server, each reading its URL per request (a
+    // re-added server's new address applies at once); the router picks
+    // the one the call belongs to.
+    let session = CallHttpClient.defaultSession()
+    router = RoutedHttpPort { serverId in
+      CallHttpClient(baseUrl: { ServerRegistry.shared.baseUrl(serverId) }, session: session)
+    }
     runtime = CallCoreRuntime(
-      http: CallHttpClient(baseUrl: { CallCore.config?.apiBaseUrl ?? "" }),
+      http: router,
       media: mediaPort,
       surface: surfaceAdapter,
       session: surfaceAdapter,
@@ -199,7 +244,18 @@ final class CallCore {
 
   // MARK: - native entry points
 
-  func onRing(_ ring: RingContext) { runtime.onRing(ring) }
+  /// Bound to its server before the runtime sees it: a busy-decline runs
+  /// inside the ring's own dispatch.
+  func onRing(_ ring: RingContext) {
+    router.bindCall(ring.callId, serverId: ring.serverId)
+    if let name = ring.workspaceName {
+      snapshotLock.lock()
+      ringWorkspaces[ring.callId] = name
+      if ringWorkspaces.count > 16 { ringWorkspaces = [ring.callId: name] }
+      snapshotLock.unlock()
+    }
+    runtime.onRing(ring)
+  }
 
   func onRingEnded(callId: String, reason: String) {
     onMain { [self] in
@@ -263,19 +319,38 @@ final class CallCore {
   /// True while `callId` is the call waiting beside the current one. Main thread.
   func isWaiting(_ callId: String) -> Bool { runtime.currentState().waiting?.callId == callId }
 
-  func place(conversationId: String, media: String, sessionToken: String) {
+  /// `serverId`: the server the session token is for (nil = the default).
+  func place(conversationId: String, media: String, sessionToken: String, serverId: String? = nil) {
     onMain { [self] in
+      // Busy: the runtime ignores it, so the binding must not move either.
+      let p = runtime.currentState().phase
+      guard p == .idle || p == .ended else { return }
       localEnd = false
+      router.bindPlace(conversationId, serverId: serverId)
       runtime.place(conversationId: conversationId, media: media, sessionToken: sessionToken)
     }
   }
 
-  func join(callId: String, conversationId: String?, sessionToken: String) {
+  func join(callId: String, conversationId: String?, sessionToken: String, serverId: String? = nil) {
     onMain { [self] in
+      let p = runtime.currentState().phase
+      guard p == .idle || p == .ended else { return }
       localEnd = false
+      router.bindCall(callId, serverId: serverId)
       runtime.join(callId: callId, conversationId: conversationId, sessionToken: sessionToken)
     }
   }
+
+  /// The server `callId` runs on: its binding, else the default (when there is one).
+  private func server(of callId: String?) -> String? {
+    guard let id = callId else { return nil }
+    if let bound = router.serverFor(id) { return bound }
+    let servers = ServerRegistry.shared.servers
+    return servers.get(CallServers.defaultId)?.id ?? (servers.all.count == 1 ? servers.all[0].id : nil)
+  }
+
+  /// The server of the current call (nil = the default). Main thread.
+  var currentServerId: String? { server(of: runtime.currentState().callId) }
 
   func setMuted(_ muted: Bool) {
     onMain { [self] in
@@ -372,10 +447,38 @@ final class CallCore {
       videoPaused: videoPaused,
       screenSharing: screenSharing
     )
-    snapshotLock.lock(); lastSnapshot = snap; snapshotLock.unlock()
+    let snapWithServer = snap.map { withServers($0, state: state) }
+    snapshotLock.lock(); lastSnapshot = snapWithServer; snapshotLock.unlock()
     reconcileCallKit(state)
     reconcileDevice(state)
-    CallCore.listener?(snap)
+    CallCore.listener?(snapWithServer)
+  }
+
+  /// The workspace each call belongs to: `serverId` and `workspaceName`
+  /// on the snapshot and on its waiting call.
+  private func withServers(_ snap: [String: Any], state: MachineState) -> [String: Any] {
+    var out = snap
+    let servers = ServerRegistry.shared.servers
+    let serverId = server(of: state.callId)
+    let ringName = ringWorkspaceName(state.callId)
+    out["serverId"] = serverId ?? NSNull()
+    out["workspaceName"] = (ringName ?? servers.get(serverId)?.name) ?? NSNull()
+    if var waiting = out["waiting"] as? [String: Any], let w = runtime.waitingRing {
+      waiting["serverId"] = (w.serverId ?? server(of: w.callId)) ?? NSNull()
+      waiting["workspaceName"] = (w.workspaceName ?? servers.get(w.serverId)?.name) ?? NSNull()
+      out["waiting"] = waiting
+    }
+    return out
+  }
+
+  /// "Ana · Acme" for the system call UI — the workspace only with several
+  /// signed in. Nil without a name: there is nothing to retitle with.
+  private func callTitle(_ base: String?, callId: String?) -> String? {
+    guard base != nil else { return nil }
+    let serverId = server(of: callId)
+    let label = ServerRegistry.shared.servers.workspaceLabel(serverId: serverId,
+                                                             pushName: ringWorkspaceName(callId))
+    return CallServers.title(base, workspace: label)
   }
 
   private func resetExtras(_ callId: String?, _ media: String?) {
@@ -415,7 +518,8 @@ final class CallCore {
         // Answered from the app's own UI: tell CallKit (audio follows).
         if !t.outgoing && !t.answered && state.direction == .incoming { callKit.requestAnswer(callId: t.callId) }
         if t.outgoing && state.phase == .active { callKit.reportConnected(callId: t.callId) }
-        callKit.updateTitle(callId: t.callId, title: conversationName, video: state.media == "video")
+        callKit.updateTitle(callId: t.callId, title: callTitle(conversationName, callId: t.callId),
+                            video: state.media == "video")
       default:
         break
       }
@@ -463,7 +567,8 @@ final class CallCore {
   fileprivate func sessionStart(callId: String, media: String) {
     guard callKit.tracked(callId: callId) == nil else { return } // an answered incoming call
     let state = runtime.currentState()
-    callKit.startOutgoing(callId: callId, handle: state.conversationId ?? callId, title: runtime.conversationName,
+    callKit.startOutgoing(callId: callId, handle: state.conversationId ?? callId,
+                          title: callTitle(runtime.conversationName, callId: callId),
                           video: media == "video") { [weak self] in
       // CallKit refused: the call goes on without the system UI.
       self?.mediaPort.activateAudioWithoutCallKit(media: media)
