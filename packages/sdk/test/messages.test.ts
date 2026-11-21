@@ -85,6 +85,18 @@ describe('ConversationMessages', () => {
     expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/conversations/c-1/read');
     expect(await bodyJson(fetchFn.calls[0]!)).toEqual({ message_id: 'm-5' });
   });
+
+  it('markUnread → POST /v1/conversations/:id/unread with {message_id}, also on the handle', async () => {
+    const fetchFn = scriptedFetch([noContent(), noContent()]);
+    const chat = buildPoolse(fetchFn);
+
+    await chat.conversations.one('c-1').messages.markUnread('m-5');
+    await chat.conversations.one('c-1').markUnread('m-6');
+
+    expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/conversations/c-1/unread');
+    expect(await bodyJson(fetchFn.calls[0]!)).toEqual({ message_id: 'm-5' });
+    expect(await bodyJson(fetchFn.calls[1]!)).toEqual({ message_id: 'm-6' });
+  });
 });
 
 describe('MessageHandle', () => {

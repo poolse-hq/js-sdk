@@ -64,7 +64,8 @@ export interface AddMemberOptions {
 /** Wraps a single conversation by id — used as the entry point for sub-resources. */
 export class ConversationHandle {
   /**
-   * Message ops scoped to this conversation: `list`, `send`, `markRead`.
+   * Message ops scoped to this conversation: `list`, `send`, `markRead`,
+   * `markUnread`.
    * Lazy: constructed on first access so an idle handle stays cheap.
    */
   public readonly messages: ConversationMessages;
@@ -86,6 +87,11 @@ export class ConversationHandle {
       path: `/v1/conversations/${this.id}`,
       ...(signal ? { signal } : {}),
     });
+  }
+
+  /** Shortcut for `messages.markUnread`: `messageId` and later count as unread. */
+  markUnread(messageId: Uuid, signal?: AbortSignal): Promise<void> {
+    return this.messages.markUnread(messageId, signal);
   }
 
   update(attrs: ConversationUpdateRequest, signal?: AbortSignal): Promise<Conversation> {

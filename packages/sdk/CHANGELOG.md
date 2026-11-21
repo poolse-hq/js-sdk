@@ -4,6 +4,14 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `conversations.one(id).markUnread(messageId)` (also on `.messages`):
+  `POST /v1/conversations/:id/unread`, so the message and everything after it
+  count as unread again (server rc.16).
+
 ## [3.5.0] - 2026-11-21
 
 ### Added

@@ -75,6 +75,20 @@ export class ConversationMessages {
       ...(signal ? { signal } : {}),
     });
   }
+
+  /**
+   * "Mark as unread": `messageId` and everything after it count as unread
+   * again. The caller's devices get `conversation:read` with the new
+   * counts; other members' read receipts don't move.
+   */
+  markUnread(messageId: Uuid, signal?: AbortSignal): Promise<void> {
+    return this.client.request<void>({
+      method: 'POST',
+      path: `/v1/conversations/${this.conversationId}/unread`,
+      body: { message_id: messageId },
+      ...(signal ? { signal } : {}),
+    });
+  }
 }
 
 /** Per-message operations: read, edit, delete, react, list replies. */
