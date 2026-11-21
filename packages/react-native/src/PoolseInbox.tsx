@@ -24,6 +24,7 @@ import {
 
 import { ChatHeader } from './ChatHeader.js';
 import { ConversationList } from './ConversationList.js';
+import { useAppStatePresence } from './lifecycle/useAppStatePresence.js';
 import { ConversationView } from './ConversationView.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { Avatar } from './primitives/Avatar.js';
@@ -77,6 +78,12 @@ export interface PoolseInboxProps {
 
   /** Forwarded to `<ConversationView>` — set if you have a nav header above. */
   keyboardOffset?: number;
+
+  /**
+   * Report this device as `active` / `idle` for presence from
+   * `AppState` (see `useAppStatePresence`). Defaults to `true`.
+   */
+  trackActivity?: boolean;
 }
 
 export interface PoolseInboxHandle {
@@ -121,7 +128,10 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
       renderConversationRow,
       emptyState,
       keyboardOffset = 0,
+      trackActivity = true,
     } = props;
+
+    useAppStatePresence(trackActivity);
 
     const theme = useTheme();
     const { width: screenWidth } = useWindowDimensions();

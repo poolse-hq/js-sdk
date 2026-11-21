@@ -1,5 +1,8 @@
+import type { PresenceState } from '@poolse/sdk';
+import { useUserPresence } from '@poolse/react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
+import { PresenceBadge } from '../PresenceBadge.js';
 import { useTheme } from '../theme/PoolseTheme.js';
 import { userColor } from './userColor.js';
 
@@ -10,20 +13,42 @@ export interface AvatarProps {
   name?: string | null;
   /** Stable color seed (typically the user's external_id). */
   seed?: string | null;
-  /** Show a green presence dot in the bottom-right corner. */
+  /** Show a green presence dot in the bottom-right corner. Superseded by `presence`. */
   online?: boolean;
+  /**
+   * A presence badge in the bottom-right corner (see `<PresenceBadge>`):
+   * a state, or `true` to look it up live with `useUserPresence` for
+   * `userId` (else `seed`) — that needs a `<PoolseProvider>` above.
+   */
+  presence?: PresenceState | true | null;
+  /** Do not disturb, with an explicit `presence` state (looked up automatically with `true`). */
+  doNotDisturb?: boolean;
+  /** Who `presence={true}` looks up: a user id or external id. Defaults to `seed`. */
+  userId?: string | null;
   /** Size variant. `md` → 40px, `sm` → 28px, `xs` → 20px, `lg` → 56px. */
   size?: 'xs' | 'sm' | 'md' | 'lg';
 }
 
 const SIZES = { xs: 20, sm: 28, md: 40, lg: 56 } as const;
 
-export function Avatar({ src, name, seed, online, size = 'md' }: AvatarProps) {
+export function Avatar({
+  src,
+  name,
+  seed,
+  online,
+  presence,
+  doNotDisturb,
+  userId,
+  size = 'md',
+}: AvatarProps) {
   const theme = useTheme();
   const dim = SIZES[size];
   const initials = computeInitials(name);
   const tint = seed ? userColor(seed) : theme.colors.accent;
   const fontSize = size === 'xs' ? 9 : size === 'sm' ? 11 : size === 'lg' ? 22 : 15;
+  const badgeSize = Math.max(8, Math.round(dim * 0.32));
+  const badgeStyle = { position: 'absolute' as const, bottom: -1, right: -1 };
+  const lookupId = presence === true ? (userId ?? seed ?? null) : null;
 
   return (
     <View
@@ -57,7 +82,16 @@ export function Avatar({ src, name, seed, online, size = 'md' }: AvatarProps) {
           {initials}
         </Text>
       )}
-      {online ? (
+      {lookupId ? (
+        <LivePresenceBadge id={lookupId} size={badgeSize} style={badgeStyle} />
+      ) : presence && presence !== true ? (
+        <PresenceBadge
+          state={presence}
+          {...(doNotDisturb ? { doNotDisturb } : {})}
+          size={badgeSize}
+          style={badgeStyle}
+        />
+      ) : online && presence === undefined ? (
         <View
           style={[
             styles.presence,
@@ -72,6 +106,28 @@ export function Avatar({ src, name, seed, online, size = 'md' }: AvatarProps) {
         />
       ) : null}
     </View>
+  );
+}
+
+// Its own component so `useUserPresence` (which needs a provider) only
+// runs for avatars that asked for a lookup.
+function LivePresenceBadge({
+  id,
+  size,
+  style,
+}: {
+  id: string;
+  size: number;
+  style: { position: 'absolute'; bottom: number; right: number };
+}) {
+  const presence = useUserPresence(id);
+  return (
+    <PresenceBadge
+      state={presence?.state ?? null}
+      doNotDisturb={!!presence?.do_not_disturb}
+      size={size}
+      style={style}
+    />
   );
 }
 
