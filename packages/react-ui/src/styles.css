@@ -4955,3 +4955,134 @@
 .poolse-conversation__jump-unread-close:hover {
   background: var(--poolse-surface-2);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   ConversationList — sidebar colours (the theme's sidebar tokens,
+   falling back to the surface ones), sections, density, header,
+   infinite scroll.
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-conversation-list {
+  --poolse-cl-bg: var(--poolse-sidebar, var(--poolse-surface));
+  --poolse-cl-text: var(--poolse-sidebar-text, var(--poolse-ink));
+  --poolse-cl-muted: color-mix(in oklab, var(--poolse-cl-text) 62%, var(--poolse-cl-bg));
+  --poolse-cl-subtle: color-mix(in oklab, var(--poolse-cl-text) 45%, var(--poolse-cl-bg));
+  --poolse-cl-hover: color-mix(in oklab, var(--poolse-cl-text) 7%, transparent);
+  --poolse-cl-active: var(--poolse-sidebar-active, var(--poolse-brand-soft));
+  --poolse-cl-active-text: var(--poolse-sidebar-active-text, var(--poolse-ink));
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--poolse-cl-bg);
+  color: var(--poolse-cl-text);
+}
+
+.poolse-conversation-list > .poolse-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  background: var(--poolse-cl-bg);
+  color: var(--poolse-cl-text);
+}
+
+.poolse-conversation-list__header {
+  flex: none;
+  padding: var(--poolse-space-sm, var(--poolse-spacing-sm))
+    var(--poolse-space-md, var(--poolse-spacing-md));
+}
+
+.poolse-conversation-list .poolse-list--placeholder {
+  color: var(--poolse-cl-subtle);
+}
+
+.poolse-conversation-list .poolse-list__item:hover,
+.poolse-conversation-list .poolse-list__item:focus-visible {
+  background: var(--poolse-cl-hover);
+}
+
+.poolse-conversation-list .poolse-list__item--selected,
+.poolse-conversation-list .poolse-list__item--selected:hover {
+  background: var(--poolse-cl-active);
+  color: var(--poolse-cl-active-text);
+}
+
+.poolse-conversation-list .poolse-list__title--unread {
+  color: inherit;
+}
+
+.poolse-conversation-list .poolse-list__preview {
+  color: var(--poolse-cl-muted);
+}
+
+.poolse-conversation-list .poolse-list__time {
+  color: var(--poolse-cl-subtle);
+}
+
+.poolse-conversation-list .poolse-list__item--selected .poolse-list__preview,
+.poolse-conversation-list .poolse-list__item--selected .poolse-list__time {
+  color: color-mix(in oklab, var(--poolse-cl-active-text) 70%, transparent);
+}
+
+.poolse-conversation-list .poolse-list__unread-badge {
+  background: var(--poolse-badge, var(--poolse-brand));
+  color: var(--poolse-badge-text, var(--poolse-on-brand));
+}
+
+/* Avatars' badge ring matches the sidebar, not the page surface. */
+.poolse-conversation-list .poolse-presence-badge {
+  border-color: var(--poolse-cl-bg);
+}
+
+.poolse-list__section {
+  list-style: none;
+}
+
+.poolse-list__section + .poolse-list__section {
+  margin-top: var(--poolse-space-sm, var(--poolse-spacing-sm));
+}
+
+.poolse-list__section-title {
+  padding: 8px 12px 4px;
+  font: 700 11.5px / 1.2 var(--poolse-font-body);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--poolse-cl-subtle, var(--poolse-ink-3));
+}
+
+.poolse-list__section-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.poolse-list__loading-more {
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--poolse-cl-subtle, var(--poolse-ink-3));
+}
+
+.poolse-list__sentinel {
+  height: 1px;
+  flex: none;
+}
+
+.poolse-conversation-list--density-compact .poolse-list__item {
+  gap: 8px;
+  padding: 5px 10px;
+}
+
+.poolse-conversation-list--density-compact .poolse-list__head {
+  align-items: center;
+}
+
+.poolse-conversation-list--density-compact .poolse-list__unread-badge {
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  font-size: 10.5px;
+}

@@ -10,7 +10,7 @@
 
 import type { Conversation, Uuid } from '@poolse/sdk';
 import { formatCallLogPreview, useConversations, useMe } from '@poolse/react';
-import { type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 
 export interface ConversationListProps {
@@ -55,6 +55,35 @@ export interface ConversationListProps {
    * call, do not disturb) on the row's avatar. Defaults to `true`.
    */
   showPresence?: boolean;
+  /**
+   * `'comfortable'` (default): avatar, name, preview and time.
+   * `'compact'`: one line per conversation, small avatar, no preview.
+   */
+  density?: 'comfortable' | 'compact';
+  /**
+   * Split the list under headings: each conversation goes under the
+   * first section whose `filter` takes it (ones no section takes aren't
+   * shown); empty sections are hidden. Overrides `groupBy`.
+   */
+  sections?: ConversationListSection[];
+  /** `'type'`: "Channels" (groups), then "Direct messages". */
+  groupBy?: 'type';
+  /** Rendered above the list (a title, a search field, a "New chat" button). */
+  header?: ReactNode;
+  /**
+   * Controlled mode's paging (with `conversations`): there's another
+   * page, one is loading, and load it. Uncontrolled, the list pages
+   * `useConversations()` itself as it's scrolled to the end.
+   */
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void | Promise<void>;
+}
+
+/** A heading in `<ConversationList sections>`. */
+export interface ConversationListSection {
+  title: string;
+  filter: (conversation: Conversation) => boolean;
 }
 
 export function ConversationList({
@@ -69,6 +98,13 @@ export function ConversationList({
   labelFor,
   avatarFor,
   showPresence = true,
+  density = 'comfortable',
+  sections,
+  groupBy,
+  header,
+  hasMore: controlledHasMore,
+  loadingMore: controlledLoadingMore,
+  onLoadMore,
 }: ConversationListProps) {
   const auto = useConversations();
   const { me } = useMe();
@@ -82,68 +118,172 @@ export function ConversationList({
   // — saves callers from threading `useConversations().unreadCounts`
   // through manually if they're already using the auto-fetch path.
   const counts = unreadCounts ?? (isControlled ? undefined : auto.unreadCounts);
+  // Paging: the shared list's own unless the caller drives it.
+  const hasMore = isControlled ? (controlledHasMore ?? false) : auto.hasMore;
+  const loadingMore = isControlled ? (controlledLoadingMore ?? false) : auto.loadingMore;
+  const loadMore = isControlled ? onLoadMore : auto.loadMore;
 
-  if (loading && conversations.length === 0) {
-    return <div className="poolse-list poolse-list--placeholder">Loading conversations…</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="poolse-list poolse-list--placeholder poolse-list--error">
-        Failed to load conversations.
-      </div>
+  // Infinite scroll: a sentinel after the last row asks for the next
+  // page as it nears the bottom of the list (or right away when the
+  // first page doesn't fill it).
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const sentinelRef = useRef<HTMLLIElement | null>(null);
+  const loadMoreRef = useRef(loadMore);
+  loadMoreRef.current = loadMore;
+  const busyRef = useRef(false);
+  const hasRows = conversations.length > 0;
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const root = listRef.current;
+    if (!sentinel || !root || !hasMore || loadingMore) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting || busyRef.current) return;
+        const fn = loadMoreRef.current;
+        if (!fn) return;
+        busyRef.current = true;
+        void Promise.resolve()
+          .then(fn)
+          .catch(() => undefined)
+          .finally(() => {
+            busyRef.current = false;
+          });
+      },
+      { root, rootMargin: '0px 0px 240px 0px', threshold: 0 },
     );
-  }
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [hasMore, loadingMore, hasRows]);
 
-  if (conversations.length === 0) {
+  const groups = useMemo(
+    () =>
+      groupConversations(conversations, sections ?? (groupBy === 'type' ? TYPE_SECTIONS : null)),
+    [conversations, sections, groupBy],
+  );
+
+  const rootClass = [
+    'poolse-conversation-list',
+    `poolse-conversation-list--density-${density}`,
+  ].join(' ');
+
+  const body = (() => {
+    if (loading && conversations.length === 0) {
+      return <div className="poolse-list poolse-list--placeholder">Loading conversations…</div>;
+    }
+    if (error && conversations.length === 0) {
+      return (
+        <div className="poolse-list poolse-list--placeholder poolse-list--error">
+          Failed to load conversations.
+        </div>
+      );
+    }
+    if (conversations.length === 0) {
+      return (
+        <div className="poolse-list poolse-list--placeholder">
+          {emptyState ?? 'No conversations yet.'}
+        </div>
+      );
+    }
+
+    const row = (conv: Conversation) => {
+      const selected = selectedId === conv.id;
+      const unread = counts?.[conv.id] ?? 0;
+      const content = renderItem ? (
+        renderItem(conv, selected)
+      ) : (
+        <DefaultRow
+          conv={conv}
+          selected={selected}
+          unread={unread}
+          meExternalId={meExternalId}
+          meId={meId}
+          showPresence={showPresence}
+          compact={density === 'compact'}
+          {...(labelFor ? { labelFor } : {})}
+          {...(avatarFor ? { avatarFor } : {})}
+        />
+      );
+      return (
+        <li
+          key={conv.id}
+          role="option"
+          aria-selected={selected}
+          className={`poolse-list__item${selected ? ' poolse-list__item--selected' : ''}`}
+          onClick={() => onSelect?.(conv)}
+          // Keyboard activation — Enter / Space behave like click.
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onSelect?.(conv);
+            }
+          }}
+          tabIndex={0}
+        >
+          {content}
+        </li>
+      );
+    };
+
     return (
-      <div className="poolse-list poolse-list--placeholder">
-        {emptyState ?? 'No conversations yet.'}
-      </div>
+      <ul ref={listRef} className="poolse-list" role="listbox" aria-label="Conversations">
+        {groups === null
+          ? conversations.map(row)
+          : groups.map((g) => (
+              <li key={g.title} role="group" aria-label={g.title} className="poolse-list__section">
+                <div className="poolse-list__section-title" aria-hidden="true">
+                  {g.title}
+                </div>
+                <ul className="poolse-list__section-items" role="presentation">
+                  {g.conversations.map(row)}
+                </ul>
+              </li>
+            ))}
+        {loadingMore && (
+          <li className="poolse-list__loading-more" role="presentation">
+            Loading…
+          </li>
+        )}
+        {hasMore && (
+          <li
+            ref={sentinelRef}
+            className="poolse-list__sentinel"
+            role="presentation"
+            aria-hidden="true"
+          />
+        )}
+      </ul>
     );
-  }
+  })();
 
   return (
-    <ul className="poolse-list" role="listbox" aria-label="Conversations">
-      {conversations.map((conv) => {
-        const selected = selectedId === conv.id;
-        const unread = counts?.[conv.id] ?? 0;
-        const content = renderItem ? (
-          renderItem(conv, selected)
-        ) : (
-          <DefaultRow
-            conv={conv}
-            selected={selected}
-            unread={unread}
-            meExternalId={meExternalId}
-            meId={meId}
-            showPresence={showPresence}
-            {...(labelFor ? { labelFor } : {})}
-            {...(avatarFor ? { avatarFor } : {})}
-          />
-        );
-        return (
-          <li
-            key={conv.id}
-            role="option"
-            aria-selected={selected}
-            className={`poolse-list__item${selected ? ' poolse-list__item--selected' : ''}`}
-            onClick={() => onSelect?.(conv)}
-            // Keyboard activation — Enter / Space behave like click.
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelect?.(conv);
-              }
-            }}
-            tabIndex={0}
-          >
-            {content}
-          </li>
-        );
-      })}
-    </ul>
+    <div className={rootClass}>
+      {header !== undefined && header !== null ? (
+        <div className="poolse-conversation-list__header">{header}</div>
+      ) : null}
+      {body}
+    </div>
   );
+}
+
+const TYPE_SECTIONS: ConversationListSection[] = [
+  { title: 'Channels', filter: (c) => c.type !== 'direct' },
+  { title: 'Direct messages', filter: (c) => c.type === 'direct' },
+];
+
+// Each conversation goes under the first section that takes it; empty
+// sections are left out. `null` = no sections, one flat list.
+function groupConversations(
+  conversations: Conversation[],
+  sections: ConversationListSection[] | null,
+): { title: string; conversations: Conversation[] }[] | null {
+  if (!sections || sections.length === 0) return null;
+  const out = sections.map((s) => ({ title: s.title, conversations: [] as Conversation[] }));
+  for (const conv of conversations) {
+    const i = sections.findIndex((s) => s.filter(conv));
+    if (i !== -1) out[i]!.conversations.push(conv);
+  }
+  return out.filter((g) => g.conversations.length > 0);
 }
 
 function DefaultRow({
@@ -153,6 +293,7 @@ function DefaultRow({
   meExternalId,
   meId = null,
   showPresence,
+  compact = false,
   labelFor,
   avatarFor,
 }: {
@@ -162,6 +303,7 @@ function DefaultRow({
   meExternalId: string | null;
   meId?: string | null;
   showPresence: boolean;
+  compact?: boolean;
   labelFor?: (externalId: string) => string;
   avatarFor?: (externalId: string) => string | null;
 }) {
@@ -207,7 +349,7 @@ function DefaultRow({
       <Avatar
         src={avatarUrl}
         name={title}
-        size="md"
+        size={compact ? 'sm' : 'md'}
         {...(showPresence && otherExtId ? { presence: true as const, userId: otherExtId } : {})}
       />
       <div className="poolse-list__body">
@@ -217,7 +359,7 @@ function DefaultRow({
           </span>
           {time && <span className="poolse-list__time">{time}</span>}
         </div>
-        <div className="poolse-list__preview">{preview}</div>
+        {compact ? null : <div className="poolse-list__preview">{preview}</div>}
       </div>
       {hasUnread && (
         <span

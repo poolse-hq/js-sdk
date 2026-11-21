@@ -64,7 +64,11 @@ export { formatRelativeTime } from './relativeTime.js';
 export { UserName, useDisplayName, type UserNameProps } from './UserName.js';
 
 // ── Conversation + member panels ──────────────────────────────
-export { ConversationList, type ConversationListProps } from './ConversationList.js';
+export {
+  ConversationList,
+  type ConversationListProps,
+  type ConversationListSection,
+} from './ConversationList.js';
 export { MemberList, type MemberListProps } from './MemberList.js';
 
 // ── Rich content ──────────────────────────────────────────────

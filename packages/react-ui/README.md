@@ -107,6 +107,9 @@ preview>` draws one on its own.
   where you'd read to when you opened the conversation), a "Jump to first
   unread" pill while it's off-screen, and a "Mark unread" action on others'
   messages.
+- **ConversationList** pages itself as it's scrolled (`useConversations().loadMore`),
+  takes `density="compact"`, `groupBy="type"` or `sections={[{ title, filter }]}`,
+  a `header`, and the theme's sidebar colours.
 - **Deleted messages** read "This message was deleted" and keep their thread
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.

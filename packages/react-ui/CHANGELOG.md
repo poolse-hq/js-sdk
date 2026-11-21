@@ -82,6 +82,14 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   message and the view doesn't re-mark it read until a newer message arrives
   (badges follow from the server's `conversation:read`). A failure shows a
   notice. `MessageActions onMarkUnread`, `MessageRow onMarkUnread`.
+- `ConversationList` (S6): infinite scroll — the next page of
+  `useConversations()` loads as the list nears its end (`loadMore`,
+  `hasMore`, `loadingMore`; a "Loading…" row meanwhile); controlled lists pass
+  `hasMore`, `loadingMore`, `onLoadMore`. `density` (`'comfortable'` |
+  `'compact'`: one line, small avatar, no preview); `sections`
+  (`ConversationListSection[]`, `{ title, filter }`: each conversation under
+  the first section that takes it, empty sections hidden) or `groupBy="type"`
+  ("Channels", "Direct messages"); a `header` slot above the list.
 - `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
   `getText()`, `setText(text)` and `focus()`.
 - `ConversationView` shows a notice when a send is refused because the quoted
@@ -106,6 +114,14 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   `onlineExternalIds` still gives the old green dot.
 - `ChatHeader` takes a direct chat's subtitle from the other person's presence,
   falling back to "Online" while they have the conversation open.
+
+- `ConversationList` renders inside a `.poolse-conversation-list` wrapper
+  (header, then the `.poolse-list`), and takes its colours from the theme's
+  sidebar tokens (`--poolse-sidebar`, `--poolse-sidebar-text`,
+  `--poolse-sidebar-active`, `--poolse-sidebar-active-text`; badges from
+  `--poolse-badge` / `--poolse-badge-text`), falling back to the surface /
+  brand tokens it used before. A failed refresh keeps the rows on screen
+  instead of replacing them with the error.
 
 ### Deprecated
 
