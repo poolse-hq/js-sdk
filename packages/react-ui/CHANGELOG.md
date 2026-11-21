@@ -4,6 +4,33 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Keyboard shortcuts scoped to the focused view, overridable: `keymap`,
+  `sendOn`, `keyboardShortcuts`, `confirmDelete` on `ConversationView`;
+  `keymap` / `onEditLast` on `MessageComposer` and `MentionInput`;
+  `DEFAULT_KEYMAP`, `resolveKeymap`, `matchesKey`.
+- Unsent rows (`<SendStatus>`): "Waiting for network…" or "Not sent" with
+  Retry / Delete.
+- `<EmptyState>` defaults for an empty channel, conversation list, thread
+  and `ConversationList query` with no results (`noResultsState`);
+  `emptyState` on `ConversationView` may be a function of `{ readOnly }`.
+- Automated accessibility check (axe-core in vitest).
+
+### Changed
+
+- Drafts are per client (`draftsOf(chat)`), keyed by its namespace; the
+  pre-3.8 key is moved on first read, and `destroy({ clearStorage: true })`
+  removes them.
+- `ThreadView` closes on Esc only while it has focus (it listened on the
+  document), so views side by side don't close each other.
+- Message rows are focusable `article`s named "Message from …"; the mention
+  textarea drops the invalid `combobox` role; the hidden file input is
+  labelled; list sections use valid group markup. Reduced motion disables
+  animation and smooth scrolling.
+
 ## [3.7.1] - 2026-11-21
 
 ### Fixed

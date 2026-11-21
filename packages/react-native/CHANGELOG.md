@@ -4,6 +4,25 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `useBackgroundClients(clients, active)` / `applyBackground`: only the
+  workspace on screen keeps its socket; all close in the background.
+- `<SendStatus>` under unsent messages (Retry / Delete), `<EmptyState>`
+  defaults for the conversation list (and `query` / `noResultsState`), an
+  empty conversation and an empty thread.
+
+### Changed
+
+- Drafts are per client and namespaced (the pre-3.8 key is moved), cleared
+  by `destroy({ clearStorage: true })`.
+- `useAppStateLifecycle` uses `client.setBackground`.
+- Message rows read as "Ana: text" with a "Message actions" accessibility
+  action (they all read "Message actions" before); reaction chips, header,
+  composer buttons and the text input have roles and labels.
+
 ## [3.7.1] - 2026-11-21
 
 ### Fixed

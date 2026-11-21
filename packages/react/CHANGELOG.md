@@ -4,6 +4,27 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `<PoolseProvider client={…}>` takes a client it never destroys (several
+  workspaces side by side; a hidden or unmounted provider keeps its client
+  connected and warm) and `background` (`client.setBackground`). `config`
+  is optional when `client` is given.
+- The conversation store lives with the client, so a remounted provider is
+  warm; its rows feed `client.unread` and `client.cache`.
+- `useMessages`: cached history at once (`fromCache`), readable offline;
+  sends through the outbox with `retry(id)` / `discard(id)`.
+- `useUnreadTotals(client?)`, `useUnreadQueue()` / `orderUnread`,
+  `useOutbox()`, `useClientTimings()`, `filterConversations()`. Re-exports
+  `Poolse`, `createIndexedDbStorage`, `memoryStorage`, `MessageQueuedError`.
+
+### Changed
+
+- A send that fails no longer disappears: queued offline, or kept as failed
+  (see `@poolse/sdk` `outbox`). `outbox: false` restores the old behaviour.
+
 ## [3.7.1] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.7.1.

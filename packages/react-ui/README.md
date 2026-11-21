@@ -114,6 +114,39 @@ preview>` draws one on its own.
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.
 
+## Keyboard, offline, empty states, accessibility
+
+- **Shortcuts**, scoped to the focused component so an app's own (Cmd+K,
+  Cmd+[ …) never collide and two views side by side don't hear each other.
+  Composer: Enter sends (`sendOn="mod+enter"`: Enter is a new line,
+  Cmd/Ctrl+Enter sends), Shift+Enter new line, ↑ in an empty composer edits
+  your last message, Esc cancels the reply. Message list (Tab into it): j / k
+  or ↓ / ↑, Home / End, r reply, t thread, e edit, Delete (yours, after
+  `confirmDelete`, default `window.confirm`), Esc back to the composer.
+  `keymap={{ messageList: { reply: ['q'] }, composer: { editLast: [] } }}`
+  overrides (`[]` turns one off); `keyboardShortcuts={false}` turns the list
+  ones off. `DEFAULT_KEYMAP`, `resolveKeymap`, `matchesKey` are exported for
+  a shortcut sheet. `MessageComposer` / `MentionInput` take `keymap` and
+  `onEditLast`.
+- **Unsent messages**: queued (offline) rows read "Waiting for network…" with
+  "Send now"; refused ones "Not sent: …" with Retry and Delete
+  (`<SendStatus>`). The composer clears either way.
+- **Empty states** that say what to do next (`<EmptyState title hint action>`):
+  empty channel (`emptyState` — a node, or `({ readOnly }) => node`),
+  conversation list (`emptyState`), `ConversationList query="…"` with no
+  matches (`noResultsState`), an empty thread.
+- **Drafts** are per client (server + user): key
+  `<client.namespace>:draft:<conversationId>` (the pre-3.8
+  `poolse:draft:<user>:<conversation>` is moved on first read);
+  `client.destroy({ clearStorage: true })` removes them.
+- **Accessibility**: message rows are `article`s named "Message from …" and
+  focusable for the list shortcuts; the composer textarea is labelled and
+  announces mention suggestions (`aria-autocomplete`, `aria-activedescendant`);
+  reduced motion turns off animation and smooth scrolling. `test/a11y.test.tsx`
+  runs axe-core over ConversationView (full and empty), ConversationList
+  (rows, sections, empty), ThreadView, MemberList and a failed send; colour
+  contrast is covered by the theme's own contrast tests.
+
 ## Components
 
 - Composed: `PoolseInbox` (with a ref: `open`, `openDirect`, `openGroup`,

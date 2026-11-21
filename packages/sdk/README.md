@@ -67,6 +67,11 @@ poolse.destroy();
 | `generateIdempotencyKey`         | `safeUuid`                  |                                                                        |
 | `onSocketError`                  | —                           | `(err: Error) => void`                                                 |
 | `userResolver`                   | —                           | `(externalId) => { displayName, avatarUrl? } \| null` (sync or async). |
+| `storage`                        | memory only                 | `PoolseStorage` for the outbox, cached history and the user.           |
+| `storageNamespace`               | poolse user id              | Who this session is, known at start (offline start).                   |
+| `outbox`                         | `true`                      | Queue offline sends; keep refused ones as `failed`.                    |
+| `cache`                          | 50 msgs × 50 convs          | `{ messagesPerConversation, conversations, listRows }`.                |
+| `background`                     | `false`                     | Start with the socket closed (`setBackground(false)` opens it).        |
 
 ## What's in it
 
@@ -100,6 +105,64 @@ sent by your backend or the Workspace API), `onRingEnded`
 `cancelled`, `timeout` or `finished`), `onCallFinished` (with
 `conversation_id`) and `onPresenceChanged`, and has `setPresence(state)`,
 `getPresence({ user_ids } | { external_ids })`, `onJoined` and `isJoined`.
+
+## Several workspaces, offline, speed
+
+Each signed-in workspace is its own `Poolse` instance. Nothing is shared at
+module level: every client has its own socket, caches, outbox, presence and
+storage namespace (`client.namespace` = `poolse:v1:<apiUrl>#<user>`).
+
+```ts
+const acme = new Poolse({
+  apiUrl: 'https://chat.acme.example',
+  getToken: acmeToken,
+  storage: createIndexedDbStorage(),
+  storageNamespace: 'ana@acme',
+});
+const beta = new Poolse({ apiUrl: 'https://chat.beta.example', getToken: betaToken });
+
+acme.unread.subscribe(({ unread, mentions }) => setBadge('acme', unread, mentions));
+beta.setBackground(true); // phone: not on screen → socket closed
+onPush((p) => clientFor(p.tenant_id)?.wake()); // connect for 30 s
+await acme.destroy({ clearStorage: true }); // sign out of one only
+```
+
+- **`setBackground(bool)` / `isBackground()` / `wake({ forMs })`** — close the
+  socket (channel handles and listeners stay) and reopen it with a fresh
+  token; hooks catch up from REST. `realtime.pause()` now also works before
+  the first connect.
+- **`destroy({ clearStorage })`** — returns a promise; closes the socket at
+  once, drops timers, caches, outbox and `scoped` services; the instance is
+  inert afterwards. `clearStorage` also deletes its keys in `storage` and its
+  drafts. `onDestroy(fn)`, `destroyed`.
+- **`scoped(key, create)`** — one service per client, destroyed with it (how
+  the UI packages keep stores per client).
+- **`unread`** — `get()`, `subscribe(fn)`, `refresh()`, `summary()`:
+  `{ unread, mentions, conversations, source, loading, error }` from
+  `GET /v1/me/unread`, live from `unread:totals` (the user channel joins with
+  `unread_totals: true` while subscribed), `conversation:read` (`totals`) and
+  per-conversation deltas; on a server without the endpoint (404), the sum of
+  the conversations seen (`source: 'local'`).
+- **`outbox`** — sends that can't reach the server are queued under their
+  client message id and resent on reconnect, `online`, or a backoff timer (2 s
+  → 60 s, none in the background); the server stores a repeated id once. A 4xx
+  (409 `message_id_conflict` included) leaves the message `failed` until
+  `retry(id)` / `remove(id)`. `entries()`, `subscribe`, `onSent`, `whenSent`,
+  `flush`. `send` rejects with `MessageQueuedError` when queued.
+  `Message.local_status` (`sending` · `queued` · `failed`) and `local_error`
+  mark such rows.
+- **`cache`** — warm `LocalCache` of the conversation list and the newest
+  messages per conversation, in memory and in `storage`.
+- **`PoolseStorage`** — `{ get, set, remove }`, sync or async, string values.
+  `createIndexedDbStorage()` (browser / desktop webview; memory fallback) and
+  `memoryStorage()` ship here; on React Native wrap MMKV
+  (`{ get: k => mmkv.getString(k) ?? null, set: (k, v) => mmkv.set(k, v), remove: k => mmkv.delete(k) }`),
+  AsyncStorage or SQLite the same way.
+- **`timings`** — `get()`, `peek(name)`, `on(fn)`, `start(name)` → `done()`,
+  `record(name, ms)`. Built in: `connect`, `reconnect`, `me`,
+  `firstConversations`, `firstMessages`, `cachedConversations`,
+  `cachedMessages` (ms since the client was created; `reconnect` since the
+  resume).
 
 ## Presence
 

@@ -4,6 +4,41 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Several clients side by side: `client.namespace` (`poolse:v1:<apiUrl>#<user>`),
+  `whenNamespace()`, `scoped(key, create)`, `onDestroy`, `destroyed`, `apiUrl`.
+  Nothing is shared at module level.
+- `destroy({ clearStorage })` now returns a promise and tears down timers,
+  caches, outbox and scoped services as well; the instance is inert after it.
+- `setBackground(bool)`, `isBackground()`, `wake({ forMs })`; `config.background`.
+  `realtime.pause()` works before the first connect; `realtime.isPaused()`.
+- `client.unread` (`get`, `subscribe`, `refresh`, `summary`) on
+  `GET /v1/me/unread`, live from `unread:totals` (joins `user:<id>` with
+  `unread_totals: true` while subscribed), `conversation:read.totals` and
+  per-conversation deltas; falls back to summing the conversations seen.
+  `UserChannel.onUnreadTotals` / `requestUnreadTotals`; `UnreadTotalsEvent`.
+- `client.outbox`: queued offline sends resent with the same id on reconnect,
+  refused ones kept as `failed` (`retry`, `remove`, `whenSent`, `onSent`,
+  `flush`); `MessageQueuedError`, `MessageDiscardedError`, `isRetryable`.
+  `Message.local_status` / `local_error`; `config.outbox` (default `true`).
+- `client.cache` (`LocalCache`) and `PoolseStorage` with
+  `createIndexedDbStorage()` and `memoryStorage()`; `config.storage`,
+  `config.storageNamespace`, `config.cache`. The signed-in user is restored
+  from storage for an offline start.
+- `client.timings` (`ClientTimings`): `connect`, `reconnect`, `me`,
+  `firstConversations`, `firstMessages`, `cachedConversations`,
+  `cachedMessages`, plus `start(name)` / `record(name, ms)`.
+- `MessagePushData` / `MessageReadPushData`: `tenant_id`, `workspace_name`,
+  `workspace_icon_url`. `ApiErrorCode`: `message_id_conflict`.
+
+### Fixed
+
+- A socket error after `pause()` no longer flips the status back to
+  `reconnecting`.
+
 ## [3.7.1] - 2026-11-21
 
 - No changes; released with the other `@poolse/*` packages at 3.7.1.

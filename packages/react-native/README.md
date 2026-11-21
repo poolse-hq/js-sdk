@@ -156,6 +156,33 @@ background; `useAppStateLifecycle({ presence: false })` leaves that out.
 `useAppStatePresence()` does only that part, and `<PoolseInbox>` does it by
 default (`trackActivity={false}` to stop).
 
+## Several workspaces: `useBackgroundClients()`
+
+With more than one workspace signed in, keep one `Poolse` per workspace and
+call this once, outside the providers, instead of `useAppStateLifecycle`:
+
+```tsx
+useBackgroundClients(clients, current, { keepConnected: inCall ? [callClient] : [] });
+// Push handler: connect the push's workspace for 30 s.
+clientFor(data.tenant_id)?.wake();
+```
+
+Only the workspace on screen keeps its socket; the others close theirs
+(caches stay warm in memory, so switching is instant) and reconnect when
+switched to. With the app in the background every socket closes. Presence
+follows the app state on the client on screen (`presence: false` to skip).
+`useAppStateLifecycle` now uses `setBackground` too. Unread totals for the
+others: `useUnreadTotals(client)` refreshes when a client is woken or
+foregrounded.
+
+Drafts are kept per client (namespaced by server + user) and removed by
+`client.destroy({ clearStorage: true })`. Unsent messages show "Waiting for
+network…" or "Not sent" with Retry / Delete. `ConversationList`,
+`ConversationView` and `ThreadView` default to an `EmptyState` that says what
+to do next (`ConversationList query` / `noResultsState` for search). Message
+rows read as "Ana: text" to VoiceOver/TalkBack with a "Message actions"
+accessibility action; reaction chips say "👍 3, you reacted".
+
 ## `ConversationList`
 
 ```tsx
