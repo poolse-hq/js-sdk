@@ -50,10 +50,15 @@ public struct CallSessionBundle: Equatable {
   public var kind: String
   /// How many people the server says are being rung right now.
   public var ringing: Int
+  /// The CallSummary's `recording` / `transcription` objects as JSON text
+  /// (docs/RECORDING.md), carried to the snapshot untouched; nil from a
+  /// server before them. Text, not a dictionary, to keep the bundle Equatable.
+  public var recording: String?
+  public var transcription: String?
 
   public init(callId: String, conversationId: String, conversationName: String?, media: String,
               created: Bool, livekitUrl: String, livekitToken: String, controlToken: String,
-              kind: String = "call", ringing: Int = 0) {
+              kind: String = "call", ringing: Int = 0, recording: String? = nil, transcription: String? = nil) {
     self.callId = callId
     self.conversationId = conversationId
     self.conversationName = conversationName
@@ -64,6 +69,8 @@ public struct CallSessionBundle: Equatable {
     self.controlToken = controlToken
     self.kind = kind
     self.ringing = ringing
+    self.recording = recording
+    self.transcription = transcription
   }
 }
 
@@ -80,11 +87,28 @@ public protocol MediaPort: AnyObject {
   func setSpeaker(_ on: Bool)
   /// Play through one specific output — an id from `Snapshot.audioOutputs`.
   func setAudioOutput(_ id: String)
+  /// Publish the mic and camera again as the user last had them, once the
+  /// server lets this participant publish (consent given, docs/RECORDING.md §5).
+  func republish()
 }
 
 public extension MediaPort {
   /// Engines without device selection fall back to the speaker toggle.
   func setAudioOutput(_ id: String) { setSpeaker(id == "speaker") }
+  func republish() {}
+}
+
+/// poolse's own participants in a room — the transcript assistant
+/// (`poolse:assistant:<call>`, kind AGENT) and LiveKit Egress's recorder
+/// (`EG_…`, kind EGRESS). They are not people: never in the roster, never
+/// counted as someone in the call (docs/RECORDING.md §7). SIP (phone)
+/// participants are people and stay.
+public enum ServiceParticipants {
+  /// `kind`: LiveKit's participant kind, lowercased (`agent`, `egress`, `sip`, …).
+  public static func isService(identity: String, kind: String?) -> Bool {
+    if identity.hasPrefix("poolse:") || identity.hasPrefix("EG_") { return true }
+    return kind == "agent" || kind == "egress"
+  }
 }
 
 // MARK: - Ring surface

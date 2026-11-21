@@ -57,6 +57,7 @@ class RuntimeTest {
     override fun setCamera(on: Boolean) { log += "camera:$on" }
     override fun switchCamera() { log += "switch" }
     override fun setSpeaker(on: Boolean) { log += "speaker:$on" }
+    override fun republish() { log += "republish" }
   }
 
   private class FakeSurface : RingSurfacePort {
@@ -197,6 +198,30 @@ class RuntimeTest {
     assertEquals(Direction.JOINED, r.runtime.currentState().direction)
     assertEquals(Phase.CONNECTING, r.runtime.currentState().phase)
     assertTrue(r.surface.log.none { it == "ringback+" })
+  }
+
+  @Test
+  fun `republish reaches the media and capture comes from the bundle`() {
+    val r = Rig()
+    assertNull(r.runtime.capture.first)
+    r.runtime.place("conv-c1", "audio", "sess-token")
+    r.http.lastCb!!(HttpResult.Ok(bundle("c1", created = false).copy(recording = """{"active":true}""")))
+    assertEquals("""{"active":true}""", r.runtime.capture.first)
+    assertNull(r.runtime.capture.second)
+    r.runtime.republish()
+    assertEquals("republish", r.media.log.last())
+  }
+
+  @Test
+  fun `service participants are not people`() {
+    assertTrue(ServiceParticipants.isService("poolse:assistant:c1", "agent"))
+    assertTrue(ServiceParticipants.isService("poolse:assistant:c1", null))
+    assertTrue(ServiceParticipants.isService("EG_abc123", "standard"))
+    assertTrue(ServiceParticipants.isService("anything", "egress"))
+    assertTrue(ServiceParticipants.isService("bot-1", "agent"))
+    assertFalse(ServiceParticipants.isService("sip_+38970123456", "sip"))
+    assertFalse(ServiceParticipants.isService("8c1f0e5e-user", "standard"))
+    assertFalse(ServiceParticipants.isService("8c1f0e5e-user", null))
   }
 
   // ── alone in a call: ask the server ─────────────────────────────────

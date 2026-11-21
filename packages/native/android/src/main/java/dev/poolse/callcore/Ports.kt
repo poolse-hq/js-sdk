@@ -57,6 +57,13 @@ data class CallSessionBundle(
   val kind: String = "call",
   /** How many people the server says are being rung right now. */
   val ringing: Int = 0,
+  /**
+   * The CallSummary's `recording` / `transcription` objects as JSON text
+   * (docs/RECORDING.md), carried to the snapshot untouched; null from a
+   * server before them.
+   */
+  val recording: String? = null,
+  val transcription: String? = null,
 )
 
 /** LiveKit (or any SFU) — media only, no lifecycle opinions. */
@@ -78,6 +85,25 @@ interface MediaPort {
    * speaker toggle.
    */
   fun setAudioOutput(id: String) = setSpeaker(id == "speaker")
+
+  /**
+   * Publish the mic and camera again as the user last had them, once the
+   * server lets this participant publish (consent given, docs/RECORDING.md §5).
+   */
+  fun republish() {}
+}
+
+/**
+ * poolse's own participants in a room — the transcript assistant
+ * (`poolse:assistant:<call>`, kind AGENT) and LiveKit Egress's recorder
+ * (`EG_…`, kind EGRESS). They are not people: never in the roster, never
+ * counted as someone in the call (docs/RECORDING.md §7). SIP (phone)
+ * participants are people and stay.
+ */
+object ServiceParticipants {
+  /** [kind]: LiveKit's participant kind, lowercased (`agent`, `egress`, `sip`, …). */
+  fun isService(identity: String, kind: String?): Boolean =
+    identity.startsWith("poolse:") || identity.startsWith("EG_") || kind == "agent" || kind == "egress"
 }
 
 /** The ring UX: CallStyle notification + full-screen activity + tones. */

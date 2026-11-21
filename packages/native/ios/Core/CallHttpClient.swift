@@ -159,6 +159,7 @@ public final class CallHttpClient: HttpPort {
       b.livekitToken = try getString(livekit, "token")
       b.controlToken = optString(root, "control_token") ?? current.controlToken
       b.ringing = 0
+      // recording / transcription: the current bundle's stand.
       return b
     }
     guard let controlToken = optString(root, "control_token") ?? current?.controlToken else {
@@ -174,7 +175,9 @@ public final class CallHttpClient: HttpPort {
       livekitToken: try getString(livekit, "token"),
       controlToken: controlToken,
       kind: optString(call, "kind") ?? current?.kind ?? "call",
-      ringing: ((call["ring_states"] as? [String: Any]) ?? [:]).values.filter { ($0 as? String) == "ringing" }.count
+      ringing: ((call["ring_states"] as? [String: Any]) ?? [:]).values.filter { ($0 as? String) == "ringing" }.count,
+      recording: optObjectText(call, "recording") ?? current?.recording,
+      transcription: optObjectText(call, "transcription") ?? current?.transcription
     )
   }
 
@@ -191,6 +194,13 @@ public final class CallHttpClient: HttpPort {
   private static func optString(_ o: [String: Any], _ key: String) -> String? {
     guard let s = o[key] as? String, !s.isEmpty else { return nil }
     return s
+  }
+
+  /// A JSON object member, re-serialised as text; nil when absent or not an object.
+  private static func optObjectText(_ o: [String: Any], _ key: String) -> String? {
+    guard let v = o[key] as? [String: Any],
+          let data = try? JSONSerialization.data(withJSONObject: v, options: [.sortedKeys]) else { return nil }
+    return String(data: data, encoding: .utf8)
   }
 
   /// org.json (Android) `getString`: required, non-null; numbers/bools coerce to text.
