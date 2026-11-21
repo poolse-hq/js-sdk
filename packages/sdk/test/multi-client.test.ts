@@ -177,7 +177,9 @@ describe('background', () => {
     c.wake({ forMs: 1000 });
     c.setBackground(false);
     await vi.advanceTimersByTimeAsync(1000);
-    expect(c.realtime.getStatus()).toBe('connecting');
+    // Still trying to connect (there's no server here, so it may already
+    // be retrying), not paused.
+    expect(['connecting', 'reconnecting']).toContain(c.realtime.getStatus());
     await c.destroy();
   });
 });

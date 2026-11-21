@@ -2,7 +2,7 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
-## [Unreleased]
+## 3.8.0 — 2026-11-21
 
 - Several workspaces (servers) at once:
   `addServer({ id, apiBaseUrl, tenantId?, name? })`, `removeServer(id)`,
