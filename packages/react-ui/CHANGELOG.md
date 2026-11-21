@@ -67,6 +67,21 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   exported. The composer is now keyed by conversation, so its text no longer
   carries over to the next conversation.
 - `MessageComposer` / `MentionInput` `onValueChange(text)`.
+- "New messages" divider: opening a conversation with unread messages draws a
+  divider above the first one, from the viewer's read position when the
+  conversation opened (their membership's `last_read_sequence` /
+  `last_read_message_id`, so `members` must load — on by default). Marking
+  read doesn't move it; it goes when the conversation is reopened or the
+  viewer sends. While it's off-screen (or older than the loaded pages) a
+  "Jump to first unread" pill at the top of the feed scrolls to it, loading
+  older pages with `loadUntil` first when needed; it can be dismissed. The
+  "↓ N new" button is unchanged. Every layout, and with `renderMessage`.
+- Mark unread: a "Mark unread" message action on other people's messages (a
+  button in `bubbles`, under More in `list` / `compact`) calls
+  `conversations.one(id).markUnread(messageId)`; the divider moves above that
+  message and the view doesn't re-mark it read until a newer message arrives
+  (badges follow from the server's `conversation:read`). A failure shows a
+  notice. `MessageActions onMarkUnread`, `MessageRow onMarkUnread`.
 - `MessageComposerHandle` (the `MessageComposer` / `MentionInput` ref) gains
   `getText()`, `setText(text)` and `focus()`.
 - `ConversationView` shows a notice when a send is refused because the quoted

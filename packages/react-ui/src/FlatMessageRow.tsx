@@ -49,6 +49,7 @@ export function FlatMessageRow({
   onDelete,
   onOpenThread,
   onQuote,
+  onMarkUnread,
   labelFor,
   onQuotedClick,
   groupPosition = 'standalone',
@@ -253,6 +254,7 @@ export function FlatMessageRow({
               },
             }
           : {})}
+        {...(!isSelf && onMarkUnread ? { onMarkUnread } : {})}
         {...(isSelf && onStartEdit ? { onEdit: onStartEdit } : {})}
         {...(isSelf && onDelete ? { onDelete } : {})}
       />

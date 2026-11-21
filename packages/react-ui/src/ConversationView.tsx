@@ -19,6 +19,7 @@ import {
   useMessageStreams,
   useMessages,
   useMe,
+  usePoolse,
   useLiveCall,
   useRealtimeStatus,
   useTyping,
@@ -376,7 +377,8 @@ export function ConversationView({
   // one REST call.
   const wantsMemberCount = senderLabels === 'auto' || avatars === 'auto';
   const membersOn = mentions || readReceipts || wantsMemberCount;
-  const { members } = useMembers(membersOn ? conversationId : '');
+  const { members, loading: membersLoading } = useMembers(membersOn ? conversationId : '');
+  const chat = usePoolse();
 
   // Group-chat heuristic: 3+ members triggers per-bubble sender
   // identification (label + avatar) under the `'auto'` setting.
@@ -529,6 +531,37 @@ export function ConversationView({
       });
   }, [atBottom, messages, markReadUpTo, onMarkedRead, conversationId]);
 
+  // ── "New messages" divider ─────────────────────────────────────────
+  // Where the viewer's read position was when they opened the
+  // conversation (their membership's read cursor), taken once per open:
+  // the divider then stays put while they read — marking read doesn't
+  // move it — until they reopen the conversation or send a message.
+  // "Mark unread" moves it to that message.
+  const [unreadMarker, setUnreadMarker] = useState<UnreadMarker | null>(null);
+  const markerTakenRef = useRef<string | null>(null);
+  useEffect(() => {
+    setUnreadMarker(null);
+    markerTakenRef.current = null;
+  }, [conversationId]);
+  useEffect(() => {
+    if (markerTakenRef.current === conversationId) return;
+    if (!membersOn || loading || membersLoading || !me) return;
+    const mine = members.find((m) => m.user_id === me.id && m.conversation_id === conversationId);
+    if (!mine) return;
+    markerTakenRef.current = conversationId;
+    let after: number | null = mine.last_read_sequence ?? null;
+    if (after === null && mine.last_read_message_id) {
+      after = messages.find((m) => m.id === mine.last_read_message_id)?.sequence ?? null;
+      // Read up to something we can't place: no divider.
+      if (after === null) return;
+    }
+    setUnreadMarker({
+      conversationId,
+      afterSequence: after ?? 0,
+      lastReadId: mine.last_read_message_id,
+    });
+  }, [conversationId, membersOn, loading, membersLoading, me, members, messages]);
+
   const scrollToBottom = () => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -544,6 +577,96 @@ export function ConversationView({
     () => messages.filter((m) => isMessageVisibleTo(m, meIdForFeed)),
     [messages, meIdForFeed],
   );
+
+  // The first unread message (someone else's, after the read position)
+  // — the divider goes above it. When the loaded pages don't reach back
+  // to the read position yet, it isn't known: the pill loads them.
+  const marker =
+    unreadMarker && unreadMarker.conversationId === conversationId ? unreadMarker : null;
+  const unread = useMemo(() => {
+    if (!marker) return { firstId: null, reaches: true, any: false };
+    const isUnread = (m: Message) =>
+      m.sequence > marker.afterSequence &&
+      m.sequence !== Number.MAX_SAFE_INTEGER &&
+      m.sender_id !== meIdForFeed;
+    const reaches = !hasMore || visibleMessages.some((m) => m.sequence <= marker.afterSequence);
+    const first = visibleMessages.find(isUnread) ?? null;
+    return {
+      firstId: reaches ? (first?.id ?? null) : null,
+      reaches,
+      any: first !== null,
+    };
+  }, [marker, visibleMessages, hasMore, meIdForFeed]);
+
+  const dividerRef = useRef<HTMLDivElement | null>(null);
+  const [dividerInView, setDividerInView] = useState(false);
+  const [jumpDismissed, setJumpDismissed] = useState(false);
+  useEffect(() => {
+    setJumpDismissed(false);
+  }, [conversationId, marker?.afterSequence]);
+  useEffect(() => {
+    setDividerInView(false);
+    const el = dividerRef.current;
+    const root = listRef.current;
+    if (!el || !root || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([entry]) => setDividerInView(!!entry?.isIntersecting), {
+      root,
+      threshold: 0,
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [unread.firstId]);
+
+  // "Jump to first unread": load older pages until the read position is
+  // there (the message read last), then scroll to the divider.
+  // 'loading' while pages load, 'loaded' once loadUntil settled (the
+  // effect then scrolls, or gives up if the divider still isn't there).
+  const [jump, setJump] = useState<'loading' | 'loaded' | null>(null);
+  const jumpToFirstUnread = () => {
+    if (!marker) return;
+    if (unread.firstId) {
+      scrollDividerIntoView(dividerRef.current);
+      return;
+    }
+    setJump('loading');
+    // With no read position at all, page back to the start.
+    void loadUntil(marker.lastReadId ?? NO_MESSAGE)
+      .catch(() => false)
+      .then(() => {
+        if (conversationIdRef.current === marker.conversationId) {
+          setJump((j) => (j ? 'loaded' : j));
+        }
+      });
+  };
+  useEffect(() => {
+    if (!jump) return;
+    if (unread.firstId) {
+      setJump(null);
+      scrollDividerIntoView(dividerRef.current);
+    } else if (jump === 'loaded') {
+      setJump(null);
+    }
+  }, [jump, unread.firstId]);
+  useEffect(() => {
+    setJump(null);
+  }, [conversationId]);
+  const showJump = !!marker && unread.any && !jumpDismissed && (!unread.firstId || !dividerInView);
+
+  // "Mark unread" on someone else's message: the server moves the read
+  // cursor back (every view's badge follows via `conversation:read`);
+  // here the divider moves above it and auto-read holds off until a
+  // newer message arrives.
+  const markUnreadFrom = async (msg: Message) => {
+    const tail = messages[messages.length - 1];
+    if (tail) lastMarkedReadRef.current = tail.id;
+    try {
+      await chat.conversations.one(conversationId).markUnread(msg.id);
+      markerTakenRef.current = conversationId;
+      setUnreadMarker({ conversationId, afterSequence: msg.sequence - 1, lastReadId: null });
+    } catch {
+      setSendNotice("Couldn't mark the message unread.");
+    }
+  };
 
   // Jump to `focusMessageId`: page back until it's loaded, then let the
   // effect below scroll to it once its row has rendered.
@@ -792,6 +915,8 @@ export function ConversationView({
       throw err;
     }
     setReplyingToState(null);
+    // Sending is reading: the divider goes.
+    setUnreadMarker(null);
     draftRef.current = { text: '', replyTo: null };
     const key = draftKeyFor();
     if (key) clearDraft(storage, key);
@@ -909,6 +1034,29 @@ export function ConversationView({
               doesn't observe a dead element. */}
           {hasMore && <div ref={topSentinelRef} aria-hidden="true" style={{ height: 1 }} />}
 
+          {/* Sticky, zero-height: the pill floats at the top of the feed. */}
+          {showJump && (
+            <div className="poolse-conversation__jump-unread">
+              <button
+                type="button"
+                className="poolse-conversation__jump-unread-btn"
+                onClick={jumpToFirstUnread}
+                disabled={jump !== null}
+              >
+                <PoolseIcon name="chevron-up" size={14} label={null} />
+                {jump ? 'Loading…' : 'Jump to first unread'}
+              </button>
+              <button
+                type="button"
+                className="poolse-conversation__jump-unread-close"
+                aria-label="Dismiss"
+                onClick={() => setJumpDismissed(true)}
+              >
+                <PoolseIcon name="close" size={12} label={null} />
+              </button>
+            </div>
+          )}
+
           {loading && messages.length === 0 ? (
             <div className="poolse-conversation__empty">Loading…</div>
           ) : messages.length === 0 ? (
@@ -1001,15 +1149,30 @@ export function ConversationView({
                   onDelete={() => void deleteMsg(msg.id)}
                   onOpenThread={() => setThreadRootId(msg.id)}
                   onQuote={() => setReplyingTo(msg)}
+                  {...(!isSelf && msg.sequence !== Number.MAX_SAFE_INTEGER
+                    ? { onMarkUnread: () => void markUnreadFrom(msg) }
+                    : {})}
                   onQuotedClick={scrollToOriginal}
                   {...(onCallBack ? { onCallBack } : {})}
                   {...layoutProps}
                   mentionsMe={mentionsViewer(msg, me?.id ?? null)}
                 />
               );
+              const divider =
+                unread.firstId === msg.id ? (
+                  <div
+                    ref={dividerRef}
+                    className="poolse-unread-divider"
+                    role="separator"
+                    aria-label="New messages"
+                  >
+                    <span>New messages</span>
+                  </div>
+                ) : null;
               if (renderMessage) {
                 return (
                   <Fragment key={msg.id}>
+                    {divider}
                     {renderMessage(msg, me?.id ?? null, {
                       layout,
                       groupPosition,
@@ -1029,6 +1192,7 @@ export function ConversationView({
                       <span>{formatDayLabel(msg.inserted_at)}</span>
                     </div>
                   )}
+                  {divider}
                   {renderDefault()}
                 </Fragment>
               );
@@ -1119,6 +1283,23 @@ export function ConversationView({
       )}
     </div>
   );
+}
+
+interface UnreadMarker {
+  conversationId: string;
+  /** Messages after this sequence are unread. */
+  afterSequence: number;
+  /** The message read last, to page back to; null when none / unknown. */
+  lastReadId: Uuid | null;
+}
+
+// `loadUntil` an id no message has: pages back to the start.
+const NO_MESSAGE = '00000000-0000-0000-0000-000000000000';
+
+function scrollDividerIntoView(el: HTMLElement | null): void {
+  if (el && typeof el.scrollIntoView === 'function') {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 // Scroll a message row into view and flash it.

@@ -4872,3 +4872,86 @@
   border-radius: var(--poolse-radius-sm);
   background: var(--poolse-surface-2);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   "New messages" divider + "Jump to first unread"
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-unread-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 6px;
+  color: var(--poolse-accent-strong, var(--poolse-brand-strong));
+  font: 700 11.5px / 1 var(--poolse-font-body);
+  letter-spacing: 0.02em;
+  scroll-margin-top: 48px;
+}
+
+/* A rule in the accent colour, the label at its end. */
+.poolse-unread-divider::before {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--poolse-accent, var(--poolse-brand));
+}
+
+.poolse-unread-divider span {
+  white-space: nowrap;
+}
+
+.poolse-conversation--layout-list .poolse-unread-divider,
+.poolse-conversation--layout-compact .poolse-unread-divider {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+
+.poolse-conversation__jump-unread {
+  position: sticky;
+  top: 8px;
+  z-index: 4;
+  height: 0;
+  display: flex;
+  justify-content: center;
+  overflow: visible;
+}
+
+.poolse-conversation__jump-unread > * {
+  /* Height 0 wrapper: lay the pill out from its top edge. */
+  align-self: flex-start;
+}
+
+.poolse-conversation__jump-unread-btn,
+.poolse-conversation__jump-unread-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--poolse-border);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  box-shadow: var(--poolse-shadow-md);
+  font: 600 12.5px / 1 var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-conversation__jump-unread-btn {
+  padding: 7px 12px;
+  border-radius: var(--poolse-radius-pill) 0 0 var(--poolse-radius-pill);
+  border-right: 0;
+}
+
+.poolse-conversation__jump-unread-btn:disabled {
+  cursor: progress;
+  color: var(--poolse-ink-2);
+}
+
+.poolse-conversation__jump-unread-close {
+  padding: 7px 9px;
+  border-radius: 0 var(--poolse-radius-pill) var(--poolse-radius-pill) 0;
+  color: var(--poolse-ink-2);
+}
+
+.poolse-conversation__jump-unread-btn:hover:not(:disabled),
+.poolse-conversation__jump-unread-close:hover {
+  background: var(--poolse-surface-2);
+}

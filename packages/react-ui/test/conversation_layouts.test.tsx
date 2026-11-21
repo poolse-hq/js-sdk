@@ -139,13 +139,13 @@ describe('<ConversationView layout>', () => {
       fireEvent.click(own.querySelector('[aria-label="More actions"]')!);
       const items = Array.from(own.querySelectorAll('[role="menuitem"]')).map((b) => b.textContent);
       expect(items).toEqual(['Copy', 'Edit', 'Delete']);
-      // Someone else's message: no Edit / Delete.
+      // Someone else's message: no Edit / Delete, but Mark unread.
       fireEvent.click(row(container, 'm5').querySelector('[aria-label="More actions"]')!);
       expect(
         Array.from(row(container, 'm5').querySelectorAll('[role="menuitem"]')).map(
           (b) => b.textContent,
         ),
-      ).toEqual(['Copy']);
+      ).toEqual(['Copy', 'Mark unread']);
     });
 
     it('shows N replies, receipts, edits, deletes, quotes, reactions and mentions', async () => {

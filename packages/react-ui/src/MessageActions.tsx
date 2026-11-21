@@ -20,6 +20,8 @@ export interface MessageActionsProps {
   onQuote?: () => void;
   /** Triggered when the user wants to copy the message body to the clipboard. */
   onCopy?: () => void;
+  /** "Mark unread" — others' messages: the read position moves back to this one. */
+  onMarkUnread?: () => void;
   /** Triggered when the user wants to edit. Only show on own messages. */
   onEdit?: () => void;
   /** Triggered when the user wants to delete. Only show on own messages. */
@@ -39,6 +41,7 @@ export function MessageActions({
   onReply,
   onQuote,
   onCopy,
+  onMarkUnread,
   onEdit,
   onDelete,
   moreMenu = false,
@@ -46,7 +49,7 @@ export function MessageActions({
 }: MessageActionsProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const hasMore = !!(onCopy || onEdit || onDelete);
+  const hasMore = !!(onCopy || onMarkUnread || onEdit || onDelete);
 
   return (
     <div className="poolse-msg-actions" role="toolbar" aria-label="Message actions">
@@ -94,6 +97,11 @@ export function MessageActions({
                 >
                   {[
                     onCopy && { label: 'Copy', icon: 'copy' as const, run: onCopy },
+                    onMarkUnread && {
+                      label: 'Mark unread',
+                      icon: 'message' as const,
+                      run: onMarkUnread,
+                    },
                     onEdit && { label: 'Edit', icon: 'edit' as const, run: onEdit },
                     onDelete && { label: 'Delete', icon: 'trash' as const, run: onDelete },
                   ]
@@ -125,6 +133,9 @@ export function MessageActions({
           {onReply && <ActionButton label="Reply in thread" icon="messages" onClick={onReply} />}
           {onQuote && <ActionButton label="Reply" icon="reply" onClick={onQuote} />}
           {onCopy && <ActionButton label="Copy" icon="copy" onClick={onCopy} />}
+          {onMarkUnread && (
+            <ActionButton label="Mark unread" icon="message" onClick={onMarkUnread} />
+          )}
           {onEdit && <ActionButton label="Edit" icon="edit" onClick={onEdit} />}
           {onDelete && <ActionButton label="Delete" icon="trash" danger onClick={onDelete} />}
           {children}
@@ -143,7 +154,7 @@ function ActionButton({
 }: {
   label: string;
   // Restrict to the iconography we actually use here so the type stays useful.
-  icon: 'emoji' | 'reply' | 'messages' | 'edit' | 'trash' | 'more-h' | 'pin' | 'copy';
+  icon: 'emoji' | 'reply' | 'messages' | 'message' | 'edit' | 'trash' | 'more-h' | 'pin' | 'copy';
   onClick: () => void;
   active?: boolean;
   danger?: boolean;

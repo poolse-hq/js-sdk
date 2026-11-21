@@ -69,6 +69,8 @@ export interface MessageRowProps {
   onOpenThread?: () => void;
   /** Quote-reply pressed. Caller stores the message id and renders the composer chip. */
   onQuote?: () => void;
+  /** "Mark unread" (others' messages): the caller moves the read position back to here. */
+  onMarkUnread?: () => void;
   /** Caller-supplied display-name lookup for the quoted-card sender. */
   labelFor?: (userId: Uuid) => string;
   /** Click on the quoted card — typically scroll-to-original. */
@@ -157,6 +159,7 @@ function BubbleMessageRow({
   onDelete,
   onOpenThread,
   onQuote,
+  onMarkUnread,
   labelFor,
   onQuotedClick,
   groupPosition = 'standalone',
@@ -358,6 +361,7 @@ function BubbleMessageRow({
                     },
                   }
                 : {})}
+              {...(!isSelf && onMarkUnread ? { onMarkUnread } : {})}
               {...(isSelf && onStartEdit ? { onEdit: onStartEdit } : {})}
               {...(isSelf && onDelete ? { onDelete } : {})}
             />

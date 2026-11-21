@@ -103,6 +103,10 @@ preview>` draws one on its own.
 - **Drafts** per conversation (text and quote) survive switching and reloads;
   `persistDrafts={false}` turns them off, `draftStorage={{ get, set, remove }}`
   stores them elsewhere.
+- **Unread.** A "New messages" divider above the first unread message (from
+  where you'd read to when you opened the conversation), a "Jump to first
+  unread" pill while it's off-screen, and a "Mark unread" action on others'
+  messages.
 - **Deleted messages** read "This message was deleted" and keep their thread
   link; quotes of them read "Original message deleted". A send refused with
   `quoted_message_deleted` shows a notice and puts the text back.
