@@ -1,7 +1,7 @@
 // Wire-shape mirror of the Phoenix-channel payloads poolse pushes.
 // See poolse/apps/caas_realtime/lib/caas_realtime_web/channels/*.
 
-import type { Conversation, Message, ThreadParticipant, Uuid } from '../types.js';
+import type { Conversation, Message, PresenceState, ThreadParticipant, Uuid } from '../types.js';
 
 /** `message:new` / `message:updated` push payloads. */
 export type MessageNewEvent = Message;
@@ -175,6 +175,20 @@ export interface ConversationReadEvent {
 export interface AppEvent {
   type: string;
   data: Record<string, unknown>;
+}
+
+/**
+ * `presence:changed` on `user:<id>` — a user's effective presence
+ * changed (once per change, not per device or reconnect). Sent for
+ * everyone the user shares a conversation with, the user themself, and
+ * anyone this socket asked about with `presence:get`. Carries no DND
+ * fields: those only come with a lookup.
+ */
+export interface PresenceChangedEvent {
+  user_id: Uuid;
+  external_id: string | null;
+  state: PresenceState;
+  last_seen_at: string | null;
 }
 
 /** Phoenix Presence list shape. */

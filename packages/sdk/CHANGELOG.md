@@ -8,6 +8,25 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ### Added
 
+- Presence (`poolse.presence`, `PresenceResource`): `get({ userIds?, externalIds? })`
+  (`GET /v1/presence`, any number of ids, sent 200 at a time); a shared store —
+  `subscribe(ids, fn)` batches lookups from every caller in a tick, `peek(id)`
+  reads the cache, and `presence:changed` keeps it live. Lookups go over the
+  socket (`presence:get`, which also subscribes) while the user channel is
+  joined, else REST; each (re)join asks again for everyone subscribed. Ids may
+  be user ids or external ids.
+- This device's activity: `presence.setActivity('active' | 'idle')` (sends
+  `presence:set`; unchanged states are skipped, `active` re-sent at most once a
+  minute), `presence.getActivity()`, and `presence.trackActivity({ idleAfterMs?,
+  document?, window? })` for browsers (hidden / blur / no input for 5 min →
+  idle; a no-op without `document`). The `user:<id>` join carries
+  `presence: 'active' | 'idle'`.
+- `UserChannel.onPresenceChanged`, `setPresence`, `getPresence`, `onJoined`,
+  `isJoined`; `ChannelReplyError` for refused or timed-out channel requests.
+- Types `Presence`, `PresenceState`, `PresenceActivity`, `PresenceList`,
+  `PresenceChangedEvent`, `PresenceLookup`, `TrackActivityOptions`;
+  `PRESENCE_MAX_LOOKUP`.
+
 - Message actions: `messages.get(id)` / `messages.one(id).get()` (a deleted
   message comes back as its tombstone), `messages.edits(id)` /
   `messages.one(id).edits()` (`MessageEditList`, `MessageEdit`), and the

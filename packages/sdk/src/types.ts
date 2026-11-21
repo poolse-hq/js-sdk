@@ -71,6 +71,42 @@ export interface ReadReceiptsState {
   visible: boolean;
 }
 
+// ── presence ─────────────────────────────────────────────────────────────
+
+/**
+ * A user's presence across all of their devices:
+ *
+ *   * `online` — a connected device is active.
+ *   * `away` — connected, but every device is idle.
+ *   * `in_call` — in a live call's or room's media.
+ *   * `offline` — no connected device for more than 30 s.
+ */
+export type PresenceState = 'online' | 'away' | 'in_call' | 'offline';
+
+/** What this device reports about itself (`presence:set`, join param `presence`). */
+export type PresenceActivity = 'active' | 'idle';
+
+/** One user's presence (`GET /v1/presence`, `presence:get`, `presence:changed`). */
+export interface Presence {
+  user_id: Uuid;
+  external_id: string | null;
+  state: PresenceState;
+  /**
+   * online / in_call: about now; away: when they went idle; offline:
+   * their last disconnect (null if never seen).
+   */
+  last_seen_at: IsoDateTime | null;
+  /** The user's own notification pause, while it lasts. Not evented — absent on `presence:changed`. */
+  dnd_until?: IsoDateTime | null;
+  /** Paused or inside their quiet hours right now. Not evented — absent on `presence:changed`. */
+  do_not_disturb?: boolean;
+}
+
+/** `GET /v1/presence`. */
+export interface PresenceList {
+  data: Presence[];
+}
+
 // ── conversations ────────────────────────────────────────────────────────
 
 export type ConversationType = 'direct' | 'group';

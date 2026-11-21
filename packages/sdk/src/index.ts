@@ -4,7 +4,14 @@ export { Poolse } from './poolse.js';
 export { POOLSE_API_URL } from './config.js';
 export type { PoolseConfig } from './config.js';
 
-export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from './errors.js';
+export {
+  ApiError,
+  AuthError,
+  ChannelReplyError,
+  PoolseError,
+  NetworkError,
+  RateLimitedError,
+} from './errors.js';
 
 // Re-export the resource classes so callers can use them in type
 // signatures (e.g. dependency injection). They aren't normally
@@ -48,6 +55,14 @@ export type {
 } from './resources/devices.js';
 export { ConversationMessages, MessageHandle, MessagesResource } from './resources/messages.js';
 export { UsersResource } from './resources/users.js';
+export {
+  PRESENCE_MAX_LOOKUP,
+  PresenceResource,
+  type PresenceLookup,
+  type PresenceMe,
+  type PresenceRealtime,
+  type TrackActivityOptions,
+} from './resources/presence.js';
 export type { AttachmentProgressEvent } from './resources/attachments.js';
 export {
   AttachmentHandle,
@@ -73,6 +88,7 @@ export type {
   MessageStreamEvent,
   MessageNewEvent,
   MessageUpdatedEvent,
+  PresenceChangedEvent,
   PresenceSnapshot,
   ThreadUpdatedEvent,
   ReactionEvent,
@@ -118,6 +134,10 @@ export type {
   MessageType,
   MessageUpdateRequest,
   PoolseUserProfile,
+  Presence,
+  PresenceActivity,
+  PresenceList,
+  PresenceState,
   QuotedMessagePreview,
   ReactionRequest,
   ReadRequest,
