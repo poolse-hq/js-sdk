@@ -168,7 +168,11 @@ struct VoipPayload {
       callerName: string("caller_name"),
       media: media,
       grant: grant,
-      ringDeadlineEpochMs: deadlineMs
+      ringDeadlineEpochMs: deadlineMs,
+      // Signed in to several workspaces: the ring is answered (and
+      // declined) on the server of its tenant.
+      serverId: ServerRegistry.shared.servers.resolve(tenantId: string("tenant_id"))?.id,
+      workspaceName: string("workspace_name")
     )
   }
 }
