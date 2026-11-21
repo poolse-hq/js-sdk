@@ -142,11 +142,42 @@ export interface ConfigureOptions {
    */
   ringtone?: string;
   /**
+   * Android: the full-screen incoming-call screen. Each field overrides the
+   * config plugin's `incomingCall` option; leave one out to keep the
+   * plugin's (or the built-in) value. Persisted for closed-app rings.
+   * Ignored on iOS, where CallKit draws the call screen.
+   */
+  incomingCall?: IncomingCallOptions;
+  /**
    * iOS: the APNs environment of this build's `aps-environment`
    * entitlement. Echoed back with the VoIP token so the server pushes to
    * the right gateway. Ignored on Android.
    */
   apnsEnvironment?: 'production' | 'sandbox';
+}
+
+/** Android's full-screen incoming call: its look, or the app's own activity instead. */
+export interface IncomingCallOptions {
+  /** `#RRGGBB` / `#AARRGGBB`: the glow, the pulsing ring and the initials disc (and the notification tint). */
+  accentColor?: string;
+  /** `#RRGGBB`: the screen's ground. A light one switches the text to dark. Default `#0B0B14`. */
+  backgroundColor?: string;
+  /**
+   * The caller's picture, as a URL template: `{externalId}` (your app's id
+   * for the caller) and `{userId}` (the poolse user id) are filled in,
+   * URL-encoded — e.g. `https://cdn.example.com/avatars/{externalId}.jpg`.
+   * Loaded off the main thread; the initials show until it loads, or if it
+   * fails. A ring push's own `caller_avatar_url` wins over the template.
+   */
+  avatarUrl?: string;
+  /**
+   * Fully qualified class name of your own Activity (declared in your
+   * manifest) to launch instead of the built-in screen. It receives the
+   * `PoolseIncomingCall.EXTRA_*` extras and answers / declines through
+   * `dev.poolse.callcore.android.PoolseIncomingCall` (see the README).
+   * A leading `.` is relative to the application id.
+   */
+  activity?: string;
 }
 
 /** The iOS PushKit (VoIP) token and the APNs environment it belongs to. */

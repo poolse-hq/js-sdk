@@ -86,6 +86,10 @@ class PoolseCallsModule : Module() {
         options?.get("smallIcon") as? String,
         options?.get("ringback") as? String,
         options?.get("ringtone") as? String,
+        (options?.get("incomingCall") as? Map<*, *>)
+          ?.entries
+          ?.associate { (k, v) -> k.toString() to (v as? String) }
+          ?: emptyMap(),
       )
       // Materialise the core now, so a call already in flight (cold
       // answer) is visible to the first getCallState.

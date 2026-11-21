@@ -410,6 +410,7 @@ class CallCore private constructor(context: Context) {
     private const val PREFS = "dev.poolse.callcore"
     /** Plugin `ringtone`: the raw resource name. */
     internal const val META_RINGTONE = "dev.poolse.calls.ringtone"
+    private val INCOMING_KEYS = listOf("accentColor", "backgroundColor", "avatarUrl", "activity")
 
     @Volatile private var instance: CallCore? = null
     @Volatile private var config: CallCoreConfig? = null
@@ -441,15 +442,18 @@ class CallCore private constructor(context: Context) {
       ringbackName: String?,
       /** Raw resource NAME of the incoming ringtone; null = the plugin's, else the system's. */
       ringtoneName: String? = null,
+      /** `configure({ incomingCall })`: accentColor, backgroundColor, avatarUrl, activity. */
+      incomingCall: Map<String, String?> = emptyMap(),
     ) {
       val ctx = context.applicationContext
-      ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+      val edit = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
         .putString("apiBaseUrl", apiBaseUrl)
         .putString("smallIcon", smallIconName)
         .putString("ringback", ringbackName)
         .putString("ringtone", ringtoneName)
-        .apply()
-      config = build(ctx, apiBaseUrl, smallIconName, ringbackName, ringtoneName)
+      for (key in INCOMING_KEYS) edit.putString("incoming.$key", incomingCall[key])
+      edit.apply()
+      config = build(ctx, apiBaseUrl, smallIconName, ringbackName, ringtoneName, incomingCall)
     }
 
     /** The core; throws if never configured (not even persisted). Prefer [getOrNull]. */
@@ -497,7 +501,15 @@ class CallCore private constructor(context: Context) {
         p.getString("smallIcon", null),
         p.getString("ringback", null),
         p.getString("ringtone", null),
+        INCOMING_KEYS.associateWith { p.getString("incoming.$it", null) },
       )
+    }
+
+    /** The ring screen's look (restored from disk on a cold start); the built-in one if never configured. */
+    fun incomingCallLook(context: Context): IncomingCallLook {
+      if (config == null) restoreConfig(context.applicationContext)
+      return config?.incomingCall
+        ?: IncomingCallLook.resolve(context.applicationContext, null, null, null, null)
     }
 
     /** Application meta-data the config plugin writes (`dev.poolse.calls.*`), or null. */
@@ -513,6 +525,7 @@ class CallCore private constructor(context: Context) {
       smallIconName: String?,
       ringbackName: String?,
       ringtoneName: String?,
+      incomingCall: Map<String, String?>,
     ): CallCoreConfig {
       val iconId = smallIconName
         ?.let { context.resources.getIdentifier(it, "drawable", context.packageName) } ?: 0
@@ -528,6 +541,13 @@ class CallCore private constructor(context: Context) {
         smallIcon = if (iconId != 0) iconId else context.applicationInfo.icon,
         ringbackRawRes = ringbackId,
         ringtoneRawRes = ringtoneId,
+        incomingCall = IncomingCallLook.resolve(
+          context,
+          accentColor = incomingCall["accentColor"],
+          backgroundColor = incomingCall["backgroundColor"],
+          avatarUrl = incomingCall["avatarUrl"],
+          activity = incomingCall["activity"],
+        ),
         mediaFactory = resolveMediaFactory(),
       )
     }
@@ -573,6 +593,8 @@ data class CallCoreConfig(
   val ringbackRawRes: Int,
   /** The incoming ringtone, `res/raw`; 0 = the system ringtone. */
   val ringtoneRawRes: Int = 0,
+  /** The full-screen ring's colours, avatar source, or the app's own activity. */
+  val incomingCall: IncomingCallLook = IncomingCallLook(),
   /**
    * Builds the media engine for a call. Injected so the core carries no
    * SFU dependency; pass `::LiveKitMediaPortFactory` (the shipped
@@ -580,7 +602,7 @@ data class CallCoreConfig(
    */
   val mediaFactory: (Context, MediaEvents) -> MediaPort,
 ) {
-  internal val ringSurface get() = RingSurfaceConfig(smallIcon, ringbackRawRes, ringtoneRawRes)
+  internal val ringSurface get() = RingSurfaceConfig(smallIcon, ringbackRawRes, ringtoneRawRes, incomingCall)
 }
 
 /** Media-level signals the SFU adapter reports back to the core. */

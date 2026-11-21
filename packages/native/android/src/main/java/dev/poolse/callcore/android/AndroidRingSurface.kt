@@ -106,7 +106,20 @@ internal class AndroidRingSurface(
       )
     }
 
-    val fullScreen = incomingActivity(autoAnswer = false, requestOffset = 0)
+    // The app's own ring activity, when it names one (incomingCall.activity),
+    // gets the full-screen intent and the heads-up tap; it answers and
+    // declines through [PoolseIncomingCall]. The notification's Answer
+    // button keeps the built-in trampoline either way.
+    val look = config.incomingCall
+    val fullScreen = look.customActivityIntent(context)?.let { custom ->
+      PendingIntent.getActivity(
+        context,
+        ring.callId.hashCode() + 6,
+        PoolseIncomingCall.fill(custom, ring)
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+    } ?: incomingActivity(autoAnswer = false, requestOffset = 0)
 
     // Answer launches an ACTIVITY, not a broadcast: a background receiver
     // cannot start an activity (Android 10+), so answering from the
@@ -129,6 +142,7 @@ internal class AndroidRingSurface(
       .setOngoing(true)
       .setAutoCancel(false)
       .setFullScreenIntent(fullScreen, true)
+      .apply { if (look.accentFromApp) setColor(look.accentColor) }
       // Tapping the heads-up (not a button) opens the ring screen too;
       // without this the tap did nothing.
       .setContentIntent(fullScreen)
@@ -393,4 +407,5 @@ data class RingSurfaceConfig(
   val ringbackRawRes: Int,
   /** The app's incoming ringtone in `res/raw`, or 0 for the system ringtone. */
   val ringtoneRawRes: Int = 0,
+  val incomingCall: IncomingCallLook = IncomingCallLook(),
 )

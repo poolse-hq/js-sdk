@@ -14,6 +14,9 @@
  *   ringtone          the incoming-call ring: a file path, or
  *                     { ios, android } (iOS caf/aiff/wav ≤ 30 s; Android
  *                     ogg/mp3/wav). Default: the system ringtone.
+ *   incomingCall      Android: the full-screen ring's { accentColor,
+ *                     backgroundColor, avatarUrl } or { activity } — your
+ *                     own Activity to launch instead (see the README).
  *   pictureInPicture  Android: let the activity float during a video call
  *                     (default true).
  *   lockscreen        Android: show the app over the lock screen when it
@@ -33,6 +36,7 @@
 const { createRunOncePlugin } = require('expo/config-plugins');
 
 const withCallDelegate = require('./withCallDelegate');
+const withIncomingCall = require('./withIncomingCall');
 const withLockscreenCalls = require('./withLockscreenCalls');
 const withMessageReplyUnlock = require('./withMessageReplyUnlock');
 const withNativeCallMedia = require('./withNativeCallMedia');
@@ -47,6 +51,7 @@ function withPoolseCalls(config, options = {}) {
   const {
     ringback,
     ringtone,
+    incomingCall,
     pictureInPicture = true,
     lockscreen = true,
     screenShare = false,
@@ -57,7 +62,10 @@ function withPoolseCalls(config, options = {}) {
   if (lockscreen) config = withLockscreenCalls(config);
   if (pictureInPicture) config = withPictureInPicture(config);
   if (ringback) config = withRingback(config, ringback);
-  if (ringtone) config = withRingtone(config, ringtone, ringback);
+  // Always applied: without the option they remove what an earlier
+  // prebuild wrote, so dropping it really goes back to the defaults.
+  config = withRingtone(config, ringtone, ringback);
+  config = withIncomingCall(config, incomingCall ?? {});
   config = withMessageReplyUnlock(config, messageReplyRequiresUnlock);
   if (screenShare) config = withScreenShare(config, screenShare === true ? {} : screenShare);
   return config;

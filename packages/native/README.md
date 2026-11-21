@@ -37,14 +37,15 @@ In `app.json`, after `expo-notifications`:
 ]
 ```
 
-| Option                       | Default | What it does                                                                                                                                                                                                                                                                                   |
-| ---------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ringback`                   | none    | Ships this sound in both apps; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only.                                                                                                                                                                |
-| `ringtone`                   | system  | The incoming-call ring: a file path, or `{ "ios": "…", "android": "…" }`. iOS: caf, aiff or wav, 30 s or shorter (CallKit rings with the system tone otherwise). Android: ogg, mp3 or wav. Lowercase letters, digits and underscores in the name, not the same name as `ringback`. See [Ringtone](#ringtone).                       |
-| `pictureInPicture`           | `true`  | Android: the activity may float as a picture-in-picture window.                                                                                                                                                                                                                                |
-| `lockscreen`                 | `true`  | Android: the app shows over the lock screen when opened for a call.                                                                                                                                                                                                                            |
-| `messageReplyRequiresUnlock` | `false` | Both: a chat notification's Reply asks for the passcode / Face ID / fingerprint before it sends. Off, Reply works straight from the lock screen (as in WhatsApp). Mark as read never asks.                                                                                                     |
-| `screenShare`                | `false` | iOS: adds the broadcast upload extension that sharing the screen needs, and the app group `group.<bundle id>` it shares with the app (`{ "appGroup": "…" }` for your own). Register that group in the Apple Developer portal and assign it to the app's and `<bundle id>.broadcast`'s App IDs. |
+| Option                       | Default | What it does                                                                                                                                                                                                                                                                                                  |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ringback`                   | none    | Ships this sound in both apps; pass its base name to `configure({ ringback })`. Lowercase letters, digits and underscores only.                                                                                                                                                                               |
+| `ringtone`                   | system  | The incoming-call ring: a file path, or `{ "ios": "…", "android": "…" }`. iOS: caf, aiff or wav, 30 s or shorter (CallKit rings with the system tone otherwise). Android: ogg, mp3 or wav. Lowercase letters, digits and underscores in the name, not the same name as `ringback`. See [Ringtone](#ringtone). |
+| `incomingCall`               | none    | Android: the full-screen incoming call's `accentColor`, `backgroundColor` and `avatarUrl` template, or `activity` — your own Activity to launch instead. See [Incoming call screen (Android)](#incoming-call-screen-android).                                                                                 |
+| `pictureInPicture`           | `true`  | Android: the activity may float as a picture-in-picture window.                                                                                                                                                                                                                                               |
+| `lockscreen`                 | `true`  | Android: the app shows over the lock screen when opened for a call.                                                                                                                                                                                                                                           |
+| `messageReplyRequiresUnlock` | `false` | Both: a chat notification's Reply asks for the passcode / Face ID / fingerprint before it sends. Off, Reply works straight from the lock screen (as in WhatsApp). Mark as read never asks.                                                                                                                    |
+| `screenShare`                | `false` | iOS: adds the broadcast upload extension that sharing the screen needs, and the app group `group.<bundle id>` it shares with the app (`{ "appGroup": "…" }` for your own). Register that group in the Apple Developer portal and assign it to the app's and `<bundle id>.broadcast`'s App IDs.                |
 
 Always applied on Android: the LiveKit media adapter, and `expo-notifications`
 as the receiver for pushes that aren't calls. On iOS, add `UIBackgroundModes`
@@ -146,6 +147,83 @@ channel sound would ring twice and could not be stopped. Changing the
 ringtone therefore never needs a new channel id, and an existing install picks
 up a new sound on its next ring. Silent and vibrate modes silence it like the
 system ringtone.
+
+## Incoming call screen (Android)
+
+When a call rings on a locked or idle Android phone, the module shows its own
+full-screen call screen. Give it your app's look:
+
+```json
+[
+  "@poolse/native",
+  {
+    "incomingCall": {
+      "accentColor": "#FF5A1F",
+      "backgroundColor": "#101014",
+      "avatarUrl": "https://cdn.example.com/avatars/{externalId}.jpg"
+    }
+  }
+]
+```
+
+| Field             | Default   | What it does                                                                                                                                                                          |
+| ----------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accentColor`     | `#5B54E8` | `#RRGGBB` or `#AARRGGBB`: the glow, the pulsing ring and the initials disc. Also tints the ring notification.                                                                         |
+| `backgroundColor` | `#0B0B14` | The screen's ground. A light colour switches the text to dark.                                                                                                                        |
+| `avatarUrl`       | none      | The caller's picture: `{externalId}` (your id for the caller) and `{userId}` (the poolse user id) are filled in, URL-encoded. A ring push's own `caller_avatar_url` takes precedence. |
+| `activity`        | none      | Your own Activity to launch instead (below).                                                                                                                                          |
+
+The picture is downloaded off the main thread (6 s timeout, 4 MB cap) and
+covers the caller's initials once it has loaded; if there is no URL, or the
+download fails, the initials stay. The URL must be reachable without
+authentication. `configure({ incomingCall: { … } })` overrides any field at
+runtime (for example a theme the user picked) and is persisted, so a ring that
+wakes a closed app uses it too; a field left out keeps the plugin's value. iOS
+ignores all of this: CallKit draws the call screen.
+
+### Your own incoming-call Activity
+
+Set `activity` to a fully qualified class name (or `.RingActivity`, relative
+to the application id). Declare the Activity in your manifest (for example
+with your own config plugin) with `android:showWhenLocked="true"`,
+`android:turnScreenOn="true"`, `android:exported="false"` and
+`android:launchMode="singleInstance"`. If the class isn't in the manifest the
+built-in screen is used and a warning is logged.
+
+The ring notification's full-screen intent and heads-up tap start it with
+`FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP` and these extras (constants
+on `dev.poolse.callcore.android.PoolseIncomingCall`):
+
+| Extra                     | Key                        | Type                   |
+| ------------------------- | -------------------------- | ---------------------- |
+| `EXTRA_CALL_ID`           | `poolse_call_id`           | String                 |
+| `EXTRA_CONVERSATION_ID`   | `poolse_conversation_id`   | String                 |
+| `EXTRA_CONVERSATION_NAME` | `poolse_conversation_name` | String, may be null    |
+| `EXTRA_CALLER_NAME`       | `poolse_caller_name`       | String, may be null    |
+| `EXTRA_CALLER_AVATAR_URL` | `poolse_caller_avatar_url` | String, may be null    |
+| `EXTRA_MEDIA`             | `poolse_media`             | `"audio"` or `"video"` |
+| `EXTRA_RING_DEADLINE`     | `poolse_ring_deadline`     | Long, epoch ms         |
+
+plus an opaque `poolse_ring` bundle that the functions below read; pass them
+the Intent you were started with (and the new one in `onNewIntent`):
+
+- `PoolseIncomingCall.isLive(context, intent): Boolean`: whether the ring can
+  still be answered. Finish at once when it can't (a stale tap).
+- `PoolseIncomingCall.answer(activity, intent): Boolean`: answers and brings
+  the app forward from your Activity (only a foreground Activity may). On
+  `true`, finish in `onStop`, once the app covers you; finishing immediately
+  dropped the launch on some devices. On `false`, finish.
+- `PoolseIncomingCall.decline(context, intent)`: declines; then finish.
+- `PoolseIncomingCall.ACTION_RING_CLOSED`: a package-local broadcast with
+  `EXTRA_CALL_ID` when the ring ends anywhere else (caller hung up, answered
+  on another device, timed out). Register for it with
+  `ContextCompat.RECEIVER_NOT_EXPORTED` and finish, except after you
+  answered: it is sent then too.
+
+The ring tone, the notification and its Answer / Decline buttons stay the
+module's. Answer on the notification still goes through the built-in
+trampoline, which answers and opens the app without showing your Activity.
+See the KDoc on `PoolseIncomingCall` for a complete example.
 
 ## Reply and Mark as read from a notification
 

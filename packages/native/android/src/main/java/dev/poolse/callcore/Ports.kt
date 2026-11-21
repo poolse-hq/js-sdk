@@ -110,6 +110,8 @@ data class RingContext(
   val media: String,
   val grant: String,
   val ringDeadlineEpochMs: Long,
+  /** The caller's picture for the ring screen, if the push or the app's template gives one. */
+  val callerAvatarUrl: String? = null,
 )
 
 /** Android: the phoneCall foreground service. iOS: the CallKit session. */

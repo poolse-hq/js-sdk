@@ -12,6 +12,16 @@ Formerly `@poolse/react-native-calls` (0.x).
   `res/raw/<name>` looping on the ringtone stream; the incoming-call channel
   stays silent, so the sound can change without a new channel. Default is
   still the system ringtone.
+- Android: the full-screen incoming call takes the app's look. Plugin option
+  `incomingCall` / `configure({ incomingCall })` with `accentColor`,
+  `backgroundColor` (a light one switches the text to dark) and `avatarUrl`, a
+  template with `{externalId}` / `{userId}` (a push's `caller_avatar_url` wins).
+  The picture loads off the main thread over the initials, which are now up to
+  two letters. The ring notification is tinted with an app-set accent.
+- Android: `incomingCall.activity` launches the app's own Activity instead of
+  the built-in screen, with `PoolseIncomingCall.EXTRA_*` extras; it answers
+  and declines through `dev.poolse.callcore.android.PoolseIncomingCall`
+  (`isLive`, `answer`, `decline`, `ACTION_RING_CLOSED`).
 
 ## 3.6.2 — 2026-11-21
 

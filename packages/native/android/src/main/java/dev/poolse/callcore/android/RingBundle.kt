@@ -16,6 +16,7 @@ internal fun RingContext.toBundle(): Bundle = Bundle().apply {
   putString(K_MEDIA, media)
   putString(K_GRANT, grant)
   putLong(K_DEADLINE, ringDeadlineEpochMs)
+  putString(K_AVATAR, callerAvatarUrl)
 }
 
 internal fun Bundle.toRingContext(): RingContext? {
@@ -30,6 +31,7 @@ internal fun Bundle.toRingContext(): RingContext? {
     media = getString(K_MEDIA) ?: "audio",
     grant = grant,
     ringDeadlineEpochMs = getLong(K_DEADLINE),
+    callerAvatarUrl = getString(K_AVATAR),
   )
 }
 
@@ -40,3 +42,4 @@ private const val K_CALLER_NAME = "callerName"
 private const val K_MEDIA = "media"
 private const val K_GRANT = "grant"
 private const val K_DEADLINE = "ringDeadline"
+private const val K_AVATAR = "callerAvatarUrl"

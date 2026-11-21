@@ -92,6 +92,13 @@ class CallMessagingService : FirebaseMessagingService() {
       media = this["media"] ?: "audio",
       grant = grant,
       ringDeadlineEpochMs = this["ring_deadline"]?.toLongOrNull() ?: 0L,
+      // The push's own picture if the server ever sends one, else the
+      // app's template filled with the caller's ids.
+      callerAvatarUrl = this["caller_avatar_url"]?.ifEmpty { null }
+        ?: CallCore.incomingCallLook(this@CallMessagingService).avatarUrlFor(
+          externalId = this["caller_external_id"],
+          userId = this["caller_user_id"],
+        ),
     )
   }
 

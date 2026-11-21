@@ -6,6 +6,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -15,13 +17,19 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.View
+import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import dev.poolse.callcore.RingContext
+import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 import dev.poolse.callcore.android.AndroidRingSurface.Companion.ACTION_RING_CLOSED
 import dev.poolse.callcore.android.AndroidRingSurface.Companion.EXTRA_CALL_ID
 import dev.poolse.callcore.android.AndroidRingSurface.Companion.EXTRA_RING
@@ -129,7 +137,7 @@ class IncomingCallActivity : Activity() {
     awaitingForward = true
     pulse?.cancel()
     pulse = null
-    setContentView(View(this).apply { setBackgroundColor(Color.parseColor("#0B0B14")) })
+    setContentView(View(this).apply { setBackgroundColor(look.backgroundColor) })
     val launched = answer()
     if (!launched) { finish(); return }
     main.postDelayed({ if (!isFinishing) finish() }, FORWARD_FALLBACK_MS)
@@ -145,12 +153,91 @@ class IncomingCallActivity : Activity() {
     runCatching { unregisterReceiver(ringClosed) }
     pulse?.cancel()
     pulse = null
+    loader.shutdownNow()
     super.onDestroy()
   }
 
   private companion object {
     const val FORWARD_FALLBACK_MS = 4_000L
+    const val AVATAR_DP = 124
+    const val AVATAR_TIMEOUT_MS = 6_000
+    const val AVATAR_MAX_BYTES = 4 * 1024 * 1024
   }
+
+  /** The ring screen's colours and avatar source, restored from disk on a cold start. */
+  private val look: IncomingCallLook get() = CallCore.incomingCallLook(this)
+
+  /** Off the main thread: a slow image host must never hold up the ring. */
+  private val loader = Executors.newSingleThreadExecutor()
+
+  private fun loadAvatar(url: String, callId: String, into: ImageView) {
+    val size = px(AVATAR_DP)
+    runCatching {
+      loader.execute {
+        val bitmap = runCatching { fetchBitmap(url, size) }.getOrNull() ?: return@execute
+        main.post {
+          if (isFinishing || isDestroyed || ring?.callId != callId) return@post
+          into.setImageBitmap(bitmap)
+          into.visibility = View.VISIBLE
+        }
+      }
+    }
+  }
+
+  private fun fetchBitmap(url: String, size: Int): Bitmap? {
+    val conn = URL(url).openConnection() as? HttpURLConnection ?: return null
+    try {
+      conn.connectTimeout = AVATAR_TIMEOUT_MS
+      conn.readTimeout = AVATAR_TIMEOUT_MS
+      conn.instanceFollowRedirects = true
+      if (conn.responseCode !in 200..299) return null
+      val bytes = conn.inputStream.use { input ->
+        val out = ByteArrayOutputStream()
+        val buf = ByteArray(16 * 1024)
+        while (true) {
+          val n = input.read(buf)
+          if (n < 0) break
+          out.write(buf, 0, n)
+          if (out.size() > AVATAR_MAX_BYTES) return null
+        }
+        out.toByteArray()
+      }
+      // Decode at roughly the size it is drawn, not the upload's.
+      val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+      if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+      var sample = 1
+      while (bounds.outWidth / (sample * 2) >= size && bounds.outHeight / (sample * 2) >= size) sample *= 2
+      return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+    } finally {
+      conn.disconnect()
+    }
+  }
+
+  /** "Ada Lovelace" → "AL", "ada" → "A". */
+  private fun initials(title: String): String {
+    val words = title.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    return words.take(2).mapNotNull { w -> w.firstOrNull { it.isLetterOrDigit() } }
+      .joinToString("").uppercase().ifEmpty { title.trim().take(1).uppercase() }
+  }
+
+  /** A light background (the app's) gets dark text; the default dark one keeps white. */
+  private fun isLight(color: Int): Boolean =
+    (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255 > 0.6
+
+  private fun onGround(ground: Int): Int = if (isLight(ground)) Color.parseColor("#14141C") else Color.WHITE
+
+  private fun onGroundMuted(ground: Int): Int =
+    if (isLight(ground)) Color.parseColor("#5A5A66") else Color.parseColor("#B8B8C6")
+
+  private fun withAlpha(color: Int, alpha: Int): Int =
+    Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+
+  private fun lighten(color: Int, by: Float): Int = Color.rgb(
+    (Color.red(color) + (255 - Color.red(color)) * by).toInt(),
+    (Color.green(color) + (255 - Color.green(color)) * by).toInt(),
+    (Color.blue(color) + (255 - Color.blue(color)) * by).toInt(),
+  )
 
   private fun showOverKeyguard() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -167,13 +254,15 @@ class IncomingCallActivity : Activity() {
   }
 
   private fun buildScene(title: String, body: String, ring: RingContext): View {
-    val root = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#0B0B14")) }
+    val accent = look.accentColor
+    val ground = look.backgroundColor
+    val root = FrameLayout(this).apply { setBackgroundColor(ground) }
 
     root.addView(
       View(this).apply {
         background = GradientDrawable(
           GradientDrawable.Orientation.TOP_BOTTOM,
-          intArrayOf(Color.parseColor("#875B54E8"), Color.parseColor("#000B0B14")),
+          intArrayOf(withAlpha(accent, 0x87), withAlpha(ground, 0)),
         ).apply {
           gradientType = GradientDrawable.RADIAL_GRADIENT
           gradientRadius = 560 * density
@@ -196,40 +285,51 @@ class IncomingCallActivity : Activity() {
       background = GradientDrawable().apply {
         shape = GradientDrawable.OVAL
         setColor(Color.TRANSPARENT)
-        setStroke(px(2), Color.parseColor("#805B54E8"))
+        setStroke(px(2), withAlpha(accent, 0x80))
       }
     }
     stage.addView(ringView, FrameLayout.LayoutParams(px(176), px(176), Gravity.CENTER))
     stage.addView(
       TextView(this).apply {
-        text = title.trim().take(1).uppercase()
-        textSize = 48f
+        text = initials(title)
+        textSize = 44f
         setTextColor(Color.WHITE)
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         gravity = Gravity.CENTER
         background = GradientDrawable(
           GradientDrawable.Orientation.TL_BR,
-          intArrayOf(Color.parseColor("#7D76FF"), Color.parseColor("#5B54E8")),
+          intArrayOf(lighten(accent, 0.22f), accent),
         ).apply { shape = GradientDrawable.OVAL }
       },
-      FrameLayout.LayoutParams(px(124), px(124), Gravity.CENTER),
+      FrameLayout.LayoutParams(px(AVATAR_DP), px(AVATAR_DP), Gravity.CENTER),
     )
+    // The caller's picture covers the initials once it has loaded; until
+    // then (or if it never does) the initials are the avatar.
+    val photo = ImageView(this).apply {
+      scaleType = ImageView.ScaleType.CENTER_CROP
+      visibility = View.GONE
+      background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(accent) }
+      outlineProvider = ViewOutlineProvider.BACKGROUND
+      clipToOutline = true
+    }
+    stage.addView(photo, FrameLayout.LayoutParams(px(AVATAR_DP), px(AVATAR_DP), Gravity.CENTER))
+    ring.callerAvatarUrl?.let { loadAvatar(it, ring.callId, photo) }
 
     val name = TextView(this).apply {
       text = title
       textSize = 32f
-      setTextColor(Color.WHITE)
+      setTextColor(onGround(ground))
       typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
       gravity = Gravity.CENTER
     }
     val sub = TextView(this).apply {
       text = body
       textSize = 15f
-      setTextColor(Color.parseColor("#B8B8C6"))
+      setTextColor(onGroundMuted(ground))
       gravity = Gravity.CENTER
       background = GradientDrawable().apply {
         cornerRadius = 999f
-        setColor(Color.parseColor("#14FFFFFF"))
+        setColor(withAlpha(onGround(ground), 0x14))
       }
       setPadding(px(16), px(8), px(16), px(8))
       layoutParams = LinearLayout.LayoutParams(wrap(), wrap()).apply { topMargin = px(12) }
@@ -303,7 +403,7 @@ class IncomingCallActivity : Activity() {
       TextView(this@IncomingCallActivity).apply {
         text = label
         textSize = 14f
-        setTextColor(Color.parseColor("#B8B8C6"))
+        setTextColor(onGroundMuted(look.backgroundColor))
         gravity = Gravity.CENTER
         layoutParams = LinearLayout.LayoutParams(wrap(), wrap()).apply { topMargin = px(10) }
       },
