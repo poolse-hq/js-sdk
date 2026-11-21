@@ -35,6 +35,7 @@ export {
 // Re-export the SDK so consumers can pull in types / errors from one
 // package — saves a second `npm install @poolse/sdk` for React-only apps.
 export type {
+  ApiErrorCode,
   AppEvent,
   Attachment,
   AttachmentStatus,
@@ -51,15 +52,23 @@ export type {
   NotifyLevel,
   OwnMembership,
   OwnMembershipUpdateRequest,
+  LinkPreview,
+  LinkPreviewType,
   Message,
   MessageCreateRequest,
+  MessageEdit,
+  MessageEditList,
   MessageType,
+  MessageUpdateRequest,
   PoolseConfig,
   PoolseUserProfile,
   RealtimeStatus,
+  ThreadParticipant,
+  ThreadUpdatedEvent,
   Uuid,
 } from '@poolse/sdk';
 export { ApiError, AuthError, PoolseError, NetworkError, RateLimitedError } from '@poolse/sdk';
+export { isTombstone, mergeMessage, toTombstone } from '@poolse/sdk';
 
 // Call-log system messages — shared parser + display helpers.
 export {

@@ -4,6 +4,29 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Re-exported `LinkPreview`, `LinkPreviewType`, `ThreadParticipant`,
+  `ThreadUpdatedEvent`, `MessageEdit`, `MessageEditList`,
+  `MessageUpdateRequest`, `ApiErrorCode`, and the helpers `isTombstone`,
+  `mergeMessage`, `toTombstone`.
+
+### Changed
+
+- `useMessages` handles `thread:updated`: the root's `reply_count`,
+  `last_reply_at` and `thread_participants` follow the server.
+- `message:updated` (an edit, or link previews arriving) is merged into the
+  row instead of replacing it, in `useMessages` and `useThread`, so fields a
+  payload leaves out survive; `edit()` merges the server's row the same way.
+- A deleted message — from `message:deleted` or an optimistic `delete()` —
+  becomes the server's tombstone (no body, mentions, reactions, attachments,
+  link previews or quote; thread fields kept), and messages quoting it get
+  `quoted_message.deleted_at` / `body: null`. A deleted reply lowers its
+  root's `reply_count` using the event's `thread_root_id` (it never did for
+  replies before, as replies aren't in the main list).
+
 ## [3.3.0] - 2026-11-20
 
 ### Added
