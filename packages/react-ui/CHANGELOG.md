@@ -8,6 +8,12 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ### Added
 
+- Agents in calls: `CallAgentTag` (the Agent badge with "Taking notes" /
+  "Listening" / "Speaking"), `InviteAgentMenu`, `WhisperPanel` ("Only you
+  see this"), `EscalationCard`, `EscalationList`. `CallVideoGrid` and
+  `StagePanel` name agents by their label with the badge (an `agents` prop
+  fills in what metadata lacks); agent tiles show no mute icon.
+
 - Live meetings: `StagePanel`, `QuestionsPanel`, `BreakoutBanner`,
   `BreakoutHostPanel`, `LobbyWaiting`, `LobbyAdmitList`, `CaptionsOverlay`,
   `MarkMomentButton`, `ConnectionIndicator`, `NetworkBanner`,

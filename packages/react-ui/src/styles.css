@@ -7397,3 +7397,150 @@ audio.poolse-player__media {
     animation: none;
   }
 }
+
+/* ── Agents in calls (AG13, AG15, AG16) ─────────────────────────────── */
+
+/* The Agent badge and what it's doing, beside its name: never truncated. */
+.poolse-call-agent {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.poolse-call-agent__state {
+  font: 600 11px / 1.4 var(--poolse-font-body);
+  color: var(--poolse-ink-3);
+}
+
+.callgrid__caption .poolse-call-agent__state {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.poolse-call-agent__state--speaking {
+  color: var(--poolse-success);
+}
+
+.callgrid__tile--agent .callgrid__avatar {
+  outline: 2px solid color-mix(in srgb, var(--poolse-info) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.poolse-invite-agent__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.poolse-invite-agent__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  min-width: 0;
+}
+
+.poolse-invite-agent__who {
+  flex: 1 1 160px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.poolse-invite-agent__name {
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-invite-agent__role {
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+}
+
+.poolse-invite-agent__actions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+.poolse-whisper__private {
+  margin: 0;
+  align-self: flex-start;
+  padding: 2px 10px;
+  font: 700 12px / 1.5 var(--poolse-font-body);
+  color: var(--poolse-brand-strong);
+  background: var(--poolse-brand-soft);
+  border-radius: var(--poolse-radius-pill);
+}
+
+.poolse-whisper__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.poolse-whisper__hint {
+  padding: 8px 10px;
+  background: var(--poolse-surface-2);
+  border-radius: var(--poolse-radius-md, 8px);
+  overflow-wrap: anywhere;
+}
+
+.poolse-whisper__kind {
+  font: 700 11px / 1.4 var(--poolse-font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-whisper__hint--promise .poolse-whisper__kind {
+  color: var(--poolse-warning);
+}
+
+.poolse-whisper__hint--question .poolse-whisper__kind {
+  color: var(--poolse-info);
+}
+
+.poolse-whisper__text {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.poolse-whisper__sources {
+  margin: 4px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 12px;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-whisper__source {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-escalation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

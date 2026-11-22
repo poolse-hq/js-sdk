@@ -284,6 +284,21 @@ and `<CallPictureInPicture pip={pip}>…tiles and controls…</CallPictureInPict
 Optional peers: `yjs` (whiteboard), `@livekit/track-processors`
 (background blur and pictures).
 
+## Agents in calls
+
+```tsx
+const agents = useCallAgents(convId, callId);
+<CallVideoGrid participants={media.participants} agents={agents.agents} /> {/* badge + "Taking notes" */}
+<StagePanel stage={stage} participants={media.participants} agents={agents.agents} />
+<InviteAgentMenu callAgents={agents} /> {/* Take notes / Assist / Remove */}
+<WhisperPanel whisper={useWhisper(callId)} /> {/* "Only you see this" */}
+<EscalationList callId={callId} /> {/* or <EscalationCard escalation={e} /> */}
+<CallAgentTag agent={agent} speaking={participant.speaking} />
+```
+
+An agent is never shown as a person: its label ("Scout", "Jasir's agent"),
+the Agent badge and what it's doing, and no mute icon.
+
 ## Theming
 
 Wrap the UI in `PoolseTheme` to use one of the eight built-in themes from

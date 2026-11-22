@@ -1,5 +1,8 @@
-import type { CallParticipant } from '@poolse/sdk';
+import type { CallAgent, CallParticipant } from '@poolse/sdk';
+import { callAgentOfParticipant } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { CallAgentTag } from './CallAgents.js';
 
 import { PoolseIcon } from './PoolseIcon.js';
 import { useFullscreen } from './useFullscreen.js';
@@ -43,6 +46,11 @@ export interface CallVideoGridProps {
   className?: string;
   /** Clicking your own preview. Left unset, the tile is not interactive. */
   onLocalClick?: (() => void) | undefined;
+  /**
+   * The call's agents (`useCallAgents().agents`): their tiles get the
+   * Agent badge and label even before the token metadata is read.
+   */
+  agents?: readonly CallAgent[] | undefined;
 }
 
 export function CallVideoGrid({
@@ -50,8 +58,10 @@ export function CallVideoGrid({
   labelFor,
   className,
   onLocalClick,
+  agents,
 }: CallVideoGridProps) {
-  const label = labelFor ?? ((id: string) => `User ${id.slice(0, 6)}`);
+  // Never the id: a name the host resolves, else a neutral word.
+  const label = labelFor ?? (() => 'Someone');
 
   const self = participants.find((p) => p.isSelf) ?? null;
   const others = useMemo(() => participants.filter((p) => !p.isSelf), [participants]);
@@ -71,7 +81,12 @@ export function CallVideoGrid({
         <ScreenTile participant={presenter} label={label} />
         <div className="callpresent__strip">
           {faces.map((participant) => (
-            <CallVideoTile key={participant.userId} participant={participant} label={label} />
+            <CallVideoTile
+              key={participant.userId}
+              participant={participant}
+              label={label}
+              agents={agents}
+            />
           ))}
         </div>
       </div>
@@ -85,7 +100,7 @@ export function CallVideoGrid({
 
     return (
       <div className={className ?? 'callstage callstage--solo'}>
-        <CallVideoTile participant={spotlight} label={label} bleed fit="contain" />
+        <CallVideoTile participant={spotlight} label={label} agents={agents} bleed fit="contain" />
         {self && others.length === 1 && (
           <FloatingSelf onClick={onLocalClick}>
             {/* `bleed` for the borders, `cover` for the fit: the
@@ -111,7 +126,12 @@ export function CallVideoGrid({
       data-count={tiles.length > 6 ? 'many' : String(tiles.length)}
     >
       {tiles.map((participant) => (
-        <CallVideoTile key={participant.userId} participant={participant} label={label} />
+        <CallVideoTile
+          key={participant.userId}
+          participant={participant}
+          label={label}
+          agents={agents}
+        />
       ))}
     </div>
   );
@@ -120,12 +140,14 @@ export function CallVideoGrid({
 function CallVideoTile({
   participant,
   label,
+  agents,
   bleed = false,
   hideName = false,
   fit = 'cover',
 }: {
   participant: CallParticipant;
   label: (userId: string) => string;
+  agents?: readonly CallAgent[] | undefined;
   /** Fill the parent, with no border and no rounding of its own. */
   bleed?: boolean;
   hideName?: boolean;
@@ -142,7 +164,14 @@ function CallVideoTile({
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   const track = participant.videoTrack as AttachableTrack | null;
-  const name = participant.isSelf ? 'You' : (participant.name ?? label(participant.userId));
+  // An agent (AG13) is named as one — "Scout", "Jasir's agent" — and
+  // marked with the Agent badge and what it's doing.
+  const agent = participant.isSelf ? null : callAgentOfParticipant(participant, agents);
+  const name = participant.isSelf
+    ? 'You'
+    : agent
+      ? agent.label
+      : (participant.name ?? label(participant.userId));
 
   useEffect(() => {
     const element = ref.current;
@@ -160,6 +189,7 @@ function CallVideoTile({
     'callgrid__tile',
     bleed ? 'callgrid__tile--bleed' : '',
     participant.speaking ? 'callgrid__tile--speaking' : '',
+    agent ? 'callgrid__tile--agent' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -210,10 +240,11 @@ function CallVideoTile({
 
       {!hideName && (
         <div className="callgrid__caption">
-          {!participant.micEnabled && (
+          {!participant.micEnabled && !agent && (
             <PoolseIcon name="mic-off" size={13} label="muted" className="callgrid__mutedicon" />
           )}
           <span className="callgrid__name">{name}</span>
+          {agent ? <CallAgentTag agent={agent} speaking={participant.speaking} /> : null}
         </div>
       )}
     </div>

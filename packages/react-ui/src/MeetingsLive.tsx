@@ -16,6 +16,7 @@
 // "Someone".
 
 import type {
+  CallAgent,
   UseAgenda,
   UseBreakouts,
   UseCaptions,
@@ -43,6 +44,7 @@ import type {
 import {
   DEFAULT_CALL_REACTIONS,
   QUESTION_MAX,
+  callAgentOfParticipant,
   connectionQualityLabel,
   identityKindOf,
   meetingNameOf,
@@ -51,6 +53,7 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { Avatar } from './Avatar.js';
+import { CallAgentTag } from './CallAgents.js';
 import { CallControlButton } from './CallControls.js';
 import { ConversationView } from './ConversationView.js';
 import { PoolseIcon } from './PoolseIcon.js';
@@ -81,6 +84,8 @@ export interface StagePanelProps {
   /** Who is in the call now (`useCallRoom().participants`) — everyone listed is here. */
   participants: readonly CallParticipant[];
   nameFor?: NameFor;
+  /** The call's agents (`useCallAgents().agents`), listed with the Agent badge. */
+  agents?: readonly CallAgent[];
   className?: string;
 }
 
@@ -89,7 +94,7 @@ export interface StagePanelProps {
  * button; moderators bring people up, send them back and lower hands.
  * In a `meeting`-mode call (no audience) it shows only raised hands.
  */
-export function StagePanel({ stage, participants, nameFor, className }: StagePanelProps) {
+export function StagePanel({ stage, participants, nameFor, agents, className }: StagePanelProps) {
   const name = useNames(nameFor, participants);
   const s = stage.stage;
   const groups = useMemo(() => {
@@ -101,21 +106,29 @@ export function StagePanel({ stage, participants, nameFor, className }: StagePan
   const isStage = s?.mode === 'stage';
   const mod = stage.isModerator;
 
-  const person = (p: CallParticipant, actions: ReactNode) => (
-    <li key={p.userId} className="poolse-stage__person">
-      <Avatar name={name(p.userId)} size="sm" />
-      <span className="poolse-stage__name" title={name(p.userId)}>
-        {name(p.userId)}
-        {p.isSelf ? <span className="poolse-stage__you"> (you)</span> : null}
-      </span>
-      {hands.some((h) => h.userId === p.userId) ? (
-        <span className="poolse-stage__hand" role="img" aria-label="Hand raised">
-          ✋
+  const person = (p: CallParticipant, actions: ReactNode) => {
+    // An agent (AG13): its own name, the Agent badge and what it's doing.
+    const agent = p.isSelf ? null : callAgentOfParticipant(p, agents);
+    const label = agent ? agent.label : name(p.userId);
+    return (
+      <li key={p.userId} className="poolse-stage__person">
+        <Avatar name={label} size="sm" />
+        <span className="poolse-stage__name" title={label}>
+          {label}
+          {p.isSelf ? <span className="poolse-stage__you"> (you)</span> : null}
         </span>
-      ) : null}
-      {mod && !p.isSelf ? <span className="poolse-stage__actions">{actions}</span> : null}
-    </li>
-  );
+        {agent ? <CallAgentTag agent={agent} speaking={p.speaking} /> : null}
+        {hands.some((h) => h.userId === p.userId) ? (
+          <span className="poolse-stage__hand" role="img" aria-label="Hand raised">
+            ✋
+          </span>
+        ) : null}
+        {mod && !p.isSelf && !agent ? (
+          <span className="poolse-stage__actions">{actions}</span>
+        ) : null}
+      </li>
+    );
+  };
 
   return (
     <section className={cx('poolse-panel', 'poolse-stage', className)} aria-label="Stage">
