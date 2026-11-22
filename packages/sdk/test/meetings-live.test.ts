@@ -23,9 +23,14 @@ import {
   waitInLobby,
   type Question,
 } from '../src/meetings-live.js';
-import { CallReactions, ScreenAnnotations, isReactionEmoji } from '../src/voice/call-data.js';
+import {
+  CallReactions,
+  ScreenAnnotations,
+  isReactionEmoji,
+  type CallDataChannel,
+} from '../src/voice/call-data.js';
 import { diagnoseCallNetwork, qualityReportBody } from '../src/voice/call-quality.js';
-import { disconnectReasonOf, type CallRoom } from '../src/voice/call-room.js';
+import { disconnectReasonOf } from '../src/voice/call-room.js';
 import {
   WhiteboardModel,
   whiteboardItemOf,
@@ -197,14 +202,17 @@ describe('poolse.live REST', () => {
   });
 });
 
-/** A CallRoom stand-in with a loopback data channel between two "peers". */
+/**
+ * A loopback data channel between "peers" — any CallDataChannel, as
+ * @poolse/native's `callData` is on phones, not only a CallRoom.
+ */
 function fakeRooms() {
   type Fn = (m: unknown, from: { userId: string | null; name: string | null }) => void;
   const peers: Array<{ id: string; listeners: Map<string, Set<Fn>> }> = [];
   const make = (id: string) => {
     const me = { id, listeners: new Map<string, Set<Fn>>() };
     peers.push(me);
-    const room = {
+    const room: CallDataChannel = {
       getSelfId: () => id,
       onData: (topic: string, fn: Fn) => {
         const set = me.listeners.get(topic) ?? new Set<Fn>();
@@ -222,7 +230,7 @@ function fakeRooms() {
         return true;
       },
     };
-    return room as unknown as CallRoom;
+    return room;
   };
   return make;
 }

@@ -197,6 +197,7 @@ export {
   type AnnotationPointer,
   type AnnotationState,
   type AnnotationStroke,
+  type CallDataChannel,
   type CallReaction,
 } from './voice/call-data.js';
 export {

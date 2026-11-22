@@ -13,6 +13,7 @@ import type {
   CallMeeting,
   CallQualityReport,
   CallReaction,
+  CallDataChannel,
   CallRoom,
   LiveMeetingsListeners,
   MeetingAttendee,
@@ -613,9 +614,12 @@ export interface UseCallReactions {
   send: (emoji: string) => Promise<boolean>;
 }
 
-/** Reactions floating over a call (CL6). `room` is `useCallRoom(…).room`. */
+/**
+ * Reactions floating over a call (CL6). `room` is `useCallRoom(…).room`,
+ * or @poolse/native's `callData` on phones.
+ */
 export function useCallReactions(
-  room: CallRoom | null,
+  room: CallDataChannel | null,
   opts: { visibleMs?: number; max?: number } = {},
 ): UseCallReactions {
   const visibleMs = opts.visibleMs ?? 4000;
@@ -656,9 +660,12 @@ export interface UseScreenAnnotations {
   annotations: ScreenAnnotations | null;
 }
 
-/** The pointer and drawing layer over `sharerUserId`'s shared screen (CL4). */
+/**
+ * The pointer and drawing layer over `sharerUserId`'s shared screen
+ * (CL4). `room` is `useCallRoom(…).room`, or @poolse/native's `callData`.
+ */
 export function useScreenAnnotations(
-  room: CallRoom | null,
+  room: CallDataChannel | null,
   sharerUserId: string | null,
   opts: { fadeMs?: number } = {},
 ): UseScreenAnnotations {

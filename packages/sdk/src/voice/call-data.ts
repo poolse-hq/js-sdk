@@ -12,8 +12,29 @@
 //
 // Coordinates are fractions of the shared picture (0–1 on both axes), so
 // a 4K screen and a phone draw in the same place.
+//
+// Both take any CallDataChannel: the web CallRoom, or @poolse/native's
+// `callData` on phones — the same topics and messages either way.
 
-import { CALL_DATA_MAX_BYTES, type CallRoom, type Unsubscribe } from './call-room.js';
+import { CALL_DATA_MAX_BYTES, type CallDataSender, type Unsubscribe } from './call-room.js';
+
+/**
+ * What reactions and annotations need of a call: JSON messages by topic
+ * over its data channel. `CallRoom` is one; @poolse/native's `callData`
+ * is the native call core's.
+ */
+export interface CallDataChannel {
+  /** Your user id (the media identity); null before connecting. */
+  getSelfId(): string | null;
+  /** Send to everyone (or `to`); false when not connected or over {@link CALL_DATA_MAX_BYTES}. */
+  sendData(
+    topic: string,
+    message: unknown,
+    opts?: { reliable?: boolean; to?: string[] },
+  ): Promise<boolean>;
+  /** Messages others sent under `topic` (yours are not echoed back). */
+  onData(topic: string, fn: (message: unknown, from: CallDataSender) => void): Unsubscribe;
+}
 
 export const REACTION_TOPIC = 'poolse.reaction';
 export const ANNOTATION_TOPIC = 'poolse.annotate';
@@ -57,7 +78,7 @@ export class CallReactions {
   private readonly received = new Map<string, number[]>();
   private readonly off: Unsubscribe;
 
-  constructor(private readonly room: CallRoom) {
+  constructor(private readonly room: CallDataChannel) {
     this.off = room.onData(REACTION_TOPIC, (msg, from) => {
       const emoji = (msg as { emoji?: unknown } | null)?.emoji;
       if (!isReactionEmoji(emoji)) return;
@@ -192,7 +213,7 @@ export class ScreenAnnotations {
   private readonly off: Unsubscribe;
 
   constructor(
-    private readonly room: CallRoom,
+    private readonly room: CallDataChannel,
     public readonly sharerUserId: string,
     private readonly opts: { fadeMs?: number } = {},
   ) {
