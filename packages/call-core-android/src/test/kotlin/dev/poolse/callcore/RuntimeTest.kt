@@ -802,4 +802,112 @@ class RuntimeTest {
     r.timers.fire("waiting_deadline")
     assertNull(r.runtime.currentState().waiting, "the deadline still fires after the generation moved")
   }
+
+  // ── breakout rooms (MEETINGS.md §5): the same call, another room ────
+
+  private fun breakoutBundle(callId: String = "c1", room: String = "split.2") = bundle(callId).copy(
+    livekitToken = "lk-$room", controlToken = "ctl-$room", breakoutRoomId = room, breakoutName = "Room 2",
+  )
+
+  @Test
+  fun `moving swaps the media room and keeps the call`() {
+    val r = Rig()
+    r.activeCall()
+    val emitted = r.sink.states.size
+    var accepted: Boolean? = null
+    r.runtime.moveToRoom(breakoutBundle()) { accepted = it }
+    assertEquals(true, accepted)
+    assertEquals("join:c1:lk-split.2", r.media.log.last())
+    assertFalse("leave" in r.media.log)
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+    assertEquals("split.2" to "Room 2", r.runtime.breakout)
+    assertTrue(r.sink.states.size > emitted)
+    assertEquals(listOf("start:c1:audio"), r.session.log, "the system call is untouched")
+    r.runtime.onMediaConnected()
+    r.runtime.hangUp()
+    assertEquals("hangup:c1:ctl-split.2", r.http.log.last())
+  }
+
+  @Test
+  fun `returning to the main room clears the breakout`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.moveToRoom(breakoutBundle())
+    r.runtime.onMediaConnected()
+    r.runtime.moveToRoom(bundle().copy(livekitToken = "lk-main-2"))
+    assertEquals("join:c1:lk-main-2", r.media.log.last())
+    assertNull(r.runtime.breakout)
+  }
+
+  @Test
+  fun `a move is refused without a live call or for another call`() {
+    val r = Rig()
+    val results = mutableListOf<Boolean>()
+    r.runtime.moveToRoom(breakoutBundle()) { results += it }
+    r.runtime.onRing(ring())
+    r.runtime.answer()
+    r.runtime.moveToRoom(breakoutBundle()) { results += it } // connecting: no bundle yet
+    r.http.lastCb!!(HttpResult.Ok(bundle()))
+    r.runtime.onMediaConnected()
+    r.runtime.moveToRoom(breakoutBundle("other")) { results += it }
+    assertEquals(listOf(false, false, false), results)
+    assertNull(r.runtime.breakout)
+  }
+
+  @Test
+  fun `a room that will not have us falls back to the one we came from`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.moveToRoom(breakoutBundle())
+    r.runtime.onMediaFailed()
+    assertEquals("join:c1:lk-c1", r.media.log.last())
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+    assertNull(r.runtime.breakout)
+    r.runtime.onMediaConnected()
+    r.runtime.onMediaFailed()
+    assertEquals("join:c1:lk-c1", r.media.log.last(), "once settled a failure is the machine's again")
+  }
+
+  @Test
+  fun `alone in a breakout room is not the call ending`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    assertNotNull(r.timers.scheduled["alone_probe"])
+    r.runtime.moveToRoom(breakoutBundle())
+    assertNull(r.timers.scheduled["alone_probe"], "a move cancels the probe")
+    r.runtime.onMediaConnected()
+    r.runtime.onRemoteCount(1)
+    r.runtime.onRemoteCount(0)
+    assertNull(r.timers.scheduled["alone_probe"])
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+  }
+
+  @Test
+  fun `a reconnect in a breakout room rejoins that room`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.moveToRoom(breakoutBundle())
+    r.runtime.onMediaConnected()
+    r.runtime.onMediaLost()
+    assertEquals(Phase.RECONNECTING, r.runtime.currentState().phase)
+    assertEquals("reconnect:c1:ctl-split.2", r.http.log.last())
+    r.http.lastReconnectCb!!(HttpResult.Ok(bundle().copy(controlToken = "ctl-fresh", livekitToken = "lk-main-fresh")))
+    assertEquals("join:c1:lk-split.2", r.media.log.last())
+    assertEquals("split.2", r.runtime.breakout?.first)
+    assertEquals("c1" to "ctl-fresh", r.runtime.control)
+    r.runtime.onMediaConnected()
+    assertEquals(Phase.ACTIVE, r.runtime.currentState().phase)
+  }
+
+  @Test
+  fun `the end of the call forgets the room`() {
+    val r = Rig()
+    r.activeCall()
+    r.runtime.moveToRoom(breakoutBundle())
+    r.runtime.hangUp()
+    assertNull(r.runtime.breakout)
+    assertNull(r.runtime.currentBundle)
+  }
 }

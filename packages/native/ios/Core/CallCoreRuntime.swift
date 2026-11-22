@@ -67,6 +67,9 @@ public final class CallCoreRuntime {
   private var resolved: [String] = []
   /// The call whose media has had someone else in it (for `onRemoteCount`).
   private var remoteSeenFor: String?
+  /// While `moveToRoom` connects: the room's bundle it came from, to go
+  /// back to if the new room cannot be joined.
+  private var movingFrom: CallSessionBundle?
 
   private var queue: [() -> Void] = []
   private var draining = false
@@ -129,6 +132,16 @@ public final class CallCoreRuntime {
 
   /// The call waiting beside the current one, with its caller's names. Runtime thread only.
   public var waitingRing: RingContext? { state.waiting == nil ? nil : waitingRingCtx }
+
+  /// The session bundle in use, nil before the server accepted. Runtime thread only.
+  public var currentBundle: CallSessionBundle? { bundle }
+
+  /// The breakout room the media is in (MEETINGS.md §5); nil in the
+  /// call's main room. Runtime thread only.
+  public var breakout: (roomId: String, name: String?)? {
+    guard let b = bundle, let id = b.breakoutRoomId else { return nil }
+    return (id, b.breakoutName)
+  }
 
   /// True if `callId` was already resolved here — its ring must never surface again.
   public func isResolved(_ callId: String) -> Bool { resolved.contains(callId) }
@@ -210,8 +223,54 @@ public final class CallCoreRuntime {
   /// Caller-side: the bridge resolved every ring from `ring_states`.
   public func allRingsResolved(_ outcome: String) { post { [self] in dispatch(.allRingsResolved(outcome: outcome)) } }
 
-  public func onMediaConnected() { post { [self] in dispatch(.mediaConnected) } }
-  public func onMediaFailed() { post { [self] in dispatch(.mediaFailed) } }
+  public func onMediaConnected() {
+    post { [self] in
+      movingFrom = nil
+      dispatch(.mediaConnected)
+    }
+  }
+
+  public func onMediaFailed() {
+    post { [self] in
+      // The room `moveToRoom` went to would not have us: back to the one
+      // it came from. The call itself never noticed.
+      if let back = movingFrom, state.phase == .active || state.phase == .reconnecting {
+        movingFrom = nil
+        bundle = back
+        media.join(bundle: back)
+        sink.emit(state: state)
+        return
+      }
+      dispatch(.mediaFailed)
+    }
+  }
+
+  /// Breakout rooms (MEETINGS.md §5): carry the call on in another
+  /// LiveKit room of the SAME call — the bundle of `POST
+  /// /breakouts/:room/join`, or of `POST /calls/:id/breakouts/return` to
+  /// come back. The machine never sees it: the phase, the system call
+  /// (CallKit / Telecom) and the timers stay; only the media swaps rooms,
+  /// with mute and camera as they were. If the new room cannot be
+  /// joined, the media goes back to the room it came from.
+  ///
+  /// `done(false)`: not now — no live call, or the bundle is another call's.
+  public func moveToRoom(_ next: CallSessionBundle, done: ((Bool) -> Void)? = nil) {
+    post { [self] in
+      guard state.phase == .active || state.phase == .reconnecting,
+            let current = bundle, current.callId == next.callId else {
+        done?(false)
+        return
+      }
+      if movingFrom == nil { movingFrom = current }
+      bundle = next
+      // Who was in the last room says nothing about this one.
+      remoteSeenFor = nil
+      timers.cancel(key: CallCoreRuntime.T_ALONE)
+      media.join(bundle: next)
+      sink.emit(state: state)
+      done?(true)
+    }
+  }
   public func onMediaLost() { post { [self] in dispatch(.mediaLost) } }
   public func onMediaReconnecting() { post { [self] in dispatch(.mediaReconnecting) } }
   public func onMediaRecovered() { post { [self] in dispatch(.mediaRecovered) } }
@@ -236,7 +295,9 @@ public final class CallCoreRuntime {
         timers.cancel(key: CallCoreRuntime.T_ALONE)
         return
       }
-      guard state.phase == .active, callKind != "room", remoteSeenFor == callId else { return }
+      // In a breakout room the others are in the call's other rooms.
+      guard state.phase == .active, callKind != "room", remoteSeenFor == callId,
+            bundle?.breakoutRoomId == nil else { return }
       scheduleAloneProbe(callId, attempt: 0)
     }
   }
@@ -254,7 +315,7 @@ public final class CallCoreRuntime {
   }
 
   private func probeAlone(_ callId: String, attempt: Int) {
-    guard state.phase == .active, let b = bundle else { return }
+    guard state.phase == .active, let b = bundle, b.breakoutRoomId == nil else { return }
     let g = gen
     let last = attempt == CallCoreRuntime.ALONE_PROBES_MS.count - 1
     // A still-live answer carries a fresh bundle; the current one stays
@@ -311,6 +372,7 @@ public final class CallCoreRuntime {
     if isTerminal(next.phase) {
       ring = nil
       bundle = nil
+      movingFrom = nil
       sessionToken = nil
     }
     // A waiting call that went away without becoming the current one
@@ -397,6 +459,7 @@ public final class CallCoreRuntime {
     case .callSessionStop:
       session.stop()
       bundle = nil
+      movingFrom = nil
       ring = nil
       sessionToken = nil
 
@@ -411,6 +474,7 @@ public final class CallCoreRuntime {
       markResolved(before.callId)
       gen += 1
       bundle = nil
+      movingFrom = nil
       sessionToken = nil
       ring = waitingRingCtx
       waitingRingCtx = nil
@@ -452,8 +516,18 @@ public final class CallCoreRuntime {
   private func onReconnectResult(_ requestGen: Int, _ result: HttpResult) {
     if requestGen != gen || state.phase != .reconnecting { return }
     switch result {
-    case let .ok(b):
+    case let .ok(fresh):
       // Fresh token (and possibly URL): rejoin. MEDIA_CONNECTED returns us to ACTIVE.
+      var b = fresh
+      // In a breakout room: /reconnect answers with the main room's
+      // session — keep the room (its token outlives a network drop) and
+      // take the rest.
+      if let cur = bundle, let room = cur.breakoutRoomId, b.breakoutRoomId == nil {
+        b.livekitUrl = cur.livekitUrl
+        b.livekitToken = cur.livekitToken
+        b.breakoutRoomId = room
+        b.breakoutName = cur.breakoutName
+      }
       bundle = b
       media.join(bundle: b)
     case .gone: dispatch(.httpGone)

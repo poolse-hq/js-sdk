@@ -39,6 +39,21 @@ class CallHttpClientTest {
     assertEquals(current.copy(livekitUrl = "wss://sfu2", livekitToken = "lk-2"), r.bundle)
   }
 
+  @Test fun `a breakout join's bundle names its room, the main room's never inherits it`() {
+    val room = CallHttpClient.parseBundle(
+      """{"cv":1,"created":false,"control_token":"ctl","livekit":{"url":"wss://sfu","token":"lk-room"},
+        "breakout":{"room_id":"0b7e.2","name":"Design"},"call":{"id":"c1","conversation_id":"conv"}}""",
+    )
+    assertEquals("0b7e.2", room.breakoutRoomId)
+    assertEquals("Design", room.breakoutName)
+    val main = CallHttpClient.parseBundle(
+      """{"control_token":"ctl","livekit":{"url":"wss://sfu","token":"lk"},"call":{"id":"c1","conversation_id":"conv"}}""",
+      room,
+    )
+    assertEquals(null, main.breakoutRoomId)
+    assertEquals(null, CallHttpClient.parseBundle("""{"livekit":{"token":"lk2"}}""", room).breakoutRoomId)
+  }
+
   @Test fun `unparseable 2xx is a failure, not a retry`() {
     assertTrue(CallHttpClient.classify(200, "<html>", null) is HttpResult.Failed)
     assertTrue(CallHttpClient.classify(200, """{"livekit":{"token":"x"}}""", null) is HttpResult.Failed)

@@ -64,6 +64,13 @@ data class CallSessionBundle(
    */
   val recording: String? = null,
   val transcription: String? = null,
+  /**
+   * The breakout room this bundle's `livekit` connects to (MEETINGS.md
+   * §5: `breakout: {room_id, name}` from `POST /breakouts/:room/join`);
+   * null for the call's main room.
+   */
+  val breakoutRoomId: String? = null,
+  val breakoutName: String? = null,
 )
 
 /** LiveKit (or any SFU) — media only, no lifecycle opinions. */

@@ -159,12 +159,17 @@ public final class CallHttpClient: HttpPort {
       b.livekitToken = try getString(livekit, "token")
       b.controlToken = optString(root, "control_token") ?? current.controlToken
       b.ringing = 0
-      // recording / transcription: the current bundle's stand.
+      // recording / transcription: the current bundle's stand. A bare
+      // refresh is the main room's (servers before breakouts).
+      b.breakoutRoomId = nil
+      b.breakoutName = nil
       return b
     }
     guard let controlToken = optString(root, "control_token") ?? current?.controlToken else {
       throw ParseError(what: "bundle without control_token")
     }
+    // Only a breakout join's bundle names a room; never inherited from `current`.
+    let breakout = root["breakout"] as? [String: Any]
     return CallSessionBundle(
       callId: try getString(call, "id"),
       conversationId: try getString(call, "conversation_id"),
@@ -177,7 +182,9 @@ public final class CallHttpClient: HttpPort {
       kind: optString(call, "kind") ?? current?.kind ?? "call",
       ringing: ((call["ring_states"] as? [String: Any]) ?? [:]).values.filter { ($0 as? String) == "ringing" }.count,
       recording: optObjectText(call, "recording") ?? current?.recording,
-      transcription: optObjectText(call, "transcription") ?? current?.transcription
+      transcription: optObjectText(call, "transcription") ?? current?.transcription,
+      breakoutRoomId: breakout.flatMap { optString($0, "room_id") },
+      breakoutName: breakout.flatMap { optString($0, "name") }
     )
   }
 

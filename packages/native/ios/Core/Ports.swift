@@ -55,10 +55,16 @@ public struct CallSessionBundle: Equatable {
   /// server before them. Text, not a dictionary, to keep the bundle Equatable.
   public var recording: String?
   public var transcription: String?
+  /// The breakout room this bundle's `livekit` connects to (MEETINGS.md §5:
+  /// `breakout: {room_id, name}` from `POST /breakouts/:room/join`); nil
+  /// for the call's main room.
+  public var breakoutRoomId: String?
+  public var breakoutName: String?
 
   public init(callId: String, conversationId: String, conversationName: String?, media: String,
               created: Bool, livekitUrl: String, livekitToken: String, controlToken: String,
-              kind: String = "call", ringing: Int = 0, recording: String? = nil, transcription: String? = nil) {
+              kind: String = "call", ringing: Int = 0, recording: String? = nil, transcription: String? = nil,
+              breakoutRoomId: String? = nil, breakoutName: String? = nil) {
     self.callId = callId
     self.conversationId = conversationId
     self.conversationName = conversationName
@@ -71,6 +77,8 @@ public struct CallSessionBundle: Equatable {
     self.ringing = ringing
     self.recording = recording
     self.transcription = transcription
+    self.breakoutRoomId = breakoutRoomId
+    self.breakoutName = breakoutName
   }
 }
 

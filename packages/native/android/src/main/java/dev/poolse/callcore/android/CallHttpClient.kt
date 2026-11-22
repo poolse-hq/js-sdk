@@ -174,7 +174,10 @@ internal class CallHttpClient(
           livekitToken = livekit.getString("token"),
           controlToken = root.optStringOrNull("control_token") ?: current.controlToken,
           ringing = 0,
-          // recording / transcription: the current bundle's stand.
+          // recording / transcription: the current bundle's stand. A bare
+          // refresh is the main room's (servers before breakouts).
+          breakoutRoomId = null,
+          breakoutName = null,
         )
       }
       return CallSessionBundle(
@@ -193,6 +196,9 @@ internal class CallHttpClient(
         } ?: 0,
         recording = call.optJSONObject("recording")?.toString() ?: current?.recording,
         transcription = call.optJSONObject("transcription")?.toString() ?: current?.transcription,
+        // Only a breakout join's bundle names a room; never inherited from [current].
+        breakoutRoomId = root.optJSONObject("breakout")?.optStringOrNull("room_id"),
+        breakoutName = root.optJSONObject("breakout")?.optStringOrNull("name"),
       )
     }
 

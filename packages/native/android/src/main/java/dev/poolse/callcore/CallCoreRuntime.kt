@@ -70,6 +70,12 @@ class CallCoreRuntime(
   /** The call whose media has had someone else in it (for [onRemoteCount]). */
   private var remoteSeenFor: String? = null
 
+  /**
+   * While [moveToRoom] connects: the room's bundle it came from, to go
+   * back to if the new room cannot be joined.
+   */
+  private var movingFrom: CallSessionBundle? = null
+
   private val resolved = object : LinkedHashMap<String, Unit>(RESOLVED_LRU, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Unit>?) = size > RESOLVED_LRU
   }
@@ -159,6 +165,15 @@ class CallCoreRuntime(
   /** The call waiting beside the current one, with its caller's names. Runtime thread only. */
   val waitingRing: RingContext? get() = if (state.waiting == null) null else waitingRingCtx
 
+  /** The session bundle in use, null before the server accepted. Any thread. */
+  val currentBundle: CallSessionBundle? get() = bundle
+
+  /**
+   * The breakout room the media is in (MEETINGS.md §5) as (room id,
+   * name); null in the call's main room. Any thread.
+   */
+  val breakout: Pair<String, String?>? get() = bundle?.let { b -> b.breakoutRoomId?.let { it to b.breakoutName } }
+
   /** True if [callId] was already resolved here — its ring must never surface again. */
   fun isResolved(callId: String): Boolean = synchronized(resolved) { resolved.containsKey(callId) }
 
@@ -235,8 +250,53 @@ class CallCoreRuntime(
   /** Caller-side: the bridge resolved every ring from `ring_states`. */
   fun allRingsResolved(outcome: String) = post { dispatch(Event.AllRingsResolved(outcome)) }
 
-  fun onMediaConnected() = post { dispatch(Event.MediaConnected) }
-  fun onMediaFailed() = post { dispatch(Event.MediaFailed) }
+  fun onMediaConnected() = post {
+    movingFrom = null
+    dispatch(Event.MediaConnected)
+  }
+
+  fun onMediaFailed() = post {
+    // The room [moveToRoom] went to would not have us: back to the one it
+    // came from. The call itself never noticed.
+    val back = movingFrom
+    if (back != null && (state.phase == Phase.ACTIVE || state.phase == Phase.RECONNECTING)) {
+      movingFrom = null
+      bundle = back
+      media.join(back)
+      sink.emit(state)
+      return@post
+    }
+    dispatch(Event.MediaFailed)
+  }
+
+  /**
+   * Breakout rooms (MEETINGS.md §5): carry the call on in another
+   * LiveKit room of the SAME call — the bundle of `POST
+   * /breakouts/:room/join`, or of `POST /calls/:id/breakouts/return` to
+   * come back. The machine never sees it: the phase, the system call
+   * (Telecom's foreground service / CallKit) and the timers stay; only
+   * the media swaps rooms, with mute and camera as they were. If the new
+   * room cannot be joined, the media goes back to the room it came from.
+   *
+   * [done] `false`: not now — no live call, or the bundle is another call's.
+   */
+  fun moveToRoom(next: CallSessionBundle, done: ((Boolean) -> Unit)? = null) = post {
+    val current = bundle
+    if ((state.phase != Phase.ACTIVE && state.phase != Phase.RECONNECTING) ||
+      current == null || current.callId != next.callId
+    ) {
+      done?.invoke(false)
+      return@post
+    }
+    if (movingFrom == null) movingFrom = current
+    bundle = next
+    // Who was in the last room says nothing about this one.
+    remoteSeenFor = null
+    timers.cancel(T_ALONE)
+    media.join(next)
+    sink.emit(state)
+    done?.invoke(true)
+  }
   fun onMediaLost() = post { dispatch(Event.MediaLost) }
   fun onMediaReconnecting() = post { dispatch(Event.MediaReconnecting) }
   fun onMediaRecovered() = post { dispatch(Event.MediaRecovered) }
@@ -262,7 +322,9 @@ class CallCoreRuntime(
       timers.cancel(T_ALONE)
       return@post
     }
+    // In a breakout room the others are in the call's other rooms.
     if (state.phase != Phase.ACTIVE || callKind == "room" || remoteSeenFor != callId) return@post
+    if (bundle?.breakoutRoomId != null) return@post
     scheduleAloneProbe(callId, 0)
   }
 
@@ -277,6 +339,7 @@ class CallCoreRuntime(
   private fun probeAlone(callId: String, attempt: Int) {
     if (state.phase != Phase.ACTIVE) return
     val b = bundle ?: return
+    if (b.breakoutRoomId != null) return
     val g = gen
     val last = attempt == ALONE_PROBES_MS.size - 1
     // A still-live answer carries a fresh bundle; the current one stays
@@ -333,7 +396,7 @@ class CallCoreRuntime(
     // fallback still need it); CallSessionStop clears it with the rest.
     if (isTerminal(next.phase)) ring = null
     // A bundle never outlives its call — whatever ended it.
-    if (isTerminal(next.phase)) { bundle = null; sessionToken = null }
+    if (isTerminal(next.phase)) { bundle = null; movingFrom = null; sessionToken = null }
     // A waiting call that went away without becoming the current one
     // (declined, cancelled, timed out) is resolved: its ring never again.
     before.waiting?.let { w ->
@@ -416,6 +479,7 @@ class CallCoreRuntime(
       Effect.CallSessionStop -> {
         session.stop()
         bundle = null
+        movingFrom = null
         ring = null
         sessionToken = null
       }
@@ -431,6 +495,7 @@ class CallCoreRuntime(
         markResolved(before.callId)
         gen++
         bundle = null
+        movingFrom = null
         sessionToken = null
         ring = waitingRingCtx
         waitingRingCtx = null
@@ -484,9 +549,21 @@ class CallCoreRuntime(
     when (result) {
       is HttpResult.Ok -> {
         // Fresh token (and possibly URL): rejoin with it. MEDIA_CONNECTED
-        // on the new room returns us to ACTIVE.
-        bundle = result.bundle
-        media.join(result.bundle)
+        // on the new room returns us to ACTIVE. In a breakout room,
+        // /reconnect answers with the main room's session: keep the room
+        // (its token outlives a network drop) and take the rest.
+        val cur = bundle
+        val fresh = result.bundle
+        val b = if (cur?.breakoutRoomId != null && fresh.breakoutRoomId == null) {
+          fresh.copy(
+            livekitUrl = cur.livekitUrl,
+            livekitToken = cur.livekitToken,
+            breakoutRoomId = cur.breakoutRoomId,
+            breakoutName = cur.breakoutName,
+          )
+        } else fresh
+        bundle = b
+        media.join(b)
       }
       HttpResult.Gone -> dispatch(Event.HttpGone)
       is HttpResult.AuthFailed -> dispatch(Event.HttpFailed(result.code))
