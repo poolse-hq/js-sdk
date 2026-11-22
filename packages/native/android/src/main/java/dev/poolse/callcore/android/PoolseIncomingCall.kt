@@ -59,6 +59,12 @@ object PoolseIncomingCall {
   const val EXTRA_MEDIA = "poolse_media"
   /** Epoch ms the ring gives up at. */
   const val EXTRA_RING_DEADLINE = "poolse_ring_deadline"
+  /** `"meeting"` for a scheduled meeting starting (CA4), else `"call"`. */
+  const val EXTRA_RING_TYPE = "poolse_ring_type"
+  /** The meeting's title ("Weekly sync"), meeting rings only. */
+  const val EXTRA_MEETING_TITLE = "poolse_meeting_title"
+  /** What to show as the ring's headline: "Weekly sync is starting", or the conversation / caller. */
+  const val EXTRA_TITLE = "poolse_title"
   /** Package-local broadcast with [EXTRA_CALL_ID]: that ring is over (cancelled, answered elsewhere, timed out). */
   const val ACTION_RING_CLOSED = AndroidRingSurface.ACTION_RING_CLOSED
 
@@ -104,6 +110,9 @@ object PoolseIncomingCall {
     .putExtra(EXTRA_MEDIA, ring.media)
     .putExtra(EXTRA_RING_DEADLINE, ring.ringDeadlineEpochMs)
     .putExtra(EXTRA_SERVER_ID, ring.serverId)
+    .putExtra(EXTRA_RING_TYPE, ring.ringType ?: "call")
+    .putExtra(EXTRA_MEETING_TITLE, ring.meetingTitle)
+    .putExtra(EXTRA_TITLE, ring.displayTitle)
 
   /** [fill] plus the workspace label, which needs the server list. */
   internal fun fill(context: Context, intent: Intent, ring: RingContext): Intent = fill(intent, ring)

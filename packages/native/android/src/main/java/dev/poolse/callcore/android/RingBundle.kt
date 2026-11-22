@@ -19,6 +19,9 @@ internal fun RingContext.toBundle(): Bundle = Bundle().apply {
   putString(K_AVATAR, callerAvatarUrl)
   putString(K_SERVER, serverId)
   putString(K_WORKSPACE, workspaceName)
+  putString(K_RING_TYPE, ringType)
+  putString(K_MEETING_TITLE, meetingTitle)
+  putString(K_MEETING_ID, meetingId)
 }
 
 internal fun Bundle.toRingContext(): RingContext? {
@@ -36,6 +39,9 @@ internal fun Bundle.toRingContext(): RingContext? {
     callerAvatarUrl = getString(K_AVATAR),
     serverId = getString(K_SERVER),
     workspaceName = getString(K_WORKSPACE),
+    ringType = getString(K_RING_TYPE),
+    meetingTitle = getString(K_MEETING_TITLE),
+    meetingId = getString(K_MEETING_ID),
   )
 }
 
@@ -49,3 +55,6 @@ private const val K_DEADLINE = "ringDeadline"
 private const val K_AVATAR = "callerAvatarUrl"
 private const val K_SERVER = "serverId"
 private const val K_WORKSPACE = "workspaceName"
+private const val K_RING_TYPE = "ringType"
+private const val K_MEETING_TITLE = "meetingTitle"
+private const val K_MEETING_ID = "meetingId"

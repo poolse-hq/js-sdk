@@ -146,7 +146,27 @@ data class RingContext(
   val serverId: String? = null,
   /** The push's `workspace_name`, for "Ana · Acme" when several servers are signed in. */
   val workspaceName: String? = null,
-)
+  /**
+   * The push's `ring_type`: `"meeting"` for a scheduled meeting starting
+   * (CA4), `"call"` (or null, older servers) for a person calling.
+   */
+  val ringType: String? = null,
+  /** The push's `meeting_title` ("Weekly sync"), meeting rings only. */
+  val meetingTitle: String? = null,
+  /** The push's `meeting_id`, meeting rings only. */
+  val meetingId: String? = null,
+) {
+  /** A scheduled meeting starting, not a person calling. */
+  val isMeeting: Boolean get() = ringType == "meeting"
+
+  /**
+   * What the ring surface names, before any workspace suffix: "Weekly
+   * sync is starting" for a meeting, else the conversation or caller.
+   */
+  val displayTitle: String?
+    get() = if (isMeeting) "${meetingTitle ?: conversationName ?: "Meeting"} is starting"
+    else conversationName ?: callerName
+}
 
 /** Android: the phoneCall foreground service. iOS: the CallKit session. */
 interface CallSessionPort {

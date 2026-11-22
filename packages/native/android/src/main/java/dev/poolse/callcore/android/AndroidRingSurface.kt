@@ -130,7 +130,7 @@ internal class AndroidRingSurface(
     val answer = incomingActivity(autoAnswer = true, requestOffset = 2)
 
     val caller = Person.Builder()
-      .setName(ServerRegistry.ringTitle(context, ring, ring.conversationName ?: ring.callerName) ?: "Incoming call")
+      .setName(ServerRegistry.ringTitle(context, ring, ring.displayTitle) ?: "Incoming call")
       .setImportant(true)
       .build()
 
@@ -210,14 +210,14 @@ internal class AndroidRingSurface(
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    val who = ServerRegistry.ringTitle(context, ring, ring.conversationName ?: ring.callerName) ?: "Someone"
+    val who = ServerRegistry.ringTitle(context, ring, ring.displayTitle) ?: "Someone"
     val what = if (ring.media == "video") "video call" else "call"
     val notification = NotificationCompat.Builder(context, WAITING_CHANNEL_ID)
       .setSmallIcon(config.smallIcon)
       .setCategory(NotificationCompat.CATEGORY_CALL)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-      .setContentTitle("$who — incoming $what")
+      .setContentTitle(if (ring.isMeeting) who else "$who — incoming $what")
       .setContentText("You're on a call. Answering ends it.")
       .setOngoing(true)
       .setAutoCancel(false)

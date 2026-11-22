@@ -121,8 +121,13 @@ class IncomingCallActivity : Activity() {
     ring = next
     awaitingForward = false
     pulse?.cancel()
-    val title = ServerRegistry.ringTitle(this, next, next.conversationName ?: next.callerName) ?: "Incoming call"
-    val body = if (next.media == "video") "Incoming video call" else "Incoming call"
+    val title = ServerRegistry.ringTitle(this, next, next.displayTitle) ?: "Incoming call"
+    val body = when {
+      next.isMeeting && next.media == "video" -> "Video meeting"
+      next.isMeeting -> "Meeting"
+      next.media == "video" -> "Incoming video call"
+      else -> "Incoming call"
+    }
     setContentView(buildScene(title, body, next))
   }
 
@@ -340,10 +345,10 @@ class IncomingCallActivity : Activity() {
       gravity = Gravity.CENTER
       layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, wrap())
     }
-    val decline = actionButton("Decline", "✕", "#EF4444") {
+    val decline = actionButton(if (ring.isMeeting) "Not now" else "Decline", "✕", "#EF4444") {
       CallCore.getOrNull(this)?.onUserDecline(ring); finish()
     }
-    val accept = actionButton("Answer", "✓", "#22C55E") {
+    val accept = actionButton(if (ring.isMeeting) "Join" else "Answer", "✓", "#22C55E") {
       val core = CallCore.getOrNull(this)
       if (core == null) finish() else answerAndForward { core.onUserAnswer(ring, this) }
     }

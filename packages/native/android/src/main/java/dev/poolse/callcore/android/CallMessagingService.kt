@@ -103,6 +103,10 @@ class CallMessagingService : FirebaseMessagingService() {
       // declined) on the server of its tenant.
       serverId = ServerRegistry.resolve(this@CallMessagingService, this["tenant_id"])?.id,
       workspaceName = this["workspace_name"]?.ifEmpty { null },
+      // A scheduled meeting starting (CA4): "Weekly sync is starting".
+      ringType = this["ring_type"]?.ifEmpty { null },
+      meetingTitle = this["meeting_title"]?.ifEmpty { null },
+      meetingId = this["meeting_id"]?.ifEmpty { null },
     )
   }
 

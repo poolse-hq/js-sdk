@@ -151,10 +151,18 @@ public struct RingContext: Equatable {
   public var serverId: String?
   /// The push's `workspace_name`, for "Ana · Acme" when several servers are signed in.
   public var workspaceName: String?
+  /// The push's `ring_type`: `"meeting"` for a scheduled meeting starting
+  /// (CA4), `"call"` (or nil, older servers) for a person calling.
+  public var ringType: String?
+  /// The push's `meeting_title` ("Weekly sync"), meeting rings only.
+  public var meetingTitle: String?
+  /// The push's `meeting_id`, meeting rings only.
+  public var meetingId: String?
 
   public init(callId: String, conversationId: String, conversationName: String?, callerName: String?,
               media: String, grant: String, ringDeadlineEpochMs: Int64,
-              serverId: String? = nil, workspaceName: String? = nil) {
+              serverId: String? = nil, workspaceName: String? = nil,
+              ringType: String? = nil, meetingTitle: String? = nil, meetingId: String? = nil) {
     self.callId = callId
     self.conversationId = conversationId
     self.conversationName = conversationName
@@ -164,6 +172,19 @@ public struct RingContext: Equatable {
     self.ringDeadlineEpochMs = ringDeadlineEpochMs
     self.serverId = serverId
     self.workspaceName = workspaceName
+    self.ringType = ringType
+    self.meetingTitle = meetingTitle
+    self.meetingId = meetingId
+  }
+
+  /// A scheduled meeting starting, not a person calling.
+  public var isMeeting: Bool { ringType == "meeting" }
+
+  /// What the ring surface names, before any workspace suffix: "Weekly
+  /// sync is starting" for a meeting, else the conversation or caller.
+  public var displayTitle: String? {
+    if isMeeting { return "\(meetingTitle ?? conversationName ?? "Meeting") is starting" }
+    return conversationName ?? callerName
   }
 }
 

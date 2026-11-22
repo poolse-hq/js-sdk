@@ -143,7 +143,12 @@ struct VoipPayload {
   var callId: String? { string("call_id") }
   var event: String? { string("event") }
   var reason: String? { string("reason") }
-  var title: String? { string("conversation_name") ?? string("caller_name") }
+  var title: String? {
+    if string("ring_type") == "meeting" {
+      return "\(string("meeting_title") ?? string("conversation_name") ?? "Meeting") is starting"
+    }
+    return string("conversation_name") ?? string("caller_name")
+  }
 
   var media: String {
     if let m = string("media")?.lowercased(), m == "video" || m == "audio" { return m }
@@ -172,7 +177,11 @@ struct VoipPayload {
       // Signed in to several workspaces: the ring is answered (and
       // declined) on the server of its tenant.
       serverId: ServerRegistry.shared.servers.resolve(tenantId: string("tenant_id"))?.id,
-      workspaceName: string("workspace_name")
+      workspaceName: string("workspace_name"),
+      // A scheduled meeting starting (CA4): "Weekly sync is starting".
+      ringType: string("ring_type"),
+      meetingTitle: string("meeting_title"),
+      meetingId: string("meeting_id")
     )
   }
 }
