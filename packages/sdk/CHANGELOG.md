@@ -8,6 +8,32 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ### Added
 
+- Live meetings (`poolse.live`, docs/MEETINGS.md — written against an
+  assumed contract, every path/field/event in `meetings-live.ts`'s WIRE
+  section): `stage` (`get`, `raiseHand`, `lowerHand`, `setRole`),
+  `questions` (`list`, `ask`, `vote`, `unvote`, `setStatus`), `breakouts`
+  (`get`, `open`, `close`, `join`, `returnToMain`), `lobby` (`get`, `admit`,
+  `deny`, `admitAll`), `moments` (`mark`, `list`), `agenda` (`get`,
+  `start`, `done`, `reopen`), `whiteboard(callId)`, `moveHere(callId)` and
+  `subscribe(conversationId, callId, listeners)`. `waitInLobby` for guests
+  without a session. Helpers: `sortQuestions`, `stageRoleOf`,
+  `participantRoleOf`, `planBreakouts`, `agendaOverrunMs`, `inCallElsewhere`,
+  `meetingCardOf`, `rsvpOf`, `meetingJoinable`.
+- `ConversationChannel.on(event, fn)` for topic events without a typed handler.
+- `CallRoom`: `sendData` / `onData` (LiveKit data channel,
+  `CALL_DATA_MAX_BYTES`), `CallParticipant.connectionQuality` and
+  `.metadata`, `onReconnecting` / `isReconnecting`, `onDisconnected`
+  (`'moved'` when you took the call on another device), `getConnectionQuality`,
+  `getNetworkStats`, `setBackground` / `getBackground` /
+  `backgroundSupported` (with `trackProcessors: @livekit/track-processors`
+  passed in), `setNoiseSuppression` / `isNoiseSuppressionEnabled`
+  (`noiseSuppression` option).
+- `CallReactions` and `ScreenAnnotations` (pointer and pen over a shared
+  screen) on the data channel; `CallQualityMonitor`, `diagnoseCallNetwork`,
+  `connectionQualityLabel` for the plain-language network banner.
+- Whiteboard: `WhiteboardModel`, `openWhiteboard`, `bindYDoc` — strokes,
+  shapes, text and an eraser in a Y.Doc over the doc relay; Yjs passed in.
+
 - Agents (docs/AGENTS.md): `is_agent` on `Me` / `Membership`, `sender_is_agent`
   and `agent_meta` on `Message`, `sender_is_agent` on `MentionEvent`;
   `agentMetaOf`, `citationsOf` (numbered `Citation`s), `approvalIdOf`,

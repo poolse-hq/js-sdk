@@ -8,6 +8,15 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ### Added
 
+- Live meeting hooks: `useStage`, `useQuestions`, `useBreakouts`,
+  `useLobby`, `useMoments`, `useAgenda`, `useCallReactions`,
+  `useScreenAnnotations`, `useCallQuality`, `useWhiteboard` (Yjs passed
+  in) and `useRoomPresence` for sidebars.
+- `useCallRoom`: `room`, `background` / `setBackground` /
+  `backgroundSupported`, `noiseSuppression` / `setNoiseSuppression`,
+  `reconnecting`, `disconnectReason`; options `trackProcessors`,
+  `noiseSuppression`.
+
 - `useAgent`, `useAgents`, `useConversationAgents` (`setScope`,
   `resetScope`), `useMemory`, `useFollowups`; `useUser` returns `agent`.
   `useMembers`, `useMessages` and `useThread` tell `poolse.users` which rows

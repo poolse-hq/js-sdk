@@ -248,6 +248,41 @@ endMs }}` for a range.
 - Custom layouts wrap rows in `<MessageExtrasProvider value={{ onOpenCitation,
 onOpenMoment, nameForUserId, externalIdForUserId }}>`.
 
+## Live meetings
+
+Every piece takes the matching `@poolse/react` hook, so the call screen
+decides the layout:
+
+```tsx
+<StagePanel stage={useStage(convId, callId, me.id)} participants={media.participants} />
+<QuestionsPanel questions={useQuestions(convId, callId)} canModerate={stage.isModerator} />
+<BreakoutBanner breakouts={breakouts} onJoinRoom={joinRoom} onReturn={backToMain} />
+<BreakoutHostPanel breakouts={breakouts} userIds={others} />
+<LobbyAdmitList lobby={useLobby(convId, callId)} />
+<CaptionsOverlay transcript={useLiveTranscript(callId)} />
+<MarkMomentButton moments={useMoments(convId, callId)} />
+<NetworkBanner report={useCallQuality(media.room)} />
+<ConnectionIndicator quality={participant.connectionQuality} />
+<AgendaPanel agenda={useAgenda(convId, callId)} />
+<ReactionsOverlay reactions={reactions.reactions} /> <ReactionBar send={reactions.send} />
+<InCallChatPanel conversationId={convId} />
+<BackgroundMenu media={media} images={[{ url: '/bg/office.jpg', label: 'Office' }]} />
+<MoveCallHereBar visible={inCallElsewhere(live, me.id, media.status === 'connected')} onMove={move} />
+<RoomPresence call={rooms[roomId]} />                       {/* sidebar */}
+<MeetingCard card={meetingCardOf(msg)!} selfUserId={me.id} onRsvp={rsvp} onJoin={join} />
+<Whiteboard board={useWhiteboard(callId, Y, { selfUserId: me.id })} />
+<AnnotationOverlay ink={useScreenAnnotations(media.room, sharer.userId)} />
+```
+
+The guest page shows `<LobbyWaiting status={status} name={guestName} />`
+while `waitInLobby` runs. Keep the call while you work:
+`const pip = usePictureInPicture()`, `pip.open({ video })` from a click,
+and `<CallPictureInPicture pip={pip}>…tiles and controls…</CallPictureInPicture>`
+(Document PiP in Chrome and Edge; elsewhere the browser floats `video`).
+
+Optional peers: `yjs` (whiteboard), `@livekit/track-processors`
+(background blur and pictures).
+
 ## Theming
 
 Wrap the UI in `PoolseTheme` to use one of the eight built-in themes from

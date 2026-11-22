@@ -8,6 +8,17 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ### Added
 
+- Live meetings: `StagePanel`, `QuestionsPanel`, `BreakoutBanner`,
+  `BreakoutHostPanel`, `LobbyWaiting`, `LobbyAdmitList`, `CaptionsOverlay`,
+  `MarkMomentButton`, `ConnectionIndicator`, `NetworkBanner`,
+  `RoomPresence`, `AgendaPanel`, `ReactionsOverlay`, `ReactionBar`,
+  `InCallChatPanel`, `BackgroundMenu`, `MoveCallHereBar`.
+- `MeetingCard` (RSVP and Join) and `formatMeetingTime`.
+- `Whiteboard`, `WhiteboardItemSvg`, `AnnotationOverlay`.
+- `usePictureInPicture` and `CallPictureInPicture` (Document PiP, video
+  PiP fallback).
+- Peers: `react-dom`; optional `yjs` and `@livekit/track-processors`.
+
 - `AgentBadge`; `Avatar agent`; the badge on `UserName`, `MemberList`,
   `MentionInput` suggestions, sender labels (all layouts) and `ChatHeader`.
 - `ApprovalCard`, `MessageApproval` (under an agent message with

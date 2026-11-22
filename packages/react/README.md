@@ -165,6 +165,31 @@ Notes that trip people up:
   (`deleted_at` set, `body: null`) and apply `thread:updated` to the root's
   `reply_count`, `last_reply_at` and `thread_participants`.
 
+## Live meetings
+
+Each hook reads once, follows the call's events and re-reads after a
+reconnect:
+
+```tsx
+const media = useCallRoom(conversationId, { livekit, trackProcessors });
+const stage = useStage(conversationId, callId, me.id); // raiseHand, setRole…
+const qa = useQuestions(conversationId, callId); // ask, toggleVote, setStatus
+const breakouts = useBreakouts(conversationId, callId); // session, myRoom, secondsLeft
+const lobby = useLobby(conversationId, callId); // admit, deny, admitAll
+const moments = useMoments(conversationId, callId); // mark()
+const agenda = useAgenda(conversationId, callId); // current, overrunMs, done
+const reactions = useCallReactions(media.room); // reactions, send
+const ink = useScreenAnnotations(media.room, sharerUserId); // pointer and pen
+const quality = useCallQuality(media.room); // report.issues
+const board = useWhiteboard(callId, Y, { selfUserId: me.id });
+const rooms = useRoomPresence(roomConversationIds); // id → LiveCall | null
+```
+
+`useCallRoom` also gives `background` / `setBackground`,
+`noiseSuppression` / `setNoiseSuppression`, `reconnecting` and
+`disconnectReason` (`'moved'`: you took the call on another device).
+Captions are `useLiveTranscript(callId)`.
+
 ## Links
 
 - Docs: <https://poolse.dev/docs/sdk/react>
