@@ -13,13 +13,22 @@ import type {
   AgendaItem,
   GuestLobbyStatus,
   LiveCall,
+  RoomPresenceEntry,
   MeetingCard as MeetingCardData,
   Message,
   Question,
   RsvpResponse,
   RoomSession,
 } from '@poolse/sdk';
-import { QUESTION_MAX, meetingCardOf, meetingJoinable, rsvpOf } from '@poolse/sdk';
+import {
+  QUESTION_MAX,
+  identityKindOf,
+  meetingCardOf,
+  meetingJoinable,
+  meetingNameOf,
+  rsvpOf,
+} from '@poolse/sdk';
+import { useOptionalPoolse } from '@poolse/react';
 import type {
   UseAgenda,
   UseBreakouts,
@@ -68,8 +77,13 @@ type NameFor = (userId: string) => string | null | undefined;
 function useNamer(nameForUserId?: NameFor) {
   const extras = useMessageExtras();
   const fn = nameForUserId ?? extras.nameForUserId;
+  // Guests and phones by the name the call gave them ("Phone ···1234");
+  // members through the directory; never the id.
   return (userId: string | null | undefined, given?: string | null) =>
-    given?.trim() || (userId ? fn?.(userId)?.trim() : null) || 'Someone';
+    given?.trim() ||
+    (userId && identityKindOf(userId) === 'member' ? fn?.(userId)?.trim() : null) ||
+    (userId ? meetingNameOf(userId) : null) ||
+    'Someone';
 }
 
 function useText() {
@@ -219,8 +233,10 @@ export function StagePanel({
   const hands = stage.stage?.hands ?? [];
   const mod = stage.isModerator;
   const isSelf = (id: string) => !!selfUserId && id === selfUserId;
-  const label = (id: string) =>
-    isSelf(id) ? `${nameOf(id, byId.get(id)?.name)} (you)` : nameOf(id, byId.get(id)?.name);
+  const label = (id: string, given?: string | null) => {
+    const n = nameOf(id, byId.get(id)?.name ?? given);
+    return isSelf(id) ? `${n} (you)` : n;
+  };
 
   return (
     <View style={[styles.card, card, style]}>
@@ -245,8 +261,8 @@ export function StagePanel({
             <PersonRow
               key={h.userId}
               seed={h.userId}
-              name={label(h.userId)}
-              guest={byId.get(h.userId)?.guest}
+              name={label(h.userId, h.name)}
+              guest={byId.get(h.userId)?.guest ?? identityKindOf(h.userId) === 'guest'}
               avatarUrl={byId.get(h.userId)?.avatarUrl}
             >
               {stage.stage?.mode === 'stage' && stage.roleOf(h.userId) === 'audience' ? (
@@ -254,7 +270,7 @@ export function StagePanel({
                   label="Bring up"
                   primary
                   onPress={() => void stage.setRole(h.userId, 'speaker')}
-                  accessibilityLabel={`Bring ${nameOf(h.userId, byId.get(h.userId)?.name)} up`}
+                  accessibilityLabel={`Bring ${nameOf(h.userId, byId.get(h.userId)?.name ?? h.name)} up`}
                 />
               ) : null}
               <Button label="Lower" onPress={() => void stage.lowerHand(h.userId)} />
@@ -787,8 +803,11 @@ export function AgendaPanel({ agenda, canEdit = false, nameForUserId, style }: A
 // ── Room presence (CL2) ──────────────────────────────────────────────────
 
 export interface RoomPresenceProps {
-  /** The room's live call (`useRoomPresence(ids)[id]`); nothing renders when null or empty. */
-  call: LiveCall | null | undefined;
+  /**
+   * Who's in (`useRoomPresence().presence[id]`), or a live call
+   * (`useLiveCall(id).call`); nothing renders when empty.
+   */
+  call: RoomPresenceEntry | LiveCall | null | undefined;
   /** Most avatars to show; the rest become "+N". Defaults to 3. */
   max?: number;
   nameForUserId?: NameFor;
@@ -799,7 +818,15 @@ export interface RoomPresenceProps {
 export function RoomPresence({ call, max = 3, nameForUserId, style }: RoomPresenceProps) {
   const { theme, muted } = useText();
   const nameOf = useNamer(nameForUserId);
-  const people = call?.participants ?? [];
+  const live = !!call && ('live' in call ? call.live : call.state === 'live');
+  const extra = live && call && 'attendees' in call ? call.attendees : [];
+  const people =
+    live && call
+      ? [
+          ...call.participants,
+          ...extra.map((a) => ({ user_id: a.identity, external_id: null, display_name: a.name })),
+        ]
+      : [];
   if (people.length === 0) return null;
   const { shown, more } = avatarOverflow(people, max);
   const names = people.map((p) => nameOf(p.user_id, p.display_name));
@@ -836,8 +863,12 @@ export interface MeetingCardProps {
   card: MeetingCardData;
   /** Your user id, to find your answer in the lists. */
   meId?: string | null;
-  /** Record your answer (the Workspace API); the card updates when the server rewrites the message. */
-  onRsvp?: (response: RsvpResponse) => void | Promise<void>;
+  /**
+   * Record your answer yourself. Default: `PUT /meetings/:id/rsvp`
+   * through the provider's client; `false` hides the buttons. The card
+   * updates when the server restates the message.
+   */
+  onRsvp?: ((response: RsvpResponse) => void | Promise<void>) | false;
   /** Join the meeting's room. */
   onJoin?: (card: MeetingCardData) => void;
   nameForUserId?: NameFor;
@@ -861,13 +892,24 @@ export function MeetingCard({
 }: MeetingCardProps) {
   const { theme, card: cardStyle, text, muted } = useText();
   const nameOf = useNamer(nameForUserId);
+  const poolse = useOptionalPoolse();
+  const self = meId ?? poolse?.me.peek()?.id ?? null;
+  const record =
+    onRsvp === false
+      ? null
+      : (onRsvp ??
+        (poolse
+          ? async (r: RsvpResponse) => {
+              await poolse.live.meetings.rsvp(card.meetingId, r);
+            }
+          : null));
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
   const [pending, setPending] = useState<RsvpResponse | null>(null);
-  const mine = pending ?? rsvpOf(card, meId);
+  const mine = pending ?? rsvpOf(card, self);
   const when = meetingTimeText(card);
   const counts = rsvpSummary(card);
   const joinable = meetingJoinable(card, now);
@@ -917,14 +959,14 @@ export function MeetingCard({
       {counts ? <Text style={[styles.small, muted]}>{counts}</Text> : null}
       {card.status !== 'cancelled' && card.status !== 'ended' ? (
         <View style={[styles.inline, styles.wrap, styles.gapTop]}>
-          {onRsvp
+          {record
             ? (['accepted', 'tentative', 'declined'] as const).map((r) => (
                 <Pressable
                   key={r}
                   onPress={async () => {
                     setPending(r);
                     try {
-                      await onRsvp(r);
+                      await record(r);
                     } finally {
                       setPending(null);
                     }

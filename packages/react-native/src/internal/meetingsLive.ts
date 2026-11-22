@@ -87,11 +87,14 @@ export function meetingTimeText(card: Pick<MeetingCard, 'startsAt' | 'endsAt'>):
 }
 
 /** "4 accepted · 1 maybe · 2 declined" (empty parts left out), or null. */
-export function rsvpSummary(card: Pick<MeetingCard, 'rsvps'>): string | null {
+export function rsvpSummary(
+  card: Pick<MeetingCard, 'rsvps'> & Partial<Pick<MeetingCard, 'counts'>>,
+): string | null {
+  const n = (k: 'accepted' | 'tentative' | 'declined') => card.counts?.[k] ?? card.rsvps[k].length;
   const parts: string[] = [];
-  if (card.rsvps.accepted.length) parts.push(`${card.rsvps.accepted.length} accepted`);
-  if (card.rsvps.tentative.length) parts.push(`${card.rsvps.tentative.length} maybe`);
-  if (card.rsvps.declined.length) parts.push(`${card.rsvps.declined.length} declined`);
+  if (n('accepted')) parts.push(`${n('accepted')} accepted`);
+  if (n('tentative')) parts.push(`${n('tentative')} maybe`);
+  if (n('declined')) parts.push(`${n('declined')} declined`);
   return parts.length ? parts.join(' · ') : null;
 }
 
