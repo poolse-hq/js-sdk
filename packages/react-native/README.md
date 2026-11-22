@@ -418,6 +418,36 @@ returns that original shape.
 - Docs: <https://poolse.dev/docs/sdk/react-native>
 - Source: <https://github.com/poolse-hq/js-sdk>
 
+## Messaging plus
+
+The same components as `@poolse/react-ui` (`PollCard`, `BlockRenderer`,
+`PinsList`, `ForwardSheet`, `FilesList`, `ForumPostList`, `CatchUpCard`,
+`TranslatedText`, `NoteCard`, the composer's `formattingToolbar`,
+`commands` and `groups`). Media have no dependency here: build the adapters
+on your media library.
+
+```tsx
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+
+function Voice({ url, attachment }) {
+  const p = useAudioPlayer(url);
+  const st = useAudioPlayerStatus(p);
+  const player = {
+    playing: st.playing,
+    positionMs: st.currentTime * 1000,
+    durationMs: st.duration * 1000,
+    play: () => p.play(),
+    pause: () => p.pause(),
+    seek: (ms) => p.seekTo(ms / 1000),
+    setRate: (r) => p.setPlaybackRate(r),
+  };
+  return <VoiceMessagePlayer player={player} attachment={attachment} />;
+}
+```
+
+`VoiceRecorder` takes an `AudioRecorderAdapter` (`start`, `stop` →
+`{uri, durationMs, mimeType}`, `cancel`): hold to record, release to send.
+
 ## License
 
 Licensed under the [poolse SDK License](./LICENSE) from 3.0.0; versions

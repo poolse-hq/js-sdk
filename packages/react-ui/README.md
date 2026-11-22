@@ -317,6 +317,22 @@ Or override the `--poolse-*` CSS variables (`--poolse-brand`,
 - Docs: <https://poolse.dev/docs/sdk/react-ui>
 - Source: <https://github.com/poolse-hq/js-sdk>
 
+## Messaging plus
+
+| Component                                                                    | What                                                                                         |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `MessageComposer` / `MentionInput` `formattingToolbar`, `commands`, `groups` | Markdown toolbar (Mod+B/I/E/K), `/command` suggestions, `@group` suggestions, the DLP dialog |
+| `PollCard`                                                                   | a poll (feed it `usePoll(message)`)                                                          |
+| `BlockRenderer`                                                              | interactive blocks: sections, buttons, menus, forms                                          |
+| `PinsList`, `ForwardDialog`, `ForwardedLabel`                                | pins and forward; `MessageActions` `onTogglePin`, `onForward`, `onTranslate`                 |
+| `FilesList`, `ForumPostList`                                                 | a conversation's files (`useFiles`), a forum's posts                                         |
+| `CatchUpCard`, `TranslatedText`, `NoteCard`                                  | "what did I miss", a translated message, a shared note link                                  |
+| `VoiceRecorder`, `VoiceMessagePlayer`, `VideoMessagePlayer`                  | voice and video messages, 1×/1.5×/2×, transcripts                                            |
+| `CustomEmojiProvider` (from `@poolse/react`), `EmojiGlyph`                   | the workspace's own emoji in the picker and reactions                                        |
+
+`ThreadView` shows a Follow button and an "Also send to channel" box
+(`follow`, `alsoSendToChannel`).
+
 ## License
 
 Licensed under the [poolse SDK License](./LICENSE) from 3.0.0; versions

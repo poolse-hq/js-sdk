@@ -4,6 +4,14 @@ All notable changes to `@poolse/theme` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `themeFromBrand({primary, accent?, background?}, {name})` (AD15): a light
+  and dark theme from the Workspace branding that keeps every text pair
+  at WCAG AA; `ensureContrast`, `mixColors`.
+
 ## [3.9.0] - 2026-11-22
 
 - No changes; released with the other `@poolse/*` packages at 3.9.0.

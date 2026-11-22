@@ -94,6 +94,18 @@ differ from the built-in theme it extends. `decodeTheme` rejects unknown
 versions, unknown fields, malformed colours, out-of-range numbers and font
 names that could break out of a CSS declaration.
 
+## A theme from the brand
+
+```ts
+import { themeFromBrand } from '@poolse/theme';
+const brand = await ws.get('/workspace/v1/branding'); // {name, colors: {primary, accent, background?}}
+const theme = themeFromBrand(brand.colors, { name: brand.name });
+```
+
+Colours too light or dark for text are adjusted until every pair in
+`CONTRAST_PAIRS` reaches WCAG AA in both schemes; an invalid colour falls
+back to the base theme's.
+
 ## License
 
 [poolse SDK License](./LICENSE).

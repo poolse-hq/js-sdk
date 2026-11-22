@@ -452,6 +452,45 @@ wire type (`Conversation`, `Message`, `Membership`, `Attachment`, `Me`, …).
 - Source: <https://github.com/poolse-hq/js-sdk>
 - Issues: <https://github.com/poolse-hq/js-sdk/issues>
 
+## Messaging plus
+
+Scheduled send, polls, pins, forward, thread follow, catch-up, translation,
+interactive blocks, files and voice/video messages (the server's
+docs/MESSAGING_PLUS.md and PLATFORM_PLUS.md):
+
+```ts
+const conv = chat.conversations.one(id).messages;
+await conv.schedule({ body: 'Morning!', send_at: '2026-11-23T08:00:00Z' });
+await chat.scheduledMessages.list(); // .update / .cancel / .sendNow
+
+const poll = await conv.send({
+  type: 'poll',
+  body: 'Lunch?',
+  poll: { options: ['Pizza', 'Sushi'] },
+});
+await chat.messages.one(poll.id).vote(['1']);
+
+await chat.messages.one(msgId).pin();
+await chat.messages.one(msgId).forward({ conversation_ids: [otherId], comment: 'fyi' });
+await chat.messages.one(rootId).setFollow(false);
+const { summary, highlights } = await conv.catchUp(); // "what did I miss"
+const { text } = await chat.messages.one(msgId).translate('de');
+await chat.messages.one(blockMsgId).action({ action_id: 'approve' });
+
+const { data, next_cursor } = await conv.files({ kind: 'document' });
+const voice = await chat.attachments.upload({
+  body: blob,
+  contentType: blob.type,
+  byteSize: blob.size,
+  purpose: 'voice',
+  durationMs,
+});
+```
+
+A send refused by data-loss prevention throws `ApiError` `dlp_warning`
+(send again with `dlp_acknowledged: true`) or `dlp_blocked`
+(`details.rules: [{id, name}]`).
+
 ## License
 
 Licensed under the [poolse SDK License](./LICENSE) from 3.0.0; versions

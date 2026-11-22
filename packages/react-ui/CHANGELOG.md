@@ -8,6 +8,21 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ### Added
 
+- `MessageComposer` / `MentionInput`: `formattingToolbar` (MS4), `commands`
+  (IN3), the data-loss-prevention dialog with Send anyway (AD6,
+  `DlpWarningDialog`); `MentionInput` `groups` (MS9).
+- `PollCard` (MS3), `BlockRenderer` (IN4), `PinsList`, `ForwardDialog`,
+  `ForwardedLabel` (MS13), `FilesList` (MS18), `ForumPostList` (MS7),
+  `CatchUpCard` (MS20), `TranslatedText` (MS21), `NoteCard` and
+  `noteIdFromLink` (NT6).
+- `VoiceRecorder`, `VoiceMessagePlayer`, `VideoMessagePlayer` with 1×,
+  1.5×, 2× and transcripts (MS15, MS16).
+- `MessageActions`: `onTogglePin` / `pinned`, `onForward`, `onTranslate` /
+  `translated`, `customEmoji`. `EmojiPicker`, `ReactionStrip`,
+  `ReactionPicker` take the workspace's emoji (`EmojiGlyph`).
+- `ThreadView`: Follow button and Also send to channel (`follow`,
+  `alsoSendToChannel`, MS19).
+
 - Live meetings: `StagePanel`, `QuestionsPanel`, `BreakoutBanner`,
   `BreakoutHostPanel`, `LobbyWaiting`, `LobbyAdmitList`, `CaptionsOverlay`,
   `MarkMomentButton`, `ConnectionIndicator`, `NetworkBanner`,
