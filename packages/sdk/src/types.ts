@@ -312,6 +312,8 @@ export interface Message {
   body: string | null;
   /** The sender is an agent (AG1): its avatar and name carry the Agent badge. */
   sender_is_agent?: boolean;
+  /** Said during this call (CL6): the in-call chat. Absent on older servers. */
+  call_id?: Uuid | null;
   /**
    * Null except on an agent's message: `{kind, citations?, approval_id?,
    * followup_id?, standup_id?}`. Read with `agentMetaOf(message)` /
@@ -498,6 +500,12 @@ export interface MessageCreateRequest {
    */
   quoted_message_id?: Uuid;
   mentions?: Uuid[];
+  /**
+   * Tag the message as said during this call (CL6, docs/MEETINGS.md §6):
+   * the call must be live in this conversation, else the tag is dropped
+   * and the message still goes. `GET /v1/calls/:id/messages` lists them.
+   */
+  call_id?: Uuid;
   /**
    * Attach previously-uploaded attachments to this message. Each id
    * must come from `chat.attachments.upload(...)` or the lower-level

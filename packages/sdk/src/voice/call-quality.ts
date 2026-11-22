@@ -11,6 +11,7 @@
 
 import type { CallRoom, Unsubscribe } from './call-room.js';
 import type { CallConnectionQuality, CallNetworkStats } from './livekit-types.js';
+import type { CallQualityReportBody } from '../meetings-live.js';
 
 export type CallNetworkIssueKind =
   | 'offline'
@@ -146,6 +147,31 @@ export interface CallQualityReport {
 }
 
 /**
+ * A reading as the server takes it (`POST /calls/:id/quality`):
+ * LiveKit's `excellent` counts as `good`, loss in percent.
+ */
+export function qualityReportBody(report: CallQualityReport): CallQualityReportBody {
+  const q = report.quality;
+  const s = report.stats;
+  return {
+    quality: q === 'excellent' || q === 'good' ? 'good' : q,
+    ...(s?.packetLoss != null ? { packet_loss: Math.round(s.packetLoss * 1000) / 10 } : {}),
+    ...(s?.rttMs != null ? { rtt_ms: Math.round(s.rttMs) } : {}),
+    ...(s?.jitterMs != null ? { jitter_ms: Math.round(s.jitterMs) } : {}),
+    ...(report.reconnecting ? { reconnecting: true } : {}),
+  };
+}
+
+/** The server's `reason` for a body, to tell when it changed. */
+function reasonOf(body: CallQualityReportBody): string {
+  if (body.reconnecting) return 'reconnecting';
+  if ((body.packet_loss ?? 0) >= 5) return 'packet_loss';
+  if ((body.rtt_ms ?? 0) >= 400) return 'high_latency';
+  if ((body.jitter_ms ?? 0) >= 50) return 'jitter';
+  return body.quality === 'poor' ? 'poor' : '';
+}
+
+/**
  * Polls one call's own link every `intervalMs` (default 3 s) while
  * someone listens, and reports {@link CallQualityReport}. An issue from
  * the stats must show in two readings in a row before it is reported —
@@ -159,9 +185,21 @@ export class CallQualityMonitor {
   private offReconnect: Unsubscribe | null = null;
   private last: CallQualityReport | null = null;
 
+  private lastSent: { key: string; at: number } | null = null;
+
+  /**
+   * `report` sends each reading to the server (`(body) =>
+   * poolse.live.quality.report(callId, body)`, or a guest's
+   * `reportQuality`) — only when the quality or its reason changed, and
+   * at most every 10 s (a minute apart while nothing changes), well
+   * under the server's 30 a minute.
+   */
   constructor(
     private readonly room: CallRoom,
-    private readonly opts: { intervalMs?: number } = {},
+    private readonly opts: {
+      intervalMs?: number;
+      report?: (body: CallQualityReportBody) => Promise<unknown>;
+    } = {},
   ) {}
 
   /** The latest report, or null before the first reading. */
@@ -199,7 +237,26 @@ export class CallQualityMonitor {
     const report: CallQualityReport = { quality, reconnecting, stats, issues };
     this.last = report;
     for (const fn of this.listeners) fn(report);
+    this.maybeReport(report);
     return report;
+  }
+
+  private maybeReport(report: CallQualityReport): void {
+    const send = this.opts.report;
+    if (!send || this.room.getStatus() !== 'connected') return;
+    const body = qualityReportBody(report);
+    const key = `${body.quality}:${reasonOf(body)}`;
+    const now = Date.now();
+    const prev = this.lastSent;
+    if (prev) {
+      const since = now - prev.at;
+      if (since < 10_000) return;
+      if (prev.key === key && since < 60_000) return;
+    }
+    this.lastSent = { key, at: now };
+    void send(body).catch(() => {
+      // Not worth surfacing: the next change reports again.
+    });
   }
 
   stop(): void {

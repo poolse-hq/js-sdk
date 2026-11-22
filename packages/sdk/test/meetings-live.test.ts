@@ -2,6 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import {
+  breakoutsFromWire,
+  GuestClient,
+  identityKindOf,
+  meetingNameOf,
+  phoneLabel,
+  roomPresenceFromWire,
   agendaFromWire,
   agendaOverrunMs,
   inCallElsewhere,
@@ -16,7 +22,7 @@ import {
   type Question,
 } from '../src/meetings-live.js';
 import { CallReactions, ScreenAnnotations, isReactionEmoji } from '../src/voice/call-data.js';
-import { diagnoseCallNetwork } from '../src/voice/call-quality.js';
+import { diagnoseCallNetwork, qualityReportBody } from '../src/voice/call-quality.js';
 import { disconnectReasonOf, type CallRoom } from '../src/voice/call-room.js';
 import {
   WhiteboardModel,
@@ -102,14 +108,17 @@ describe('live meetings mapping', () => {
 
   it('reads meeting cards from metadata or a JSON body, and knows when Join is live', () => {
     const card = meetingCardOf({
-      metadata: {
+      type: 'system',
+      body: JSON.stringify({
+        type: 'meeting_card',
         meeting: {
           id: 'm1',
           title: 'Weekly sync',
           starts_at: '2026-11-21T10:00:00Z',
           rsvps: { accepted: ['u1'], declined: [] },
+          my_rsvp: null,
         },
-      },
+      }),
     })!;
     expect(card.title).toBe('Weekly sync');
     expect(rsvpOf(card, 'u1')).toBe('accepted');
@@ -122,6 +131,7 @@ describe('live meetings mapping', () => {
       body: JSON.stringify({ type: 'meeting_card', meeting: { id: 'm2', status: 'live' } }),
     })!;
     expect(fromBody.status).toBe('live');
+    expect(card.counts.accepted).toBe(1);
     expect(meetingCardOf({ body: 'hello' })).toBeNull();
   });
 
@@ -308,5 +318,140 @@ describe('whiteboard', () => {
     ).toMatchObject({
       text: 'a'.repeat(500),
     });
+  });
+});
+
+describe('MEETINGS.md specifics', () => {
+  it('names guests and phones without showing ids', () => {
+    expect(phoneLabel('sip_+37060012345')).toBe('Phone ···2345');
+    expect(phoneLabel('sip_out_3f2a')).toBe('Phone');
+    expect(meetingNameOf('guest_abc', 'Ana')).toBe('Ana');
+    expect(meetingNameOf('guest_abc')).toBe('Guest');
+    expect(meetingNameOf('sip_+37060012345', '+37060012345')).toBe('Phone ···2345');
+    expect(meetingNameOf('u-1')).toBeNull();
+    expect(identityKindOf('sip_out_1')).toBe('phone');
+  });
+
+  it('works out your role from a stage event without my_role', () => {
+    const s = stageFromWire(
+      { call_id: 'c', stage: { call_id: 'c', mode: 'stage', roles: { me: 'speaker' }, hands: [] } },
+      'me',
+    )!;
+    expect(s.myRole).toBe('speaker');
+    expect(stageFromWire({ stage: { call_id: 'c', mode: 'stage' } }, 'me')!.myRole).toBe(
+      'audience',
+    );
+  });
+
+  it('reads breakout rooms as parts of the main call', () => {
+    const b = breakoutsFromWire({
+      breakouts: {
+        id: 'sp1',
+        call_id: 'call-1',
+        status: 'open',
+        rooms: [{ id: 'sp1.1', n: 1, name: 'Room 1', call_id: null, user_ids: ['guest_9'] }],
+        my_room_id: 'sp1.1',
+      },
+    })!;
+    expect(b.rooms[0]).toMatchObject({ id: 'sp1.1', n: 1, callId: null });
+    expect(breakoutsFromWire({ breakouts: null })).toBeNull();
+  });
+
+  it('the lobby lives on the conversation and has no call before one starts', async () => {
+    const lobby = { lobby: { call_id: null, conversation_id: 'c-1', enabled: true, waiting: [] } };
+    const fetchFn = scriptedFetch([jsonResponse(lobby), jsonResponse(lobby)]);
+    const chat = buildPoolse(fetchFn);
+    const l = await chat.live.lobby.get({ conversationId: 'c-1' });
+    expect(l.callId).toBeNull();
+    await chat.live.lobby.admit({ conversationId: 'c-1' }, 'g-1');
+    expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/conversations/c-1/lobby');
+    expect(fetchFn.calls[1]?.url).toBe('https://chat.test/v1/conversations/c-1/lobby/g-1/admit');
+  });
+
+  it('RSVPs, captions and quality go to their endpoints', async () => {
+    const meeting = { meeting: { id: 'm1', title: 'Sync', my_rsvp: 'accepted' } };
+    const fetchFn = scriptedFetch([
+      jsonResponse(meeting),
+      jsonResponse({ captions: { call_id: 'call-1', user_ids: ['me'], transcript_id: 't1' } }),
+      jsonResponse({
+        quality: {
+          identity: 'me',
+          quality: 'poor',
+          reason: 'packet_loss',
+          explanation: 'Your network…',
+        },
+      }),
+    ]);
+    const chat = buildPoolse(fetchFn);
+    expect((await chat.live.meetings.rsvp('m1', 'accepted')).myRsvp).toBe('accepted');
+    expect(fetchFn.calls[0]?.method).toBe('PUT');
+    expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/meetings/m1/rsvp');
+    expect((await chat.live.captions.set('call-1', true)).userIds).toEqual(['me']);
+    expect(await bodyJson(fetchFn.calls[1]!)).toEqual({ on: true });
+    const q = await chat.live.quality.report('call-1', { quality: 'poor', packet_loss: 8 });
+    expect(q.reason).toBe('packet_loss');
+  });
+
+  it('a guest joins with a name, waits, and gets the session', async () => {
+    const fetchFn = scriptedFetch([
+      jsonResponse({
+        data: { conversation_name: 'Acme', lobby: true, publish: 'audio', live: false },
+      }),
+      jsonResponse(
+        {
+          guest: { id: 'g1', name: 'Ana' },
+          token: 'gt',
+          lobby_token: 'gt',
+          entry_id: 'g1',
+          lobby: true,
+        },
+        { status: 201 },
+      ),
+      jsonResponse({
+        lobby: { status: 'admitted', session: { call: { id: 'call-1', media: 'video' } } },
+      }),
+    ]);
+    const guest = new GuestClient({ apiUrl: 'https://chat.test', fetch: fetchFn });
+    expect((await guest.link('lt')).publish).toBe('audio');
+    const joined = await guest.join('lt', '  Ana  ');
+    expect(joined.entryId).toBe('g1');
+    expect(await bodyJson(fetchFn.calls[1]!)).toEqual({ link: 'lt', name: 'Ana' });
+    const st = await guest.waitInLobby({ intervalMs: 1 });
+    expect(st.status).toBe('admitted');
+    expect(st.status === 'admitted' && st.session?.call?.id).toBe('call-1');
+    expect(fetchFn.calls[2]?.headers.get('authorization')).toBe('Bearer gt');
+  });
+
+  it('reads who is in a room from room:participants', () => {
+    const r = roomPresenceFromWire({
+      conversation_id: 'c-1',
+      call_id: 'call-1',
+      media: 'video',
+      participants: [{ user_id: 'u1', display_name: 'Ana' }],
+      attendees: [{ identity: 'sip_+37060012345', kind: 'phone', name: null }],
+      live: true,
+    })!;
+    expect(r.attendees[0]?.name).toBe('Phone ···2345');
+    expect(
+      roomPresenceFromWire({ conversation_id: 'c-1', call_id: 'call-1', live: false })!
+        .participants,
+    ).toEqual([]);
+  });
+
+  it('a quality report counts excellent as good and loss in percent', () => {
+    expect(
+      qualityReportBody({
+        quality: 'excellent',
+        reconnecting: false,
+        stats: {
+          packetLoss: 0.083,
+          rttMs: 120.4,
+          jitterMs: null,
+          videoKbps: null,
+          limitedBy: null,
+        },
+        issues: [],
+      }),
+    ).toEqual({ quality: 'good', packet_loss: 8.3, rtt_ms: 120 });
   });
 });

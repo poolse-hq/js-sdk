@@ -1026,6 +1026,14 @@ export class UserChannel {
     this.channel.leave();
   }
 
+  /**
+   * Any server event on the user topic, by name — for events without a
+   * typed handler (`room:participants`, `meeting:starting`, `meeting:brief`).
+   */
+  on(event: string, fn: (payload: unknown) => void): Unsubscribe {
+    return this.subscribe(event, fn);
+  }
+
   private subscribe(event: string, fn: (payload: unknown) => void): Unsubscribe {
     let set = this.listeners.get(event);
     if (!set) {
