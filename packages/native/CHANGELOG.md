@@ -11,6 +11,12 @@ Formerly `@poolse/react-native-calls` (0.x).
   (defaulted). Snapshots and `waiting` carry `ringType` and `meetingTitle`.
   Custom Android ring activities get `EXTRA_RING_TYPE`, `EXTRA_MEETING_TITLE`
   and `EXTRA_TITLE`.
+- Meeting notices (MEETINGS.md §11.3). Android posts `type: "meeting"` data
+  pushes (`starting` with Join, `brief`) on a new "Meetings" channel. iOS
+  registers the `poolse_meeting` category with a Join action. A tap and Join
+  reach JS as a `CallAction` of type `open` / `join_meeting`, with the new
+  `scheduledMeetingId`. `takeCallAction` and `onCallAction` now work on iOS
+  too, for meeting notices.
 - Noise suppression and background blur (CL7): `setNoiseSuppression`,
   `noiseSuppressionSupported`, `setBackgroundBlur` and
   `backgroundBlurSupported`. Snapshots carry `noiseSuppression` and

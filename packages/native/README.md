@@ -162,6 +162,21 @@ and the Android buttons read Join / Not now. Answering joins the meeting's
 room like any call. The snapshot says so too: `ringType: 'meeting'` and
 `meetingTitle`, so the call screen can name the meeting.
 
+**Meeting notices.** The server's "is starting" notice (for meetings set to
+notify rather than ring) and the brief a few minutes before
+(MEETINGS.md §11.3) are shown with the app closed. On Android the core posts
+the `type: "meeting"` data push itself, on a "Meetings" channel, with the
+workspace as subtext when several are signed in. "Starting" has a Join
+button. A brief is replaced by that meeting's "starting" notice, and a
+redelivered push is not posted twice. On iOS the server sends an alert push
+with category `poolse_meeting`, and the core registers that category with a
+Join action (`poolse_meeting_join`). On both platforms the tap and Join reach
+the app as a `CallAction`: `{ type: 'open' | 'join_meeting', conversationId,
+callId, media, serverId, scheduledMeetingId }`, through `takeCallAction()`
+on a cold start and `onCallAction` while running. On Join, join the room
+(`rooms.start(conversationId, media)` joins what is live). The core never
+joins by itself.
+
 **Noise suppression and background blur.**
 `setNoiseSuppression(on)` / `noiseSuppressionSupported()`: on by default.
 Android switches WebRTC's noise suppression on the microphone (echo

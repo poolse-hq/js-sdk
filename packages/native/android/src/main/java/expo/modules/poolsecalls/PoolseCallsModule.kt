@@ -10,6 +10,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import dev.poolse.callcore.android.CallCore
+import dev.poolse.callcore.android.MeetingNotification
 import dev.poolse.callcore.android.MessageNotifications
 import dev.poolse.callcore.android.MissedCallNotification
 import dev.poolse.callcore.android.ServerRegistry
@@ -297,20 +298,28 @@ class PoolseCallsModule : Module() {
     // Null on a notification posted before servers: the default one.
     val serverId = intent.getStringExtra(MissedCallNotification.EXTRA_SERVER_ID)
       ?: context?.let { ServerRegistry.servers(it).get(null)?.id }
+    // A meeting notice's tap / Join (MeetingNotification).
+    val meetingId = intent.getStringExtra(MeetingNotification.EXTRA_SCHEDULED_MEETING_ID)
     for (key in listOf(
       MissedCallNotification.EXTRA_SERVER_ID,
       MissedCallNotification.EXTRA_ACTION,
       MissedCallNotification.EXTRA_CONVERSATION_ID,
       MissedCallNotification.EXTRA_CALL_ID,
       MissedCallNotification.EXTRA_MEDIA,
+      MeetingNotification.EXTRA_SCHEDULED_MEETING_ID,
     )) intent.removeExtra(key)
-    if (callId != null) context?.let { MissedCallNotification.cancel(it, callId) }
+    if (meetingId != null) {
+      context?.let { MeetingNotification.cancel(it, meetingId) }
+    } else if (callId != null) {
+      context?.let { MissedCallNotification.cancel(it, callId) }
+    }
     return mapOf(
       "type" to action,
       "conversationId" to conversationId,
       "callId" to callId,
       "media" to media,
       "serverId" to serverId,
+      "scheduledMeetingId" to meetingId,
     )
   }
 

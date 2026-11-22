@@ -9,7 +9,7 @@ public class PoolseCallsModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PoolseCalls")
 
-    Events("onCallState", "onVoipToken", "onPictureInPicture", "onNotificationAction")
+    Events("onCallState", "onVoipToken", "onPictureInPicture", "onNotificationAction", "onCallAction")
 
     // Normally done at launch by PoolseCallsAppDelegateSubscriber; this is
     // the backstop for a host whose AppDelegate does not forward to Expo.
@@ -31,6 +31,9 @@ public class PoolseCallsModule: Module {
         CallPictureInPicture.listener = { [weak self] active in
           self?.sendEvent("onPictureInPicture", ["active": active])
         }
+        MessageNotifications.callActionListener = { [weak self] event in
+          self?.sendEvent("onCallAction", event)
+        }
         MessageNotifications.actionListener = { [weak self] event in
           self?.sendEvent("onNotificationAction", event)
         }
@@ -43,6 +46,7 @@ public class PoolseCallsModule: Module {
         VoipPush.tokenListener = nil
         CallPictureInPicture.listener = nil
         MessageNotifications.actionListener = nil
+        MessageNotifications.callActionListener = nil
       }
     }
 
@@ -175,6 +179,13 @@ public class PoolseCallsModule: Module {
 
     // Reply / Mark as read done from a notification while JS was not
     // listening (usually: the app was not running). Oldest first, once.
+    // A meeting notice's tap / Join that launched the app (cold start), once.
+    Function("takeCallAction") { () -> [String: Any]? in
+      var out: [String: Any]?
+      let take = { out = MessageNotifications.pendingCallAction; MessageNotifications.pendingCallAction = nil }
+      if Thread.isMainThread { take() } else { DispatchQueue.main.sync(execute: take) }
+      return out
+    }
     Function("takeNotificationActions") { () -> [[String: Any]] in
       MessageNotifications.takePending()
     }

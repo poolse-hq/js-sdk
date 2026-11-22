@@ -38,6 +38,16 @@ final class MessageNotifications: NSObject, NotificationDelegate {
   static let category = "poolse_message"
   static let replyAction = "reply"
   static let markReadAction = "mark_read"
+  /// Scheduled-meeting notices (server docs/MEETINGS.md §11.3): an alert push
+  /// with this category; "starting" offers Join.
+  static let meetingCategory = "poolse_meeting"
+  static let meetingJoinAction = "poolse_meeting_join"
+
+  /// The bridge's subscriber for meeting taps / Join (`onCallAction`); main thread.
+  static var callActionListener: (([String: Any]) -> Void)?
+  /// The last one nobody was listening for — the cold start that a Join
+  /// launched; `takeCallAction` reads it once. Main thread.
+  static var pendingCallAction: [String: Any]?
 
   /// The bridge's subscriber for finished notification actions; main thread.
   static var actionListener: (([String: Any]) -> Void)?
@@ -79,10 +89,19 @@ final class MessageNotifications: NSObject, NotificationDelegate {
       categorySummaryFormat: "%u more messages from %@",
       options: []
     )
+    // Join opens the app: joining needs the user's session, which only it has.
+    let join = UNNotificationAction(identifier: Self.meetingJoinAction, title: "Join", options: [.foreground])
+    let meeting = UNNotificationCategory(
+      identifier: Self.meetingCategory,
+      actions: [join],
+      intentIdentifiers: [],
+      options: []
+    )
     let center = UNUserNotificationCenter.current()
     center.getNotificationCategories { existing in
-      var all = existing.filter { $0.identifier != Self.category }
+      var all = existing.filter { $0.identifier != Self.category && $0.identifier != Self.meetingCategory }
       all.insert(category)
+      all.insert(meeting)
       center.setNotificationCategories(all)
     }
   }
@@ -91,6 +110,7 @@ final class MessageNotifications: NSObject, NotificationDelegate {
 
   func didReceive(_ response: UNNotificationResponse, completionHandler: @escaping () -> Void) -> Bool {
     let content = response.notification.request.content
+    if content.categoryIdentifier == Self.meetingCategory { return meetingResponse(response) }
     guard content.categoryIdentifier == Self.category else { return false }
     let action = response.actionIdentifier
     guard action == Self.replyAction || action == Self.markReadAction else {
@@ -170,6 +190,38 @@ final class MessageNotifications: NSObject, NotificationDelegate {
         Self.report(event)
         // Give the failure notification a moment to be scheduled.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { background.end() }
+      }
+    }
+    return true
+  }
+
+  /// A meeting notice's tap (`open`) or Join (`join_meeting`), handed to JS
+  /// as a CallAction — the shape Android's notification produces.
+  private func meetingResponse(_ response: UNNotificationResponse) -> Bool {
+    let content = response.notification.request.content
+    let info = content.userInfo
+    func str(_ key: String) -> String? { (info[key] as? String).flatMap(nilIfEmpty) }
+    let action: String
+    switch response.actionIdentifier {
+    case Self.meetingJoinAction: action = "join_meeting"
+    case UNNotificationDefaultActionIdentifier: action = "open"
+    default: return true // dismissed
+    }
+    guard let conversationId = str("conversation_id") else { return true }
+    let server = ServerRegistry.shared.servers.resolve(tenantId: str("tenant_id"))
+    let event: [String: Any] = [
+      "type": action,
+      "conversationId": conversationId,
+      "callId": str("call_id") ?? NSNull(),
+      "media": str("media") == "video" ? "video" : "audio",
+      "serverId": server?.id ?? NSNull(),
+      "scheduledMeetingId": str("scheduled_meeting_id") ?? NSNull(),
+    ]
+    DispatchQueue.main.async {
+      if let listener = Self.callActionListener {
+        listener(event)
+      } else {
+        Self.pendingCallAction = event
       }
     }
     return true

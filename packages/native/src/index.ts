@@ -317,17 +317,22 @@ export interface CallServer {
 }
 
 /**
- * What the user tapped on a missed-call notification: the notification
- * itself (`open` the conversation) or its Call back button (`call_back`
- * — place a call on the conversation with `media`).
+ * What the user tapped on a missed-call or meeting notification: the
+ * notification itself (`open` the conversation), a missed call's Call
+ * back (`call_back` — place a call on the conversation with `media`), or
+ * a starting meeting's Join (`join_meeting` — join the room `callId` in
+ * the conversation, e.g. `poolse.rooms.start(conversationId, media)`,
+ * which joins what is live).
  */
 export interface CallAction {
-  type: 'open' | 'call_back';
+  type: 'open' | 'call_back' | 'join_meeting';
   conversationId: string;
   callId: string | null;
   media: 'audio' | 'video';
   /** The server (workspace) it belongs to — open that one. Absent before 3.8. */
   serverId?: string | null;
+  /** A meeting notice's scheduled meeting; null for missed calls. Absent before 3.10. */
+  scheduledMeetingId?: string | null;
 }
 
 /**
@@ -828,24 +833,28 @@ export function setShowOnLockscreen(enabled: boolean): void {
   }
 }
 
-// ── missed-call notifications (Android) ─────────────────────────────────
+// ── missed-call and meeting notifications ───────────────────────────────
 
 /**
- * Android: the missed-call notification action the app was LAUNCHED
- * with, once — read it on mount. `null` when the app opened any other
- * way. The native core posts that notification itself from the push,
- * so it works with the app closed.
+ * The notification action the app was LAUNCHED with, once — read it on
+ * mount. `null` when the app opened any other way.
  *
- * iOS shows missed calls as an ordinary alert push (to the token you
- * register with `kind: 'alert'`); read its taps with your notification
- * library — its `type` is `call_missed`, the category
+ * Android: missed calls and meeting notices (`starting` with Join, and
+ * the brief; server docs/MEETINGS.md §11.3), both posted by the native
+ * core from the push so they work with the app closed.
+ *
+ * iOS: meeting notices (the alert push's category `poolse_meeting`, Join
+ * `poolse_meeting_join`), whose tap and Join arrive here as `open` /
+ * `join_meeting`. Missed calls there are an ordinary alert push (to the
+ * token you register with `kind: 'alert'`); read its taps with your
+ * notification library — its `type` is `call_missed`, the category
  * `poolse_missed_call`, the Call back action `call_back`.
  */
 export function takeCallAction(): CallAction | null {
   return native?.takeCallAction?.() ?? null;
 }
 
-/** Android: a missed-call notification tapped while the app is running. */
+/** A missed-call (Android) or meeting notification (both) tapped while the app is running. */
 export function onCallAction(cb: (action: CallAction) => void): Unsubscribe {
   if (!native || !native.takeCallAction) return () => undefined;
   const sub = native.addListener('onCallAction', cb);
