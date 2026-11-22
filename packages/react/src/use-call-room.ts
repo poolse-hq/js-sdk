@@ -1,4 +1,7 @@
 import type {
+  CallBackground,
+  CallDisconnectReason,
+  TrackProcessorsModule,
   CallDevice,
   CallDeviceKind,
   CallParticipant,
@@ -41,9 +44,38 @@ export interface UseCallRoomOptions {
    * true; false: call `republish` yourself.
    */
   republishOnPermission?: boolean;
+  /**
+   * `@livekit/track-processors` (`import * as trackProcessors from
+   * '@livekit/track-processors'`) for background blur and replacement on
+   * the web. Optional peer; without it `backgroundSupported` is false.
+   */
+  trackProcessors?: TrackProcessorsModule;
+  /** Start with the browser's noise suppression on (default) or off. */
+  noiseSuppression?: boolean;
 }
 
 export interface UseCallRoom {
+  /**
+   * The media object itself, for the data-channel hooks
+   * (`useCallReactions`, `useScreenAnnotations`, `useCallQuality`). null
+   * until there is a conversation.
+   */
+  room: CallRoom | null;
+  /** Background blur / replacement can run here (CL7). */
+  backgroundSupported: boolean;
+  /** The chosen camera background. */
+  background: CallBackground;
+  /** Resolves false when it could not be applied (see `error`). */
+  setBackground: (effect: CallBackground) => Promise<boolean>;
+  noiseSuppression: boolean;
+  setNoiseSuppression: (enabled: boolean) => Promise<void>;
+  /** The connection dropped and LiveKit is bringing it back (CL15). */
+  reconnecting: boolean;
+  /**
+   * Why the SFU connection last ended, or null while it hasn't. `moved`:
+   * you took the call on another device — say so, and don't hang up.
+   */
+  disconnectReason: CallDisconnectReason | null;
   status: CallRoomStatus;
   /** Everyone on the call, the local participant first. */
   participants: CallParticipant[];
@@ -171,6 +203,10 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   const [error, setError] = useState<Error | null>(null);
   const [sfuAvailable, setSfuAvailable] = useState<boolean | null>(null);
   const [canPublish, setCanPublish] = useState(true);
+  const [background, setBackgroundState] = useState<CallBackground>({ type: 'none' });
+  const [noiseSuppression, setNoise] = useState(opts.noiseSuppression ?? true);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [disconnectReason, setDisconnectReason] = useState<CallDisconnectReason | null>(null);
 
   // Kept current, but read only when a room is built.
   //
@@ -220,6 +256,12 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
         : {}),
       ...(optsRef.current.republishOnPermission !== undefined
         ? { republishOnPermission: optsRef.current.republishOnPermission }
+        : {}),
+      ...(optsRef.current.trackProcessors
+        ? { trackProcessors: optsRef.current.trackProcessors }
+        : {}),
+      ...(optsRef.current.noiseSuppression !== undefined
+        ? { noiseSuppression: optsRef.current.noiseSuppression }
         : {}),
     });
   }, [poolse, conversationId]);
@@ -285,6 +327,12 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     const offDevices = room.onDevices(() => refreshDevices(room));
     const offError = room.onError(setError);
     const offPublish = room.onPublishPermission(() => sync(room));
+    setReconnecting(room.isReconnecting());
+    setDisconnectReason(null);
+    setBackgroundState(room.getBackground());
+    setNoise(room.isNoiseSuppressionEnabled());
+    const offReconnect = room.onReconnecting(setReconnecting);
+    const offDisconnect = room.onDisconnected(setDisconnectReason);
 
     return () => {
       offStatus();
@@ -293,6 +341,8 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       offDevices();
       offError();
       offPublish();
+      offReconnect();
+      offDisconnect();
       held.current = null;
       // Unmounting mid-call must disconnect, or the SFU keeps publishing
       // a participant nobody is behind.
@@ -419,7 +469,32 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     sync(room);
   }, [room, sync]);
 
+  const setBackground = useCallback(
+    async (effect: CallBackground) => {
+      if (!room) return false;
+      setBackgroundState(effect);
+      return room.setBackground(effect);
+    },
+    [room],
+  );
+
+  const setNoiseSuppression = useCallback(
+    async (enabled: boolean) => {
+      setNoise(enabled);
+      await room?.setNoiseSuppression(enabled);
+    },
+    [room],
+  );
+
   return {
+    room,
+    backgroundSupported: room?.backgroundSupported() ?? false,
+    background,
+    setBackground,
+    noiseSuppression,
+    setNoiseSuppression,
+    reconnecting,
+    disconnectReason,
     status,
     participants,
     cameraEnabled,

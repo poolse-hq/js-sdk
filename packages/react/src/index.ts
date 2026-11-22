@@ -135,6 +135,29 @@ export type {
 export { useCallRoom, type UseCallRoom, type UseCallRoomOptions } from './use-call-room.js';
 export { useLiveCall, type UseLiveCall } from './use-live-call.js';
 export { useRoom, type UseRoom, type UseRoomOptions } from './use-room.js';
+// Live meeting features (CL2–CL15, CA5) — docs/MEETINGS.md.
+export {
+  useAgenda,
+  useBreakouts,
+  useCallQuality,
+  useCallReactions,
+  useLobby,
+  useMoments,
+  useQuestions,
+  useRoomPresence,
+  useScreenAnnotations,
+  useStage,
+  useWhiteboard,
+  type UseAgenda,
+  type UseBreakouts,
+  type UseCallReactions,
+  type UseLobby,
+  type UseMoments,
+  type UseQuestions,
+  type UseScreenAnnotations,
+  type UseStage,
+  type UseWhiteboard,
+} from './use-meetings-live.js';
 
 // ── Recording, consent and transcripts ───────────────────────────
 export { useRecording, type UseRecording } from './use-recording.js';
