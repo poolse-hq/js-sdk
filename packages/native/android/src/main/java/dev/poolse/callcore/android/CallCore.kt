@@ -91,6 +91,15 @@ class CallCore private constructor(context: Context) {
   private var videoPaused = false
   /** False while the server holds our media back (recording consent). */
   private var canPublish = true
+  /** Capture processing (CL7): per process, not per call. */
+  private var noiseSuppression = true
+  private var backgroundBlur = false
+  /**
+   * This call was taken over by the same user on another device (CL11):
+   * the SFU replaced our participant (duplicate identity). The end that
+   * follows reads `reason: 'moved'`.
+   */
+  private var movedElsewhere = false
 
   /** Last snapshot emitted; read by the bridge's getCallState from any thread. */
   @Volatile private var lastSnapshot: Map<String, Any?>? = null
@@ -108,6 +117,9 @@ class CallCore private constructor(context: Context) {
   /** The push's `workspace_name` per ringing call. */
   private val ringWorkspaces = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+  /** Meeting rings (CA4) per call: the meeting's title, "" when it has none. Absent: a person calling. */
+  private val ringMeetings = java.util.concurrent.ConcurrentHashMap<String, String>()
+
   /**
    * A ring arrived — from FCM (closed app) or the socket (open app).
    * Bound to its server before the runtime sees it: a busy-decline runs
@@ -123,6 +135,10 @@ class CallCore private constructor(context: Context) {
     ring.workspaceName?.let {
       if (ringWorkspaces.size > 16) ringWorkspaces.clear()
       ringWorkspaces[ring.callId] = it
+    }
+    if (ring.isMeeting) {
+      if (ringMeetings.size > 16) ringMeetings.clear()
+      ringMeetings[ring.callId] = ring.meetingTitle ?: ""
     }
   }
 
@@ -255,6 +271,34 @@ class CallCore private constructor(context: Context) {
     return true
   }
 
+  /**
+   * Noise suppression on the microphone (CL7), on by default. Kept
+   * across calls for this process. False when the engine can't change
+   * it (the signalling-only build).
+   */
+  fun setNoiseSuppression(on: Boolean): Boolean {
+    val source = media as? CaptureProcessingSource ?: return false
+    // On the runtime's (main) thread: the media port only touches its room there.
+    runtime.post { noiseSuppression = on; source.setNoiseSuppression(on) }
+    runtime.reemit()
+    return true
+  }
+
+  /** Background blur on the camera (CL7); a no-op where unsupported. */
+  fun setBackgroundBlur(on: Boolean): Boolean {
+    val source = media as? CaptureProcessingSource ?: return false
+    if (!source.backgroundBlurSupported) return false
+    runtime.post { backgroundBlur = on; source.setBackgroundBlur(on) }
+    runtime.reemit()
+    return true
+  }
+
+  val noiseSuppressionSupported: Boolean
+    get() = (media as? CaptureProcessingSource)?.noiseSuppressionSupported ?: false
+
+  val backgroundBlurSupported: Boolean
+    get() = (media as? CaptureProcessingSource)?.backgroundBlurSupported ?: false
+
   /** Whether this build's media engine can share the screen. */
   val screenShareSupported: Boolean get() = media is ScreenShareSource
 
@@ -368,6 +412,16 @@ class CallCore private constructor(context: Context) {
     val out = snap.toMutableMap()
     out["serverId"] = serverId
     out["workspaceName"] = state.callId?.let { ringWorkspaces[it] } ?: servers.get(serverId)?.name
+    // A scheduled meeting that rang this device (CA4).
+    val meeting = state.callId?.let { ringMeetings[it] }
+    out["ringType"] = if (meeting != null) "meeting" else "call"
+    out["meetingTitle"] = meeting?.ifEmpty { null }
+    out["noiseSuppression"] = noiseSuppression
+    out["backgroundBlur"] = backgroundBlur
+    out["movedElsewhere"] = movedElsewhere
+    // Taken over by another of this user's devices: the machine ends it
+    // as `left` (CALL_CONTRACT.md §9); the app is told why.
+    if (movedElsewhere && state.phase == Phase.ENDED) out["reason"] = "moved"
     val waiting = snap["waiting"] as? Map<*, *>
     val ring = runtime.waitingRing
     if (waiting != null && ring != null) {
@@ -375,6 +429,8 @@ class CallCore private constructor(context: Context) {
       out["waiting"] = waiting.entries.associate { (k, v) -> k.toString() to v } + mapOf(
         "serverId" to waitingServer,
         "workspaceName" to (ring.workspaceName ?: servers.get(waitingServer)?.name),
+        "ringType" to (if (ring.isMeeting) "meeting" else "call"),
+        "meetingTitle" to ring.meetingTitle,
       )
     }
     return out
@@ -391,6 +447,7 @@ class CallCore private constructor(context: Context) {
     roster = emptyList()
     conversationName = null
     callKind = "call"
+    movedElsewhere = false
     mutedSelf = false
     // Reported by the media adapter once the camera is really published.
     cameraOn = false
@@ -483,6 +540,9 @@ class CallCore private constructor(context: Context) {
     override fun onNetwork(quality: String, videoPaused: Boolean) {
       runtime.post { connectionQuality = quality; this@CallCore.videoPaused = videoPaused }
       runtime.reemit()
+    }
+    override fun onMovedElsewhere() {
+      runtime.post { movedElsewhere = true }
     }
   }
 
@@ -747,6 +807,12 @@ interface MediaEvents {
    * given yet, docs/RECORDING.md §5). Sent on every change.
    */
   fun onCanPublish(allowed: Boolean) {}
+  /**
+   * The SFU replaced us with the same user joining from another device
+   * ("move call to this device", CALL_CONTRACT.md §9). Sent just before
+   * [onLost].
+   */
+  fun onMovedElsewhere() {}
 }
 
 /** One place call audio can play — a snapshot `audioOutputs[]` entry. */

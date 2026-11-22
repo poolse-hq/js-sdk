@@ -193,6 +193,9 @@ final class CallCore {
   private var videoPaused = false
   /// False while the server holds our media back (recording consent).
   private var canPublish = true
+  /// Taken over by the same user on another device (CL11): the end that
+  /// follows reads `reason: 'moved'`.
+  private var movedElsewhere = false
 
   /// ring_ended reasons seen per call — the CallKit end reason.
   private var ringEndReasons: [String: String] = [:]
@@ -203,6 +206,16 @@ final class CallCore {
   private var lastSnapshot: [String: Any]?
   /// The push's `workspace_name` per ringing call (under snapshotLock).
   private var ringWorkspaces: [String: String] = [:]
+  /// Meeting rings (CA4) per call: the meeting's title, "" when it has
+  /// none (under snapshotLock). Absent: a person calling.
+  private var ringMeetings: [String: String] = [:]
+
+  private func ringMeetingTitle(_ callId: String?) -> String?? {
+    guard let id = callId else { return nil }
+    snapshotLock.lock(); defer { snapshotLock.unlock() }
+    guard let title = ringMeetings[id] else { return nil }
+    return .some(title.isEmpty ? nil : title)
+  }
 
   private func ringWorkspaceName(_ callId: String?) -> String? {
     guard let id = callId else { return nil }
@@ -254,6 +267,12 @@ final class CallCore {
       snapshotLock.lock()
       ringWorkspaces[ring.callId] = name
       if ringWorkspaces.count > 16 { ringWorkspaces = [ring.callId: name] }
+      snapshotLock.unlock()
+    }
+    if ring.isMeeting {
+      snapshotLock.lock()
+      if ringMeetings.count > 16 { ringMeetings = [:] }
+      ringMeetings[ring.callId] = ring.meetingTitle ?? ""
       snapshotLock.unlock()
     }
     runtime.onRing(ring)
@@ -375,6 +394,16 @@ final class CallCore {
   /// Not optimistic: screenSharing flips when the screen is published.
   func setScreenShare(_ on: Bool) { onMain { [self] in mediaPort.setScreenShare(on) } }
 
+  /// Noise suppression (CL7), on by default; see LiveKitMediaPort.
+  func setNoiseSuppression(_ on: Bool) {
+    onMain { [self] in mediaPort.setNoiseSuppression(on); runtime.reemit() }
+  }
+
+  /// Background blur on the camera (CL7).
+  func setBackgroundBlur(_ on: Bool) {
+    onMain { [self] in mediaPort.setBackgroundBlur(on); runtime.reemit() }
+  }
+
   func setSpeaker(_ on: Bool) {
     onMain { [self] in
       audioRoute = on ? "speaker" : "earpiece" // optimistic; the adapter reports the real one
@@ -472,9 +501,25 @@ final class CallCore {
     let ringName = ringWorkspaceName(state.callId)
     out["serverId"] = serverId ?? NSNull()
     out["workspaceName"] = (ringName ?? servers.get(serverId)?.name) ?? NSNull()
+    out["noiseSuppression"] = mediaPort.noiseSuppression
+    out["backgroundBlur"] = mediaPort.backgroundBlur
+    out["movedElsewhere"] = movedElsewhere
+    // Taken over by another of this user's devices: the machine ends it
+    // as `left` (CALL_CONTRACT.md §9); the app is told why.
+    if movedElsewhere && state.phase == .ended { out["reason"] = "moved" }
+    // A scheduled meeting that rang this device (CA4).
+    if let meeting = ringMeetingTitle(state.callId) {
+      out["ringType"] = "meeting"
+      out["meetingTitle"] = meeting ?? NSNull()
+    } else {
+      out["ringType"] = "call"
+      out["meetingTitle"] = NSNull()
+    }
     if var waiting = out["waiting"] as? [String: Any], let w = runtime.waitingRing {
       waiting["serverId"] = (w.serverId ?? server(of: w.callId)) ?? NSNull()
       waiting["workspaceName"] = (w.workspaceName ?? servers.get(w.serverId)?.name) ?? NSNull()
+      waiting["ringType"] = w.isMeeting ? "meeting" : "call"
+      waiting["meetingTitle"] = w.meetingTitle ?? NSNull()
       out["waiting"] = waiting
     }
     return out
@@ -506,6 +551,7 @@ final class CallCore {
     connectionQuality = "unknown"
     videoPaused = false
     canPublish = true
+    movedElsewhere = false
   }
 
   /// CallKit follows the FINAL state of each dispatch.
@@ -635,6 +681,9 @@ final class CallCore {
     runtime.post { [weak self] in self?.canPublish = allowed }
     runtime.reemit()
   }
+  fileprivate func movedAway() {
+    runtime.post { [weak self] in self?.movedElsewhere = true }
+  }
 }
 
 // MARK: - CallKit actions
@@ -736,6 +785,7 @@ private final class EventsAdapter: MediaEvents {
   func onAudioOutputs(_ outputs: [AudioOutput], selectedId: String?) { core?.outputs(outputs, selected: selectedId) }
   func onNetwork(quality: String, videoPaused: Bool) { core?.network(quality: quality, videoPaused: videoPaused) }
   func onCanPublish(_ allowed: Bool) { core?.publishAllowed(allowed) }
+  func onMovedElsewhere() { core?.movedAway() }
 }
 
 /// Host-facing entry points.

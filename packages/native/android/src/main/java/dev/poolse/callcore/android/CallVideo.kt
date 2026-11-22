@@ -27,6 +27,20 @@ interface ScreenShareSource {
   fun setScreenShare(on: Boolean, permission: android.content.Intent?)
 }
 
+/**
+ * Capture processing (CL7), for a media port that can change it mid-call.
+ * Noise suppression is the platform's (WebRTC's NS with echo
+ * cancellation kept on); background blur needs a video processor.
+ */
+interface CaptureProcessingSource {
+  val noiseSuppressionSupported: Boolean get() = true
+  val backgroundBlurSupported: Boolean get() = false
+  /** On by default. Applies to the published microphone at once. */
+  fun setNoiseSuppression(on: Boolean)
+  /** A no-op where [backgroundBlurSupported] is false. */
+  fun setBackgroundBlur(on: Boolean) {}
+}
+
 /** One on-screen video slot, bound to a participant's camera or shared screen. */
 interface CallVideoSurface {
   /** The Android view to host; it fills its parent. */

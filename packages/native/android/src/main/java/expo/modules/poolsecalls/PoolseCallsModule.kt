@@ -184,6 +184,11 @@ class PoolseCallsModule : Module() {
         promise?.resolve(false)
       }
     }
+    // Capture processing (CL7). Blur is not available on Android yet.
+    Function("noiseSuppressionSupported") { core()?.noiseSuppressionSupported ?: false }
+    Function("setNoiseSuppression") { on: Boolean -> core()?.setNoiseSuppression(on) ?: false }
+    Function("backgroundBlurSupported") { core()?.backgroundBlurSupported ?: false }
+    Function("setBackgroundBlur") { on: Boolean -> core()?.setBackgroundBlur(on) ?: false }
     Function("switchCamera") { core()?.switchCamera() }
     Function("setSpeaker") { on: Boolean -> core()?.setSpeaker(on) }
     Function("setAudioOutput") { id: String -> core()?.setAudioOutput(id) }

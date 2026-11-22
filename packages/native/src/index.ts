@@ -37,7 +37,13 @@ export interface Snapshot {
     | 'no_answer'
     | 'cancelled'
     | 'connection_lost'
-    | 'failed';
+    | 'failed'
+    /**
+     * You took this call on another of your devices (`moveCallHere`
+     * there): it goes on without this one. Say "Moved to your other
+     * device", not "Call ended". Absent before 3.10.
+     */
+    | 'moved';
   /**
    * REMOTE people only; `userId` is the LiveKit identity. poolse's
    * transcript assistant (`poolse:…`, kind agent) and the recorder
@@ -132,6 +138,24 @@ export interface Snapshot {
   recording?: CallRecordingState | null;
   /** The live transcript's state, the same way (`transcript:*` on the socket). Absent before 3.9. */
   transcription?: CallTranscriptionState | null;
+  /**
+   * `meeting`: a scheduled meeting rang this device as it started (the
+   * push's `ring_type`), so the ring reads "Weekly sync is starting" and
+   * the call screen should name the meeting. `call` otherwise. Absent
+   * before 3.10.
+   */
+  ringType?: 'call' | 'meeting';
+  /** The meeting's title for a `meeting` ring; null otherwise. Absent before 3.10. */
+  meetingTitle?: string | null;
+  /** Noise suppression on the microphone (on by default; `setNoiseSuppression`). Absent before 3.10. */
+  noiseSuppression?: boolean;
+  /** Background blur on the camera (`setBackgroundBlur`). Absent before 3.10. */
+  backgroundBlur?: boolean;
+  /**
+   * This call was taken over by your other device (`moveCallHere`
+   * there); the end that follows has `reason: 'moved'`. Absent before 3.10.
+   */
+  movedElsewhere?: boolean;
 }
 
 /** The CallSummary's `recording` object, as the server sent it (docs/CALL_CONTRACT.md §4.2). */
@@ -175,6 +199,10 @@ export interface WaitingCall {
   serverId?: string | null;
   /** That workspace's name ("Ana · Acme"). Absent before 3.8. */
   workspaceName?: string | null;
+  /** `meeting` when a scheduled meeting is starting rather than a person calling. Absent before 3.10. */
+  ringType?: 'call' | 'meeting';
+  /** The meeting's title for a `meeting` ring. Absent before 3.10. */
+  meetingTitle?: string | null;
 }
 
 /** One place call audio can play. */
@@ -369,6 +397,10 @@ interface PoolseCallsNative {
   startScreenShare?(): Promise<boolean>;
   stopScreenShare?(): void;
   setSpeaker(on: boolean): void;
+  noiseSuppressionSupported?(): boolean;
+  setNoiseSuppression?(on: boolean): boolean;
+  backgroundBlurSupported?(): boolean;
+  setBackgroundBlur?(on: boolean): boolean;
   setAudioOutput?(id: string): void;
   republish?(): void;
   callControl?(): Promise<{
@@ -526,6 +558,29 @@ export function join(
   return native?.join(callId, conversationId, sessionToken, serverId ?? null) ?? Promise.resolve();
 }
 
+/** What {@link moveCallHere} needs besides the call id. */
+export interface MoveCallOptions {
+  conversationId: string;
+  /** The user's session token on the call's server. */
+  sessionToken: string;
+  /** The call's server (an `addServer` id); leave it out for the default one. */
+  serverId?: string;
+}
+
+/**
+ * "Move call to this device" (CL11): take a call you are on elsewhere
+ * — your desktop, your other phone — over to this one without hanging
+ * up. This device joins the same call; the server lets one device per
+ * person carry it (CALL_CONTRACT.md §9), so the other one is let go and
+ * its snapshot ends with `reason: 'moved'`. Offer it from the Join
+ * banner when `liveCalls` says you are already in the call.
+ *
+ * The camera follows the call's media on this device; mute starts off.
+ */
+export function moveCallHere(callId: string, options: MoveCallOptions): Promise<void> {
+  return join(callId, options.conversationId, options.sessionToken, options.serverId);
+}
+
 export interface StartRoomResult {
   /** The room's call id — what the Join banner and `call:*` events carry. */
   callId: string;
@@ -656,6 +711,41 @@ export const startScreenShare = async (): Promise<boolean> =>
   (await native?.startScreenShare?.()) ?? false;
 
 export const stopScreenShare = (): void => native?.stopScreenShare?.();
+// ── capture processing (CL7) ──────────────────────────────────────────
+
+/**
+ * Whether noise suppression can be switched. On by default on both
+ * platforms; the snapshot's `noiseSuppression` says what is in effect.
+ */
+export const noiseSuppressionSupported = (): boolean =>
+  native?.noiseSuppressionSupported?.() ?? false;
+
+/**
+ * Noise suppression on or off, for this and later calls (until the app
+ * restarts). Android: WebRTC's noise suppression on the microphone
+ * (echo cancellation stays on; the mic track is republished, a short
+ * gap). iOS: Apple's voice processing does echo cancellation and noise
+ * suppression as one, so off bypasses both — offer "off" for
+ * headphones only. Returns false when the build can't.
+ */
+export const setNoiseSuppression = (on: boolean): boolean =>
+  native?.setNoiseSuppression?.(on) ?? false;
+
+/**
+ * Whether this build can blur the background behind you. iOS 15+: yes
+ * (Vision person segmentation). Android: not yet — it needs an ML Kit
+ * segmentation model, planned as a later addition. Hide the toggle when
+ * false.
+ */
+export const backgroundBlurSupported = (): boolean => native?.backgroundBlurSupported?.() ?? false;
+
+/**
+ * Blur the background on your camera, kept across camera flips and
+ * calls. A no-op returning false where unsupported. Background
+ * pictures (replacement) are not offered on native yet.
+ */
+export const setBackgroundBlur = (on: boolean): boolean => native?.setBackgroundBlur?.(on) ?? false;
+
 /** Route call audio to the loudspeaker (`true`) or back to earpiece / headset (`false`). */
 export const setSpeaker = (on: boolean): void => native?.setSpeaker(on);
 

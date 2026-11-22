@@ -11,6 +11,7 @@ import dev.poolse.callcore.CallSessionBundle
 import dev.poolse.callcore.MediaPort
 import dev.poolse.callcore.ServiceParticipants
 import dev.poolse.callcore.android.AudioOutput
+import dev.poolse.callcore.android.CaptureProcessingSource
 import dev.poolse.callcore.android.CallVideoSource
 import dev.poolse.callcore.android.CallVideoSurface
 import dev.poolse.callcore.android.MediaEvents
@@ -28,6 +29,7 @@ import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.ParticipantPermission
 import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.CameraPosition
+import io.livekit.android.room.track.LocalAudioTrackOptions
 import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.RemoteTrackPublication
 import io.livekit.android.room.track.Track
@@ -61,7 +63,7 @@ import org.json.JSONObject
 class LiveKitMediaPort(
   private val context: Context,
   private val events: MediaEvents,
-) : MediaPort, CallVideoSource, ScreenShareSource {
+) : MediaPort, CallVideoSource, ScreenShareSource, CaptureProcessingSource {
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   @Volatile private var room: Room? = null
@@ -112,6 +114,21 @@ class LiveKitMediaPort(
   /** Remote camera publications this port switched off, by sid. */
   private val pausedSids = mutableSetOf<String>()
 
+  /**
+   * WebRTC's noise suppression on the microphone (CL7). Echo
+   * cancellation, gain control and the high-pass filter stay on: a call
+   * without AEC echoes. Kept across calls.
+   */
+  private var noiseSuppression = true
+
+  private fun captureOptions() = LocalAudioTrackOptions(
+    noiseSuppression = noiseSuppression,
+    echoCancellation = true,
+    autoGainControl = true,
+    highPassFilter = true,
+    typingNoiseDetection = true,
+  )
+
   /** Live `<CallVideoView>` slots; rebound whenever what they show may have changed. */
   private val surfaces = linkedSetOf<LiveKitVideoSurface>()
 
@@ -127,6 +144,7 @@ class LiveKitMediaPort(
     loud = wantsVideo || bundle.kind == "room"
     val newRoom = LiveKit.create(appContext = context.applicationContext)
     configureAudio(newRoom, loud)
+    newRoom.audioTrackCaptureDefaults = captureOptions()
     // A 1:1/small call: never let the SFU pause a subscribed camera for
     // "not visible" — a track whose view mounts late would stay black.
     // (Renderers are still registered with visibility via addRenderer.)
@@ -269,6 +287,32 @@ class LiveKitMediaPort(
       refreshVideo()
     }
   }
+
+  // ── capture processing (CL7) ────────────────────────────────────────
+
+  /**
+   * Capture options are fixed when the microphone track is created, so a
+   * change mid-call unpublishes the live track and publishes a fresh one
+   * with the new options (a short gap in our audio, nothing else).
+   */
+  override fun setNoiseSuppression(on: Boolean) {
+    if (on == noiseSuppression) return
+    noiseSuppression = on
+    val r = room ?: return
+    r.audioTrackCaptureDefaults = captureOptions()
+    if (r.state != Room.State.CONNECTED || !canPublish) return
+    scope.launch {
+      val track = r.localParticipant.getTrackPublication(Track.Source.MICROPHONE)?.track ?: return@launch
+      runCatching {
+        r.localParticipant.unpublishTrack(track, true)
+        r.localParticipant.setMicrophoneEnabled(!mutedWanted)
+      }.onFailure { Log.w(TAG, "noise suppression switch failed", it) }
+    }
+  }
+
+  // Background blur needs livekit-android-track-processors (ML Kit
+  // segmentation, several MB): not shipped yet. [backgroundBlurSupported]
+  // stays false.
 
   // ── publish permission (recording consent) ──────────────────────────
 
@@ -540,6 +584,10 @@ class LiveKitMediaPort(
         // LiveKit gave up (or the server removed us). Our own leave()
         // never gets here — the collector is cancelled first.
         is RoomEvent.Disconnected -> {
+          // The same user joined from another device: LiveKit replaces
+          // the older participant (one identity per user). The reconnect
+          // that follows is refused, and the call ends as moved.
+          if (event.reason == DisconnectReason.DUPLICATE_IDENTITY) events.onMovedElsewhere()
           if (event.reason != DisconnectReason.CLIENT_INITIATED) events.onLost()
         }
         // The transcript assistant or the recorder joining is nobody answering.

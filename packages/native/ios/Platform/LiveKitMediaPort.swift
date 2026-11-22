@@ -35,6 +35,9 @@ protocol MediaEvents: AnyObject {
   /// Whether the server lets us publish (false: recording consent not
   /// given yet, docs/RECORDING.md §5). Sent on every change.
   func onCanPublish(_ allowed: Bool)
+  /// The SFU replaced us with the same user joining from another device
+  /// ("move call to this device", CALL_CONTRACT.md §9). Sent just before `onLost`.
+  func onMovedElsewhere()
 }
 
 /// Step-by-step trace of the audio path, in the device log as
@@ -112,6 +115,12 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   /// Weak this long before video is paused; good this long before it is back.
   private static let pauseVideoAfter: TimeInterval = 6
   private static let resumeVideoAfter: TimeInterval = 10
+
+  /// Capture processing (CL7); per process, not per call.
+  private(set) var noiseSuppression = true
+  private(set) var backgroundBlur = false
+  /// The capturer holds its processor weakly: this keeps it alive.
+  private var blurProcessor: BackgroundBlurVideoProcessor?
 
   private let surfaces = NSHashTable<LiveKitVideoSurface>.weakObjects()
   private var audioPrepared = false
@@ -742,8 +751,37 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     return (track.capturer as? CameraCapturer)?.position == .back ? "back" : "front"
   }
 
+  // MARK: - capture processing (CL7)
+
+  /// Apple's voice processing (VPIO) does echo cancellation, gain control
+  /// and noise suppression as one unit, so "off" bypasses all of it —
+  /// meant for headphones (music, an instrument). Valid mid-call.
+  func setNoiseSuppression(_ on: Bool) {
+    noiseSuppression = on
+    AudioManager.shared.isVoiceProcessingBypassed = !on
+  }
+
+  /// Blur behind the person on the published camera (Vision person
+  /// segmentation, LiveKit's BackgroundBlurVideoProcessor). Survives a
+  /// camera flip and republish: re-applied whenever the camera is reported.
+  func setBackgroundBlur(_ on: Bool) {
+    backgroundBlur = on
+    if let r = room { applyBlur(r) }
+  }
+
+  private func applyBlur(_ r: Room) {
+    guard let track = localCameraTrack(r) else { return }
+    if backgroundBlur {
+      if blurProcessor == nil { blurProcessor = BackgroundBlurVideoProcessor() }
+      if track.capturer.processor !== blurProcessor { track.capturer.processor = blurProcessor }
+    } else if track.capturer.processor != nil {
+      track.capturer.processor = nil
+    }
+  }
+
   private func reportLocalCamera(_ r: Room) {
     guard room === r else { return }
+    applyBlur(r)
     let on = localCameraTrack(r) != nil
     events?.onLocalCamera(on: on, facing: on ? cameraFacing() : nil)
   }
@@ -760,6 +798,10 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     case .reconnected:
       events?.onRecovered()
     case .disconnected:
+      // The same user joined from another device: LiveKit replaces the
+      // older participant (one identity per user). The reconnect that
+      // follows is refused, and the call ends as moved.
+      if r.disconnectError?.type == .duplicateIdentity { events?.onMovedElsewhere() }
       events?.onLost()
     case .participantJoined:
       // The transcript assistant or the recorder joining is nobody answering.

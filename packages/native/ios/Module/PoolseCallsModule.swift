@@ -125,6 +125,20 @@ public class PoolseCallsModule: Module {
       return true
     }
     Function("stopScreenShare") { onCore { $0.setScreenShare(false) } }
+    // Capture processing (CL7). Noise suppression is Apple's voice
+    // processing; blur is Vision person segmentation (iOS 15+).
+    Function("noiseSuppressionSupported") { () -> Bool in true }
+    Function("setNoiseSuppression") { (on: Bool) -> Bool in
+      guard CallCore.getOrNull() != nil else { return false }
+      onCore { $0.setNoiseSuppression(on) }
+      return true
+    }
+    Function("backgroundBlurSupported") { () -> Bool in true }
+    Function("setBackgroundBlur") { (on: Bool) -> Bool in
+      guard CallCore.getOrNull() != nil else { return false }
+      onCore { $0.setBackgroundBlur(on) }
+      return true
+    }
     Function("setSpeaker") { (on: Bool) in onCore { $0.setSpeaker(on) } }
     Function("setAudioOutput") { (id: String) in onCore { $0.setAudioOutput(id) } }
     // Recording consent accepted: mic and camera back as they were.
