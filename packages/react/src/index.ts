@@ -53,6 +53,7 @@ export {
   parseSlashCommand,
   playbackRateLabel,
   rankMentionGroups,
+  slashCommandsFromWorkspace,
   slashQuery,
   waveformBars,
   type FormatKind,

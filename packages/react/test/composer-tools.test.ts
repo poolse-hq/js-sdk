@@ -8,6 +8,7 @@ import {
   rankMentionGroups,
   nextPlaybackRate,
   parseSlashCommand,
+  slashCommandsFromWorkspace,
   slashQuery,
   waveformBars,
 } from '../src/composer-tools.js';
@@ -155,5 +156,24 @@ describe('custom emoji', () => {
     expect(searchCustomEmoji(set, 'parrot').map((e) => e.name)).toEqual(['parrot', 'party-parrot']);
     expect(searchCustomEmoji(set, ':ship').map((e) => e.name)).toEqual(['shipit']);
     expect(searchCustomEmoji(set, '')).toHaveLength(3);
+  });
+});
+
+describe('slashCommandsFromWorkspace', () => {
+  it('maps the Workspace list', () => {
+    expect(
+      slashCommandsFromWorkspace([
+        {
+          command: 'deploy',
+          description: 'Deploy',
+          usage: '[env]',
+          app: { id: 'a', name: 'Deployer' },
+        },
+        { command: 'x', description: null, usage: null, app: null },
+      ]),
+    ).toEqual([
+      { name: 'deploy', description: 'Deploy', usage: '[env]', source: 'Deployer' },
+      { name: 'x' },
+    ]);
   });
 });

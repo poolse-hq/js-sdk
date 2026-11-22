@@ -240,6 +240,27 @@ export function applySlashCommand(value: string, name: string): TextEdit {
   return { value: head + rest, selection: { start: head.length, end: head.length } };
 }
 
+/**
+ * The composer's suggestions from the Workspace's `GET /workspace/v1/commands`
+ * (`{commands: [{command, description, usage, app: {id, name}}]}`): the app's
+ * name becomes `source`. Run a sent command with `POST /workspace/v1/commands/run`.
+ */
+export function slashCommandsFromWorkspace(
+  commands: ReadonlyArray<{
+    command: string;
+    description?: string | null;
+    usage?: string | null;
+    app?: { id?: string; name?: string | null } | null;
+  }>,
+): SlashCommand[] {
+  return commands.map((c) => ({
+    name: c.command,
+    ...(c.description ? { description: c.description } : {}),
+    ...(c.usage ? { usage: c.usage } : {}),
+    ...(c.app?.name ? { source: c.app.name } : {}),
+  }));
+}
+
 /** Split a sent `/name args` into its parts, or `null` for a normal message. */
 export function parseSlashCommand(value: string): { name: string; args: string } | null {
   const m = /^\/([a-z0-9_-]+)(?:\s+([\s\S]*))?$/i.exec(value.trim());

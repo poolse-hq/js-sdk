@@ -15,3 +15,6 @@ packages/native/android/build/
 packages/native/android/.gradle/
 packages/native/android/local.properties
 .gradle/
+
+# Generated API reference (pnpm docs:api)
+docs/api/
