@@ -3,6 +3,8 @@ import * as Y from 'yjs';
 
 import {
   breakoutsFromWire,
+  captionsFromWire,
+  participantQualityFromWire,
   GuestClient,
   identityKindOf,
   meetingNameOf,
@@ -453,5 +455,37 @@ describe('MEETINGS.md specifics', () => {
         issues: [],
       }),
     ).toEqual({ quality: 'good', packet_loss: 8.3, rtt_ms: 120 });
+  });
+});
+
+describe('flat server events', () => {
+  it('reads call:quality as the server sends it', () => {
+    const q = participantQualityFromWire({
+      call_id: 'c1',
+      identity: 'u1',
+      quality: 'poor',
+      reason: 'packet_loss',
+      explanation: 'Your network is dropping packets.',
+      stats: { packet_loss: 12 },
+      at: '2026-11-22T10:00:00Z',
+    });
+    expect(q).toEqual({
+      identity: 'u1',
+      quality: 'poor',
+      reason: 'packet_loss',
+      explanation: 'Your network is dropping packets.',
+      at: '2026-11-22T10:00:00Z',
+    });
+    expect(
+      participantQualityFromWire({ quality: { identity: 'u2', quality: 'good' } })?.identity,
+    ).toBe('u2');
+  });
+
+  it('reads captions:changed as the server sends it', () => {
+    expect(captionsFromWire({ call_id: 'c1', user_ids: ['u1'], transcript_id: null })).toEqual({
+      callId: 'c1',
+      userIds: ['u1'],
+      transcriptId: null,
+    });
   });
 });

@@ -137,9 +137,12 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? 
 const int = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+// Only an object or list under `key` is a wrapper: a flat event can carry a
+// plain field of the same name (`call:quality` has `quality: "good"`).
 const unwrap = (res: unknown, key: string): unknown => {
   const o = obj(res);
-  return o?.[key] ?? obj(o?.data)?.[key] ?? o?.data ?? res;
+  const wrapped = (v: unknown) => (v !== null && typeof v === 'object' ? v : undefined);
+  return wrapped(o?.[key]) ?? wrapped(obj(o?.data)?.[key]) ?? o?.data ?? res;
 };
 
 // ── people ───────────────────────────────────────────────────────────────
