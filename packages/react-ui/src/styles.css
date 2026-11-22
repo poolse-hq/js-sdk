@@ -6530,3 +6530,870 @@ audio.poolse-player__media {
   font-size: 12px;
   color: var(--poolse-ink-3);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Live meetings — stage, Q&A, breakouts, lobby, captions, quality,
+   room presence, agenda, reactions, chat, background, whiteboard,
+   annotations, meeting cards, picture-in-picture (MeetingsLive.tsx,
+   MeetingCard.tsx, Whiteboard.tsx, PictureInPicture.tsx).
+   ───────────────────────────────────────────────────────────── */
+.poolse-btn--quiet {
+  background: transparent;
+  color: var(--poolse-ink-2);
+}
+
+.poolse-btn--active {
+  background: var(--poolse-brand-soft);
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  font-family: var(--poolse-font-body);
+  font-size: 14px;
+}
+
+.poolse-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.poolse-panel__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-panel__meta,
+.poolse-panel__empty {
+  margin: 0;
+  color: var(--poolse-ink-3);
+  font-size: 13px;
+}
+
+.poolse-panel__error {
+  margin: 0;
+  color: var(--poolse-error);
+  font-size: 13px;
+}
+
+.poolse-stage__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.poolse-stage__label {
+  margin: 0;
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.poolse-stage__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.poolse-stage__person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  min-width: 0;
+}
+
+.poolse-stage__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-stage__you {
+  color: var(--poolse-ink-3);
+}
+
+.poolse-stage__actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.poolse-stage__actions .poolse-btn {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.poolse-guest-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--poolse-radius-pill);
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.poolse-qa__ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.poolse-qa__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+  background: var(--poolse-paper, var(--poolse-surface));
+  color: var(--poolse-ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.poolse-qa__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.poolse-qa__anon {
+  color: var(--poolse-ink-2);
+  font-size: 13px;
+}
+
+.poolse-qa__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.poolse-qa__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.poolse-qa__item--done {
+  opacity: 0.7;
+}
+
+.poolse-qa__vote {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 40px;
+  padding: 4px 6px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink-2);
+  font: 600 13px var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-qa__vote--on {
+  border-color: var(--poolse-brand);
+  background: var(--poolse-brand-soft);
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-qa__vote:disabled {
+  cursor: default;
+}
+
+.poolse-qa__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.poolse-qa__text {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.poolse-qa__by {
+  margin: 2px 0 0;
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-qa__mod {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.poolse-qa__mod .poolse-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.poolse-breakout__room {
+  display: inline-block;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.poolse-breakouts__form {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.poolse-breakouts__form input {
+  width: 64px;
+  padding: 4px 6px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-sm);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  font: inherit;
+}
+
+.poolse-breakouts__rooms {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.poolse-breakouts__rooms li {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.poolse-breakouts__rooms strong,
+.poolse-breakouts__people {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-breakouts__people {
+  color: var(--poolse-ink-3);
+  font-size: 13px;
+}
+
+.poolse-lobby {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--poolse-ink);
+  font-family: var(--poolse-font-body);
+}
+
+.poolse-lobby__meeting {
+  margin: 0;
+  max-width: 100%;
+  color: var(--poolse-ink-3);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-lobby__title {
+  margin: 0;
+  font: 700 22px / 1.3 var(--poolse-font-display, var(--poolse-font-body));
+}
+
+.poolse-lobby__detail,
+.poolse-lobby__name {
+  margin: 0;
+  color: var(--poolse-ink-2);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.poolse-lobby__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--poolse-surface-2);
+  border-top-color: var(--poolse-brand);
+  border-radius: 50%;
+  animation: poolse-lobby-spin 0.9s linear infinite;
+}
+
+@keyframes poolse-lobby-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.poolse-captions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: min(720px, 92%);
+  margin: 0 auto;
+  padding: 8px 12px;
+  border-radius: var(--poolse-radius-md);
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font: 500 16px / 1.4 var(--poolse-font-body);
+}
+
+.poolse-captions__line {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.poolse-captions__line--interim {
+  opacity: 0.75;
+}
+
+.poolse-captions__line--wait {
+  opacity: 0.7;
+  font-size: 14px;
+}
+
+.poolse-signal {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.poolse-signal__bar {
+  width: 3px;
+  border-radius: 1px;
+  background: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.poolse-signal__bar:nth-child(1) {
+  height: 4px;
+}
+
+.poolse-signal__bar:nth-child(2) {
+  height: 8px;
+}
+
+.poolse-signal__bar:nth-child(3) {
+  height: 12px;
+}
+
+.poolse-signal__bar--on {
+  background: var(--poolse-success);
+}
+
+.poolse-signal--poor .poolse-signal__bar--on {
+  background: var(--poolse-warning);
+}
+
+.poolse-signal--lost {
+  color: var(--poolse-error);
+}
+
+.poolse-netbanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--poolse-radius-md);
+  background: color-mix(in srgb, var(--poolse-warning) 16%, var(--poolse-surface));
+  color: var(--poolse-ink);
+  font: 13.5px / 1.4 var(--poolse-font-body);
+}
+
+.poolse-netbanner--error {
+  background: color-mix(in srgb, var(--poolse-error) 16%, var(--poolse-surface));
+}
+
+.poolse-netbanner__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.poolse-netbanner__text span {
+  color: var(--poolse-ink-2);
+}
+
+.poolse-netbanner__close {
+  flex-shrink: 0;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--poolse-ink-2);
+  cursor: pointer;
+}
+
+.poolse-roompresence {
+  display: inline-flex;
+  align-items: center;
+}
+
+.poolse-roompresence__faces {
+  display: inline-flex;
+  align-items: center;
+}
+
+.poolse-roompresence__faces > .poolse-avatar + .poolse-avatar {
+  margin-left: -6px;
+}
+
+.poolse-roompresence__more {
+  margin-left: 4px;
+  color: var(--poolse-ink-3);
+  font: 600 12px var(--poolse-font-body);
+}
+
+.poolse-agenda__nudge {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--poolse-radius-sm);
+  background: color-mix(in srgb, var(--poolse-warning) 18%, var(--poolse-surface));
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.poolse-agenda__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.poolse-agenda__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--poolse-radius-sm);
+}
+
+.poolse-agenda__item--current {
+  background: var(--poolse-brand-soft);
+}
+
+.poolse-agenda__item--done .poolse-agenda__title {
+  color: var(--poolse-ink-3);
+  text-decoration: line-through;
+}
+
+.poolse-agenda__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.poolse-agenda__title,
+.poolse-agenda__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-agenda__meta {
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+}
+
+.poolse-reactfloat {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.poolse-reactfloat__item {
+  position: absolute;
+  bottom: 8%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: poolse-react-float 4s ease-out forwards;
+}
+
+.poolse-reactfloat__emoji {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.poolse-reactfloat__who {
+  max-width: 14ch;
+  padding: 1px 6px;
+  border-radius: var(--poolse-radius-pill);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font: 600 11px var(--poolse-font-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes poolse-react-float {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(-10%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-260%);
+  }
+}
+
+.poolse-reactbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--poolse-radius-pill);
+  background: var(--poolse-surface-2);
+}
+
+.poolse-reactbar__btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.poolse-reactbar__btn:hover,
+.poolse-reactbar__btn:focus-visible {
+  background: var(--poolse-surface);
+}
+
+.poolse-callchat {
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+}
+
+.poolse-callchat .poolse-panel__head {
+  padding: 10px 14px 0;
+}
+
+.poolse-callchat__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.poolse-bgmenu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font: 14px var(--poolse-font-body);
+  color: var(--poolse-ink);
+}
+
+.poolse-bgmenu__opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.poolse-bgmenu__opt {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  min-width: 64px;
+  border: 2px solid transparent;
+  border-radius: var(--poolse-radius-md);
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+  font: 600 12px var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-bgmenu__opt--on {
+  border-color: var(--poolse-brand);
+}
+
+.poolse-bgmenu__thumb {
+  width: 56px;
+  height: 36px;
+  border-radius: var(--poolse-radius-sm);
+  object-fit: cover;
+}
+
+.poolse-board {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-family: var(--poolse-font-body);
+}
+
+.poolse-board__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.poolse-board__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.poolse-board__tool {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--poolse-radius-sm);
+  background: transparent;
+  color: var(--poolse-ink);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.poolse-board__tool--on {
+  background: var(--poolse-brand-soft);
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-board__swatch {
+  width: 22px;
+  height: 22px;
+  margin: 0 2px;
+  border: 2px solid var(--poolse-surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--poolse-border);
+  cursor: pointer;
+}
+
+.poolse-board__swatch--on {
+  box-shadow: 0 0 0 2px var(--poolse-brand);
+}
+
+.poolse-board__canvas {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.poolse-board__canvas--view {
+  cursor: default;
+}
+
+.poolse-board__canvas--eraser {
+  cursor: cell;
+}
+
+.poolse-board__paper {
+  fill: #fff;
+}
+
+.poolse-annotate {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.poolse-annotate__ink {
+  width: 100%;
+  height: 100%;
+}
+
+.poolse-annotate--live .poolse-annotate__ink {
+  pointer-events: auto;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.poolse-annotate__pointer {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e5484d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.poolse-annotate__name {
+  position: absolute;
+  left: 16px;
+  top: -4px;
+  max-width: 16ch;
+  padding: 1px 6px;
+  border-radius: var(--poolse-radius-pill);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font: 600 11px var(--poolse-font-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-meetcard {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 420px;
+  padding: 12px 14px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-lg);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  font-family: var(--poolse-font-body);
+}
+
+.poolse-meetcard--cancelled .poolse-meetcard__title {
+  text-decoration: line-through;
+  color: var(--poolse-ink-3);
+}
+
+.poolse-meetcard__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.poolse-meetcard__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-meetcard__status {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: var(--poolse-radius-pill);
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.poolse-meetcard__status--live {
+  background: color-mix(in srgb, var(--poolse-success) 18%, var(--poolse-surface));
+  color: var(--poolse-ink);
+}
+
+.poolse-meetcard__when,
+.poolse-meetcard__meta {
+  margin: 0;
+  color: var(--poolse-ink-2);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-meetcard__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.poolse-meetcard__rsvp {
+  display: inline-flex;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+  overflow: hidden;
+}
+
+.poolse-meetcard__rsvpbtn {
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--poolse-ink);
+  font: 600 13px var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-meetcard__rsvpbtn + .poolse-meetcard__rsvpbtn {
+  border-left: 1px solid var(--poolse-border);
+}
+
+.poolse-meetcard__rsvpbtn--on {
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+}
+
+.poolse-pip-body {
+  margin: 0;
+  background: #111;
+}
+
+.poolse-pip {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poolse-reactfloat__item {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    opacity: 0;
+  }
+
+  .poolse-lobby__spinner {
+    animation: none;
+  }
+}

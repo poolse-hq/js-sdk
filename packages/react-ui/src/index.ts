@@ -108,6 +108,66 @@ export {
   type SummaryCardProps,
   type SummaryMessageRowProps,
 } from './Meetings.js';
+// Live meetings: stage, Q&A, breakouts, lobby, captions, moments,
+// quality, rooms, agenda, reactions, chat, background (CL2–CL15, CA5).
+export {
+  AgendaPanel,
+  BackgroundMenu,
+  BreakoutBanner,
+  BreakoutHostPanel,
+  CaptionsOverlay,
+  ConnectionIndicator,
+  InCallChatPanel,
+  LobbyAdmitList,
+  LobbyWaiting,
+  MarkMomentButton,
+  MoveCallHereBar,
+  NetworkBanner,
+  QuestionsPanel,
+  ReactionBar,
+  ReactionsOverlay,
+  RoomPresence,
+  StagePanel,
+  type AgendaPanelProps,
+  type BackgroundMenuProps,
+  type BreakoutBannerProps,
+  type BreakoutHostPanelProps,
+  type CaptionsOverlayProps,
+  type ConnectionIndicatorProps,
+  type InCallChatPanelProps,
+  type LobbyAdmitListProps,
+  type LobbyWaitingProps,
+  type MarkMomentButtonProps,
+  type MoveCallHereBarProps,
+  type NameFor,
+  type NetworkBannerProps,
+  type QuestionsPanelProps,
+  type ReactionBarProps,
+  type ReactionsOverlayProps,
+  type RoomPresenceProps,
+  type StagePanelProps,
+} from './MeetingsLive.js';
+// Meeting cards in chat (CA4, CA11).
+export { MeetingCard, formatMeetingTime, type MeetingCardProps } from './MeetingCard.js';
+// Whiteboard (CL12) and drawing on a shared screen (CL4).
+export {
+  AnnotationOverlay,
+  WHITEBOARD_COLORS,
+  Whiteboard,
+  WhiteboardItemSvg,
+  type AnnotationOverlayProps,
+  type WhiteboardProps,
+  type WhiteboardTool,
+} from './Whiteboard.js';
+// Keep the call while you work (CL11).
+export {
+  CallPictureInPicture,
+  pictureInPictureSupport,
+  usePictureInPicture,
+  type CallPictureInPictureProps,
+  type PictureInPictureKind,
+  type UsePictureInPicture,
+} from './PictureInPicture.js';
 export {
   MessageExtrasProvider,
   useMessageExtras,
