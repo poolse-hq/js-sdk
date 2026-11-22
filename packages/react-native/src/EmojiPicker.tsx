@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
+import { customEmojiToken, searchCustomEmoji, useCustomEmoji } from '@poolse/react';
+import { EmojiGlyph } from './EmojiGlyph.js';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -77,8 +79,18 @@ function PickerSheet({
   const columns = Math.max(6, Math.floor((width - insets.left - insets.right - 16) / CELL));
 
   const categories = useMemo(() => emojiCategories(), []);
+  const custom = useCustomEmoji();
   const sections = useMemo(() => {
     const out: Array<{ id: string; title: string; data: string[][] }> = [];
+    if (custom.length > 0)
+      out.push({
+        id: 'custom',
+        title: 'Workspace',
+        data: chunk(
+          custom.map((e) => customEmojiToken(e.name)),
+          columns,
+        ),
+      });
     if (recent.length > 0)
       out.push({ id: 'recent', title: 'Recent', data: chunk(recent, columns) });
     for (const c of categories) {
@@ -92,8 +104,16 @@ function PickerSheet({
       });
     }
     return out;
-  }, [categories, recent, columns]);
-  const results = useMemo(() => searchEmoji(query, columns * 6), [query, columns]);
+  }, [categories, recent, columns, custom]);
+  const results = useMemo(
+    () => [
+      ...(query.trim()
+        ? searchCustomEmoji(custom, query).map((e) => ({ emoji: customEmojiToken(e.name) }))
+        : []),
+      ...searchEmoji(query, columns * 6),
+    ],
+    [query, columns, custom],
+  );
 
   const pick = (emoji: string) => {
     recordRecentEmoji(emoji);
@@ -116,7 +136,7 @@ function PickerSheet({
       accessibilityRole="button"
       accessibilityLabel={emoji}
     >
-      <Text style={styles.emoji}>{emoji}</Text>
+      <EmojiGlyph emoji={emoji} size={28} style={styles.emoji} />
     </Pressable>
   );
 

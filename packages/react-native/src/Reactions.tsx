@@ -2,6 +2,7 @@ import type { Uuid } from '@poolse/sdk';
 import { useReactions } from '@poolse/react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { EmojiGlyph } from './EmojiGlyph.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
@@ -59,7 +60,7 @@ export function ReactionStrip({
               },
             ]}
           >
-            <Text style={styles.emoji}>{emoji}</Text>
+            <EmojiGlyph emoji={emoji} size={16} style={styles.emoji} />
             <Text
               style={[
                 styles.count,

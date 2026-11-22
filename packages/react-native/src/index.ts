@@ -255,3 +255,37 @@ export {
 } from './voice/AudioRouteSheet.js';
 export { callColors } from './voice/callTheme.js';
 export { useCallDuration } from './voice/useCallDuration.js';
+
+// ── Messaging plus (MS3 MS7 MS10 MS13 MS15 MS16 MS18 MS20 MS21 IN4 NT6) ──
+export {
+  BlockRenderer,
+  CatchUpCard,
+  FilesList,
+  ForumPostList,
+  ForwardSheet,
+  NoteCard,
+  PinsList,
+  PollCard,
+  TranslatedText,
+  VideoMessagePlayer,
+  VoiceMessagePlayer,
+  VoiceRecorder,
+  type AudioRecorderAdapter,
+  type BlockRendererProps,
+  type CatchUpCardProps,
+  type FilesListProps,
+  type ForumPost,
+  type ForumPostListProps,
+  type ForwardSheetProps,
+  type ForwardTarget,
+  type MediaPlayback,
+  type NoteCardProps,
+  type PinsListProps,
+  type PollCardProps,
+  type TranslatedTextProps,
+  type VideoMessagePlayerProps,
+  type VoiceMessagePlayerProps,
+  type VoiceRecorderProps,
+} from './MessagingPlus.js';
+export { EmojiGlyph } from './EmojiGlyph.js';
+export { formatBytes, noteIdFromLink, stripMarkdown } from './internal/plus.js';
