@@ -354,7 +354,12 @@ the Workspace API (`onRsvp`), and the card follows the server's rewrite of
 the message.
 
 ```tsx
-<MeetingCardMessageRow msg={msg} meId={me.id} onRsvp={rsvp} onJoin={(c) => openRoom(c.roomConversationId)} />
+<MeetingCardMessageRow
+  msg={msg}
+  meId={me.id}
+  onRsvp={rsvp}
+  onJoin={(c) => openRoom(c.roomConversationId)}
+/>
 ```
 
 ## Layouts
