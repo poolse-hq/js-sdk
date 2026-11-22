@@ -7600,3 +7600,643 @@ audio.poolse-player__media {
   outline: 2px solid var(--poolse-brand);
   outline-offset: 2px;
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Messaging plus: polls, blocks, pins, forward, files, forum,
+   catch-up, translation, note card, media messages
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-plus-empty {
+  padding: 16px;
+  color: var(--poolse-ink-3);
+  font: 400 14px / 1.4 var(--poolse-font-body);
+  text-align: center;
+}
+
+.poolse-poll,
+.poolse-blocks,
+.poolse-catchup,
+.poolse-media {
+  max-width: 420px;
+  font: 400 14px / 1.45 var(--poolse-font-body);
+  color: var(--poolse-ink);
+}
+
+.poolse-poll__question {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.poolse-poll__meta,
+.poolse-catchup__meta,
+.poolse-forwarded,
+.poolse-translated__meta {
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+}
+
+.poolse-poll__options {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.poolse-poll__option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  overflow: hidden;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+  background: var(--poolse-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.poolse-poll__option:disabled {
+  cursor: default;
+}
+
+.poolse-poll__option--mine {
+  border-color: var(--poolse-brand);
+}
+
+.poolse-poll__option:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 1px;
+}
+
+.poolse-poll__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--poolse-brand-soft);
+  transition: width 0.2s;
+}
+
+.poolse-poll__mark,
+.poolse-poll__text,
+.poolse-poll__count {
+  position: relative;
+}
+
+.poolse-poll__mark {
+  width: 16px;
+  color: var(--poolse-brand-strong);
+  font-weight: 700;
+}
+
+.poolse-poll__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.poolse-poll__count {
+  color: var(--poolse-ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.poolse-poll__close,
+.poolse-catchup__run,
+.poolse-files__versions,
+.poolse-translated__toggle,
+.poolse-media__transcript-toggle {
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--poolse-brand-strong);
+  font: 600 13px / 1.3 var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.poolse-blocks__section p,
+.poolse-blocks__context p,
+.poolse-catchup__text p {
+  margin: 0;
+}
+
+.poolse-blocks__context {
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+}
+
+.poolse-blocks__divider {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--poolse-border);
+  margin: 2px 0;
+}
+
+.poolse-blocks__image {
+  max-width: 100%;
+  border-radius: var(--poolse-radius-md);
+}
+
+.poolse-blocks__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.poolse-blocks__button,
+.poolse-blocks__select {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-sm);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  font: 600 13px / 1.2 var(--poolse-font-body);
+  text-decoration: none;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-blocks__button--primary {
+  background: var(--poolse-brand);
+  border-color: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+}
+
+.poolse-blocks__button--danger {
+  color: var(--poolse-error);
+  border-color: var(--poolse-error);
+}
+
+.poolse-blocks__button:disabled,
+.poolse-blocks__select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.poolse-blocks__input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.poolse-blocks__label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.poolse-blocks__input input:not([type='checkbox']),
+.poolse-blocks__input textarea,
+.poolse-blocks__input select,
+.poolse-forward__search,
+.poolse-forward__comment {
+  padding: 7px 9px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-sm);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  font: 400 14px / 1.4 var(--poolse-font-body);
+}
+
+.poolse-blocks__input--invalid input,
+.poolse-blocks__input--invalid textarea,
+.poolse-blocks__input--invalid select {
+  border-color: var(--poolse-error);
+}
+
+.poolse-blocks__error {
+  color: var(--poolse-error);
+  font-size: 12px;
+}
+
+.poolse-blocks__check,
+.poolse-forward__item,
+.poolse-thread__also {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.poolse-thread__also {
+  padding: 0 16px 10px;
+  color: var(--poolse-ink-2);
+  font-size: 13px;
+}
+
+.poolse-thread__follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  background: transparent;
+  color: var(--poolse-ink-2);
+  font: 600 12px / 1 var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-thread__follow--on {
+  background: var(--poolse-brand-soft);
+  border-color: transparent;
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-pins,
+.poolse-files ul,
+.poolse-forum ul,
+.poolse-forward__list,
+.poolse-catchup__highlights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.poolse-pins__item,
+.poolse-files__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--poolse-border);
+}
+
+.poolse-pins__open,
+.poolse-files__open,
+.poolse-forum__post {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.poolse-pins__open:hover,
+.poolse-files__open:hover,
+.poolse-forum__post:hover {
+  background: var(--poolse-surface-2);
+}
+
+.poolse-pins__sender,
+.poolse-forum__title,
+.poolse-files__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-pins__body {
+  color: var(--poolse-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.poolse-pins__time,
+.poolse-files__meta,
+.poolse-forum__meta {
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-files__open {
+  grid-template-columns: 40px 1fr;
+  column-gap: 10px;
+}
+
+.poolse-files__thumb {
+  grid-row: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: var(--poolse-radius-sm);
+  background: var(--poolse-surface-2);
+  font-size: 18px;
+}
+
+.poolse-files__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.poolse-files__versions {
+  margin: 0 12px 0 0;
+}
+
+.poolse-forum__post {
+  width: 100%;
+  border-bottom: 1px solid var(--poolse-border);
+}
+
+.poolse-forum__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.poolse-forum__tag {
+  padding: 1px 8px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  font-size: 11px;
+  color: var(--poolse-ink-2);
+}
+
+.poolse-forward {
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.poolse-forward__list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.poolse-forward__item {
+  padding: 6px 2px;
+}
+
+.poolse-forward__item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-catchup {
+  padding: 12px 14px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-lg);
+  background: var(--poolse-surface);
+}
+
+.poolse-catchup__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.poolse-catchup__title {
+  font-weight: 700;
+}
+
+.poolse-catchup__text {
+  margin: 6px 0;
+}
+
+.poolse-catchup__highlights button {
+  padding: 3px 0;
+  border: none;
+  background: none;
+  color: var(--poolse-link, var(--poolse-brand-strong));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.poolse-translated__meta {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.poolse-translated__toggle {
+  margin: 0;
+}
+
+.poolse-notecard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 360px;
+  padding: 10px 12px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-md);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.poolse-notecard:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.poolse-notecard__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: var(--poolse-radius-sm);
+  background: var(--poolse-brand-soft);
+  color: var(--poolse-brand-strong);
+}
+
+.poolse-notecard__body {
+  display: grid;
+  min-width: 0;
+}
+
+.poolse-notecard__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-notecard__dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--poolse-brand);
+}
+
+.poolse-notecard__meta {
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-emoji-glyph {
+  display: inline-block;
+  vertical-align: -0.2em;
+  object-fit: contain;
+}
+
+.poolse-voice__row,
+.poolse-video__bar,
+.poolse-recorder--on {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.poolse-media__play {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.poolse-voice__wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  height: 28px;
+  min-width: 80px;
+  cursor: pointer;
+}
+
+.poolse-voice__bar {
+  flex: 1;
+  min-height: 3px;
+  border-radius: 2px;
+  background: var(--poolse-ink-3);
+  opacity: 0.5;
+}
+
+.poolse-voice__bar--played {
+  background: var(--poolse-brand);
+  opacity: 1;
+}
+
+.poolse-media__time {
+  min-width: 3.5em;
+  color: var(--poolse-ink-2);
+  font: 500 12px / 1 var(--poolse-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.poolse-media__rate {
+  min-width: 40px;
+  padding: 3px 6px;
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-pill);
+  background: var(--poolse-surface);
+  color: var(--poolse-ink-2);
+  font: 600 12px / 1 var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-video__el {
+  width: 100%;
+  max-height: 360px;
+  border-radius: var(--poolse-radius-md);
+  background: #000;
+}
+
+.poolse-video__bar {
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.poolse-video__summary,
+.poolse-media__transcript-text {
+  margin: 6px 0 0;
+  color: var(--poolse-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.poolse-media__transcript-status {
+  margin-top: 4px;
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+}
+
+.poolse-recorder--on {
+  padding: 4px 6px 4px 10px;
+  border-radius: var(--poolse-radius-pill);
+  background: var(--poolse-surface-2);
+}
+
+.poolse-recorder__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--poolse-error);
+  animation: poolse-rec-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes poolse-rec-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.poolse-recorder__cancel {
+  border: none;
+  background: none;
+  color: var(--poolse-ink-2);
+  font: 600 13px / 1 var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-recorder__send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poolse-recorder__dot {
+    animation: none;
+  }
+
+  .poolse-poll__bar {
+    transition: none;
+  }
+}

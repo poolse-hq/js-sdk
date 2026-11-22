@@ -2,6 +2,14 @@
 // dependency. The emoji list (~800, with their Unicode names as search
 // keywords) is its own module, loaded the first time a picker opens.
 
+import {
+  customEmojiToken,
+  findCustomEmoji,
+  parseCustomEmojiToken,
+  searchCustomEmoji,
+  useCustomEmoji,
+  type CustomEmoji,
+} from '@poolse/react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { EmojiCategoryData } from './emojiData.js';
 
@@ -13,6 +21,41 @@ export interface EmojiPickerProps {
   /** Focus the search field on open. Defaults to `true`. */
   autoFocus?: boolean;
   className?: string;
+  /**
+   * The workspace's own emoji (MS10), shown first as "Workspace" and in
+   * search. Picking one gives its `:name:` token. Defaults to the nearest
+   * `<CustomEmojiProvider>`.
+   */
+  customEmoji?: readonly CustomEmoji[];
+}
+
+/**
+ * One emoji: the image of a known `:name:` custom emoji, else the text.
+ * Unknown tokens show as their text.
+ */
+export function EmojiGlyph({
+  emoji,
+  size = 20,
+  customEmoji,
+}: {
+  emoji: string;
+  size?: number;
+  customEmoji?: readonly CustomEmoji[];
+}) {
+  const scoped = useCustomEmoji();
+  const custom = findCustomEmoji(emoji, customEmoji ?? scoped);
+  if (!custom) return <>{emoji}</>;
+  return (
+    <img
+      className="poolse-emoji-glyph"
+      src={custom.url}
+      alt={emoji}
+      width={size}
+      height={size}
+      loading="lazy"
+      draggable={false}
+    />
+  );
 }
 
 const RECENT_KEY = 'poolse:recent-emoji';
@@ -61,7 +104,15 @@ export function rememberEmoji(emoji: string): void {
   }
 }
 
-export function EmojiPicker({ onPick, onClose, autoFocus = true, className }: EmojiPickerProps) {
+export function EmojiPicker({
+  onPick,
+  onClose,
+  autoFocus = true,
+  className,
+  customEmoji,
+}: EmojiPickerProps) {
+  const scopedCustom = useCustomEmoji();
+  const custom = customEmoji ?? scopedCustom;
   const [data, setData] = useState(loadedData);
   const [query, setQuery] = useState('');
   const [recent] = useState(readRecent);
@@ -100,7 +151,7 @@ export function EmojiPicker({ onPick, onClose, autoFocus = true, className }: Em
     const q = query.trim().toLowerCase();
     if (!q || !data) return null;
     const words = q.split(/\s+/);
-    const out: string[] = [];
+    const out: string[] = searchCustomEmoji(custom, q).map((e) => customEmojiToken(e.name));
     for (const cat of data) {
       for (const [emoji, keywords] of cat.emojis) {
         if (words.every((w) => keywords.includes(w))) out.push(emoji);
@@ -108,7 +159,7 @@ export function EmojiPicker({ onPick, onClose, autoFocus = true, className }: Em
       }
     }
     return out;
-  }, [query, data]);
+  }, [query, data, custom]);
 
   const pick = (emoji: string) => {
     rememberEmoji(emoji);
@@ -117,6 +168,15 @@ export function EmojiPicker({ onPick, onClose, autoFocus = true, className }: Em
 
   const sections: { id: string; label: string; emojis: string[] }[] = data
     ? [
+        ...(custom.length > 0
+          ? [
+              {
+                id: 'custom',
+                label: 'Workspace',
+                emojis: custom.map((e) => customEmojiToken(e.name)),
+              },
+            ]
+          : []),
         ...(recent.length > 0 ? [{ id: 'recent', label: 'Recently used', emojis: recent }] : []),
         ...data.map((c) => ({ id: c.id, label: c.label, emojis: c.emojis.map(([e]) => e) })),
       ]
@@ -170,8 +230,9 @@ export function EmojiPicker({ onPick, onClose, autoFocus = true, className }: Em
       className="poolse-emoji-picker__emoji"
       onClick={() => pick(emoji)}
       aria-label={emoji}
+      title={parseCustomEmojiToken(emoji) ? emoji : undefined}
     >
-      {emoji}
+      <EmojiGlyph emoji={emoji} customEmoji={custom} />
     </button>
   );
 
@@ -216,7 +277,11 @@ export function EmojiPicker({ onPick, onClose, autoFocus = true, className }: Em
               title={s.label}
               onClick={() => jumpTo(s.id)}
             >
-              {s.id === 'recent' ? '🕘' : s.emojis[0]}
+              {s.id === 'recent' ? (
+                '🕘'
+              ) : (
+                <EmojiGlyph emoji={s.emojis[0] ?? ''} customEmoji={custom} size={16} />
+              )}
             </button>
           ))}
         </div>

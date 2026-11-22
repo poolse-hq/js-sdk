@@ -11,6 +11,12 @@ import {
   slashQuery,
   waveformBars,
 } from '../src/composer-tools.js';
+import {
+  customEmojiToken,
+  findCustomEmoji,
+  parseCustomEmojiToken,
+  searchCustomEmoji,
+} from '../src/custom-emoji.js';
 
 const sel = (start: number, end = start) => ({ start, end });
 
@@ -128,5 +134,26 @@ describe('group mentions', () => {
   it('describes a group', () => {
     expect(groups.map(mentionGroupMeta)).toEqual(['12 people', 'On call: Ana', '1 person']);
     expect(mentionGroupMeta({ handle: 'x', name: 'X' })).toBeNull();
+  });
+});
+
+describe('custom emoji', () => {
+  const set = [
+    { name: 'party-parrot', url: 'https://w/e/1' },
+    { name: 'shipit', url: 'https://w/e/2' },
+    { name: 'parrot', url: 'https://w/e/3' },
+  ];
+  it('makes and reads tokens', () => {
+    expect(customEmojiToken('shipit')).toBe(':shipit:');
+    expect(parseCustomEmojiToken(':shipit:')).toBe('shipit');
+    expect(parseCustomEmojiToken('👍')).toBeNull();
+    expect(parseCustomEmojiToken(':Bad Name:')).toBeNull();
+    expect(findCustomEmoji(':parrot:', set)?.url).toBe('https://w/e/3');
+    expect(findCustomEmoji(':nope:', set)).toBeNull();
+  });
+  it('searches, prefix first', () => {
+    expect(searchCustomEmoji(set, 'parrot').map((e) => e.name)).toEqual(['parrot', 'party-parrot']);
+    expect(searchCustomEmoji(set, ':ship').map((e) => e.name)).toEqual(['shipit']);
+    expect(searchCustomEmoji(set, '')).toHaveLength(3);
   });
 });

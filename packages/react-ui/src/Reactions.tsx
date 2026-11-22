@@ -2,9 +2,9 @@
 // message + an emoji picker popover. Powered by `useReactions`.
 
 import type { Uuid } from '@poolse/sdk';
-import { useReactions, type ReactionMap } from '@poolse/react';
+import { useCustomEmoji, useReactions, type CustomEmoji, type ReactionMap } from '@poolse/react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { EmojiPicker, loadEmojiData, rememberEmoji } from './EmojiPicker.js';
+import { EmojiGlyph, EmojiPicker, loadEmojiData, rememberEmoji } from './EmojiPicker.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '😢', '🙏'] as const;
@@ -21,6 +21,8 @@ export interface ReactionStripProps {
    * to true; set false to render reactions as a read-only display.
    */
   picker?: boolean;
+  /** The workspace's own emoji (MS10); defaults to the nearest `<CustomEmojiProvider>`. */
+  customEmoji?: readonly CustomEmoji[];
 }
 
 /**
@@ -34,7 +36,10 @@ export function ReactionStrip({
   initialReactions,
   currentUserId,
   picker = true,
+  customEmoji,
 }: ReactionStripProps) {
+  const scoped = useCustomEmoji();
+  const custom = customEmoji ?? scoped;
   const { reactions, addReaction, removeReaction } = useReactions(messageId, {
     conversationId,
     ...(initialReactions !== undefined ? { initialReactions } : {}),
@@ -62,7 +67,9 @@ export function ReactionStrip({
             aria-pressed={mine}
             aria-label={`${emoji} reacted by ${users.length} ${users.length === 1 ? 'user' : 'users'}`}
           >
-            <span>{emoji}</span>
+            <span>
+              <EmojiGlyph emoji={emoji} customEmoji={custom} size={16} />
+            </span>
             <span className="poolse-reaction-pill__count">{users.length}</span>
           </button>
         );
@@ -89,6 +96,7 @@ export function ReactionStrip({
                 void addReaction(emoji);
               }}
               onClose={() => setPickerOpen(false)}
+              customEmoji={custom}
             />
           )}
         </>
@@ -104,9 +112,12 @@ export function ReactionStrip({
 export function ReactionPicker({
   onPick,
   onClose,
+  customEmoji,
 }: {
   onPick: (emoji: string) => void;
   onClose?: () => void;
+  /** The workspace's own emoji, offered in the full picker. */
+  customEmoji?: readonly CustomEmoji[];
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [full, setFull] = useState(false);
@@ -164,7 +175,11 @@ export function ReactionPicker({
   if (full) {
     return (
       <div ref={rootRef} className="poolse-reaction-picker poolse-reaction-picker--full">
-        <EmojiPicker onPick={pick} {...(onClose ? { onClose } : {})} />
+        <EmojiPicker
+          onPick={pick}
+          {...(onClose ? { onClose } : {})}
+          {...(customEmoji ? { customEmoji } : {})}
+        />
       </div>
     );
   }

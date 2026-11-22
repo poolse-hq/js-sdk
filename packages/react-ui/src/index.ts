@@ -214,7 +214,7 @@ export { AttachmentPreview, type AttachmentPreviewProps } from './AttachmentPrev
 export { LinkPreviewCard, type LinkPreviewCardProps } from './LinkPreviewCard.js';
 export { UploadQueueStrip, type UploadQueueStripProps } from './UploadQueueStrip.js';
 export { ReactionStrip, ReactionPicker, type ReactionStripProps } from './Reactions.js';
-export { EmojiPicker, loadEmojiData, type EmojiPickerProps } from './EmojiPicker.js';
+export { EmojiGlyph, EmojiPicker, loadEmojiData, type EmojiPickerProps } from './EmojiPicker.js';
 export { MentionInput, type MentionInputProps } from './MentionInput.js';
 
 // ── Theme ─────────────────────────────────────────────────────
@@ -244,3 +244,38 @@ export {
 export { PoolseIcon, type PoolseIconProps, type IconName } from './PoolseIcon.js';
 export { PoolseLogo, type PoolseLogoProps, type PoolseLogoVariant } from './PoolseLogo.js';
 export { PoolseFonts, usePoolseFonts } from './fonts.js';
+
+// ── Messaging plus (MS3 MS7 MS13 MS15 MS16 MS18 MS20 MS21 IN4 NT6) ──
+export {
+  BlockRenderer,
+  CatchUpCard,
+  FilesList,
+  ForumPostList,
+  ForwardDialog,
+  ForwardedLabel,
+  NoteCard,
+  PinsList,
+  PollCard,
+  TranslatedText,
+  formatBytes,
+  noteIdFromLink,
+  type BlockRendererProps,
+  type CatchUpCardProps,
+  type FilesListProps,
+  type ForumPost,
+  type ForumPostListProps,
+  type ForwardDialogProps,
+  type ForwardTarget,
+  type NoteCardProps,
+  type PinsListProps,
+  type PollCardProps,
+  type TranslatedTextProps,
+} from './MessagingPlus.js';
+export {
+  VideoMessagePlayer,
+  VoiceMessagePlayer,
+  VoiceRecorder,
+  type VideoMessagePlayerProps,
+  type VoiceMessagePlayerProps,
+  type VoiceRecorderProps,
+} from './MediaMessages.js';

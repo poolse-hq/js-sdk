@@ -4,6 +4,7 @@
 // actions to enable per message based on ownership / capabilities.
 
 import { useState, type ReactNode } from 'react';
+import type { CustomEmoji } from '@poolse/react';
 import { PoolseIcon } from './PoolseIcon.js';
 import { ReactionPicker } from './Reactions.js';
 
@@ -26,6 +27,16 @@ export interface MessageActionsProps {
   onEdit?: () => void;
   /** Triggered when the user wants to delete. Only show on own messages. */
   onDelete?: () => void;
+  /** Pin or unpin (MS13); `pinned` says which the button does. */
+  onTogglePin?: () => void;
+  pinned?: boolean;
+  /** Forward to other conversations (MS13): open your target picker (`<ForwardDialog>`). */
+  onForward?: () => void;
+  /** Translate (MS21), or back to the original when `translated`. */
+  onTranslate?: () => void;
+  translated?: boolean;
+  /** The workspace's own emoji for the reaction picker (MS10). */
+  customEmoji?: readonly CustomEmoji[];
   /**
    * Slack-style toolbar: React, Reply, Thread, then a "More" button
    * whose menu holds Copy / Edit / Delete. Defaults to `false` (every
@@ -45,11 +56,27 @@ export function MessageActions({
   onEdit,
   onDelete,
   moreMenu = false,
+  onTogglePin,
+  pinned = false,
+  onForward,
+  onTranslate,
+  translated = false,
+  customEmoji,
   children,
 }: MessageActionsProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const hasMore = !!(onCopy || onMarkUnread || onEdit || onDelete);
+  const hasMore = !!(
+    onCopy ||
+    onMarkUnread ||
+    onEdit ||
+    onDelete ||
+    onTogglePin ||
+    onForward ||
+    onTranslate
+  );
+  const pinLabel = pinned ? 'Unpin' : 'Pin';
+  const translateLabel = translated ? 'Show original' : 'Translate';
 
   return (
     <div className="poolse-msg-actions" role="toolbar" aria-label="Message actions">
@@ -69,6 +96,7 @@ export function MessageActions({
                   onReact(emoji);
                 }}
                 onClose={() => setPickerOpen(false)}
+                {...(customEmoji ? { customEmoji } : {})}
               />
             </div>
           )}
@@ -97,6 +125,13 @@ export function MessageActions({
                 >
                   {[
                     onCopy && { label: 'Copy', icon: 'copy' as const, run: onCopy },
+                    onForward && { label: 'Forward', icon: 'send' as const, run: onForward },
+                    onTogglePin && { label: pinLabel, icon: 'pin' as const, run: onTogglePin },
+                    onTranslate && {
+                      label: translateLabel,
+                      icon: 'messages' as const,
+                      run: onTranslate,
+                    },
                     onMarkUnread && {
                       label: 'Mark unread',
                       icon: 'message' as const,
@@ -133,6 +168,18 @@ export function MessageActions({
           {onReply && <ActionButton label="Reply in thread" icon="messages" onClick={onReply} />}
           {onQuote && <ActionButton label="Reply" icon="reply" onClick={onQuote} />}
           {onCopy && <ActionButton label="Copy" icon="copy" onClick={onCopy} />}
+          {onForward && <ActionButton label="Forward" icon="send" onClick={onForward} />}
+          {onTogglePin && (
+            <ActionButton label={pinLabel} icon="pin" onClick={onTogglePin} active={pinned} />
+          )}
+          {onTranslate && (
+            <ActionButton
+              label={translateLabel}
+              icon="messages"
+              onClick={onTranslate}
+              active={translated}
+            />
+          )}
           {onMarkUnread && (
             <ActionButton label="Mark unread" icon="message" onClick={onMarkUnread} />
           )}
@@ -154,7 +201,17 @@ function ActionButton({
 }: {
   label: string;
   // Restrict to the iconography we actually use here so the type stays useful.
-  icon: 'emoji' | 'reply' | 'messages' | 'message' | 'edit' | 'trash' | 'more-h' | 'pin' | 'copy';
+  icon:
+    | 'emoji'
+    | 'reply'
+    | 'messages'
+    | 'message'
+    | 'edit'
+    | 'trash'
+    | 'more-h'
+    | 'pin'
+    | 'copy'
+    | 'send';
   onClick: () => void;
   active?: boolean;
   danger?: boolean;

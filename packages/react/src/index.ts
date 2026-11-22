@@ -368,3 +368,12 @@ export {
   type UseThreadFollow,
   type UseTranslation,
 } from './use-messaging-plus.js';
+export {
+  CustomEmojiProvider,
+  customEmojiToken,
+  findCustomEmoji,
+  parseCustomEmojiToken,
+  searchCustomEmoji,
+  useCustomEmoji,
+  type CustomEmoji,
+} from './custom-emoji.js';
