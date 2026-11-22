@@ -359,6 +359,23 @@ never by id; `RoomPresence` takes `useRoomPresence().presence[id]`.
 <MeetingCardMessageRow msg={msg} onJoin={(c) => openRoom(c.roomConversationId)} />
 ```
 
+## Agents in calls
+
+Same props as @poolse/react-ui:
+
+```tsx
+const agents = useCallAgents(conversationId, callId);
+<StagePanel stage={stage} participants={people} agents={agents.agents} selfUserId={me.id} />
+<InviteAgentMenu callAgents={agents} />
+<WhisperPanel whisper={useWhisper(callId)} />
+<EscalationList callId={callId} />
+```
+
+With `@poolse/native`, a roster entry with `isAgent` is an agent: name it
+`agentLabel` and show `<CallAgentTag agent={agents.agentFor(p.userId) ??
+{ mode: p.agentMode ?? 'notetaker', status: 'live', speaking: false }}
+speaking={p.speaking} />` — never a camera placeholder.
+
 ## Layouts
 
 ```tsx

@@ -8,6 +8,11 @@ versions follow [semver](https://semver.org).
 
 ### Added
 
+- Agents in calls: `CallAgentTag`, `InviteAgentMenu`, `WhisperPanel`
+  ("Only you see this"), `EscalationCard`, `EscalationList` — the same props
+  as @poolse/react-ui. `StagePanel` takes `agents` (and
+  `MeetingParticipant.agent` / `.speaking`) and lists them with the badge.
+
 - Live meetings on the final server contract: guests and phones named by
   the call, `RoomPresence` with `useRoomPresence` entries (guests and phones
   counted), `MeetingCard` RSVPs through `poolse.live.meetings.rsvp` by

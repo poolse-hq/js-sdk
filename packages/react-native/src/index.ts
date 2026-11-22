@@ -61,6 +61,18 @@ export {
 // Agents (AG1, AG4, AG5) and meetings (RT6, RT8, RT9, RT13).
 export { AgentBadge, AgentBadgeInline, type AgentBadgeProps } from './AgentBadge.js';
 export {
+  CallAgentTag,
+  EscalationCard,
+  EscalationList,
+  InviteAgentMenu,
+  WhisperPanel,
+  type CallAgentTagProps,
+  type EscalationCardProps,
+  type EscalationListProps,
+  type InviteAgentMenuProps,
+  type WhisperPanelProps,
+} from './CallAgents.js';
+export {
   ApprovalCard,
   ApprovalList,
   MessageApproval,

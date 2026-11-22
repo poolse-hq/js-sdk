@@ -11,6 +11,7 @@
 
 import type {
   AgendaItem,
+  CallAgent,
   GuestLobbyStatus,
   LiveCall,
   RoomPresenceEntry,
@@ -57,6 +58,7 @@ import {
   overrunText,
   rsvpSummary,
 } from './internal/meetingsLive.js';
+import { CallAgentTag } from './CallAgents.js';
 import { useMessageExtras } from './messageExtras.js';
 import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
@@ -69,6 +71,14 @@ export interface MeetingParticipant {
   /** Joined from a guest link: shown with a Guest mark. */
   guest?: boolean;
   avatarUrl?: string | null;
+  /**
+   * An agent in the call (AG13): named by its `label` and shown with the
+   * Agent badge and what it's doing. `useCallAgents().agentFor(userId)`,
+   * or pass the call's `agents` to the panel.
+   */
+  agent?: CallAgent | null;
+  /** Speaking now (the roster's flag) — an agent shows "Speaking". */
+  speaking?: boolean;
 }
 
 type NameFor = (userId: string) => string | null | undefined;
@@ -163,6 +173,8 @@ function PersonRow({
   seed,
   children,
   extra,
+  agent,
+  speaking,
 }: {
   name: string;
   guest?: boolean | undefined;
@@ -170,6 +182,8 @@ function PersonRow({
   seed: string;
   children?: ReactNode;
   extra?: string | null;
+  agent?: CallAgent | null | undefined;
+  speaking?: boolean | undefined;
 }) {
   const { text, subtle } = useText();
   return (
@@ -181,6 +195,9 @@ function PersonRow({
             {name}
           </Text>
           {guest ? <GuestMark /> : null}
+          {agent ? (
+            <CallAgentTag agent={agent} {...(speaking !== undefined ? { speaking } : {})} />
+          ) : null}
         </View>
         {extra ? (
           <Text style={[styles.small, subtle]} numberOfLines={1}>
@@ -211,6 +228,8 @@ export interface StagePanelProps {
   participants: readonly MeetingParticipant[];
   selfUserId?: string | null;
   nameForUserId?: NameFor;
+  /** The call's agents (`useCallAgents().agents`), listed with the Agent badge. */
+  agents?: readonly CallAgent[];
   style?: StyleProp<ViewStyle>;
 }
 
@@ -223,18 +242,23 @@ export function StagePanel({
   participants,
   selfUserId,
   nameForUserId,
+  agents,
   style,
 }: StagePanelProps) {
   const { card, muted } = useText();
   const nameOf = useNamer(nameForUserId);
   const byId = useMemo(() => new Map(participants.map((p) => [p.userId, p])), [participants]);
+  const agentOf = (p: MeetingParticipant) =>
+    p.agent ?? agents?.find((a) => a.userId === p.userId) ?? null;
   const speakers = participants.filter((p) => stage.roleOf(p.userId) !== 'audience');
   const audience = participants.filter((p) => stage.roleOf(p.userId) === 'audience');
   const hands = stage.stage?.hands ?? [];
   const mod = stage.isModerator;
   const isSelf = (id: string) => !!selfUserId && id === selfUserId;
   const label = (id: string, given?: string | null) => {
-    const n = nameOf(id, byId.get(id)?.name ?? given);
+    const p = byId.get(id);
+    const agent = p ? agentOf(p) : null;
+    const n = agent ? agent.label : nameOf(id, p?.name ?? given);
     return isSelf(id) ? `${n} (you)` : n;
   };
 
@@ -291,9 +315,11 @@ export function StagePanel({
             name={label(p.userId)}
             guest={p.guest}
             avatarUrl={p.avatarUrl}
+            agent={agentOf(p)}
+            speaking={p.speaking}
             extra={stage.roleOf(p.userId) === 'moderator' ? 'Moderator' : null}
           >
-            {mod && !isSelf(p.userId) && stage.stage?.mode === 'stage' ? (
+            {mod && !isSelf(p.userId) && !agentOf(p) && stage.stage?.mode === 'stage' ? (
               <Button
                 label="Move to audience"
                 onPress={() => void stage.setRole(p.userId, 'audience')}
