@@ -303,10 +303,16 @@ const lobby = useLobby(conversationId, callId);
 <StagePanel stage={stage} participants={people} selfUserId={me.id} />
 <QuestionsPanel questions={questions} canModerate={stage.isModerator} />
 <LobbyAdmitList lobby={lobby} />
-<BreakoutBanner breakouts={useBreakouts(conversationId, callId)} onJoined={connect} />
+<BreakoutBanner breakouts={useNativeBreakouts(conversationId, callId, { moveToRoom })} />
 <AgendaPanel agenda={useAgenda(conversationId, callId)} canEdit />
 <MarkMomentButton moments={useMoments(conversationId, callId)} />
 ```
+
+With `@poolse/native`, `useNativeBreakouts` (pass its `moveToRoom`) joins
+your breakout room as the split opens and brings you back as it closes;
+the phone's call never ends, only its media changes rooms. The banner's
+Join room / Return to main buttons use it too. With the JS `CallRoom`, use
+`useBreakouts` and connect to the session in `onJoined`.
 
 `participants` is `{ userId, name?, guest?, avatarUrl? }[]` from your call
 roster; names fall back to the `MessageExtrasProvider`'s `nameForUserId`,
@@ -325,7 +331,7 @@ Overlays for the call screen:
 const t = useLiveTranscript(callId, { enabled: captionsOn });
 {captionsOn && <CaptionsOverlay segments={t.segments} />}
 
-const reactions = useCallReactions(media.room); // JS CallRoom only
+const reactions = useCallReactions(media.room); // or callData from @poolse/native
 <ReactionsOverlay reactions={reactions.reactions} />
 <ReactionPickerBar onReact={reactions.send} />
 
@@ -336,7 +342,9 @@ const reactions = useCallReactions(media.room); // JS CallRoom only
 ```
 
 The whiteboard and screen annotations are view-only on phones by default
-(`WhiteboardView` draws pen strokes when given `model` and `readOnly={false}`):
+(`WhiteboardView` draws pen strokes when given `model` and `readOnly={false}`;
+`AnnotationOverlay` draws lines everyone sees when given `annotations` and
+`drawing`):
 
 ```tsx
 import * as Y from 'yjs';
@@ -346,6 +354,7 @@ const board = useWhiteboard(callId, Y, { selfUserId: me.id });
 <View>
   <CallVideoView source="screen" fit="contain" />
   <AnnotationOverlay state={useScreenAnnotations(media.room, sharerId).state} />
+  {/* @poolse/native: useScreenAnnotations(callData, sharerId) */}
 </View>
 ```
 

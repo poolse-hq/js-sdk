@@ -4,6 +4,13 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Changed
+
+- `useCallReactions` and `useScreenAnnotations` take any `CallDataChannel`
+  — `useCallRoom(…).room`, or @poolse/native's `callData` on phones.
+
 ## [3.10.0] - 2026-11-23
 
 ### Added

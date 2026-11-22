@@ -2,6 +2,30 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## [Unreleased]
+
+### Added
+
+- Data channel (CL4, CL6): `publishData(topic, data, options)` over
+  LiveKit data packets on both cores (iOS `publish(data:)`, Android
+  `publishData`), options `reliable`, `base64` and `to`, capped at
+  `CALL_DATA_MAX_BYTES` (14 000, as the web `CallRoom`); `onCallData`
+  with `topic`, `payload` (base64), `text`, `fromIdentity`, `fromName`;
+  `callData`, a `CallDataChannel` for @poolse/sdk's `CallReactions` /
+  `ScreenAnnotations` and @poolse/react's `useCallReactions` /
+  `useScreenAnnotations`, so reactions and the pointer and drawing on a
+  shared screen interoperate with web and desktop. Snapshot
+  `selfIdentity`.
+- Breakout rooms (CL5): `moveToRoom(session)` moves the live call's media
+  to another room of the same call (the bundle of
+  `POST /breakouts/:room/join` or `POST /calls/:id/breakouts/return`),
+  keeping the CallKit / Telecom call, the phase and mute and camera; it
+  falls back to the previous room if the new one can't be joined.
+  Snapshot `breakout` (`roomId`, `name`; null in the main room). In a
+  breakout room the alone check is off and a reconnect rejoins that room
+  with the fresh control token. The state machine and its vectors are
+  unchanged; runtime tests cover the move on both cores.
+
 ## [3.10.0] - 2026-11-23
 
 ### Added

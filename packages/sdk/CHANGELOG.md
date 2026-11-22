@@ -4,6 +4,14 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `CallDataChannel` (`getSelfId`, `sendData`, `onData`): what
+  `CallReactions` and `ScreenAnnotations` take, so they run over
+  @poolse/native's `callData` on phones as well as over `CallRoom`.
+
 ## [3.10.0] - 2026-11-23
 
 ### Added — messaging plus (docs/MESSAGING_PLUS.md, PLATFORM_PLUS.md §1)

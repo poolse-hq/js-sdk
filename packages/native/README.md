@@ -204,6 +204,41 @@ person in a call, so the other device is let go. Its snapshot gets
 other device", not "Call ended". Offer it where `liveCalls` shows you already
 in the call.
 
+**Reactions, pointer and drawing (data channel).** `callData` is the call's
+LiveKit data channel in the shape @poolse/sdk's `CallDataChannel` takes, so
+the SDK's `CallReactions` and `ScreenAnnotations`, and @poolse/react's
+`useCallReactions` / `useScreenAnnotations`, run on phones with the same
+topics and messages as the web and desktop (`poolse.reaction`,
+`poolse.annotate`):
+
+```tsx
+import { callData } from '@poolse/native';
+const reactions = useCallReactions(callData);
+const { state, annotations } = useScreenAnnotations(callData, sharerUserId);
+<CallVideoView participantId={sharerUserId} source="screen" fit="contain" />
+<AnnotationOverlay state={state} annotations={annotations} drawing={penOn} />
+```
+
+Lower level: `publishData(topic, data, { reliable?, base64?, to? })` sends
+text (or base64 bytes) and resolves `false` with no call connected or over
+`CALL_DATA_MAX_BYTES` (14 000, as on the web); `onCallData(cb)` gets
+`{ topic, payload (base64), text, fromIdentity, fromName }` for every message
+others send. `snapshot.selfIdentity` is your identity in the room.
+
+**Breakout rooms.** A breakout room is another LiveKit room of the same call
+(MEETINGS.md §5). `moveToRoom(session)` takes the bundle of `POST
+/v1/breakouts/:room/join` (or `POST /v1/calls/:id/breakouts/return` to come
+back, the SDK's `meetingsLive.breakouts.join` / `returnToMain`) and moves the
+call's media there without hanging up: CallKit and Android's call service
+keep the call, the phase stays `active`, mute and camera stay as they were,
+and `snapshot.breakout` (`{ roomId, name }`, null in the main room) says
+where you are. A screen share stops on the move. If the room can't be
+joined, the media goes back to where it was. Being alone in a breakout room
+never ends the call, and a network drop there rejoins the same room.
+@poolse/react-native's `useNativeBreakouts(conversationId, callId, {
+moveToRoom })` follows the split by itself: into your room as it opens, back
+as it closes.
+
 ## Ringtone
 
 ```json

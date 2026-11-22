@@ -4,6 +4,20 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `useNativeBreakouts(conversationId, callId, { moveToRoom })` (CL5):
+  `useBreakouts` that moves the @poolse/native call into your breakout
+  room as the split opens and back as it closes (`auto`, default on);
+  `inBreakout`, `joinRoom`, `returnToMainRoom`. `BreakoutBanner` takes it
+  and uses it for Join room / Return to main.
+- `AnnotationOverlay` draws (CL4): `annotations` (from
+  `useScreenAnnotations`) with `drawing` and `color` make a finger draw
+  lines everyone in the call sees. With @poolse/native's `callData` the
+  overlay and `useCallReactions` work on phones.
+
 ## [3.10.0] - 2026-11-23
 
 ### Added
