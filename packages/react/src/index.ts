@@ -352,3 +352,19 @@ export type {
 // Experimental: the shared-document relay (`poolse.realtime.doc`).
 export { DocChannel, DocPushError, DEFAULT_DOC_LIMITS } from '@poolse/sdk';
 export type { DocEditor, DocJoinInfo, DocLimits, DocRights, DocClosedReason } from '@poolse/sdk';
+export {
+  useCatchUp,
+  useFiles,
+  usePins,
+  usePoll,
+  useScheduledMessages,
+  useThreadFollow,
+  useTranslation,
+  type UseCatchUp,
+  type UseFiles,
+  type UsePins,
+  type UsePoll,
+  type UseScheduledMessages,
+  type UseThreadFollow,
+  type UseTranslation,
+} from './use-messaging-plus.js';
