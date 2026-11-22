@@ -37,7 +37,7 @@ class PoolseCallsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("PoolseCalls")
 
-    Events("onCallState", "onCallAction", "onPictureInPicture", "onNotificationAction")
+    Events("onCallState", "onCallAction", "onPictureInPicture", "onNotificationAction", "onCallData")
 
     // <CallVideoView>: renders a participant's (or our own) camera.
     View(PoolseCallVideoView::class) {
@@ -60,9 +60,11 @@ class PoolseCallsModule : Module() {
       CallCore.listener = { snapshot -> sendEvent("onCallState", mapOf("snapshot" to snapshot)) }
       CallPictureInPicture.listener = { active -> sendEvent("onPictureInPicture", mapOf("active" to active)) }
       MessageNotifications.actionListener = { event -> sendEvent("onNotificationAction", event) }
+      CallCore.dataListener = { message -> sendEvent("onCallData", message) }
     }
     OnStopObserving {
       CallCore.listener = null
+      CallCore.dataListener = null
       CallPictureInPicture.listener = null
       MessageNotifications.actionListener = null
     }
@@ -195,6 +197,36 @@ class PoolseCallsModule : Module() {
     Function("setAudioOutput") { id: String -> core()?.setAudioOutput(id) }
     // Recording consent accepted: mic and camera back as they were.
     Function("republish") { core()?.republish() }
+
+    // The call's data channel (CL4, CL6): `data` is UTF-8 text, or bytes
+    // as base64 with `options.base64`. Resolves false when not connected,
+    // over 14 000 bytes, or refused.
+    AsyncFunction("publishData") { topic: String, data: String, options: Map<String, Any?>?, promise: Promise ->
+      val core = core()
+      val bytes = runCatching {
+        if (options?.get("base64") == true) android.util.Base64.decode(data, android.util.Base64.DEFAULT)
+        else data.toByteArray(Charsets.UTF_8)
+      }.getOrNull()
+      if (core == null || bytes == null) {
+        promise.resolve(false)
+        return@AsyncFunction
+      }
+      val to = (options?.get("to") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+      core.publishData(topic, bytes, options?.get("reliable") as? Boolean ?: true, to) { promise.resolve(it) }
+    }
+
+    // Breakout rooms (MEETINGS.md §5): the live call's media to another
+    // room of the same call, keeping the call service and the system
+    // call. `session` is the JSON of POST /breakouts/:room/join or
+    // /calls/:id/breakouts/return.
+    AsyncFunction("moveToRoom") { session: String, promise: Promise ->
+      val core = core()
+      if (core == null) {
+        promise.resolve(false)
+        return@AsyncFunction
+      }
+      core.moveToRoom(session) { promise.resolve(it) }
+    }
 
     // What authorizes acting on the call itself (ringing people in).
     AsyncFunction("callControl") {

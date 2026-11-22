@@ -41,6 +41,24 @@ interface CaptureProcessingSource {
   fun setBackgroundBlur(on: Boolean) {}
 }
 
+/**
+ * The call's data channel (CL4 pointer and drawing on a shared screen,
+ * CL6 reactions), for a media port that has one. Messages arrive through
+ * [MediaEvents.onData]. Main thread only.
+ */
+interface CallDataSource {
+  /** Our SFU identity (the poolse user id) while connected; null otherwise. */
+  val localIdentity: String?
+
+  /**
+   * Send [data] under [topic] to everyone in the room, or to [to] (SFU
+   * identities). `reliable = false` for what is stale a moment later (a
+   * moving pointer). [done] false: not connected, over
+   * [CallCore.DATA_MAX_BYTES], or refused.
+   */
+  fun publishData(topic: String, data: ByteArray, reliable: Boolean, to: List<String>, done: (Boolean) -> Unit)
+}
+
 /** One on-screen video slot, bound to a participant's camera or shared screen. */
 interface CallVideoSurface {
   /** The Android view to host; it fills its parent. */

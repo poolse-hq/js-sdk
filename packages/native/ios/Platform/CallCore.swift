@@ -45,6 +45,10 @@ final class CallCore {
   /// The bridge's snapshot subscriber; process-level so JS may subscribe before configure.
   static var listener: (([String: Any]?) -> Void)?
 
+  /// The bridge's data-channel subscriber (CL4, CL6): `{topic, payload
+  /// (base64), text (UTF-8 or nil), fromIdentity, fromName}`. Main thread.
+  static var dataListener: (([String: Any]) -> Void)?
+
   /// Configure and PERSIST (see CallCore.kt). Re-configuring swaps in place:
   /// HTTP and the ringback read the config per use. A non-empty
   /// `apiBaseUrl` is the `default` server; "" sets the options only and
@@ -422,6 +426,31 @@ final class CallCore {
   /// The current call's id and control token (main thread).
   var control: (callId: String, controlToken: String)? { runtime.control }
 
+  /// Breakout rooms (MEETINGS.md §5): the call's media to the room of
+  /// `payload` — the JSON of `POST /breakouts/:room/join` (or of `POST
+  /// /calls/:id/breakouts/return`). CallKit keeps the call; see
+  /// CallCoreRuntime.moveToRoom. `done(false)`: unparseable, no live
+  /// call, or another call's session.
+  func moveToRoom(payload: String, done: @escaping (Bool) -> Void) {
+    onMain { [self] in
+      guard let current = runtime.currentBundle,
+            let next = try? CallHttpClient.parseBundle(payload, current: current) else {
+        done(false)
+        return
+      }
+      runtime.moveToRoom(next) { [weak self] ok in
+        // The last room's people are not in this one.
+        if ok { self?.roster = [] }
+        done(ok)
+      }
+    }
+  }
+
+  /// A data-channel message to the call's room (CL4, CL6); see LiveKitMediaPort.publishData.
+  func publishData(topic: String, data: Data, reliable: Bool, to: [String], done: @escaping (Bool) -> Void) {
+    onMain { [self] in mediaPort.publishData(topic: topic, data: data, reliable: reliable, to: to, done: done) }
+  }
+
   /// A video slot for the native view. Main thread.
   func createVideoSurface(renderMode: VideoView.RenderMode = .auto) -> LiveKitVideoSurface {
     mediaPort.createVideoSurface(renderMode: renderMode)
@@ -504,6 +533,13 @@ final class CallCore {
     out["noiseSuppression"] = mediaPort.noiseSuppression
     out["backgroundBlur"] = mediaPort.backgroundBlur
     out["movedElsewhere"] = movedElsewhere
+    // Breakout rooms (MEETINGS.md §5): the room the media is in, nil in the main room.
+    if let b = runtime.breakout {
+      out["breakout"] = ["roomId": b.roomId, "name": b.name ?? NSNull()] as [String: Any]
+    } else {
+      out["breakout"] = NSNull()
+    }
+    out["selfIdentity"] = mediaPort.localIdentity ?? NSNull()
     // Taken over by another of this user's devices: the machine ends it
     // as `left` (CALL_CONTRACT.md §9); the app is told why.
     if movedElsewhere && state.phase == .ended { out["reason"] = "moved" }
@@ -685,6 +721,15 @@ final class CallCore {
   fileprivate func movedAway() {
     runtime.post { [weak self] in self?.movedElsewhere = true }
   }
+  fileprivate func data(topic: String, payload: Data, from: String?, name: String?) {
+    CallCore.dataListener?([
+      "topic": topic,
+      "payload": payload.base64EncodedString(),
+      "text": String(data: payload, encoding: .utf8) ?? NSNull(),
+      "fromIdentity": from ?? NSNull(),
+      "fromName": name ?? NSNull(),
+    ])
+  }
 }
 
 // MARK: - CallKit actions
@@ -787,6 +832,9 @@ private final class EventsAdapter: MediaEvents {
   func onNetwork(quality: String, videoPaused: Bool) { core?.network(quality: quality, videoPaused: videoPaused) }
   func onCanPublish(_ allowed: Bool) { core?.publishAllowed(allowed) }
   func onMovedElsewhere() { core?.movedAway() }
+  func onData(topic: String, payload: Data, fromIdentity: String?, fromName: String?) {
+    core?.data(topic: topic, payload: payload, from: fromIdentity, name: fromName)
+  }
 }
 
 /// Host-facing entry points.

@@ -38,6 +38,9 @@ protocol MediaEvents: AnyObject {
   /// The SFU replaced us with the same user joining from another device
   /// ("move call to this device", CALL_CONTRACT.md §9). Sent just before `onLost`.
   func onMovedElsewhere()
+  /// A data-channel message from someone in the room (CL4, CL6): its
+  /// topic, the bytes, and who sent it (nil identity: the server).
+  func onData(topic: String, payload: Data, fromIdentity: String?, fromName: String?)
 }
 
 /// Step-by-step trace of the audio path, in the device log as
@@ -377,6 +380,45 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     // red status-bar pill would keep recording into nothing.
     if BroadcastManager.shared.isBroadcasting { BroadcastManager.shared.requestStop() }
     events?.onLocalScreen(false)
+  }
+
+  // MARK: - data channel (CL4, CL6)
+
+  /// The most one message may carry — the web CallRoom's
+  /// CALL_DATA_MAX_BYTES, under LiveKit's ~15 KiB packet.
+  static let dataMaxBytes = 14_000
+
+  /// Our LiveKit identity (the poolse user id) while connected.
+  var localIdentity: String? {
+    guard let r = room, connectedRoom == ObjectIdentifier(r) else { return nil }
+    return r.localParticipant.identity?.stringValue
+  }
+
+  /// Send `data` under `topic` to everyone in the room, or to `to` (LiveKit
+  /// identities). `reliable: false` for what is stale a moment later (a
+  /// moving pointer). `done(false)`: not connected, over the cap, or LiveKit refused.
+  func publishData(topic: String, data: Data, reliable: Bool, to: [String], done: @escaping (Bool) -> Void) {
+    guard let r = room, connectedRoom == ObjectIdentifier(r), !topic.isEmpty,
+          data.count <= Self.dataMaxBytes else {
+      done(false)
+      return
+    }
+    let options = DataPublishOptions(destinationIdentities: to.map { Participant.Identity(from: $0) },
+                                     topic: topic, reliable: reliable)
+    Task {
+      do {
+        try await r.localParticipant.publish(data: data, options: options)
+        await MainActor.run { done(true) }
+      } catch {
+        NSLog("[PoolseCalls] data publish on %@ failed: %@", topic, "\(error)")
+        await MainActor.run { done(false) }
+      }
+    }
+  }
+
+  fileprivate func dataReceived(_ r: Room, topic: String, data: Data, from: String?, name: String?) {
+    guard room === r, !topic.isEmpty, data.count <= Self.dataMaxBytes else { return }
+    events?.onData(topic: topic, payload: data, fromIdentity: from, fromName: name)
   }
 
   // MARK: - screen sharing
@@ -1014,6 +1056,14 @@ final class RoomObserver: NSObject, RoomDelegate, @unchecked Sendable {
   func room(_ room: Room, participant: Participant, didUpdateMetadata metadata: String?) { send(room, .rosterChanged) }
   func room(_ room: Room, participant: Participant, didUpdateAttributes attributes: [String: String]) { send(room, .rosterChanged) }
   func room(_ room: Room, participant: Participant, didUpdateConnectionQuality quality: ConnectionQuality) { send(room, .quality) }
+  func room(_ room: Room, participant: RemoteParticipant?, didReceiveData data: Data, forTopic topic: String,
+            encryptionType: EncryptionType) {
+    let from = participant?.identity?.stringValue
+    let name = participant?.name
+    DispatchQueue.main.async { [weak self] in
+      self?.port?.dataReceived(room, topic: topic, data: data, from: from, name: name)
+    }
+  }
   // Only ever the local participant's (LiveKit's own LocalParticipant sends it).
   func room(_ room: Room, participant: Participant, didUpdatePermissions permissions: ParticipantPermissions) {
     if participant is LocalParticipant { send(room, .permissions) }

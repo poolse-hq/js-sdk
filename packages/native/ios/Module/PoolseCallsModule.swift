@@ -9,7 +9,7 @@ public class PoolseCallsModule: Module {
   public func definition() -> ModuleDefinition {
     Name("PoolseCalls")
 
-    Events("onCallState", "onVoipToken", "onPictureInPicture", "onNotificationAction", "onCallAction")
+    Events("onCallState", "onVoipToken", "onPictureInPicture", "onNotificationAction", "onCallAction", "onCallData")
 
     // Normally done at launch by PoolseCallsAppDelegateSubscriber; this is
     // the backstop for a host whose AppDelegate does not forward to Expo.
@@ -37,6 +37,9 @@ public class PoolseCallsModule: Module {
         MessageNotifications.actionListener = { [weak self] event in
           self?.sendEvent("onNotificationAction", event)
         }
+        CallCore.dataListener = { [weak self] message in
+          self?.sendEvent("onCallData", message)
+        }
       }
     }
 
@@ -47,6 +50,7 @@ public class PoolseCallsModule: Module {
         CallPictureInPicture.listener = nil
         MessageNotifications.actionListener = nil
         MessageNotifications.callActionListener = nil
+        CallCore.dataListener = nil
       }
     }
 
@@ -147,6 +151,24 @@ public class PoolseCallsModule: Module {
     Function("setAudioOutput") { (id: String) in onCore { $0.setAudioOutput(id) } }
     // Recording consent accepted: mic and camera back as they were.
     Function("republish") { onCore { $0.republish() } }
+
+    // The call's data channel (CL4, CL6): `data` is UTF-8 text, or bytes
+    // as base64 with `options.base64`. Resolves false when not connected,
+    // over 14 000 bytes, or refused.
+    AsyncFunction("publishData") { (topic: String, data: String, options: [String: Any]?, promise: Promise) in
+      let bytes = (options?["base64"] as? Bool == true) ? Data(base64Encoded: data) : data.data(using: .utf8)
+      guard let bytes = bytes, let core = CallCore.getOrNull() else { return promise.resolve(false) }
+      core.publishData(topic: topic, data: bytes, reliable: options?["reliable"] as? Bool ?? true,
+                       to: options?["to"] as? [String] ?? []) { ok in promise.resolve(ok) }
+    }.runOnQueue(.main)
+
+    // Breakout rooms (MEETINGS.md §5): the live call's media to another
+    // room of the same call, keeping the CallKit call. `session` is the
+    // JSON of POST /breakouts/:room/join or /calls/:id/breakouts/return.
+    AsyncFunction("moveToRoom") { (session: String, promise: Promise) in
+      guard let core = CallCore.getOrNull() else { return promise.resolve(false) }
+      core.moveToRoom(payload: session) { ok in promise.resolve(ok) }
+    }.runOnQueue(.main)
 
     // Picture-in-picture: armed while a video call shows someone; the
     // <CallVideoView pictureInPicture> on screen is what it grows out of.

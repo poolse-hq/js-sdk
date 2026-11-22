@@ -167,6 +167,17 @@ export interface Snapshot {
    * there); the end that follows has `reason: 'moved'`. Absent before 3.10.
    */
   movedElsewhere?: boolean;
+  /**
+   * The breakout room the call's media is in (`moveToRoom`,
+   * MEETINGS.md §5); null in the call's main room. `roomId` is the
+   * split's `<split id>.<n>`. Absent before 3.11.
+   */
+  breakout?: { roomId: string; name: string | null } | null;
+  /**
+   * Your own identity in the media room — your poolse user id — once
+   * connected; what `callData.getSelfId()` answers. Absent before 3.11.
+   */
+  selfIdentity?: string | null;
 }
 
 /** The CallSummary's `recording` object, as the server sent it (docs/CALL_CONTRACT.md §4.2). */
@@ -428,6 +439,12 @@ interface PoolseCallsNative {
   setBackgroundBlur?(on: boolean): boolean;
   setAudioOutput?(id: string): void;
   republish?(): void;
+  publishData?(
+    topic: string,
+    data: string,
+    options: { reliable?: boolean; base64?: boolean; to?: string[] } | null,
+  ): Promise<boolean>;
+  moveToRoom?(session: string): Promise<boolean>;
   callControl?(): Promise<{
     callId: string;
     controlToken: string;
@@ -458,6 +475,7 @@ interface PoolseCallsNative {
     event: 'onPictureInPicture',
     cb: (payload: { active: boolean }) => void,
   ): { remove(): void };
+  addListener(event: 'onCallData', cb: (payload: CallDataMessage) => void): { remove(): void };
 }
 
 const native = requireOptionalNativeModule<PoolseCallsNative>('PoolseCalls');
@@ -1027,6 +1045,188 @@ export function onPictureInPicture(cb: (active: boolean) => void): Unsubscribe {
   if (!native?.setPictureInPictureEnabled) return () => undefined;
   const sub = native.addListener('onPictureInPicture', (payload) => cb(payload.active));
   return () => sub.remove();
+}
+
+// ── data channel (CL4, CL6) ───────────────────────────────────────────
+
+/**
+ * The most one data-channel message may carry, in bytes — the same cap
+ * as the web SDK's `CALL_DATA_MAX_BYTES`, under LiveKit's ~15 KiB packet.
+ */
+export const CALL_DATA_MAX_BYTES = 14_000;
+
+/** One message from someone in the call's room. */
+export interface CallDataMessage {
+  topic: string;
+  /** The bytes, base64. */
+  payload: string;
+  /** The bytes as UTF-8 text; null when they are not text. */
+  text: string | null;
+  /** Who sent it (their poolse user id); null when the server did. */
+  fromIdentity: string | null;
+  fromName: string | null;
+}
+
+export interface PublishDataOptions {
+  /** Default true. `false` for what is stale a moment later (a moving pointer). */
+  reliable?: boolean;
+  /** `data` is base64 bytes rather than text. */
+  base64?: boolean;
+  /** Only these people (poolse user ids); everyone in the room when left out. */
+  to?: string[];
+}
+
+/** UTF-8 length of `s`, without TextEncoder (not on every Hermes). */
+function utf8Length(s: string): number {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+      n += 4;
+      i++;
+    } else n += 3;
+  }
+  return n;
+}
+
+/**
+ * Send `data` under `topic` to everyone in the call's room over LiveKit's
+ * data channel, through the SFU, never stored (CL4, CL6). Web, desktop
+ * and phones share topics and formats: `poolse.reaction`,
+ * `poolse.annotate` (see {@link callData} for JSON). Resolves false with
+ * no call connected, over {@link CALL_DATA_MAX_BYTES}, or on a build
+ * without it.
+ */
+export async function publishData(
+  topic: string,
+  data: string,
+  options: PublishDataOptions = {},
+): Promise<boolean> {
+  if (!native?.publishData || !topic) return false;
+  const size = options.base64 ? Math.floor((data.length * 3) / 4) : utf8Length(data);
+  if (size > CALL_DATA_MAX_BYTES) return false;
+  try {
+    return await native.publishData(topic, data, {
+      reliable: options.reliable ?? true,
+      base64: options.base64 ?? false,
+      ...(options.to ? { to: options.to } : {}),
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Every data-channel message others send in the call's room (yours are not echoed). */
+export function onCallData(cb: (message: CallDataMessage) => void): Unsubscribe {
+  if (!native?.publishData) return () => undefined;
+  const sub = native.addListener('onCallData', cb);
+  return () => sub.remove();
+}
+
+type DataListener = (
+  message: unknown,
+  from: { userId: string | null; name: string | null },
+) => void;
+const dataListeners = new Map<string, Set<DataListener>>();
+let dataSub: Unsubscribe | null = null;
+
+/**
+ * The native call's data channel in the shape @poolse/sdk's
+ * `CallDataChannel` takes — JSON messages by topic — so the SDK's
+ * `CallReactions` and `ScreenAnnotations` (and @poolse/react's
+ * `useCallReactions` / `useScreenAnnotations`) run on phones exactly as
+ * on the web and desktop, and interoperate with them:
+ *
+ *     import { callData } from '@poolse/native';
+ *     const { reactions, send } = useCallReactions(callData);
+ *     const { state } = useScreenAnnotations(callData, sharerUserId);
+ *     <AnnotationOverlay state={state} />
+ *
+ * One process-wide object; it follows whichever call is live.
+ */
+export const callData = {
+  getSelfId(): string | null {
+    return getCallState()?.selfIdentity ?? null;
+  },
+  sendData(
+    topic: string,
+    message: unknown,
+    opts: { reliable?: boolean; to?: string[] } = {},
+  ): Promise<boolean> {
+    let text: string;
+    try {
+      text = JSON.stringify(message);
+    } catch {
+      return Promise.resolve(false);
+    }
+    return publishData(topic, text, opts);
+  },
+  onData(topic: string, fn: DataListener): Unsubscribe {
+    let set = dataListeners.get(topic);
+    if (!set) {
+      set = new Set();
+      dataListeners.set(topic, set);
+    }
+    set.add(fn);
+    dataSub ??= onCallData((m) => {
+      const listeners = dataListeners.get(m.topic);
+      if (!listeners?.size || m.text == null) return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(m.text);
+      } catch {
+        return;
+      }
+      const from = { userId: m.fromIdentity, name: m.fromName };
+      for (const l of [...listeners]) l(parsed, from);
+    });
+    return () => {
+      set.delete(fn);
+      if (set.size === 0) dataListeners.delete(topic);
+      if (dataListeners.size === 0 && dataSub) {
+        dataSub();
+        dataSub = null;
+      }
+    };
+  },
+};
+
+// ── breakout rooms (CL5) ──────────────────────────────────────────────
+
+/**
+ * What {@link moveToRoom} takes: the session bundle `POST
+ * /v1/breakouts/:room/join` or `POST /v1/calls/:id/breakouts/return`
+ * answers with (@poolse/sdk's `meetingsLive.breakouts.join` /
+ * `returnToMain`), or its JSON text.
+ */
+export interface RoomSessionBundle {
+  call: { id: string };
+  livekit: { url: string; token: string };
+  control_token: string;
+  breakout?: { room_id: string; name: string | null } | null;
+}
+
+/**
+ * Breakout rooms (MEETINGS.md §5): move the call you are on into another
+ * of its rooms — your breakout room, or back to the main room — without
+ * hanging up. CallKit / the Android call service keep the call; only
+ * the media swaps rooms, mute and camera as they were, and
+ * `snapshot.breakout` says where you are. If the new room can't be
+ * joined, the media goes back to the room it came from.
+ *
+ * Resolves false with no call connected (or still connecting), for
+ * another call's session, or on a build without it. @poolse/react-native's
+ * `useNativeBreakouts` does this for you as the split opens and closes.
+ */
+export async function moveToRoom(session: RoomSessionBundle | string): Promise<boolean> {
+  if (!native?.moveToRoom) return false;
+  try {
+    return await native.moveToRoom(typeof session === 'string' ? session : JSON.stringify(session));
+  } catch {
+    return false;
+  }
 }
 
 // ── video ─────────────────────────────────────────────────────────────

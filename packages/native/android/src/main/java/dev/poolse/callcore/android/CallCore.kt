@@ -331,6 +331,37 @@ class CallCore private constructor(context: Context) {
   /** The current call's id and control token. Any thread. */
   val control: Pair<String, String>? get() = runtime.control
 
+  /**
+   * Breakout rooms (MEETINGS.md §5): the call's media to the room of
+   * [payload] — the JSON of `POST /breakouts/:room/join` (or of `POST
+   * /calls/:id/breakouts/return`). The call service and the system call
+   * stay; see [CallCoreRuntime.moveToRoom]. [done] false: unparseable,
+   * no live call, or another call's session.
+   */
+  fun moveToRoom(payload: String, done: (Boolean) -> Unit) = runtime.post {
+    val current = runtime.currentBundle
+    val next = current?.let { runCatching { CallHttpClient.parseBundle(payload, it) }.getOrNull() }
+    if (next == null) {
+      done(false)
+      return@post
+    }
+    runtime.moveToRoom(next) { ok ->
+      // The last room's people are not in this one.
+      if (ok) roster = emptyList()
+      done(ok)
+    }
+  }
+
+  /**
+   * A data-channel message to the call's room (CL4, CL6). False at once
+   * when the media engine has no data channel (the signalling-only build).
+   */
+  fun publishData(topic: String, data: ByteArray, reliable: Boolean, to: List<String>, done: (Boolean) -> Unit) {
+    val source = media as? CallDataSource ?: return done(false)
+    // On the runtime's (main) thread: the media port only touches its room there.
+    runtime.post { source.publishData(topic, data, reliable, to, done) }
+  }
+
   fun allRingsResolved(outcome: String) = runtime.allRingsResolved(outcome)
 
   fun state(): MachineState = runtime.currentState()
@@ -424,6 +455,9 @@ class CallCore private constructor(context: Context) {
     out["noiseSuppression"] = noiseSuppression
     out["backgroundBlur"] = backgroundBlur
     out["movedElsewhere"] = movedElsewhere
+    // Breakout rooms (MEETINGS.md §5): the room the media is in, null in the main room.
+    out["breakout"] = runtime.breakout?.let { (roomId, name) -> mapOf("roomId" to roomId, "name" to name) }
+    out["selfIdentity"] = (media as? CallDataSource)?.localIdentity
     // Taken over by another of this user's devices: the machine ends it
     // as `left` (CALL_CONTRACT.md §9); the app is told why.
     if (movedElsewhere && state.phase == Phase.ENDED) out["reason"] = "moved"
@@ -550,6 +584,22 @@ class CallCore private constructor(context: Context) {
     override fun onMovedElsewhere() {
       runtime.post { movedElsewhere = true }
     }
+    override fun onData(topic: String, payload: ByteArray, fromIdentity: String?, fromName: String?) {
+      val text = runCatching {
+        Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(payload)).toString()
+      }.getOrNull()
+      runCatching {
+        dataListener?.invoke(
+          mapOf(
+            "topic" to topic,
+            "payload" to android.util.Base64.encodeToString(payload, android.util.Base64.NO_WRAP),
+            "text" to text,
+            "fromIdentity" to fromIdentity,
+            "fromName" to fromName,
+          ),
+        )
+      }.onFailure { Log.w(TAG, "data listener failed", it) }
+    }
   }
 
   private fun bringAppToFront(callId: String, from: Context?): Boolean {
@@ -581,6 +631,15 @@ class CallCore private constructor(context: Context) {
      * it up when it is created.
      */
     @Volatile var listener: ((Map<String, Any?>?) -> Unit)? = null
+
+    /**
+     * The bridge's data-channel subscriber (CL4, CL6): `{topic, payload
+     * (base64), text (UTF-8 or null), fromIdentity, fromName}`.
+     */
+    @Volatile var dataListener: ((Map<String, Any?>) -> Unit)? = null
+
+    /** The most one data message may carry — the web CallRoom's CALL_DATA_MAX_BYTES. */
+    const val DATA_MAX_BYTES = 14_000
 
     /**
      * Configure the core and PERSIST the inputs. A ring can wake a killed
@@ -819,6 +878,11 @@ interface MediaEvents {
    * [onLost].
    */
   fun onMovedElsewhere() {}
+  /**
+   * A data-channel message from someone in the room (CL4, CL6): its
+   * topic, the bytes, and who sent it (null identity: the server).
+   */
+  fun onData(topic: String, payload: ByteArray, fromIdentity: String?, fromName: String?) {}
 }
 
 /** One place call audio can play — a snapshot `audioOutputs[]` entry. */

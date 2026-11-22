@@ -11,6 +11,8 @@ import dev.poolse.callcore.CallSessionBundle
 import dev.poolse.callcore.MediaPort
 import dev.poolse.callcore.ServiceParticipants
 import dev.poolse.callcore.android.AudioOutput
+import dev.poolse.callcore.android.CallCore
+import dev.poolse.callcore.android.CallDataSource
 import dev.poolse.callcore.android.CaptureProcessingSource
 import dev.poolse.callcore.android.CallVideoSource
 import dev.poolse.callcore.android.CallVideoSurface
@@ -29,6 +31,7 @@ import io.livekit.android.room.participant.Participant
 import io.livekit.android.room.participant.ParticipantPermission
 import io.livekit.android.room.participant.RemoteParticipant
 import io.livekit.android.room.track.CameraPosition
+import io.livekit.android.room.track.DataPublishReliability
 import io.livekit.android.room.track.LocalAudioTrackOptions
 import io.livekit.android.room.track.LocalVideoTrack
 import io.livekit.android.room.track.RemoteTrackPublication
@@ -63,7 +66,7 @@ import org.json.JSONObject
 class LiveKitMediaPort(
   private val context: Context,
   private val events: MediaEvents,
-) : MediaPort, CallVideoSource, ScreenShareSource, CaptureProcessingSource {
+) : MediaPort, CallVideoSource, ScreenShareSource, CaptureProcessingSource, CallDataSource {
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   @Volatile private var room: Room? = null
@@ -285,6 +288,36 @@ class LiveKitMediaPort(
       if (room !== r) return@launch
       reportLocalScreen(r)
       refreshVideo()
+    }
+  }
+
+  // ── data channel (CL4, CL6) ─────────────────────────────────────────
+
+  override val localIdentity: String?
+    get() = room?.takeIf { it.state == Room.State.CONNECTED }?.localParticipant?.identity?.value
+
+  override fun publishData(
+    topic: String,
+    data: ByteArray,
+    reliable: Boolean,
+    to: List<String>,
+    done: (Boolean) -> Unit,
+  ) {
+    val r = room
+    if (r == null || r.state != Room.State.CONNECTED || topic.isEmpty() || data.size > CallCore.DATA_MAX_BYTES) {
+      done(false)
+      return
+    }
+    scope.launch {
+      val sent = runCatching {
+        r.localParticipant.publishData(
+          data,
+          if (reliable) DataPublishReliability.RELIABLE else DataPublishReliability.LOSSY,
+          topic,
+          to.takeIf { it.isNotEmpty() }?.map { Participant.Identity(it) },
+        )
+      }.onFailure { Log.w(TAG, "data publish on $topic failed", it) }.isSuccess
+      done(sent)
     }
   }
 
@@ -625,6 +658,12 @@ class LiveKitMediaPort(
         is RoomEvent.ConnectionQualityChanged -> {
           qualityChanged(room)
           emit(room)
+        }
+        is RoomEvent.DataReceived -> {
+          val topic = event.topic
+          if (!topic.isNullOrEmpty() && event.data.size <= CallCore.DATA_MAX_BYTES) {
+            events.onData(topic, event.data, event.participant?.identity?.value, event.participant?.name)
+          }
         }
         is RoomEvent.ActiveSpeakersChanged,
         is RoomEvent.ParticipantMetadataChanged,
