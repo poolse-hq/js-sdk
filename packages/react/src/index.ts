@@ -4,7 +4,7 @@
 // use the hooks below to access live state + actions. The provider
 // owns one Poolse instance for its mount lifetime.
 
-export { PoolseProvider, usePoolse, type PoolseProviderProps } from './provider.js';
+export { PoolseProvider, usePoolse, useOptionalPoolse, type PoolseProviderProps } from './provider.js';
 export {
   useUnreadTotals,
   useUnreadQueue,

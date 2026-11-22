@@ -18,6 +18,7 @@
 import type {
   UseAgenda,
   UseBreakouts,
+  UseCaptions,
   UseCallReactions,
   UseLiveTranscript,
   UseLobby,
@@ -36,12 +37,15 @@ import type {
   GuestLobbyStatus,
   LiveCall,
   Question,
+  RoomPresenceEntry,
   StageRole,
 } from '@poolse/sdk';
 import {
   DEFAULT_CALL_REACTIONS,
   QUESTION_MAX,
   connectionQualityLabel,
+  identityKindOf,
+  meetingNameOf,
   planBreakouts,
 } from '@poolse/sdk';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -57,7 +61,14 @@ export type NameFor = (userId: string) => string | null | undefined;
 function useNames(nameFor?: NameFor, participants?: readonly CallParticipant[]) {
   return useMemo(() => {
     const fromCall = new Map((participants ?? []).map((p) => [p.userId, p.name ?? null]));
-    return (userId: string): string => nameFor?.(userId) || fromCall.get(userId) || 'Someone';
+    // Members through the host's directory; guests and phones by the
+    // name the call gave them ("Phone ···1234"); never the id.
+    return (userId: string, given?: string | null): string =>
+      (identityKindOf(userId) === 'member' ? nameFor?.(userId) : null) ||
+      given ||
+      fromCall.get(userId) ||
+      meetingNameOf(userId) ||
+      'Someone';
   }, [nameFor, participants]);
 }
 
@@ -129,8 +140,11 @@ export function StagePanel({ stage, participants, nameFor, className }: StagePan
           <ol className="poolse-stage__list">
             {hands.map((h) => (
               <li key={h.userId} className="poolse-stage__person">
-                <span className="poolse-stage__name" title={name(h.userId)}>
-                  {name(h.userId)}
+                <span className="poolse-stage__name" title={name(h.userId, h.name)}>
+                  {name(h.userId, h.name)}
+                  {identityKindOf(h.userId) === 'guest' ? (
+                    <span className="poolse-guest-badge">Guest</span>
+                  ) : null}
                 </span>
                 {mod ? (
                   <span className="poolse-stage__actions">
@@ -467,7 +481,7 @@ export function BreakoutHostPanel({
               <li key={r.name}>
                 <strong>{r.name}</strong>
                 <span className="poolse-breakouts__people">
-                  {r.userIds.length ? r.userIds.map(name).join(', ') : 'Nobody yet'}
+                  {r.userIds.length ? r.userIds.map((id) => name(id)).join(', ') : 'Nobody yet'}
                 </span>
               </li>
             ))}
@@ -664,6 +678,24 @@ export function CaptionsOverlay({ transcript, lines = 2, className }: CaptionsOv
   );
 }
 
+export interface CaptionsButtonProps {
+  /** `useCaptions(conversationId, callId, me.id)`. */
+  captions: UseCaptions;
+}
+
+/** "Captions" call control: turns your captions on and off. */
+export function CaptionsButton({ captions }: CaptionsButtonProps) {
+  return (
+    <CallControlButton
+      icon="messages"
+      label={captions.on ? 'Captions on' : 'Captions'}
+      highlight={captions.on}
+      disabled={captions.pending}
+      onClick={() => void captions.toggle()}
+    />
+  );
+}
+
 // ── mark a moment (CL14) ─────────────────────────────────────────────────
 
 export interface MarkMomentButtonProps {
@@ -768,8 +800,8 @@ export function NetworkBanner({
 // ── room presence (CL2) ──────────────────────────────────────────────────
 
 export interface RoomPresenceProps {
-  /** `useRoomPresence(ids)[conversationId]` or `useLiveCall(id).call`. */
-  call: LiveCall | null | undefined;
+  /** `useRoomPresence().presence[conversationId]`, or `useLiveCall(id).call`. */
+  call: RoomPresenceEntry | LiveCall | null | undefined;
   /** Avatars before "+N". Defaults to 3. */
   max?: number;
   className?: string;
@@ -777,12 +809,16 @@ export interface RoomPresenceProps {
 
 /** Who's in a room, for a sidebar row: a few faces and the count. Nothing when empty. */
 export function RoomPresence({ call, max = 3, className }: RoomPresenceProps) {
-  const people = call?.state === 'live' ? call.participants : [];
+  const live = !!call && ('live' in call ? call.live : call.state === 'live');
+  const members = live && call ? call.participants : [];
+  const extra = live && call && 'attendees' in call ? call.attendees : [];
+  const people = [
+    ...members.map((p) => ({ key: p.user_id, name: p.display_name || 'Someone' })),
+    ...extra.map((a) => ({ key: a.identity, name: a.name })),
+  ];
   if (people.length === 0) return null;
   const shown = people.slice(0, max);
-  const label = `${people.length} in the room: ${people
-    .map((p) => p.display_name || 'Someone')
-    .join(', ')}`;
+  const label = `${people.length} in the room: ${people.map((p) => p.name).join(', ')}`;
   return (
     <span
       className={cx('poolse-roompresence', className)}
@@ -792,7 +828,7 @@ export function RoomPresence({ call, max = 3, className }: RoomPresenceProps) {
     >
       <span className="poolse-roompresence__faces" aria-hidden="true">
         {shown.map((p) => (
-          <Avatar key={p.user_id} name={p.display_name || 'Someone'} size="xs" />
+          <Avatar key={p.key} name={p.name} size="xs" />
         ))}
         {people.length > max ? (
           <span className="poolse-roompresence__more">+{people.length - max}</span>
@@ -939,12 +975,19 @@ export function ReactionBar({ send, emoji = DEFAULT_CALL_REACTIONS, className }:
 export interface InCallChatPanelProps {
   /** The call's conversation: its chat stays with the meeting afterwards. */
   conversationId: string;
+  /** The live call: messages sent here are tagged with it (`call_id`). */
+  callId?: string | null;
   onClose?: () => void;
   className?: string;
 }
 
 /** The call's chat beside the video: the conversation itself, in a narrow panel. */
-export function InCallChatPanel({ conversationId, onClose, className }: InCallChatPanelProps) {
+export function InCallChatPanel({
+  conversationId,
+  callId,
+  onClose,
+  className,
+}: InCallChatPanelProps) {
   return (
     <section className={cx('poolse-panel', 'poolse-callchat', className)} aria-label="Chat">
       <div className="poolse-panel__head">
@@ -963,6 +1006,7 @@ export function InCallChatPanel({ conversationId, onClose, className }: InCallCh
       <div className="poolse-callchat__body">
         <ConversationView
           conversationId={conversationId}
+          {...(callId ? { sendDefaults: { call_id: callId } } : {})}
           emptyState={
             <p className="poolse-panel__empty">
               Messages sent during the call stay here afterwards.

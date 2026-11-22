@@ -5,9 +5,13 @@
 //     const card = meetingCardOf(message);
 //     {card && <MeetingCard card={card} selfUserId={me.id} onRsvp={rsvp} onJoin={join} />}
 //
-// RSVPs are recorded by the Workspace API, so the host passes `onRsvp`.
+// Answers go to `PUT /meetings/:id/rsvp` through the provider's client;
+// pass `onRsvp` to record them elsewhere instead. The card's body has no
+// `my_rsvp`: yours is found in `rsvps` by `selfUserId` (default: the
+// signed-in user).
 
 import type { MeetingCard as MeetingCardData, RsvpResponse } from '@poolse/sdk';
+import { useOptionalPoolse } from '@poolse/react';
 import { meetingJoinable, rsvpOf } from '@poolse/sdk';
 import { useEffect, useState } from 'react';
 
@@ -17,8 +21,14 @@ export interface MeetingCardProps {
   card: MeetingCardData;
   /** Your poolse user id, to find your answer in the lists. */
   selfUserId?: string | null;
-  /** Record an answer; resolve false (or throw) to show it failed. */
-  onRsvp?: (response: RsvpResponse, card: MeetingCardData) => Promise<boolean | void> | void;
+  /**
+   * Record an answer yourself; resolve false (or throw) to show it
+   * failed. Default: `poolse.live.meetings.rsvp` when inside a
+   * `PoolseProvider`. `false` hides the buttons.
+   */
+  onRsvp?:
+    | ((response: RsvpResponse, card: MeetingCardData) => Promise<boolean | void> | void)
+    | false;
   /** Join the meeting (its room or live call). */
   onJoin?: (card: MeetingCardData) => void;
   /** Locale for the date and time. Defaults to the browser's. */
@@ -64,10 +74,21 @@ export function MeetingCard({
   locale,
   className,
 }: MeetingCardProps) {
-  const [mine, setMine] = useState<RsvpResponse | null>(() => rsvpOf(card, selfUserId));
+  const poolse = useOptionalPoolse();
+  const self = selfUserId ?? poolse?.me.peek()?.id ?? null;
+  const record =
+    onRsvp === false
+      ? null
+      : (onRsvp ??
+        (poolse
+          ? async (r: RsvpResponse) => {
+              await poolse.live.meetings.rsvp(card.meetingId, r);
+            }
+          : null));
+  const [mine, setMine] = useState<RsvpResponse | null>(() => rsvpOf(card, self));
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => setMine(rsvpOf(card, selfUserId)), [card, selfUserId]);
+  useEffect(() => setMine(rsvpOf(card, self)), [card, self]);
   useEffect(() => {
     if (card.status !== 'scheduled') return;
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -76,11 +97,11 @@ export function MeetingCard({
 
   const joinable = meetingJoinable(card, now);
   const when = formatMeetingTime(card.startsAt, card.endsAt, locale);
-  const accepted = card.rsvps.accepted.length;
+  const accepted = card.counts.accepted;
   const counts = [
     accepted ? `${accepted} accepted` : null,
-    card.rsvps.tentative.length ? `${card.rsvps.tentative.length} maybe` : null,
-    card.rsvps.declined.length ? `${card.rsvps.declined.length} declined` : null,
+    card.counts.tentative ? `${card.counts.tentative} maybe` : null,
+    card.counts.declined ? `${card.counts.declined} declined` : null,
   ].filter(Boolean);
   const status =
     card.status === 'live'
@@ -96,7 +117,7 @@ export function MeetingCard({
     setMine(value);
     setFailed(false);
     try {
-      const ok = await onRsvp?.(value, card);
+      const ok = await record?.(value, card);
       if (ok === false) throw new Error('rsvp failed');
     } catch {
       setMine(before);
@@ -135,7 +156,7 @@ export function MeetingCard({
       {counts.length ? <p className="poolse-meetcard__meta">{counts.join(' · ')}</p> : null}
       {card.status !== 'cancelled' && card.status !== 'ended' ? (
         <div className="poolse-meetcard__actions">
-          {onRsvp ? (
+          {record ? (
             <div role="radiogroup" aria-label="Your answer" className="poolse-meetcard__rsvp">
               {RSVP.map((r) => (
                 <button

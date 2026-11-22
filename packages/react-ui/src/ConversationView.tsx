@@ -75,6 +75,12 @@ export interface ConversationViewProps {
   conversationId: Uuid;
 
   /**
+   * Merged into every message this view sends — `{ call_id }` tags the
+   * in-call chat (CL6, `InCallChatPanel`).
+   */
+  sendDefaults?: Partial<Omit<MessageCreateRequest, 'id' | 'body'>>;
+
+  /**
    * What an empty conversation shows. Defaults to "No messages yet"
    * with a hint to write the first one (or none, read-only). A
    * function receives `{ readOnly }`.
@@ -347,6 +353,7 @@ const TRUE = true;
 
 export function ConversationView({
   conversationId,
+  sendDefaults,
   emptyState,
   renderMessage,
   labelFor,
@@ -1009,7 +1016,7 @@ export function ConversationView({
   // a message deleted meanwhile drops the quote and puts the text back
   // so it can go out without it. Anything else is rethrown.
   const sendRequest = async (input: MessageCreateRequest) => {
-    const req = { ...input, id: input.id ?? safeUuid() };
+    const req = { ...sendDefaults, ...input, id: input.id ?? safeUuid() };
     try {
       await send(req);
     } catch (err) {

@@ -42,7 +42,7 @@ function stageHook(over: Partial<UseStage> = {}): UseStage {
       callId: 'call-1',
       mode: 'stage',
       roles: { mod: 'moderator', ana: 'speaker' },
-      hands: [{ userId: 'ben', raisedAt: null }],
+      hands: [{ userId: 'ben', name: null, raisedAt: null }],
       myRole: 'moderator',
     },
     myRole: 'moderator',
@@ -52,6 +52,7 @@ function stageHook(over: Partial<UseStage> = {}): UseStage {
     raiseHand: vi.fn(async () => true),
     lowerHand: vi.fn(async () => true),
     setRole: vi.fn(async () => true),
+    setMode: vi.fn(async () => true),
     error: null,
     pending: false,
     ...over,
@@ -121,6 +122,7 @@ describe('lobby, agenda, quality, presence', () => {
     const hook: UseLobby = {
       lobby: {
         callId: 'c',
+        conversationId: 'c-1',
         enabled: true,
         waiting: [{ id: 'e1', name: LONG, guest: true, userId: null, requestedAt: null }],
       },
@@ -223,6 +225,8 @@ describe('MeetingCard', () => {
     rsvps: { accepted: ['u1', 'u2'], declined: [], tentative: [] },
     myRsvp: null,
     inviteeCount: 4,
+    conversationId: 'c-1',
+    counts: { accepted: 2, declined: 0, tentative: 0 },
   };
 
   it('answers, and rolls back when saving fails', async () => {
@@ -266,5 +270,44 @@ describe('Whiteboard', () => {
     expect(screen.getByText('Hello')).toBeTruthy();
     expect(screen.queryByRole('toolbar')).toBeNull();
     expect(screen.getByRole('img', { name: 'Whiteboard, 1 item' })).toBeTruthy();
+  });
+});
+
+describe('guests and phones', () => {
+  it('names a phone hand without its number and marks guests', () => {
+    const stage = stageHook({
+      stage: {
+        callId: 'call-1',
+        mode: 'meeting',
+        roles: {},
+        hands: [
+          { userId: 'sip_+37060012345', name: 'Phone ···2345', raisedAt: null },
+          { userId: 'guest_g1', name: 'Ana', raisedAt: null },
+        ],
+        myRole: 'speaker',
+      },
+    });
+    const { container } = render(<StagePanel stage={stage} participants={[]} />);
+    expect(screen.getByText('Phone ···2345')).toBeTruthy();
+    expect(screen.getByText('Guest')).toBeTruthy();
+    expect(container.textContent).not.toContain('37060012345');
+  });
+
+  it('counts guests and phones in a room', () => {
+    render(
+      <RoomPresence
+        call={{
+          conversationId: 'c',
+          callId: 'call-1',
+          media: 'audio',
+          live: true,
+          participants: [{ user_id: 'u1', external_id: null, display_name: 'Ana' }],
+          attendees: [
+            { identity: 'sip_+3706001', kind: 'phone', name: 'Phone ···6001', role: null },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByRole('img', { name: '2 in the room: Ana, Phone ···6001' })).toBeTruthy();
   });
 });
