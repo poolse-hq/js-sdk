@@ -289,6 +289,74 @@ The names follow `@poolse/react-ui`, but the props differ in places (for
 example `ThreadView` needs `visible` and `onClose`, and there is no
 `EditableMessageBubble`); see the docs for each component's props.
 
+## Live meetings
+
+The in-call pieces for stages, Q&A, breakouts, the lobby, the agenda and
+meeting cards. Each takes a `@poolse/react` hook's result, so it works
+with the JS `CallRoom` (`useCallRoom`) and with `@poolse/native` alike.
+
+```tsx
+const stage = useStage(conversationId, callId, me.id);
+const questions = useQuestions(conversationId, callId);
+const lobby = useLobby(conversationId, callId);
+
+<StagePanel stage={stage} participants={people} selfUserId={me.id} />
+<QuestionsPanel questions={questions} canModerate={stage.isModerator} />
+<LobbyAdmitList lobby={lobby} />
+<BreakoutBanner breakouts={useBreakouts(conversationId, callId)} onJoined={connect} />
+<AgendaPanel agenda={useAgenda(conversationId, callId)} canEdit />
+<MarkMomentButton moments={useMoments(conversationId, callId)} />
+```
+
+`participants` is `{ userId, name?, guest?, avatarUrl? }[]` from your call
+roster; names fall back to the `MessageExtrasProvider`'s `nameForUserId`,
+then "Someone" — never a raw id. Guests carry a Guest mark.
+
+A guest waiting to be let in (no session; `waitInLobby` from
+`@poolse/sdk`):
+
+```tsx
+<LobbyWaiting name={guestName} status={status} title="Weekly sync" onLeave={leave} />
+```
+
+Overlays for the call screen:
+
+```tsx
+const t = useLiveTranscript(callId, { enabled: captionsOn });
+{captionsOn && <CaptionsOverlay segments={t.segments} />}
+
+const reactions = useCallReactions(media.room); // JS CallRoom only
+<ReactionsOverlay reactions={reactions.reactions} />
+<ReactionPickerBar onReact={reactions.send} />
+
+<ConnectionIndicator quality={participant.connectionQuality} />
+<NetworkBanner issues={useCallQuality(media.room)?.issues ?? []} />
+// @poolse/native: diagnoseCallNetwork({ quality: snap.connectionQuality,
+//   reconnecting: snap.phase === 'reconnecting' })
+```
+
+The whiteboard and screen annotations are view-only on phones by default
+(`WhiteboardView` draws pen strokes when given `model` and `readOnly={false}`):
+
+```tsx
+import * as Y from 'yjs';
+const board = useWhiteboard(callId, Y, { selfUserId: me.id });
+<WhiteboardView items={board.items} />
+
+<View>
+  <CallVideoView source="screen" fit="contain" />
+  <AnnotationOverlay state={useScreenAnnotations(media.room, sharerId).state} />
+</View>
+```
+
+Meeting invites in chat: `meetingCardOf(msg)` reads the card; RSVPs go to
+the Workspace API (`onRsvp`), and the card follows the server's rewrite of
+the message.
+
+```tsx
+<MeetingCardMessageRow msg={msg} meId={me.id} onRsvp={rsvp} onJoin={(c) => openRoom(c.roomConversationId)} />
+```
+
 ## Layouts
 
 ```tsx

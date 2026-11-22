@@ -16,6 +16,22 @@ versions follow [semver](https://semver.org).
 - `renderMedia` (`PoolseMediaProps`): plays recordings and clips through the
   app's own player (README: an expo-video adapter); no new peer dependency.
 - `ConversationView` `onOpenCitation`, `onOpenMoment`, `renderMedia`.
+- Live meeting components (docs/MEETINGS.md; each takes the matching
+  `@poolse/react` hook): `StagePanel` (speakers, audience, raise hand, Bring
+  up / Move to audience), `QuestionsPanel` (Q&A with upvotes, anonymous,
+  Answered / Dismiss), `BreakoutBanner` (room, countdown, Join room / Return
+  to main), `LobbyWaiting` (the guest's waiting screen) and `LobbyAdmitList`
+  (Admit / Deny / Admit all), `MarkMomentButton`, `AgendaPanel` (owner,
+  minutes, check off, over-time nudge), `RoomPresence` (who's in a room, for
+  sidebars), `MeetingCard` and `MeetingCardMessageRow` (Accept / Maybe /
+  Decline, Join).
+- Call overlays: `CaptionsOverlay` (live captions from the transcript),
+  `ReactionsOverlay` and `ReactionPickerBar`, `ConnectionIndicator` (signal
+  bars for web or native quality), `NetworkBanner` (plain-language network
+  problems), `WhiteboardView` (view, or simple pen drawing with a model) and
+  `AnnotationOverlay` (pointer and drawing on a shared screen, view only).
+- Helpers: `formatCountdown`, `captionLines`, `avatarOverflow`,
+  `overrunText`, `meetingTimeText`, `rsvpSummary`.
 
 ## [3.9.0] - 2026-11-22
 
