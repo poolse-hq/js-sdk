@@ -645,6 +645,12 @@ export interface AttachmentUploadRequest {
   duration_ms?: number;
   /** This file is a new version of that one (MS18). */
   replaces_attachment_id?: Uuid;
+  /**
+   * An opaque file (encrypted note attachments, NT2): stored as
+   * `application/octet-stream` without a name, never processed, previewed
+   * or linked to a message. Send `content_type: 'application/octet-stream'`.
+   */
+  opaque?: boolean;
 }
 
 /** Presigned PUT payload returned by `POST /v1/attachments/upload-url`. */

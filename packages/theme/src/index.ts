@@ -60,3 +60,10 @@ export {
   relativeLuminance,
   type ContrastIssue,
 } from './contrast.js';
+export {
+  ensureContrast,
+  mixColors,
+  themeFromBrand,
+  type BrandColors,
+  type BrandThemeOptions,
+} from './brand.js';

@@ -55,7 +55,8 @@ export interface AttachmentUploadInput {
   /** The recording's length in ms. */
   durationMs?: number;
   /** Upload as a new version of this attachment (MS18). */
-  replacesAttachmentId?: Uuid;
+  replacesAttachmentId?: Uuid; /** An opaque, already-encrypted file for a note (NT2): no name, type or processing. */
+  opaque?: boolean;
 }
 
 /** Options accepted by every attachment method. */
@@ -146,6 +147,7 @@ export class AttachmentsResource {
       ...(input.purpose ? { purpose: input.purpose } : {}),
       ...(input.durationMs !== undefined ? { duration_ms: Math.round(input.durationMs) } : {}),
       ...(input.replacesAttachmentId ? { replaces_attachment_id: input.replacesAttachmentId } : {}),
+      ...(input.opaque ? { opaque: true } : {}),
     };
 
     const { attachment, upload } = await this.requestUpload(req, opts);
