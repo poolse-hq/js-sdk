@@ -97,11 +97,15 @@ final class MessageNotifications: NSObject, NotificationDelegate {
       intentIdentifiers: [],
       options: []
     )
+    // An agent's question (AGENTS_IN_CALLS.md §5): Approve / Decline / Answer.
+    let escalation = EscalationNotifications.makeCategory(requireUnlock: requireUnlock)
+    let ours: Set<String> = [Self.category, Self.meetingCategory, EscalationNotifications.category]
     let center = UNUserNotificationCenter.current()
     center.getNotificationCategories { existing in
-      var all = existing.filter { $0.identifier != Self.category && $0.identifier != Self.meetingCategory }
+      var all = existing.filter { !ours.contains($0.identifier) }
       all.insert(category)
       all.insert(meeting)
+      all.insert(escalation)
       center.setNotificationCategories(all)
     }
   }
@@ -111,6 +115,9 @@ final class MessageNotifications: NSObject, NotificationDelegate {
   func didReceive(_ response: UNNotificationResponse, completionHandler: @escaping () -> Void) -> Bool {
     let content = response.notification.request.content
     if content.categoryIdentifier == Self.meetingCategory { return meetingResponse(response) }
+    if content.categoryIdentifier == EscalationNotifications.category {
+      return EscalationNotifications.didReceive(response)
+    }
     guard content.categoryIdentifier == Self.category else { return false }
     let action = response.actionIdentifier
     guard action == Self.replyAction || action == Self.markReadAction else {

@@ -48,7 +48,8 @@ export interface Snapshot {
    * REMOTE people only; `userId` is the LiveKit identity. poolse's
    * transcript assistant (`poolse:…`, kind agent) and the recorder
    * (LiveKit Egress, `EG_…`) are never listed — nor counted when the core
-   * ends a call left alone. Phone (SIP) participants are listed.
+   * ends a call left alone. Phone (SIP) participants are listed. Agents
+   * invited into the call are listed with `isAgent` (last), never counted.
    */
   participants: Array<{
     userId: string;
@@ -68,6 +69,16 @@ export interface Snapshot {
      * Absent before 0.11.0.
      */
     connectionQuality?: ConnectionQuality;
+    /**
+     * An agent in the call (server docs/AGENTS_IN_CALLS.md): show it with
+     * the Agent badge, named `agentLabel` — never as a person, never with
+     * a camera placeholder. Absent for people and before 3.10.
+     */
+    isAgent?: boolean;
+    /** "Scout", or "Jasir's agent" for one attending on someone's behalf. */
+    agentLabel?: string | null;
+    /** `notetaker` (silent) | `assistant` (answers when named) | `delegate`. */
+    agentMode?: 'notetaker' | 'assistant' | 'delegate' | null;
   }>;
   /** The kind of output playing now — the short answer to "where is the audio". */
   audioRoute: AudioOutputKind;
@@ -336,20 +347,28 @@ export interface CallAction {
 }
 
 /**
- * A Reply or Mark as read the user did from a chat notification, after
- * the native core sent it (or gave up). The server has already posted
- * the reply and marked the conversation read; use this to refresh what
- * the app shows (insert the message, drop the unread count) without
- * waiting for the socket, or to tell the user a reply did not go out.
+ * A Reply or Mark as read the user did from a chat notification — or an
+ * answer to an agent's question (`escalation`: Approve / Decline / Answer
+ * on an `agent_escalation` push) — after the native core sent it (or gave
+ * up). The server has already posted the reply and marked the
+ * conversation read, or passed the answer to the agent in the call; use
+ * this to refresh what the app shows without waiting for the socket, or
+ * to tell the user it did not go out.
  */
 export interface NotificationActionResult {
-  action: 'reply' | 'mark_read';
+  action: 'reply' | 'mark_read' | 'escalation';
+  /** The conversation (for `escalation`: the call's; `""` when the push had none). */
   conversationId: string;
+  /** `escalation` only: which question, and how it was answered. Absent before 3.10. */
+  escalationId?: string;
+  decision?: 'approve' | 'decline' | 'answer';
+  /** `escalation` only: the call the agent is in. */
+  callId?: string | null;
   /** The server (workspace) the conversation is on. Absent before 3.8. */
   serverId?: string;
   /** Whether the server accepted it. */
   ok: boolean;
-  /** Reply only: what the user typed. */
+  /** Reply (and an escalation's `answer`): what the user typed. */
   text?: string;
   /** Reply only: the idempotency id sent with it — the message's id once posted. */
   clientId?: string;
@@ -360,7 +379,8 @@ export interface NotificationActionResult {
    * `device_signed_out`, `user_blocked`, `forbidden`, `not_found`,
    * `mau_cap_exceeded`, `validation_failed`, `rate_limited`), or
    * `network`, `no_grant` (the push carried no reply grant),
-   * `not_configured` (never `configure`d), `http_<status>`.
+   * `not_configured` (never `configure`d), `http_<status>`. An
+   * escalation: `not_pending`, `expired`, `invalid_token`, `no_token`.
    */
   error?: string;
   /** The HTTP status when the server answered with an error. */
@@ -934,6 +954,18 @@ let actionObservers = 0;
 export function onNotificationReply(cb: (result: NotificationActionResult) => void): Unsubscribe {
   return onNotificationAction((result) => {
     if (result.action === 'reply') cb(result);
+  });
+}
+
+/**
+ * `onNotificationAction`, agent escalations only (AG16): Approve / Decline
+ * / Answer on an `agent_escalation` push, answered natively from the lock
+ * screen. Feed `ok` ones to `poolse.escalations.list()` (or let
+ * `agent:escalation` do it) so an open card updates.
+ */
+export function onEscalationAction(cb: (result: NotificationActionResult) => void): Unsubscribe {
+  return onNotificationAction((result) => {
+    if (result.action === 'escalation') cb(result);
   });
 }
 

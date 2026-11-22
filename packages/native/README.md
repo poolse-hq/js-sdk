@@ -378,6 +378,35 @@ expo-notifications also hands these responses to its own JS listeners: in
 `addNotificationResponseReceivedListener`, ignore an `actionIdentifier` of
 `reply` or `mark_read` (only the default tap should open the chat).
 
+## Agents in calls and escalations
+
+`participants` lists agents in the call (server docs/AGENTS_IN_CALLS.md)
+with `isAgent: true`, `agentLabel` ("Scout", "Jasir's agent") and
+`agentMode`; show them with the Agent badge, never as a person. They never
+keep a call alive.
+
+Your agent attending a meeting for you asks by push (`type:
+"agent_escalation"`). The core shows it with **Approve**, **Decline** and
+**Answer** (a text field) and replies natively — from the lock screen, app
+closed, no session — with the push's `reply_token` to `POST
+/v1/agent-escalations/:id/reply` on the push's server.
+
+- **Android**: the data push is posted on the "Questions from your agent"
+  channel; it times out at `expires_at`. After a reply it reads "Approved —
+  your agent will say so." and goes; a failure says why and keeps the
+  actions while trying again can work.
+- **iOS**: an alert push with category `poolse_agent_escalation`
+  (time-sensitive); the core registers the category (actions
+  `poolse_escalation_approve`, `poolse_escalation_decline`,
+  `poolse_escalation_answer`) beside `poolse_message`. A failure posts
+  "Couldn't send your answer" with the same actions. In
+  `addNotificationResponseReceivedListener`, ignore those action ids.
+
+Results arrive as `onNotificationAction` (or `onEscalationAction`) with
+`action: 'escalation'`, `escalationId`, `decision`, `ok`, `error`. The
+token works once: a reply is retried only when no answer came back.
+`messageReplyRequiresUnlock` makes these actions ask for the unlock too.
+
 ## Signed in to several workspaces
 
 The core can serve several API servers at once — one per workspace the user

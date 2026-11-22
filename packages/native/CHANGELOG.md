@@ -4,6 +4,22 @@ Formerly `@poolse/react-native-calls` (0.x).
 
 ## [Unreleased]
 
+### Added
+
+- Agents in calls (AGENTS_IN_CALLS.md): `participants` lists agents in the
+  call with `isAgent`, `agentLabel` and `agentMode` (token metadata `agent:
+true`); they never keep a call alive (the alone check skips them) and an
+  agent joining is not someone answering.
+- Escalations from the lock screen: Android posts the `agent_escalation`
+  data push natively with Approve / Decline / Answer (RemoteInput); iOS
+  registers the `poolse_agent_escalation` category (Approve, Decline and a
+  `UNTextInputNotificationAction` Answer). Both reply natively — `POST
+/v1/agent-escalations/:id/reply` with the push's `reply_token`, no
+  session, no JS — and report through `onNotificationAction` with `action:
+"escalation"` (`escalationId`, `decision`, `ok`, `error`); new
+  `onEscalationAction`. `messageReplyRequiresUnlock` covers these actions
+  too.
+
 - Meeting rings (CA4): a ring push with `ring_type: "meeting"` and
   `meeting_title` shows "Weekly sync is starting" on CallKit and on the
   Android ring notification and screen, with Join / Not now buttons on

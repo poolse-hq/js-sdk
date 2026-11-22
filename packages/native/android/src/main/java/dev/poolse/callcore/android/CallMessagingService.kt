@@ -15,7 +15,8 @@ import dev.poolse.callcore.RingContext
  * Contract: data-only messages — rings with `type: "call"`, control
  * pushes (`ring_ended`, `finished`) and the missed-call notification
  * (`missed`) with `type: "call_event"` (CALL_CONTRACT.md §5); meeting
- * notices with `type: "meeting"` (MEETINGS.md §11.3).
+ * notices with `type: "meeting"` (MEETINGS.md §11.3); an agent's question
+ * with `type: "agent_escalation"` (AGENTS_IN_CALLS.md §5).
  */
 class CallMessagingService : FirebaseMessagingService() {
 
@@ -52,6 +53,13 @@ class CallMessagingService : FirebaseMessagingService() {
       // Join, and the brief. Always shown, even for the open chat.
       if (CallCore.getOrNull(this) == null) return
       MeetingNotification.show(this, data, CallCore.smallIcon(this))
+      return
+    }
+    if (type == "agent_escalation") {
+      // Your agent, attending a meeting for you, asks something
+      // (AGENTS_IN_CALLS.md §5): Approve / Decline / Answer from here.
+      if (CallCore.getOrNull(this) == null) return
+      EscalationNotification.show(this, data, CallCore.smallIcon(this))
       return
     }
     if (type != "call" && type != "call_event") {
