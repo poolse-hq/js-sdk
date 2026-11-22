@@ -141,9 +141,17 @@ export {
 } from './messageExtras.js';
 export {
   MessageComposer,
+  type ComposerSendOptions,
   type MessageComposerProps,
   type MessageComposerHandle,
 } from './MessageComposer.js';
+export {
+  CommandSuggestions,
+  DlpWarningSheet,
+  FormattingToolbar,
+  type DlpWarningSheetProps,
+  type FormattingToolbarProps,
+} from './ComposerExtras.js';
 export { MessageActions, type MessageActionsProps } from './MessageActions.js';
 export { MessageList, type MessageListProps, type MessageListItem } from './MessageList.js';
 export { DaySeparator, type DaySeparatorProps } from './DaySeparator.js';

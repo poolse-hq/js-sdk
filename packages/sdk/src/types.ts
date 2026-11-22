@@ -516,6 +516,12 @@ export interface MessageCreateRequest {
    */
   attachment_ids?: Uuid[];
   /**
+   * Send despite a data-loss-prevention warning (AD6): the first send
+   * failed with `dlp_warning`, and the sender chose "Send anyway". Has no
+   * effect on `dlp_blocked`.
+   */
+  dlp_acknowledged?: boolean;
+  /**
    * Client-supplied UUID for retry-safe sends. The SDK fills this in
    * automatically when not provided so the optimistic temp row and
    * the canonical server row share a single id (used for id-based

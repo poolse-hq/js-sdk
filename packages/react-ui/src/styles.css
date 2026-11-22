@@ -7397,3 +7397,206 @@ audio.poolse-player__media {
     animation: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Composer extras: formatting toolbar (MS4), /command menu (IN3),
+   group suggestions (MS9), data-loss-prevention dialog (AD6)
+   ───────────────────────────────────────────────────────────── */
+
+.poolse-format-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0 0 6px;
+}
+
+.poolse-format-toolbar__btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--poolse-radius-sm);
+  background: transparent;
+  color: var(--poolse-ink-2);
+  font: 600 13px / 1 var(--poolse-font-body);
+  cursor: pointer;
+}
+
+.poolse-format-toolbar__btn--italic span {
+  font-style: italic;
+}
+
+.poolse-format-toolbar__btn--strike span {
+  text-decoration: line-through;
+}
+
+.poolse-format-toolbar__btn--code span,
+.poolse-format-toolbar__btn--codeBlock span {
+  font-family: var(--poolse-font-mono);
+}
+
+.poolse-format-toolbar__btn:hover:not(:disabled) {
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+}
+
+.poolse-format-toolbar__btn:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 1px;
+}
+
+.poolse-format-toolbar__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.poolse-command-menu {
+  min-width: 260px;
+  max-width: min(420px, 100%);
+}
+
+.poolse-command-menu .poolse-mention-menu__item {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.poolse-command-menu__name {
+  font-weight: 600;
+  font-family: var(--poolse-font-mono);
+}
+
+.poolse-command-menu__usage,
+.poolse-command-menu__source,
+.poolse-mention-menu__handle,
+.poolse-mention-menu__meta {
+  color: var(--poolse-ink-3);
+  font-size: 12px;
+}
+
+.poolse-command-menu__source,
+.poolse-mention-menu__meta {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.poolse-command-menu__desc {
+  flex-basis: 100%;
+  color: var(--poolse-ink-2);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poolse-mention-menu__group-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--poolse-brand-soft);
+  color: var(--poolse-brand-strong);
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.poolse-mention-menu__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.poolse-dlp-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(12, 13, 16, 0.5);
+}
+
+.poolse-dlp-dialog__card {
+  width: 100%;
+  max-width: 400px;
+  padding: 18px;
+  color: var(--poolse-ink);
+  background: var(--poolse-surface);
+  border: 1px solid var(--poolse-border);
+  border-radius: var(--poolse-radius-lg);
+  box-shadow: var(--poolse-shadow-lg);
+}
+
+.poolse-dlp-dialog__title {
+  margin: 0;
+  font: 700 16px / 1.3 var(--poolse-font-body);
+}
+
+.poolse-dlp-dialog__text {
+  margin: 8px 0 12px;
+  font: 400 14px / 1.45 var(--poolse-font-body);
+  color: var(--poolse-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.poolse-dlp-dialog__matches {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.poolse-dlp-dialog__matches li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.poolse-dlp-dialog__rule {
+  font-weight: 600;
+  color: var(--poolse-warning);
+}
+
+.poolse-dlp-dialog__excerpt {
+  font-family: var(--poolse-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.poolse-dlp-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.poolse-dlp-dialog__actions button {
+  padding: 8px 16px;
+  font: 600 14px / 1.2 var(--poolse-font-body);
+  border-radius: var(--poolse-radius-pill);
+  border: 1px solid var(--poolse-border);
+  background: var(--poolse-surface-2);
+  color: var(--poolse-ink);
+  cursor: pointer;
+}
+
+.poolse-dlp-dialog__actions .poolse-dlp-dialog__send {
+  background: var(--poolse-brand);
+  border-color: var(--poolse-brand);
+  color: var(--poolse-on-brand);
+}
+
+.poolse-dlp-dialog__actions button:focus-visible {
+  outline: 2px solid var(--poolse-brand);
+  outline-offset: 2px;
+}

@@ -42,6 +42,29 @@ export { useAttachmentUrl } from './use-attachment-url.js';
 export { useAgent, useUser, type UseUserState } from './use-user.js';
 export { useAppEvent } from './use-app-event.js';
 export {
+  FORMAT_ACTIONS,
+  MESSAGE_PLAYBACK_RATES,
+  applyFormat,
+  applySlashCommand,
+  filterSlashCommands,
+  formatForShortcut,
+  nextPlaybackRate,
+  mentionGroupMeta,
+  parseSlashCommand,
+  playbackRateLabel,
+  rankMentionGroups,
+  slashQuery,
+  waveformBars,
+  type FormatKind,
+  type MediaTranscriptSegment,
+  type MentionGroup,
+  type MessagePlaybackRate,
+  type SlashCommand,
+  type TextEdit,
+  type TextSelection,
+} from './composer-tools.js';
+export { readDlpError, type DlpMatch, type DlpOutcome } from './dlp.js';
+export {
   computeGroupPosition,
   sameGroup,
   sameDay,

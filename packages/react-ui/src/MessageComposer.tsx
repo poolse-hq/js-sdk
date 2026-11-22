@@ -7,7 +7,14 @@ import {
   type KeyboardEvent,
 } from 'react';
 import type { Message, Uuid } from '@poolse/sdk';
+import type { FormatKind, SlashCommand } from '@poolse/react';
 import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
+import {
+  DlpWarningDialog,
+  FormattingToolbar,
+  useComposerExtras,
+  useDlpGuard,
+} from './composerExtras.js';
 import { composerAction, DEFAULT_KEYMAP, type ComposerKeymap } from './keymap.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
@@ -22,10 +29,7 @@ export interface MessageComposerProps {
    * files were attached. Return value is awaited so the composer can
    * stay disabled until send completes.
    */
-  onSend: (
-    body: string,
-    opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] },
-  ) => Promise<unknown> | void;
+  onSend: (body: string, opts?: ComposerSendOptions) => Promise<unknown> | void;
   /** Called on every keystroke. Hook this to `useTyping().signalTyping`. */
   onTyping?: () => void;
   placeholder?: string;
@@ -74,6 +78,30 @@ export interface MessageComposerProps {
    * when there's none to edit (the caret then moves as usual).
    */
   onEditLast?: () => boolean | void;
+  /**
+   * Show the Markdown formatting toolbar (bold, italic, strike, code,
+   * link, quote, lists, checklist, code block, table) above the input.
+   * The Mod+B / I / E / K and Mod+Shift+X shortcuts work either way.
+   * Default `false`. Pass an array to choose the buttons and their order.
+   */
+  formattingToolbar?: boolean | readonly FormatKind[];
+  /**
+   * Slash commands to suggest when the message starts with `/` (IN3):
+   * the apps' commands from the Workspace API. Picking one inserts
+   * `/name `; the message is sent as typed (`parseSlashCommand` splits it).
+   */
+  commands?: readonly SlashCommand[];
+}
+
+/** The second argument of `onSend`. */
+export interface ComposerSendOptions {
+  quoted_message_id?: Uuid;
+  attachment_ids?: Uuid[];
+  /**
+   * Set when the sender chose "Send anyway" on a data-loss-prevention
+   * warning (AD6): pass it on to `messages.send`.
+   */
+  dlp_acknowledged?: true;
 }
 
 /**
@@ -119,6 +147,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       onValueChange,
       keymap = DEFAULT_KEYMAP.composer,
       onEditLast,
+      formattingToolbar = false,
+      commands,
     },
     ref,
   ) {
@@ -127,6 +157,14 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const taRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     useAutogrow(taRef, value);
+    const extras = useComposerExtras({
+      value,
+      setValue,
+      taRef,
+      formatting: true,
+      commands,
+    });
+    const dlp = useDlpGuard();
 
     // Every staged chip shows — pending, uploading, ready, errored, and
     // files refused before upload (too big, wrong type). Ready chips
@@ -171,7 +209,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       // the next keystroke even if the send round-trip is slow.
       // Otherwise the user types into the still-present old text and
       // the new characters append to the stale message.
-      const opts: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] } = {
+      const opts: ComposerSendOptions = {
         ...(replyingTo ? { quoted_message_id: replyingTo.id } : {}),
         ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
       };
@@ -185,13 +223,19 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         // Pass `undefined` (not an empty object) when there are no
         // opts — callers that only care about body can ignore the
         // second arg, and tests that assert on its identity stay clean.
-        await onSend(trimmed, Object.keys(opts).length > 0 ? opts : undefined);
+        const sent = await dlp.guard(trimmed, (ack) => {
+          const o: ComposerSendOptions = ack ? { ...opts, dlp_acknowledged: true } : opts;
+          return onSend(trimmed, Object.keys(o).length > 0 ? o : undefined);
+        });
+        // Held back by data-loss prevention: put the text back for "Edit".
+        if (!sent) setValue((now) => (now ? now : trimmed));
       } finally {
         setSending(false);
       }
     };
 
     const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (extras.onKeyDown(e)) return;
       const action = composerAction(e, keymap);
       if (action === 'editLast') {
         if (value === '' && onEditLast && onEditLast() !== false) e.preventDefault();
@@ -237,6 +281,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
 
     const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setValue(e.target.value);
+      extras.track(e.target);
       onTyping?.();
     };
 
@@ -249,7 +294,15 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           e.preventDefault();
           void submit();
         }}
+        style={commands ? { position: 'relative' } : undefined}
       >
+        {formattingToolbar && (
+          <FormattingToolbar
+            onFormat={extras.format}
+            disabled={disabled || sending}
+            {...(Array.isArray(formattingToolbar) ? { actions: formattingToolbar } : {})}
+          />
+        )}
         {replyingTo && (
           <ReplyChip
             message={replyingTo}
@@ -303,9 +356,11 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             onChange={onChange}
             onKeyDown={onKeyDown}
             onPaste={uploads.onPaste}
+            onSelect={(e) => extras.track(e.currentTarget)}
             placeholder={placeholder}
             disabled={disabled || sending}
             aria-label={placeholder}
+            {...extras.textareaProps}
           />
           {emojiPicker && (
             <ComposerEmojiButton
@@ -323,6 +378,24 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             <PoolseIcon name="send-fill" label={null} />
           </button>
         </div>
+        {extras.menu}
+        {dlp.pending && (
+          <DlpWarningDialog
+            outcome={dlp.pending.outcome}
+            onEdit={() => {
+              dlp.dismiss();
+              taRef.current?.focus();
+            }}
+            onSendAnyway={() => {
+              const { retry, body } = dlp.pending!;
+              setValue('');
+              setSending(true);
+              void retry()
+                .catch(() => setValue((now) => (now ? now : body)))
+                .finally(() => setSending(false));
+            }}
+          />
+        )}
       </form>
     );
   },

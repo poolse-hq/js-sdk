@@ -177,7 +177,16 @@ export {
 } from './messageExtras.js';
 export { EditedLabel, useEditHistory, type EditedLabelProps } from './EditedLabel.js';
 export { EditableMessageBubble, type EditableMessageBubbleProps } from './EditableMessageBubble.js';
-export { MessageComposer, type MessageComposerProps } from './MessageComposer.js';
+export {
+  MessageComposer,
+  type ComposerSendOptions,
+  type MessageComposerProps,
+} from './MessageComposer.js';
+export {
+  DlpWarningDialog,
+  FormattingToolbar,
+  type DlpWarningDialogProps,
+} from './composerExtras.js';
 export { MessageActions, type MessageActionsProps } from './MessageActions.js';
 export { TypingIndicator, type TypingIndicatorProps } from './TypingIndicator.js';
 export { ThreadView, type ThreadViewProps } from './ThreadView.js';
