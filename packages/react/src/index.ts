@@ -229,6 +229,16 @@ export {
 // ── Agents (AG1, AG3, AG4, AG5, AG10, AG11) ──────────────────────
 export { useApproval, useApprovals, type UseApproval, type UseApprovals } from './use-approvals.js';
 export {
+  useAgentBrief,
+  useCallAgents,
+  useEscalations,
+  useWhisper,
+  type UseAgentBrief,
+  type UseCallAgents,
+  type UseEscalations,
+  type UseWhisper,
+} from './use-call-agents.js';
+export {
   useAgents,
   useConversationAgents,
   useFollowups,
@@ -238,6 +248,36 @@ export {
   type UseFollowups,
   type UseMemory,
 } from './use-agents.js';
+export {
+  BRIEF_RULE_MAX,
+  BRIEF_TEXT_MAX,
+  ESCALATION_ANSWER_MAX,
+  callAgentModeLabel,
+  callAgentOfParticipant,
+  callAgentStateLabel,
+  callAgentStateOf,
+  escalationErrorMessage,
+  escalationStatusLabel,
+  whisperErrorMessage,
+  whisperHintKindLabel,
+} from '@poolse/sdk';
+export type {
+  AgentBrief,
+  AgentBriefInput,
+  AgentEscalation,
+  AgentSaid,
+  CallAgent,
+  CallAgentMode,
+  CallAgentState,
+  CallAgentStatus,
+  EscalationDecision,
+  EscalationReply,
+  EscalationStatus,
+  WhisperHint,
+  WhisperHintKind,
+  WhisperSource,
+  WhisperState,
+} from '@poolse/sdk';
 export {
   APPROVAL_REASON_MAX,
   agentFromWire,

@@ -8,6 +8,12 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ### Added
 
+- Agents in calls: `useCallAgents(conversationId, callId)` (the agents in
+  the call, `available` ones to invite, `invite`, `setMode`, `remove`,
+  `agentFor(userId)`, `said`), `useWhisper(callId)` (on/off, history and
+  live hints, `latest`), `useEscalations({ callId? })` (pending and answered,
+  `reply`, `agentNameOf`) and `useAgentBrief({ scheduledMeetingId | callId })`.
+
 - Live meeting hooks: `useStage`, `useQuestions`, `useBreakouts` (`auto`
   follows the split), `useLobby` (the conversation's, before a call too),
   `useMoments`, `useAgenda`, `useCaptions`, `useCallMeeting`,

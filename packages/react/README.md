@@ -192,6 +192,15 @@ const { rooms, presence } = useRoomPresence(); // GET /me/rooms + room:participa
 `disconnectReason` (`'moved'`: you took the call on another device).
 Captions are `useLiveTranscript(callId)`.
 
+## Agents in calls
+
+```tsx
+const agents = useCallAgents(conversationId, callId); // agents, available, invite, setMode, remove, agentFor
+const whisper = useWhisper(callId); // on, toggle, hints, latest
+const { escalations, reply } = useEscalations({ callId }); // your agent's questions
+const { brief, save } = useAgentBrief({ scheduledMeetingId }); // optional; the Workspace owns the editor
+```
+
 ## Links
 
 - Docs: <https://poolse.dev/docs/sdk/react>
