@@ -639,6 +639,15 @@ export class ConversationChannel {
     };
   }
 
+  /**
+   * Any server event on this conversation's topic, by name — for events
+   * without a typed handler here (the live meeting events in
+   * `meetings-live.ts` read through this). The payload is as sent.
+   */
+  on(event: string, fn: (payload: unknown) => void): Unsubscribe {
+    return this.subscribe(event, fn);
+  }
+
   /** Current presence snapshot for sync access — usually used in tests. */
   getPresenceState(): PresenceSnapshot {
     return this.presenceState;

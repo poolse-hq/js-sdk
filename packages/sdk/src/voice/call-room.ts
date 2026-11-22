@@ -1,5 +1,9 @@
 import type {
+  CallBackground,
   CallConnection,
+  CallConnectionQuality,
+  CallDisconnectReason,
+  CallNetworkStats,
   CallDevice,
   CallDeviceKind,
   CallParticipant,
@@ -10,10 +14,78 @@ import type {
   LiveKitParticipant,
   LiveKitRoomHandle,
   LiveKitTrack,
+  TrackProcessorsModule,
 } from './livekit-types.js';
 import { isServiceParticipant } from '../recording.js';
 
 export type Unsubscribe = () => void;
+
+/**
+ * The most one data-channel message may carry, in bytes of JSON. LiveKit
+ * caps a reliable packet at about 15 KiB; staying under it means a
+ * message is never split or refused by the SFU. Send long strokes as
+ * several messages (the annotation and whiteboard helpers do).
+ */
+export const CALL_DATA_MAX_BYTES = 14_000;
+
+/** Who sent a data-channel message. */
+export interface CallDataSender {
+  /** poolse user id (the LiveKit identity); null when the server sent it. */
+  userId: string | null;
+  name: string | null;
+}
+
+const QUALITIES: readonly CallConnectionQuality[] = [
+  'excellent',
+  'good',
+  'poor',
+  'lost',
+  'unknown',
+];
+
+function qualityOf(raw: unknown): CallConnectionQuality {
+  return typeof raw === 'string' && (QUALITIES as readonly string[]).includes(raw)
+    ? (raw as CallConnectionQuality)
+    : 'unknown';
+}
+
+function metadataOf(raw: unknown): Record<string, unknown> {
+  if (typeof raw !== 'string' || !raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/** LiveKit's numeric `DisconnectReason`, as poolse words it. */
+export function disconnectReasonOf(raw: unknown): CallDisconnectReason {
+  switch (raw) {
+    case 1:
+      return 'left';
+    case 2: // DUPLICATE_IDENTITY: the same user joined from another device
+      return 'moved';
+    case 4: // PARTICIPANT_REMOVED
+      return 'removed';
+    case 5: // ROOM_DELETED
+    case 10: // ROOM_CLOSED
+      return 'ended';
+    case 3:
+    case 6:
+    case 7:
+    case 9:
+      return 'lost';
+    default:
+      return 'unknown';
+  }
+}
+
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
 
 /**
  * A call's media, carried by the LiveKit SFU.
@@ -120,6 +192,21 @@ export class CallRoom {
   private lastCanPublish = true;
   private readonly republishOnPermission: boolean;
 
+  private readonly trackProcessors: TrackProcessorsModule | null;
+  private background: CallBackground = { type: 'none' };
+  private noiseSuppression: boolean;
+  /** Only send capture options once the default was changed — the browser's own default is on. */
+  private noiseSuppressionChanged = false;
+  private reconnecting = false;
+  private readonly dataListeners = new Map<
+    string,
+    Set<(message: unknown, from: CallDataSender) => void>
+  >();
+  private readonly reconnectListeners = new Set<(reconnecting: boolean) => void>();
+  private readonly disconnectListeners = new Set<(reason: CallDisconnectReason) => void>();
+  /** The previous video byte count, for the bitrate in `getNetworkStats`. */
+  private lastVideoSample: { bytes: number; at: number } | null = null;
+
   /** Bound once so `off()` in teardown removes the same references. */
   private readonly onRoomChange = () => this.emitParticipants();
 
@@ -146,6 +233,9 @@ export class CallRoom {
     this.republishOnPermission = opts.republishOnPermission ?? true;
     this.facing = opts.facing ?? 'user';
     this.aloneGraceMs = opts.aloneGraceMs ?? 1500;
+    this.trackProcessors = opts.trackProcessors ?? null;
+    this.noiseSuppression = opts.noiseSuppression ?? true;
+    this.noiseSuppressionChanged = opts.noiseSuppression === false;
   }
 
   // ── observation ─────────────────────────────────────────────────────
@@ -271,16 +361,14 @@ export class CallRoom {
       // consent: the token says no publishing. Publish nothing (and
       // report nothing) — `republish` brings it back once allowed.
       if (this.lastCanPublish) {
-        await this.publish(
-          () => room.localParticipant.setMicrophoneEnabled(!this.startMuted),
-          'microphone',
-        );
+        await this.publish(() => this.enableMic(room, !this.startMuted), 'microphone');
       }
       if (this.startWithVideo && this.lastCanPublish) {
         await this.publish(
           () => room.localParticipant.setCameraEnabled(true, { facingMode: this.facing }),
           'camera',
         );
+        await this.applyBackground();
       }
 
       // Browsers keep audio silent until the page has seen a user
@@ -334,6 +422,8 @@ export class CallRoom {
           : local.setCameraEnabled(false),
       'camera',
     );
+    // A fresh camera track has no effect on it: put the chosen one back.
+    if (enabled) await this.applyBackground();
   }
 
   /**
@@ -494,7 +584,9 @@ export class CallRoom {
   async setMicrophoneEnabled(enabled: boolean): Promise<void> {
     this.wantMic = enabled;
     if (enabled && !this.canPublish()) return;
-    await this.withLocal((local) => local.setMicrophoneEnabled(enabled), 'microphone');
+    const room = this.room;
+    if (!room) return;
+    await this.withLocal(() => this.enableMic(room, enabled), 'microphone');
   }
 
   /**
@@ -526,10 +618,11 @@ export class CallRoom {
     if (!room || !this.canPublish()) return;
     const local = room.localParticipant;
     if (this.wantMic && !local.isMicrophoneEnabled) {
-      await this.withLocal((l) => l.setMicrophoneEnabled(true), 'microphone');
+      await this.withLocal(() => this.enableMic(room, true), 'microphone');
     }
     if (this.wantCamera && !local.isCameraEnabled) {
       await this.withLocal((l) => l.setCameraEnabled(true, { facingMode: this.facing }), 'camera');
+      await this.applyBackground();
     }
   }
 
@@ -541,7 +634,273 @@ export class CallRoom {
     return this.room?.localParticipant.isMicrophoneEnabled ?? false;
   }
 
+  // ── background and noise (CL7) ──────────────────────────────────────
+
+  /**
+   * Whether background blur and replacement can run here: a browser,
+   * `trackProcessors` passed in, and a GPU path the processors accept
+   * (`supportsBackgroundProcessors()`). Hide the control when false.
+   */
+  backgroundSupported(): boolean {
+    const tp = this.trackProcessors;
+    if (!tp || typeof document === 'undefined') return false;
+    if (!tp.BackgroundBlur && !tp.VirtualBackground && !tp.BackgroundProcessor) return false;
+    try {
+      return tp.supportsBackgroundProcessors?.() ?? true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The effect chosen for your camera (kept while the camera is off). */
+  getBackground(): CallBackground {
+    return this.background;
+  }
+
+  /**
+   * Blur or replace what is behind you, or turn the effect off. Chosen
+   * before the camera is on, it is applied when the camera starts — and
+   * again each time it restarts. Resolves false when it could not be
+   * applied (no processors, an image that would not load); the reason
+   * arrives through `onError` and the camera carries on without it.
+   */
+  async setBackground(effect: CallBackground): Promise<boolean> {
+    this.background = effect;
+    const ok = await this.applyBackground();
+    this.emitParticipants();
+    return ok;
+  }
+
+  /** Whether noise suppression is asked for on the microphone. */
+  isNoiseSuppressionEnabled(): boolean {
+    return this.noiseSuppression;
+  }
+
+  /**
+   * Turn the browser's noise suppression (and automatic gain) on or off
+   * on the live microphone; echo cancellation always stays on. Applied
+   * to the running track at once, and to every later one.
+   */
+  async setNoiseSuppression(enabled: boolean): Promise<void> {
+    this.noiseSuppression = enabled;
+    this.noiseSuppressionChanged = true;
+    const source = this.livekit.Track.Source['Microphone'] ?? 'microphone';
+    const track = this.room?.localParticipant.getTrackPublication(source)?.track;
+    const media = track?.mediaStreamTrack;
+    if (!media?.applyConstraints) return;
+    try {
+      await media.applyConstraints(this.captureOptions() ?? {});
+    } catch (err) {
+      this.emitError(new Error(`could not change noise suppression: ${String(err)}`));
+    }
+  }
+
+  // ── data channel ────────────────────────────────────────────────────
+
+  /**
+   * Send a JSON message to everyone in the call (or to `to`, by user id)
+   * under `topic`, over the SFU's data channel — reactions, the pointer
+   * on a shared screen. `reliable: false` for things that are stale a
+   * moment later (a moving pointer); the default is reliable. Resolves
+   * false when not connected or the message is over
+   * {@link CALL_DATA_MAX_BYTES}.
+   */
+  async sendData(
+    topic: string,
+    message: unknown,
+    opts: { reliable?: boolean; to?: string[] } = {},
+  ): Promise<boolean> {
+    const local = this.room?.localParticipant;
+    if (!local?.publishData || this.status !== 'connected') return false;
+    let bytes: Uint8Array;
+    try {
+      bytes = new TextEncoder().encode(JSON.stringify(message));
+    } catch {
+      return false;
+    }
+    if (bytes.byteLength > CALL_DATA_MAX_BYTES) return false;
+    try {
+      await local.publishData(bytes, {
+        reliable: opts.reliable ?? true,
+        topic,
+        ...(opts.to ? { destinationIdentities: opts.to } : {}),
+      });
+      return true;
+    } catch (err) {
+      this.emitError(new Error(`could not send ${topic}: ${String(err)}`));
+      return false;
+    }
+  }
+
+  /** Messages others sent under `topic` (yours are not echoed back). */
+  onData(topic: string, fn: (message: unknown, from: CallDataSender) => void): Unsubscribe {
+    let set = this.dataListeners.get(topic);
+    if (!set) {
+      set = new Set();
+      this.dataListeners.set(topic, set);
+    }
+    set.add(fn);
+    return () => {
+      set.delete(fn);
+    };
+  }
+
+  // ── connection (CL15, CL11) ─────────────────────────────────────────
+
+  /** True while LiveKit is re-establishing a dropped connection. */
+  isReconnecting(): boolean {
+    return this.reconnecting;
+  }
+
+  /** The connection dropped (`true`) and came back (`false`). */
+  onReconnecting(fn: (reconnecting: boolean) => void): Unsubscribe {
+    this.reconnectListeners.add(fn);
+    return () => this.reconnectListeners.delete(fn);
+  }
+
+  /**
+   * The SFU connection ended, and why. `moved` means you joined the
+   * same call from another device, which took over: say "Moved to your
+   * other device" rather than "Call ended", and don't hang up — the
+   * call goes on there.
+   */
+  onDisconnected(fn: (reason: CallDisconnectReason) => void): Unsubscribe {
+    this.disconnectListeners.add(fn);
+    return () => this.disconnectListeners.delete(fn);
+  }
+
+  /** Your own link quality, as LiveKit measures it. */
+  getConnectionQuality(): CallConnectionQuality {
+    return qualityOf(this.room?.localParticipant.connectionQuality);
+  }
+
+  /**
+   * One reading of your uplink from the sender's WebRTC stats (web):
+   * loss, round trip, jitter, video bitrate and whether the encoder is
+   * held back. null when not connected or the platform has no stats.
+   * Feed it to `diagnoseCallNetwork` for the plain-language banner.
+   */
+  async getNetworkStats(): Promise<CallNetworkStats | null> {
+    const local = this.room?.localParticipant;
+    if (!local) return null;
+    const source = (name: string, fallback: string) => this.livekit.Track.Source[name] ?? fallback;
+    const audio = local.getTrackPublication(source('Microphone', 'microphone'))?.track;
+    const video =
+      local.getTrackPublication(source('Camera', 'camera'))?.track ??
+      local.getTrackPublication(source('ScreenShare', 'screen_share'))?.track;
+
+    const read = async (track: LiveKitTrack | null | undefined) => {
+      try {
+        const report = await track?.getRTCStatsReport?.();
+        if (!report) return [];
+        const values = report instanceof Map ? [...report.values()] : [...report].map((e) => e[1]);
+        return values;
+      } catch {
+        return [];
+      }
+    };
+
+    const entries = [...(await read(audio)), ...(await read(video))];
+    if (entries.length === 0) return null;
+
+    const stats: CallNetworkStats = {
+      packetLoss: null,
+      rttMs: null,
+      jitterMs: null,
+      videoKbps: null,
+      limitedBy: null,
+    };
+    let videoBytes = 0;
+    let sawVideo = false;
+    for (const e of entries) {
+      if (e['type'] === 'remote-inbound-rtp') {
+        const lost = num(e['fractionLost']);
+        if (lost !== null) stats.packetLoss = Math.max(stats.packetLoss ?? 0, lost);
+        const rtt = num(e['roundTripTime']);
+        if (rtt !== null) stats.rttMs = Math.max(stats.rttMs ?? 0, rtt * 1000);
+        const jitter = num(e['jitter']);
+        if (jitter !== null) stats.jitterMs = Math.max(stats.jitterMs ?? 0, jitter * 1000);
+      } else if (e['type'] === 'outbound-rtp' && e['kind'] === 'video') {
+        sawVideo = true;
+        videoBytes += num(e['bytesSent']) ?? 0;
+        const why = e['qualityLimitationReason'];
+        if (why === 'bandwidth' || why === 'cpu') stats.limitedBy = why;
+      }
+    }
+    if (sawVideo) {
+      const now = Date.now();
+      const prev = this.lastVideoSample;
+      if (prev && now > prev.at && videoBytes >= prev.bytes) {
+        stats.videoKbps = Math.round(((videoBytes - prev.bytes) * 8) / (now - prev.at));
+      }
+      this.lastVideoSample = { bytes: videoBytes, at: now };
+    }
+    return stats;
+  }
+
   // ── internals ───────────────────────────────────────────────────────
+
+  /** Capture options for the microphone, or undefined to leave the browser's defaults. */
+  private captureOptions():
+    | { noiseSuppression: boolean; echoCancellation: boolean; autoGainControl: boolean }
+    | undefined {
+    if (!this.noiseSuppressionChanged) return undefined;
+    return {
+      noiseSuppression: this.noiseSuppression,
+      echoCancellation: true,
+      autoGainControl: this.noiseSuppression,
+    };
+  }
+
+  private enableMic(room: LiveKitRoomHandle, enabled: boolean): Promise<unknown> {
+    const options = enabled ? this.captureOptions() : undefined;
+    return options
+      ? room.localParticipant.setMicrophoneEnabled(enabled, options)
+      : room.localParticipant.setMicrophoneEnabled(enabled);
+  }
+
+  private makeProcessor(effect: CallBackground): unknown {
+    const tp = this.trackProcessors;
+    if (!tp || effect.type === 'none') return null;
+    if (effect.type === 'blur') {
+      const radius = effect.radius ?? 10;
+      if (tp.BackgroundBlur) return tp.BackgroundBlur(radius);
+      return tp.BackgroundProcessor?.({ mode: 'background-blur', blurRadius: radius }) ?? null;
+    }
+    if (tp.VirtualBackground) return tp.VirtualBackground(effect.url);
+    return tp.BackgroundProcessor?.({ mode: 'virtual-background', imagePath: effect.url }) ?? null;
+  }
+
+  /** Put {@link background} on the live camera track; true when nothing was left undone. */
+  private async applyBackground(): Promise<boolean> {
+    const source = this.livekit.Track.Source['Camera'] ?? 'camera';
+    const track = this.room?.localParticipant.getTrackPublication(source)?.track;
+    // No camera yet: remembered, applied when it starts.
+    if (!track) return this.background.type === 'none' || this.backgroundSupported();
+    try {
+      if (this.background.type === 'none') {
+        await track.stopProcessor?.();
+        return true;
+      }
+      if (!this.backgroundSupported() || !track.setProcessor) {
+        this.emitError(new Error('background effects are not available here'));
+        return false;
+      }
+      const processor = this.makeProcessor(this.background);
+      if (!processor) return false;
+      await track.setProcessor(processor);
+      return true;
+    } catch (err) {
+      this.emitError(new Error(`could not apply the background: ${String(err)}`));
+      return false;
+    }
+  }
+
+  private setReconnecting(on: boolean): void {
+    if (this.reconnecting === on) return;
+    this.reconnecting = on;
+    for (const fn of this.reconnectListeners) fn(on);
+  }
 
   /**
    * Publish one capture device, surviving its absence.
@@ -592,6 +951,8 @@ export class CallRoom {
       RoomEvent['LocalTrackUnpublished'],
       RoomEvent['ActiveSpeakersChanged'],
       RoomEvent['ParticipantNameChanged'],
+      RoomEvent['ConnectionQualityChanged'],
+      RoomEvent['ParticipantMetadataChanged'],
     ]) {
       if (event) room.on(event, this.onRoomChange);
     }
@@ -636,14 +997,52 @@ export class CallRoom {
       }) as never);
     }
 
+    // Data-channel messages, dispatched by topic as parsed JSON. A
+    // message that is not JSON was not sent by poolse and is dropped.
+    const data = RoomEvent['DataReceived'];
+    if (data) {
+      room.on(data, ((
+        payload: Uint8Array,
+        participant?: LiveKitParticipant,
+        _kind?: unknown,
+        topic?: string,
+      ) => {
+        const set = topic ? this.dataListeners.get(topic) : undefined;
+        if (!set || set.size === 0) return;
+        let message: unknown;
+        try {
+          message = JSON.parse(new TextDecoder().decode(payload));
+        } catch {
+          return;
+        }
+        const from: CallDataSender = {
+          userId: participant?.identity ?? null,
+          name: participant?.name ?? null,
+        };
+        for (const fn of set) fn(message, from);
+      }) as never);
+    }
+
+    for (const [name, on] of [
+      ['Reconnecting', true],
+      ['SignalReconnecting', true],
+      ['Reconnected', false],
+    ] as const) {
+      const event = RoomEvent[name];
+      if (event) room.on(event, () => this.setReconnecting(on));
+    }
+
     const disconnected = RoomEvent['Disconnected'];
     if (disconnected) {
-      room.on(disconnected, () => {
+      room.on(disconnected, ((reason?: unknown) => {
         // The SFU dropped us. Reflect it rather than showing a call that
         // looks live and carries nothing.
+        this.setReconnecting(false);
         this.setStatus('idle');
         this.emitParticipants();
-      });
+        const why = disconnectReasonOf(reason);
+        for (const fn of this.disconnectListeners) fn(why);
+      }) as never);
     }
   }
 
@@ -714,6 +1113,8 @@ export class CallRoom {
       screenSharing: !!screen,
       screenTrack: screen?.track ?? null,
       screenTrackRef: screen ? { participant, publication: screen, source: screenSource } : null,
+      connectionQuality: qualityOf(participant.connectionQuality),
+      metadata: metadataOf(participant.metadata),
     };
   }
 
@@ -728,6 +1129,8 @@ export class CallRoom {
     // callee was still picking up.
     this.hasSeenPeer = false;
     this.lastCanPublish = true;
+    this.reconnecting = false;
+    this.lastVideoSample = null;
     this.clearAloneTimer();
 
     for (const track of [...this.audioSinks.keys()]) this.stopAudio(track);

@@ -24,6 +24,7 @@ import { CallsResource } from './resources/calls.js';
 import { RoomsResource } from './resources/rooms.js';
 import { AgentsResource, ApprovalsResource } from './agents.js';
 import { MeetingsResource } from './meetings.js';
+import { LiveMeetingsResource } from './meetings-live.js';
 import { CallRoom } from './voice/call-room.js';
 import type { CallRoomOptions } from './voice/livekit-types.js';
 import { RestClient } from './rest-client.js';
@@ -129,6 +130,13 @@ export class Poolse {
   /** Ask what was said in your meetings: `meetings.ask({ question, callId })` (RT8). */
   public readonly meetings: MeetingsResource;
   /**
+   * The live meeting features of a call (docs/MEETINGS.md): `stage`
+   * (roles, raised hands), `questions` (Q&A with votes), `breakouts`,
+   * `lobby`, `moments`, `agenda`, `whiteboard(callId)`, `moveHere(callId)`,
+   * and `subscribe(conversationId, callId, listeners)` for live changes.
+   */
+  public readonly live: LiveMeetingsResource;
+  /**
    * Who is online, away, in a call or offline: `get` (REST), a live
    * store (`subscribe` / `peek`), and this device's own activity
    * (`setActivity`, `trackActivity`).
@@ -222,6 +230,7 @@ export class Poolse {
       return a ? { id: a.id, name: a.name, kind: a.template } : null;
     });
     this.meetings = new MeetingsResource(this.rest);
+    this.live = new LiveMeetingsResource(this.rest, this.realtime);
     const scope = () => this.storageScope();
     this.cache = new LocalCache(scope, this.resolved.cache);
     this.outbox = new Outbox({

@@ -27,7 +27,33 @@ export interface LiveKitTrack {
   kind?: string;
   attach?: () => HTMLMediaElement;
   detach?: (element?: HTMLMediaElement) => unknown;
+  /** The browser track underneath (web) — where audio constraints are applied. */
+  mediaStreamTrack?: { applyConstraints?(c: Record<string, unknown>): Promise<void> } | undefined;
+  /**
+   * A video effect on a local camera track (`@livekit/track-processors`).
+   * Present only on local video tracks of livekit-client ≥ 1.x.
+   */
+  setProcessor?(processor: unknown): Promise<void>;
+  stopProcessor?(): Promise<void>;
+  /** The sender's WebRTC stats (local tracks), for the network diagnosis. */
+  getRTCStatsReport?(): Promise<
+    Iterable<[string, Record<string, unknown>]> | Map<string, Record<string, unknown>> | undefined
+  >;
 }
+
+/**
+ * LiveKit's view of a participant's link: `excellent` · `good` · `poor`
+ * · `lost` (dropped, coming back) · `unknown`.
+ */
+export type CallConnectionQuality = 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
+
+/**
+ * Why the SFU connection ended, from LiveKit's `DisconnectReason`.
+ * `moved` — the same user joined from another device ("move call to
+ * this device"), which supersedes this one; `removed` — a host or the
+ * server took you out; `left` — you hung up; `lost` — the network.
+ */
+export type CallDisconnectReason = 'left' | 'moved' | 'removed' | 'ended' | 'lost' | 'unknown';
 
 export interface LiveKitPublication {
   track?: LiveKitTrack | null | undefined;
@@ -97,6 +123,10 @@ export interface LiveKitParticipant {
    * when they do).
    */
   permissions?: { canPublish?: boolean } | undefined;
+  /** LiveKit's `ConnectionQuality` string. */
+  connectionQuality?: string | undefined;
+  /** JSON metadata the server set on the token (`role`, `guest`, `display_name`…). */
+  metadata?: string | undefined;
   getTrackPublication(source: string): LiveKitPublication | undefined;
 }
 
@@ -107,7 +137,19 @@ export interface LiveKitLocalParticipant extends LiveKitParticipant {
    * which on Android is routinely the rear one.
    */
   setCameraEnabled(enabled: boolean, options?: { facingMode?: CameraFacing }): Promise<unknown>;
-  setMicrophoneEnabled(enabled: boolean): Promise<unknown>;
+  setMicrophoneEnabled(
+    enabled: boolean,
+    options?: { noiseSuppression?: boolean; echoCancellation?: boolean; autoGainControl?: boolean },
+  ): Promise<unknown>;
+  /**
+   * Send bytes to the others over the SFU's data channel: `reliable`
+   * (ordered, retried) or lossy, to everyone or to `destinationIdentities`,
+   * under a `topic`. Absent on very old builds.
+   */
+  publishData?(
+    data: Uint8Array,
+    options?: { reliable?: boolean; topic?: string; destinationIdentities?: string[] },
+  ): Promise<unknown>;
   /**
    * Publish a screen or window. On the web the browser shows its own
    * picker; `audio` asks for the tab's or system's sound with it, which
@@ -218,6 +260,48 @@ export interface CallConnection {
 /** Connection lifecycle for a call's media. */
 export type CallRoomStatus = 'idle' | 'connecting' | 'connected' | 'error';
 
+/**
+ * A video effect on your camera (CL7). `blur` softens what is behind
+ * you; `image` replaces it with a picture (a URL the page can load).
+ */
+export type CallBackground =
+  | { type: 'none' }
+  | { type: 'blur'; radius?: number }
+  | { type: 'image'; url: string };
+
+/**
+ * `@livekit/track-processors`, imported by your app and passed in
+ * (`trackProcessors` on the room options) — an optional peer, so a page
+ * without it simply has no background effects:
+ *
+ *     import * as trackProcessors from '@livekit/track-processors';
+ *
+ * Structural for the same reason as {@link LiveKitModule}. Both the
+ * older `BackgroundBlur` / `VirtualBackground` factories and the newer
+ * `BackgroundProcessor({ mode })` are understood.
+ */
+export interface TrackProcessorsModule {
+  BackgroundBlur?: (blurRadius?: number) => unknown;
+  VirtualBackground?: (imagePath: string) => unknown;
+  BackgroundProcessor?: (options: Record<string, unknown>) => unknown;
+  supportsBackgroundProcessors?: () => boolean;
+  supportsModernBackgroundProcessors?: () => boolean;
+}
+
+/** One reading of your own uplink, from the sender's WebRTC stats. */
+export interface CallNetworkStats {
+  /** Share of packets lost on the way to the SFU, 0–1 (null: not reported). */
+  packetLoss: number | null;
+  /** Round trip to the SFU in milliseconds. */
+  rttMs: number | null;
+  /** Jitter in milliseconds. */
+  jitterMs: number | null;
+  /** Outgoing video bitrate in kbit/s, when the camera or a screen is published. */
+  videoKbps: number | null;
+  /** The encoder is holding back video because of bandwidth or CPU (`qualityLimitationReason`). */
+  limitedBy: 'bandwidth' | 'cpu' | null;
+}
+
 /** Somebody on the call, including yourself. */
 export interface CallParticipant {
   /** poolse user id. */
@@ -253,6 +337,16 @@ export interface CallParticipant {
   screenTrack: LiveKitTrack | null;
   /** The shared screen as a renderable reference, for React Native's `<VideoTrack>`. */
   screenTrackRef: LiveKitTrackReference | null;
+  /**
+   * Their link to the SFU (CL15): show a weak-signal mark on `poor`,
+   * "Reconnecting…" on `lost`. `unknown` until LiveKit has measured it.
+   */
+  connectionQuality?: CallConnectionQuality;
+  /**
+   * The token's metadata the server set, parsed (`{}` when none) — a
+   * stage role or a guest flag, read with `participantRoleOf`.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 export interface CallRoomOptions {
@@ -296,4 +390,15 @@ export interface CallRoomOptions {
    * with `republish()` from `onPublishPermission`.
    */
   republishOnPermission?: boolean;
+  /**
+   * `@livekit/track-processors` for background blur and replacement
+   * (web). Optional; without it `backgroundSupported()` is false.
+   */
+  trackProcessors?: TrackProcessorsModule;
+  /**
+   * Ask the browser for noise suppression, echo cancellation and gain
+   * control on the microphone. Defaults to true (also the browser's own
+   * default); `setNoiseSuppression` changes it mid-call.
+   */
+  noiseSuppression?: boolean;
 }

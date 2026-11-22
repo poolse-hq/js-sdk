@@ -71,6 +71,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@types/phoenix": "^1.6.7"
+    "@types/phoenix": "^1.6.7",
+    "yjs": "13.6.20"
   }
 }
