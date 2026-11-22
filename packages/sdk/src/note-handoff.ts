@@ -27,7 +27,7 @@ export async function handNoteToAgent(
 ): Promise<Message> {
   const bytes = new TextEncoder().encode(handoff.markdown);
   const safe = handoff.title
-    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+    .replace(/[\\/:*?"<>|\s]+/g, ' ')
     .trim()
     .slice(0, 100);
   const file = await chat.attachments.upload({
