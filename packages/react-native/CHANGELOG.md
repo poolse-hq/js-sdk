@@ -12,6 +12,17 @@ versions follow [semver](https://semver.org).
   ("Only you see this"), `EscalationCard`, `EscalationList` — the same props
   as @poolse/react-ui. `StagePanel` takes `agents` (and
   `MeetingParticipant.agent` / `.speaking`) and lists them with the badge.
+- `MessageComposer` / `MentionInput`: `formattingToolbar`, `commands`,
+  `groups`, the DLP warning (`DlpWarningSheet`); `FormattingToolbar`,
+  `CommandSuggestions`.
+- `PollCard`, `BlockRenderer`, `PinsList`, `ForwardSheet`, `FilesList`,
+  `ForumPostList`, `CatchUpCard`, `TranslatedText`, `NoteCard`,
+  `VoiceRecorder` (hold to record), `VoiceMessagePlayer`,
+  `VideoMessagePlayer` — media through the `MediaPlayback` and
+  `AudioRecorderAdapter` adapters (expo-audio / expo-video in the app).
+- `MessageActions`: pin, forward, translate. `ThreadView`: `follow`,
+  `alsoSendToChannel`. Custom emoji in `EmojiPicker` and `ReactionStrip`
+  (`EmojiGlyph`).
 
 - Live meetings on the final server contract: guests and phones named by
   the call, `RoomPresence` with `useRoomPresence` entries (guests and phones

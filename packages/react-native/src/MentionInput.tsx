@@ -1,5 +1,13 @@
 import type { Membership, Uuid } from '@poolse/sdk';
-import { useMe, useMembers, usePoolse, useUser } from '@poolse/react';
+import {
+  mentionGroupMeta,
+  rankMentionGroups,
+  useMe,
+  useMembers,
+  usePoolse,
+  useUser,
+  type MentionGroup,
+} from '@poolse/react';
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -15,6 +23,7 @@ import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import {
   MessageComposer,
+  type ComposerSendOptions,
   type MessageComposerHandle,
   type MessageComposerProps,
 } from './MessageComposer.js';
@@ -25,14 +34,16 @@ export interface MentionInputProps extends Omit<MessageComposerProps, 'onSend'> 
   /** Same callback as MessageComposer.onSend, plus the mentioned user_ids. */
   onSend: (
     body: string,
-    opts?: {
-      quoted_message_id?: Uuid;
-      attachment_ids?: Uuid[];
-      mentions?: Uuid[];
-    },
+    opts?: ComposerSendOptions & { mentions?: Uuid[] },
   ) => Promise<unknown> | void;
   /** Most suggestions shown at once. Defaults to 6. */
   maxSuggestions?: number;
+  /**
+   * User groups to offer after matching members (MS9): `@design`,
+   * `@oncall`. Picking one inserts `@handle`; the Workspace expands it
+   * when the message arrives, so nothing extra is sent.
+   */
+  groups?: readonly MentionGroup[];
 }
 
 interface Candidate {
@@ -56,6 +67,7 @@ export function MentionInput({
   value: valueProp,
   onChangeText,
   onSelectionChange,
+  groups,
   ...composerProps
 }: MentionInputProps) {
   const theme = useTheme();
@@ -92,6 +104,22 @@ export function MentionInput({
     return filterMentionCandidates(all, query.query, maxSuggestions);
   }, [query, members, me?.id, labelFor, chat, maxSuggestions]);
 
+  const groupMatches = useMemo(
+    () =>
+      query && groups
+        ? rankMentionGroups(groups, query.query, Math.max(0, maxSuggestions - candidates.length))
+        : [],
+    [query, groups, maxSuggestions, candidates.length],
+  );
+
+  const pickGroup = (g: MentionGroup) => {
+    if (!query) return;
+    const next = insertMention(text, query.start, cursor, g.handle);
+    setText(next.text);
+    setCursor(next.cursor);
+    setTimeout(() => composerRef.current?.setSelection(next.cursor, next.cursor), 0);
+  };
+
   const pick = (c: Candidate) => {
     if (!query) return;
     const next = insertMention(text, query.start, cursor, c.label);
@@ -109,7 +137,7 @@ export function MentionInput({
   };
 
   const suggestions =
-    query && candidates.length > 0 ? (
+    query && candidates.length + groupMatches.length > 0 ? (
       <View
         style={[
           styles.suggestions,
@@ -131,6 +159,9 @@ export function MentionInput({
               label={c.label}
               onPress={() => pick(c)}
             />
+          ))}
+          {groupMatches.map((g) => (
+            <GroupRow key={`group:${g.handle}`} group={g} onPress={() => pickGroup(g)} />
           ))}
         </ScrollView>
         <Pressable
@@ -207,7 +238,49 @@ function MentionRow({
   );
 }
 
+function GroupRow({ group, onPress }: { group: MentionGroup; onPress: () => void }) {
+  const theme = useTheme();
+  const meta = mentionGroupMeta(group);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? theme.colors.surfaceAlt : 'transparent' },
+      ]}
+      accessibilityRole="menuitem"
+      accessibilityLabel={`Mention group ${group.name}`}
+    >
+      <View style={[styles.groupIcon, { backgroundColor: theme.colors.accentSoft }]}>
+        <Text style={[styles.groupAt, { color: theme.colors.accentStrong }]}>@</Text>
+      </View>
+      <View style={styles.groupText}>
+        <Text
+          style={[styles.rowText, { color: theme.colors.text, fontFamily: theme.fonts.body }]}
+          numberOfLines={1}
+        >
+          {group.name}
+        </Text>
+        <Text style={[styles.groupMeta, { color: theme.colors.textSubtle }]} numberOfLines={1}>
+          @{group.handle}
+          {meta ? ` · ${meta}` : ''}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  groupIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupAt: { fontSize: 14, fontWeight: '700' },
+  groupText: { flex: 1, minWidth: 0 },
+  groupMeta: { fontSize: 12, marginTop: 1 },
   suggestions: {
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 8,

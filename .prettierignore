@@ -4,3 +4,4 @@ coverage
 .pnpm-store
 pnpm-lock.yaml
 *.log
+docs/api

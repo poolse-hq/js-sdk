@@ -38,6 +38,14 @@ export interface MessageActionsProps {
    * Called after the sheet closes.
    */
   onMoreReactions?: () => void;
+  /** Pin or unpin (MS13); `pinned` picks the label. */
+  onTogglePin?: () => void;
+  pinned?: boolean;
+  /** Forward to other conversations (MS13): open your target picker (`<ForwardSheet>`). */
+  onForward?: () => void;
+  /** Translate (MS21), or back to the original when `translated`. */
+  onTranslate?: () => void;
+  translated?: boolean;
 }
 
 /**
@@ -62,6 +70,11 @@ export function MessageActions({
   onRemovePreview,
   previewUrls = [],
   onMoreReactions,
+  onTogglePin,
+  pinned = false,
+  onForward,
+  onTranslate,
+  translated = false,
 }: MessageActionsProps) {
   const theme = useTheme();
   const insets = useSafeInsets();
@@ -71,6 +84,15 @@ export function MessageActions({
   if (onReplyInThread)
     items.push({ label: 'Reply in thread', icon: 'messages', onPress: onReplyInThread });
   if (onCopy) items.push({ label: 'Copy text', icon: 'copy', onPress: onCopy });
+  if (onForward) items.push({ label: 'Forward', icon: 'send', onPress: onForward });
+  if (onTogglePin)
+    items.push({ label: pinned ? 'Unpin' : 'Pin', icon: 'pin', onPress: onTogglePin });
+  if (onTranslate)
+    items.push({
+      label: translated ? 'Show original' : 'Translate',
+      icon: 'messages',
+      onPress: onTranslate,
+    });
   if (!isSelf && onMarkUnread)
     items.push({ label: 'Mark unread', icon: 'bell', onPress: onMarkUnread });
   if (isSelf && onRemovePreview) {

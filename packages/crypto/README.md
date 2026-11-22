@@ -281,6 +281,90 @@ Any other backend works too: implement `BlobTransport` (`get`, `put`,
 `delete`, `list`, optional `changes`). `MemoryBlobTransport` is an in-memory
 one for tests.
 
+### Workspace notes (NOTES.md)
+
+Helpers that follow the Workspace API's notes contract
+(`apps/workspace/NOTES.md`): the associated data, field names and
+base64url encodings it expects, so results go straight into request bodies.
+
+```ts
+import {
+  sealNote,
+  openNoteMeta,
+  openNoteContent,
+  noteKeyForVersion,
+  shareWrapsFor,
+  rotateNoteKey,
+  recoveryAuth,
+  signedDeviceGrant,
+  NoteSearchIndex,
+  NoteOutbox,
+  noteAsDocument,
+} from '@poolse/crypto';
+
+// Write (revision = base_revision + 1, bound into the associated data).
+const { meta, content } = await sealNote(
+  key,
+  { title, body, metadata },
+  { noteId, revision: base + 1 },
+);
+await ws.put(`/notes/${noteId}`, { base_revision: base, meta, content, key_wrap });
+
+// Share (NT5): one signed wrap per approved device of each recipient.
+const wraps = await shareWrapsFor(key, recipients /* from POST /notes/keys/lookup */, {
+  noteId,
+  signer: device,
+});
+
+// Revoke or expiry (NT15, on notes:rotate): new key, re-encrypted, wraps for who's left.
+const r = await rotateNoteKey(key, note, {
+  noteId,
+  revision: base + 1,
+  accountKey,
+  signer: device,
+  remaining,
+});
+await ws.put(`/notes/${noteId}`, {
+  base_revision: base,
+  meta: r.meta,
+  content: r.content,
+  key_wrap: r.key_wrap,
+  key_history: r.key_history,
+  share_wraps: r.share_wraps,
+});
+
+// Versions (NT8): the key the version was written with, then its own revision.
+const vkey = await noteKeyForVersion(key, note.key_history, version.key_version, { noteId });
+const old = await openNoteContent(vkey, version.content, { noteId, revision: version.revision });
+```
+
+| Helper                                                                                  | For                                                                                                                                  |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `noteAssociatedData`, `noteAttachmentAssociatedData`, `folderAssociatedData`            | the associated data of each ciphertext                                                                                               |
+| `sealNote` / `openNoteMeta` / `openNoteContent` / `envelopeKeyVersion`                  | `meta` (title + metadata, no body) and `content`                                                                                     |
+| `sealFolder` / `openFolderName`                                                         | encrypted folder names (`name_envelope`, `key_wrap`)                                                                                 |
+| `shareWrapsFor`                                                                         | `wraps` / `share_wraps` (`{member_id, device_id, wrap}`); editors (NT16) get the same wrap and write with the same key               |
+| `rotateNoteKey`, `shareExpired`                                                         | rotation after a revoke or an expired share                                                                                          |
+| `noteKeyForVersion`                                                                     | walk `key_history` back for a version                                                                                                |
+| `recoveryAuth`                                                                          | `recovery.auth` / `recovery_auth`: 32 bytes, HKDF-SHA-256 of the recovery secret (empty salt, info `poolse-crypto/v1/recovery-auth`) |
+| `signForServer`, `deviceApprovalMessage`, `recoveryReplaceMessage`, `signedDeviceGrant` | the device signatures the server checks (raw P-256 `r‖s`)                                                                            |
+| `noteAsDocument`                                                                        | NT12: one decrypted note as Markdown for an agent task (only after the member chose to hand it over)                                 |
+
+**On-device search (NT7).** `NoteSearchIndex` keeps the words of the notes
+this device has decrypted; `put(id, {title, text, updatedAt})`, `remove`,
+`search(query)` (every word must match as a prefix, case and accents
+ignored; title and whole-word matches first). `seal(accountKey)` encrypts it
+for storage on the device (key `HKDF(accountKey, "key/search-index")`);
+`NoteSearchIndex.open(sealed, accountKey)` reads it back.
+
+**Offline queue (NT9).** `NoteOutbox.load({storage, accountKey})` keeps
+edits made offline, encrypted at rest; `put(noteId, baseRevision, data)` /
+`delete(...)`; several edits of a note collapse into one write on the first
+`baseRevision`. `flush({send, resolve})` sends them in order: `send` seals
+and writes one entry and answers `ok`, `conflict` (`409 revision_conflict`,
+with the server's note) or `gone`; `resolve` merges a conflict (default:
+keep the local edit). A thrown error stops the flush and keeps the rest.
+
 ## Format
 
 Everything the library writes is a binary envelope (base64url it with

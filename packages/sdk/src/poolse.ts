@@ -14,7 +14,7 @@ import { AttachmentsResource } from './resources/attachments.js';
 import { ConversationsResource } from './resources/conversations.js';
 import { DevicesResource } from './resources/devices.js';
 import { MeResource } from './resources/me.js';
-import { MessagesResource } from './resources/messages.js';
+import { MessagesResource, ScheduledMessagesResource } from './resources/messages.js';
 import { PresenceResource } from './resources/presence.js';
 import { NotificationActions } from './notification-actions.js';
 import { UsersResource } from './resources/users.js';
@@ -75,6 +75,8 @@ export class Poolse {
   public readonly conversations: ConversationsResource;
   /** `/v1/messages/:id/*` — accessed via `chat.messages.one(id)`. */
   public readonly messages: MessagesResource;
+  /** `/v1/scheduled-messages` — your scheduled messages (MS1); schedule with `conversations.one(id).messages.schedule`. */
+  public readonly scheduledMessages: ScheduledMessagesResource;
   /** `/v1/attachments/*` — presigned-URL uploads/downloads. */
   public readonly attachments: AttachmentsResource;
 
@@ -211,6 +213,7 @@ export class Poolse {
     this.devices = new DevicesResource(this.rest);
     this.conversations = new ConversationsResource(this.rest);
     this.messages = new MessagesResource(this.rest);
+    this.scheduledMessages = new ScheduledMessagesResource(this.rest);
     this.attachments = new AttachmentsResource(this.rest, cachedConfig.fetch);
     this.users = new UsersResource(cachedConfig);
     this.callTokens = new CallTokensResource(this.rest);

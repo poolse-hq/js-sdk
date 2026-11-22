@@ -6,7 +6,17 @@
 // with the message — dropped again if the `@name` is deleted first.
 
 import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import { agentFromWire, useMembers, usePoolse, useUser } from '@poolse/react';
+import {
+  agentFromWire,
+  useMembers,
+  usePoolse,
+  useUser,
+  mentionGroupMeta,
+  rankMentionGroups,
+  type FormatKind,
+  type MentionGroup,
+  type SlashCommand,
+} from '@poolse/react';
 import {
   forwardRef,
   useEffect,
@@ -20,6 +30,12 @@ import {
 import { AgentBadge } from './AgentBadge.js';
 import { Avatar } from './Avatar.js';
 import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
+import {
+  DlpWarningDialog,
+  FormattingToolbar,
+  useComposerExtras,
+  useDlpGuard,
+} from './composerExtras.js';
 import { composerAction, DEFAULT_KEYMAP, type ComposerKeymap } from './keymap.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
@@ -85,7 +101,20 @@ export interface MentionInputProps {
    * when there's none to edit (the caret then moves as usual).
    */
   onEditLast?: () => boolean | void;
+  /** Same as `<MessageComposer formattingToolbar>`. Default `false`. */
+  formattingToolbar?: boolean | readonly FormatKind[];
+  /** Same as `<MessageComposer commands>`: `/command` suggestions. */
+  commands?: readonly SlashCommand[];
+  /**
+   * User groups to offer next to members (MS9): `@design`, `@oncall`.
+   * Picking one inserts `@handle`; the Workspace expands it when the
+   * message arrives, so nothing extra is sent. Listed after matching
+   * members, names first.
+   */
+  groups?: readonly MentionGroup[];
 }
+
+type Suggestion = { kind: 'member'; member: Membership } | { kind: 'group'; group: MentionGroup };
 
 /** Most suggestions shown at once. */
 const MAX_SUGGESTIONS = 8;
@@ -115,6 +144,9 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       onValueChange,
       keymap = DEFAULT_KEYMAP.composer,
       onEditLast,
+      formattingToolbar = false,
+      commands,
+      groups,
     },
     ref,
   ) {
@@ -133,6 +165,8 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     const taRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     useAutogrow(taRef, value);
+    const extras = useComposerExtras({ value, setValue, taRef, formatting: true, commands });
+    const dlp = useDlpGuard();
 
     // Same queue as MessageComposer: staged uploads plus files refused
     // before upload; ready chips are swept after a successful send.
@@ -190,12 +224,17 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
 
     // Candidates for the current query: name or external id contains
     // it, names that start with it first; never the viewer.
-    const filtered = mention
-      ? rankMembers(
-          members.filter((m) => m.user_id !== meId),
-          mention.query.toLowerCase(),
-          label,
-        ).slice(0, MAX_SUGGESTIONS)
+    const filtered: Suggestion[] = mention
+      ? [
+          ...rankMembers(
+            members.filter((m) => m.user_id !== meId),
+            mention.query.toLowerCase(),
+            label,
+          ).map((member): Suggestion => ({ kind: 'member', member })),
+          ...rankMentionGroups(groups ?? [], mention.query).map(
+            (group): Suggestion => ({ kind: 'group', group }),
+          ),
+        ].slice(0, MAX_SUGGESTIONS)
       : [];
 
     // Reset active selection whenever the candidate list changes.
@@ -213,12 +252,17 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
         const mentions = [...selectedMentions.current]
           .filter(([, name]) => trimmed.includes(`@${name}`))
           .map(([id]) => id);
-        await onSend({
+        const req: MessageCreateRequest = {
           body: trimmed,
           ...(mentions.length > 0 ? { mentions } : {}),
           ...(replyingTo ? { quoted_message_id: replyingTo.id } : {}),
           ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
-        });
+        };
+        const sent = await dlp.guard(trimmed, (ack) =>
+          onSend(ack ? { ...req, dlp_acknowledged: true } : req),
+        );
+        // Held back by data-loss prevention: the text stays for "Edit".
+        if (!sent) return;
         setValue('');
         selectedMentions.current = new Map();
         for (const it of ready) uploads.remove(it.localId);
@@ -226,6 +270,27 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       } finally {
         setSending(false);
       }
+    };
+
+    const insertSuggestion = (s: Suggestion) => {
+      if (s.kind === 'member') insertMention(s.member);
+      else insertGroup(s.group);
+    };
+
+    const insertGroup = (g: MentionGroup) => {
+      if (!mention) return;
+      const before = value.slice(0, mention.start);
+      const after = value.slice(mention.start + 1 + mention.query.length);
+      const inserted = `@${g.handle} `;
+      setValue(`${before}${inserted}${after}`);
+      setMention(null);
+      requestAnimationFrame(() => {
+        const ta = taRef.current;
+        if (!ta) return;
+        const pos = before.length + inserted.length;
+        ta.focus();
+        ta.setSelectionRange(pos, pos);
+      });
     };
 
     const insertMention = (m: Membership) => {
@@ -255,6 +320,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const next = e.target.value;
       setValue(next);
+      extras.track(e.target);
       onTyping?.();
 
       // Detect an active @mention: look back from the caret for an `@`
@@ -293,7 +359,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
           const pick = filtered[activeIdx];
           if (pick) {
             e.preventDefault();
-            insertMention(pick);
+            insertSuggestion(pick);
             return;
           }
         }
@@ -304,6 +370,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
         }
       }
 
+      if (extras.onKeyDown(e)) return;
       const action = composerAction(e, keymap);
       if (action === 'editLast') {
         if (value === '' && onEditLast && onEditLast() !== false) e.preventDefault();
@@ -362,6 +429,13 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
         }}
         style={{ position: 'relative' }}
       >
+        {formattingToolbar && (
+          <FormattingToolbar
+            onFormat={extras.format}
+            disabled={disabled || sending}
+            {...(Array.isArray(formattingToolbar) ? { actions: formattingToolbar } : {})}
+          />
+        )}
         {replyingTo && (
           <div className="poolse-composer__reply" role="status">
             <div className="poolse-composer__reply-body">
@@ -426,6 +500,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
             onChange={onChange}
             onKeyDown={onKeyDown}
             onPaste={uploads.onPaste}
+            onSelect={(e) => extras.track(e.currentTarget)}
             placeholder={placeholder}
             disabled={disabled || sending}
             aria-label={placeholder}
@@ -435,7 +510,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
                   'aria-controls': menuId,
                   'aria-activedescendant': `${menuId}-opt-${activeIdx}`,
                 }
-              : {})}
+              : extras.textareaProps)}
           />
           {emojiPicker && (
             <ComposerEmojiButton
@@ -456,9 +531,9 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
 
         {mention && filtered.length > 0 && (
           <div id={menuId} className="poolse-mention-menu" role="listbox" aria-label="Members">
-            {filtered.map((m, i) => (
+            {filtered.map((s, i) => (
               <div
-                key={m.id}
+                key={s.kind === 'member' ? s.member.id : `group:${s.group.handle}`}
                 id={`${menuId}-opt-${i}`}
                 role="option"
                 aria-selected={i === activeIdx}
@@ -468,13 +543,40 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
                   // Use mousedown so the textarea doesn't lose focus
                   // before the insert lands.
                   e.preventDefault();
-                  insertMention(m);
+                  insertSuggestion(s);
                 }}
               >
-                <MentionOption member={m} name={label(m.external_id)} />
+                {s.kind === 'member' ? (
+                  <MentionOption member={s.member} name={label(s.member.external_id)} />
+                ) : (
+                  <GroupOption group={s.group} />
+                )}
               </div>
             ))}
           </div>
+        )}
+        {extras.menu}
+        {dlp.pending && (
+          <DlpWarningDialog
+            outcome={dlp.pending.outcome}
+            onEdit={() => {
+              dlp.dismiss();
+              taRef.current?.focus();
+            }}
+            onSendAnyway={() => {
+              const retry = dlp.pending!.retry;
+              setSending(true);
+              void retry()
+                .then(() => {
+                  setValue('');
+                  selectedMentions.current = new Map();
+                  for (const it of uploads.ready) uploads.remove(it.localId);
+                  uploads.clearRejected();
+                })
+                .catch(() => undefined)
+                .finally(() => setSending(false));
+            }}
+          />
         )}
       </form>
     );
@@ -490,6 +592,20 @@ function MentionOption({ member, name }: { member: Membership; name: string }) {
       <Avatar src={profile?.avatarUrl ?? null} name={name} size="xs" agent={agent} />
       <span className="poolse-mention-menu__name">{name}</span>
       {agent ? <AgentBadge size="xs" /> : null}
+    </>
+  );
+}
+
+function GroupOption({ group }: { group: MentionGroup }) {
+  const meta = mentionGroupMeta(group);
+  return (
+    <>
+      <span className="poolse-mention-menu__group-icon" aria-hidden="true">
+        @
+      </span>
+      <span className="poolse-mention-menu__name">{group.name}</span>
+      <span className="poolse-mention-menu__handle">@{group.handle}</span>
+      {meta ? <span className="poolse-mention-menu__meta">{meta}</span> : null}
     </>
   );
 }

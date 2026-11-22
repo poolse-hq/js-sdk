@@ -1,5 +1,5 @@
 import type { Message, Uuid } from '@poolse/sdk';
-import { useMe, usePoolse, useThread } from '@poolse/react';
+import { useMe, usePoolse, useThread, useThreadFollow } from '@poolse/react';
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { EmptyState } from './EmptyState.js';
 import {
@@ -8,6 +8,7 @@ import {
   Modal,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   useWindowDimensions,
   View,
@@ -41,6 +42,10 @@ export interface ThreadViewProps {
   showPresence?: boolean;
   /** Link previews under replies. Defaults to `true`. */
   linkPreviews?: boolean;
+  /** A Follow / Following button in the header (MS19). Default `true`. */
+  follow?: boolean;
+  /** An "Also send to channel" switch above the composer (MS19). Default `true`; off in DMs. */
+  alsoSendToChannel?: boolean;
 }
 
 // Sheet covers the bottom 88% of the screen. The remaining 12% is the
@@ -74,6 +79,8 @@ export function ThreadView({
   density,
   showPresence = false,
   linkPreviews = true,
+  follow = true,
+  alsoSendToChannel = true,
 }: ThreadViewProps) {
   return (
     <Modal
@@ -101,6 +108,8 @@ export function ThreadView({
           {...(density ? { density } : {})}
           showPresence={showPresence}
           linkPreviews={linkPreviews}
+          follow={follow}
+          alsoSendToChannel={alsoSendToChannel}
         />
       </UploadProvider>
     </Modal>
@@ -118,6 +127,8 @@ function ThreadSheet({
   density,
   showPresence,
   linkPreviews,
+  follow,
+  alsoSendToChannel,
 }: {
   onClose: () => void;
   conversationId: Uuid;
@@ -129,8 +140,12 @@ function ThreadSheet({
   density?: ChatDensity;
   showPresence: boolean;
   linkPreviews: boolean;
+  follow: boolean;
+  alsoSendToChannel: boolean;
 }) {
   const theme = useTheme();
+  const followState = useThreadFollow(follow ? rootMessage.id : null);
+  const [alsoToChannel, setAlsoToChannel] = useState(false);
   const { me } = useMe();
   const chat = usePoolse();
   const meId = me?.id ?? null;
@@ -284,6 +299,37 @@ function ThreadSheet({
             >
               Thread
             </Text>
+            {follow && followState.following !== null ? (
+              <Pressable
+                onPress={() => void followState.setFollowing(!followState.following)}
+                style={[
+                  styles.followBtn,
+                  {
+                    backgroundColor: followState.following
+                      ? theme.colors.accentSoft
+                      : 'transparent',
+                    borderColor: followState.following ? 'transparent' : theme.colors.border,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: followState.following }}
+                accessibilityLabel={followState.following ? 'Following thread' : 'Follow thread'}
+                hitSlop={8}
+              >
+                <Text
+                  style={[
+                    styles.followText,
+                    {
+                      color: followState.following
+                        ? theme.colors.accentStrong
+                        : theme.colors.textMuted,
+                    },
+                  ]}
+                >
+                  {followState.following ? 'Following' : 'Follow'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
 
@@ -316,9 +362,26 @@ function ThreadSheet({
             />
           </View>
 
+          {alsoSendToChannel && !editingMessage ? (
+            <View style={styles.alsoRow}>
+              <Text style={[styles.alsoText, { color: theme.colors.textMuted }]}>
+                Also send to channel
+              </Text>
+              <Switch
+                value={alsoToChannel}
+                onValueChange={setAlsoToChannel}
+                accessibilityLabel="Also send to channel"
+              />
+            </View>
+          ) : null}
           <MessageComposer
             onSend={async (body, opts) => {
-              await sendReply({ body, ...opts });
+              await sendReply({
+                body,
+                ...opts,
+                ...(alsoSendToChannel && alsoToChannel ? { also_send_to_channel: true } : {}),
+              });
+              setAlsoToChannel(false);
             }}
             placeholder="Reply to thread…"
             attachments
@@ -378,6 +441,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  followBtn: {
+    marginLeft: 'auto',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  followText: { fontSize: 13, fontWeight: '600' },
+  alsoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
+  alsoText: { fontSize: 13 },
   title: {
     fontSize: 16,
     fontWeight: '600',

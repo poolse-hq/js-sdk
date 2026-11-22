@@ -6,6 +6,33 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ## [Unreleased]
 
+### Added — messaging plus (docs/MESSAGING_PLUS.md, PLATFORM_PLUS.md §1)
+
+- Scheduled send (MS1): `messages.schedule({body, send_at, …})`,
+  `chat.scheduledMessages.list / update / cancel / sendNow`,
+  `user.onScheduledMessage` (`scheduled_message:sent` / `failed`).
+- Polls (MS3): `type: "poll"` with `poll: {options, multiple, anonymous,
+closes_at}`; `messages.one(id).poll() / vote(optionIds) / closePoll()`;
+  `conversation.onPollUpdated`; helpers `isPollClosed`, `pollPercentages`,
+  `toggleVote`, `applyLocalVote`.
+- Pins and forward (MS13): `pin()`, `unpin()`, `forward({conversation_ids,
+comment})`, `messages.pins()`, `onPinChanged`; `Message.pinned_at`,
+  `forwarded_from`.
+- Thread follow and also-send-to-channel (MS19): `followState()`,
+  `setFollow(on)`; `also_send_to_channel` on sends, `Message.also_in_channel`.
+- `messages.catchUp({since, language})` (MS20), `translate(language)` (MS21).
+- Interactive blocks (IN4): `type: "blocks"` with `blocks`, `Block` types,
+  `action({action_id, value, values})`, `missingInputs`, `initialBlockValues`.
+- Files and media (MS15, MS16, MS18): `messages.files({kind, limit, before})`,
+  `attachments.versions / thumbnailUrl / previewUrl`, upload `purpose`
+  (`voice` / `video_message`), `durationMs`, `replacesAttachmentId`,
+  `opaque` (NT2); attachment `kind`, `transcript`, `summary`,
+  `has_thumbnail`, `has_preview`, `version`; `onAttachmentProcessed`;
+  `attachmentKind`, `mediaMessageOf`.
+- `dlp_acknowledged` on sends, edits, schedules and forwards (AD6).
+- `handNoteToAgent` (NT12): one decrypted note as a Markdown file on a
+  message to an agent.
+
 ### Added
 
 - Agents in calls (the server's docs/AGENTS_IN_CALLS.md; every path, field

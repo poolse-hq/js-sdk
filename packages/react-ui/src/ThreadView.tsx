@@ -8,7 +8,7 @@
 // "reply" on a message opens this in a right pane.
 
 import type { Message, Uuid } from '@poolse/sdk';
-import { useMe, useThread } from '@poolse/react';
+import { useMe, useThread, useThreadFollow } from '@poolse/react';
 import React, { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { MessageBubble } from './MessageBubble.js';
 import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
@@ -46,6 +46,16 @@ export interface ThreadViewProps {
   maxFileSize?: number;
   /** Accepted attachment types (see `MessageComposer`). */
   acceptFileTypes?: string[];
+  /**
+   * A Follow / Following button in the header (MS19): who gets a push for
+   * the thread's replies. Default `true`.
+   */
+  follow?: boolean;
+  /**
+   * An "Also send to channel" checkbox under the composer (MS19). Default
+   * `true`; turn it off in a direct message.
+   */
+  alsoSendToChannel?: boolean;
 }
 
 export function ThreadView({
@@ -61,8 +71,12 @@ export function ThreadView({
   linkPreviews = true,
   maxFileSize,
   acceptFileTypes,
+  follow = true,
+  alsoSendToChannel = true,
 }: ThreadViewProps) {
   const { me } = useMe();
+  const followState = useThreadFollow(follow ? rootMessage.id : null);
+  const [alsoToChannel, setAlsoToChannel] = useState(false);
   const {
     replies,
     loading,
@@ -197,6 +211,22 @@ export function ThreadView({
       {/* Header */}
       <header className="poolse-thread__header">
         <div className="poolse-thread__title">Thread</div>
+        {follow && followState.following !== null && (
+          <button
+            type="button"
+            className={`poolse-thread__follow${followState.following ? ' poolse-thread__follow--on' : ''}`}
+            aria-pressed={followState.following}
+            onClick={() => void followState.setFollowing(!followState.following)}
+            title={
+              followState.following
+                ? 'You get notified about new replies'
+                : 'Get notified about new replies'
+            }
+          >
+            <PoolseIcon name="bell" size={14} label={null} />
+            <span>{followState.following ? 'Following' : 'Follow'}</span>
+          </button>
+        )}
         {onClose && (
           <button
             ref={closeBtnRef}
@@ -241,18 +271,31 @@ export function ThreadView({
           into the same queue via composerRef. */}
       <MessageComposer
         ref={composerRef}
-        onSend={(body, opts) =>
-          sendReply({
+        onSend={async (body, opts) => {
+          await sendReply({
             body,
             ...(opts?.attachment_ids && opts.attachment_ids.length > 0
               ? { attachment_ids: opts.attachment_ids }
               : {}),
-          })
-        }
+            ...(opts?.dlp_acknowledged ? { dlp_acknowledged: true } : {}),
+            ...(alsoSendToChannel && alsoToChannel ? { also_send_to_channel: true } : {}),
+          });
+          setAlsoToChannel(false);
+        }}
         placeholder="Reply in thread…"
         {...(maxFileSize !== undefined ? { maxFileSize } : {})}
         {...(acceptFileTypes ? { acceptFileTypes } : {})}
       />
+      {alsoSendToChannel && (
+        <label className="poolse-thread__also">
+          <input
+            type="checkbox"
+            checked={alsoToChannel}
+            onChange={(e) => setAlsoToChannel(e.target.checked)}
+          />
+          <span>Also send to channel</span>
+        </label>
+      )}
 
       {dragActive && (
         <div className="poolse-conversation__drop-overlay" aria-hidden="true">

@@ -13,6 +13,17 @@ All notable changes to `@poolse/react` are documented here. Format follows
   `agentFor(userId)`, `said`), `useWhisper(callId)` (on/off, history and
   live hints, `latest`), `useEscalations({ callId? })` (pending and answered,
   `reply`, `agentNameOf`) and `useAgentBrief({ scheduledMeetingId | callId })`.
+- Composer helpers shared by both UI packages: `applyFormat`,
+  `FORMAT_ACTIONS`, `formatForShortcut` (MS4); `slashQuery`,
+  `filterSlashCommands`, `applySlashCommand`, `parseSlashCommand`,
+  `slashCommandsFromWorkspace` (IN3); `rankMentionGroups`,
+  `mentionGroupMeta` (MS9); `readDlpError` (AD6);
+  `MESSAGE_PLAYBACK_RATES`, `nextPlaybackRate`, `waveformBars` (MS15).
+- Custom emoji (MS10): `CustomEmojiProvider`, `useCustomEmoji`,
+  `customEmojiToken`, `parseCustomEmojiToken`, `findCustomEmoji`,
+  `searchCustomEmoji`.
+- Hooks: `usePoll`, `usePins`, `useThreadFollow`, `useCatchUp`,
+  `useTranslation`, `useScheduledMessages`, `useFiles`.
 
 - Live meeting hooks: `useStage`, `useQuestions`, `useBreakouts` (`auto`
   follows the split), `useLobby` (the conversation's, before a call too),

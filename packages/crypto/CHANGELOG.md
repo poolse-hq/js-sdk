@@ -4,6 +4,23 @@ All notable changes to `@poolse/crypto` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Workspace notes helpers on the NOTES.md contract: `sealNote`,
+  `openNoteMeta`, `openNoteContent`, `envelopeKeyVersion`,
+  `noteKeyForVersion` (NT8), `sealFolder` / `openFolderName`,
+  `shareWrapsFor` (NT5, NT16), `rotateNoteKey` and `shareExpired` (NT15),
+  the associated-data builders, `recoveryAuth`, `signForServer`,
+  `deviceApprovalMessage`, `recoveryReplaceMessage`, `signedDeviceGrant`
+  (NT10), `noteAsDocument` (NT12).
+- `NoteSearchIndex` and `searchWords`: on-device search for encrypted notes,
+  sealed under the account key (NT7).
+- `NoteOutbox` and `MemoryOutboxStorage`: the offline queue for notes with
+  conflict resolution, encrypted at rest (NT9).
+- Frozen test vectors for all of them (`NOTES_V1`).
+
 ## [3.9.0] - 2026-11-22
 
 ### Added

@@ -12,6 +12,12 @@
 // without tearing down the socket — `Poolse` holds a single instance
 // and consumers get back the same handle for the same conversation id.
 
+import type {
+  AttachmentProcessedEvent,
+  PinEvent,
+  PollUpdatedEvent,
+  ScheduledMessageEvent,
+} from '../messaging-plus.js';
 import { Socket } from 'phoenix';
 import type { Channel } from 'phoenix';
 
@@ -468,6 +474,26 @@ export class ConversationChannel {
    */
   onThreadUpdated(fn: (evt: ThreadUpdatedEvent) => void): Unsubscribe {
     return this.subscribe('thread:updated', fn as (p: unknown) => void);
+  }
+
+  /** A poll's votes changed or it was closed (`poll:updated`, MS3). */
+  onPollUpdated(fn: (evt: PollUpdatedEvent) => void): Unsubscribe {
+    return this.subscribe('poll:updated', fn as (p: unknown) => void);
+  }
+
+  /** A message was pinned (`pin:added`) or unpinned (`pin:removed`) — MS13. */
+  onPinChanged(fn: (evt: PinEvent & { pinned: boolean }) => void): Unsubscribe {
+    const a = this.subscribe('pin:added', (p) => fn({ ...(p as PinEvent), pinned: true }));
+    const b = this.subscribe('pin:removed', (p) => fn({ ...(p as PinEvent), pinned: false }));
+    return () => {
+      a();
+      b();
+    };
+  }
+
+  /** An attachment finished processing: transcript, summary, thumbnail (`attachment:processed`). */
+  onAttachmentProcessed(fn: (evt: AttachmentProcessedEvent) => void): Unsubscribe {
+    return this.subscribe('attachment:processed', fn as (p: unknown) => void);
   }
 
   /** An AI agent's reply as it's written (`message:stream`); see `MessageStreamEvent`. */
@@ -946,6 +972,22 @@ export class UserChannel {
   /** Ask for the unread totals now (`unread:totals`; 60/min per socket). */
   requestUnreadTotals(): Promise<UnreadTotalsEvent> {
     return this.request('unread:totals', {});
+  }
+
+  /** One of your scheduled messages went out (`sent`) or couldn't (`failed`, with `error`) — MS1. */
+  onScheduledMessage(
+    fn: (evt: ScheduledMessageEvent & { status: 'sent' | 'failed' }) => void,
+  ): Unsubscribe {
+    const a = this.subscribe('scheduled_message:sent', (p) =>
+      fn({ ...(p as ScheduledMessageEvent), status: 'sent' }),
+    );
+    const b = this.subscribe('scheduled_message:failed', (p) =>
+      fn({ ...(p as ScheduledMessageEvent), status: 'failed' }),
+    );
+    return () => {
+      a();
+      b();
+    };
   }
 
   /**

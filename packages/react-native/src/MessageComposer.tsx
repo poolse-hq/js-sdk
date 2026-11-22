@@ -8,8 +8,17 @@ import {
 } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AttachmentUploadInput, Message, Uuid } from '@poolse/sdk';
-import { useUser } from '@poolse/react';
+import {
+  applyFormat,
+  applySlashCommand,
+  readDlpError,
+  useUser,
+  type DlpOutcome,
+  type FormatKind,
+  type SlashCommand,
+} from '@poolse/react';
 
+import { CommandSuggestions, DlpWarningSheet, FormattingToolbar } from './ComposerExtras.js';
 import { EmojiPicker } from './EmojiPicker.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
@@ -25,10 +34,7 @@ export interface MessageComposerProps {
    * (resolved from the composer's upload queue). Awaited so the
    * composer disables until the send round-trips.
    */
-  onSend: (
-    body: string,
-    opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] },
-  ) => Promise<unknown> | void;
+  onSend: (body: string, opts?: ComposerSendOptions) => Promise<unknown> | void;
   /** Called on every keystroke. Hook to `useTyping().signalTyping`. */
   onTyping?: () => void;
   placeholder?: string;
@@ -76,6 +82,22 @@ export interface MessageComposerProps {
   emojiPicker?: boolean;
   /** Rendered above the input row — e.g. `<MentionInput>`'s suggestions. */
   accessory?: ReactNode;
+  /**
+   * Show the Markdown formatting toolbar (bold, italic, strike, code,
+   * link, quote, lists, checklist, code block, table) above the input.
+   * Default `false`. Pass an array to choose the buttons and their order.
+   */
+  formattingToolbar?: boolean | readonly FormatKind[];
+  /** Slash commands to suggest when the message starts with `/` (IN3). */
+  commands?: readonly SlashCommand[];
+}
+
+/** The second argument of `onSend`. */
+export interface ComposerSendOptions {
+  quoted_message_id?: Uuid;
+  attachment_ids?: Uuid[];
+  /** Set when the sender chose "Send anyway" on a data-loss-prevention warning (AD6). */
+  dlp_acknowledged?: true;
 }
 
 /**
@@ -113,6 +135,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       onSelectionChange,
       emojiPicker = true,
       accessory,
+      formattingToolbar = false,
+      commands,
     },
     ref,
   ) {
@@ -125,6 +149,12 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const [sending, setSending] = useState(false);
     const [emojiOpen, setEmojiOpen] = useState(false);
     const selectionRef = useRef<{ start: number; end: number } | null>(null);
+    const [cursor, setCursor] = useState(0);
+    const [dlp, setDlp] = useState<{
+      outcome: DlpOutcome;
+      body: string;
+      opts: ComposerSendOptions;
+    } | null>(null);
     const isEditing = !!editingMessage;
     const draftValue = valueProp ?? innerValue;
     const value = isEditing ? editValue : draftValue;
@@ -216,17 +246,22 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           const attachmentIds = readyAttachmentIds;
           setDraft('');
           upload.reset();
+          const opts: ComposerSendOptions = {
+            ...(replyId ? { quoted_message_id: replyId } : {}),
+            ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
+          };
           try {
-            await onSend(body, {
-              ...(replyId ? { quoted_message_id: replyId } : {}),
-              ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
-            });
+            await onSend(body, opts);
           } catch (err) {
+            // Data-loss prevention held it back: show why, keep the text.
+            const outcome = readDlpError(err);
+            if (outcome) setDlp({ outcome, body, opts });
             // Put the text back so nothing typed is lost (the parent
             // shows why it failed). Uncontrolled: only if nothing new
             // was typed meanwhile; controlled: the parent decides.
             if (!controlled) setInnerValue((now) => (now ? now : body));
-            console.warn('[poolse/composer] send failed:', err);
+            else if (outcome) onChangeTextRef.current?.(body);
+            if (!outcome) console.warn('[poolse/composer] send failed:', err);
           }
         }
       } catch (err) {
@@ -248,6 +283,35 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     // that space) and we collapse back to the base 10px padding to
     // avoid floating the composer above the keyboard.
     const paddingBottom = keyboardOpen ? 10 : Math.max(10, insets.bottom);
+
+    const applyText = (next: string, sel: { start: number; end: number }) => {
+      selectionRef.current = sel;
+      setValue(next);
+      setCursor(sel.end);
+      // After React applies the new text, move the native selection.
+      setTimeout(() => inputRef.current?.setSelection?.(sel.start, sel.end), 0);
+    };
+    const format = (kind: FormatKind) => {
+      const sel = selectionRef.current ?? { start: value.length, end: value.length };
+      const r = applyFormat(value, sel, kind);
+      applyText(r.value, r.selection);
+    };
+    const sendAnyway = async () => {
+      if (!dlp) return;
+      const { body, opts } = dlp;
+      setDlp(null);
+      setDraft('');
+      setSending(true);
+      try {
+        await onSend(body, { ...opts, dlp_acknowledged: true });
+      } catch (err) {
+        if (!controlled) setInnerValue((now) => (now ? now : body));
+        else onChangeTextRef.current?.(body);
+        console.warn('[poolse/composer] send failed:', err);
+      } finally {
+        setSending(false);
+      }
+    };
     return (
       <View
         style={[
@@ -275,6 +339,26 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         {attachments && !isEditing ? <UploadQueueStrip /> : null}
 
         {isEditing ? null : accessory}
+
+        {!isEditing && commands ? (
+          <CommandSuggestions
+            commands={commands}
+            text={value}
+            cursor={cursor}
+            onPick={(c) => {
+              const r = applySlashCommand(value, c.name);
+              applyText(r.value, r.selection);
+            }}
+          />
+        ) : null}
+
+        {formattingToolbar ? (
+          <FormattingToolbar
+            onFormat={format}
+            disabled={disabled || sending}
+            {...(Array.isArray(formattingToolbar) ? { actions: formattingToolbar } : {})}
+          />
+        ) : null}
 
         <View style={styles.row}>
           {attachments && onAttachPress ? (
@@ -310,6 +394,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             }}
             onSelectionChange={(e) => {
               selectionRef.current = e.nativeEvent.selection;
+              setCursor(e.nativeEvent.selection.end);
               if (!isEditing) onSelectionChange?.(e.nativeEvent.selection);
             }}
             placeholder={placeholder}
@@ -364,6 +449,17 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
               selectionRef.current = { start: cursor, end: cursor };
               setValue(next);
             }}
+          />
+        ) : null}
+
+        {dlp ? (
+          <DlpWarningSheet
+            outcome={dlp.outcome}
+            onEdit={() => {
+              setDlp(null);
+              inputRef.current?.focus();
+            }}
+            onSendAnyway={() => void sendAnyway()}
           />
         ) : null}
       </View>

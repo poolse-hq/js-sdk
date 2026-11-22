@@ -29,6 +29,7 @@ import type {
   AttachmentUploadResponse,
   Uuid,
 } from '../types.js';
+import type { AttachmentAssetUrl, AttachmentPurpose } from '../messaging-plus.js';
 
 /** Input accepted by {@link AttachmentsResource.upload}. */
 export interface AttachmentUploadInput {
@@ -49,6 +50,13 @@ export interface AttachmentUploadInput {
   byteSize: number;
   /** Surfaced in download UX so saved files keep a sensible name. */
   filename?: string;
+  /** `'voice'` (MS15) or `'video_message'` (MS16): transcribed (and summarised) after the send. */
+  purpose?: AttachmentPurpose;
+  /** The recording's length in ms. */
+  durationMs?: number;
+  /** Upload as a new version of this attachment (MS18). */
+  replacesAttachmentId?: Uuid; /** An opaque, already-encrypted file for a note (NT2): no name, type or processing. */
+  opaque?: boolean;
 }
 
 /** Options accepted by every attachment method. */
@@ -136,6 +144,10 @@ export class AttachmentsResource {
       content_type: input.contentType,
       byte_size: input.byteSize,
       ...(input.filename !== undefined ? { original_filename: input.filename } : {}),
+      ...(input.purpose ? { purpose: input.purpose } : {}),
+      ...(input.durationMs !== undefined ? { duration_ms: Math.round(input.durationMs) } : {}),
+      ...(input.replacesAttachmentId ? { replaces_attachment_id: input.replacesAttachmentId } : {}),
+      ...(input.opaque ? { opaque: true } : {}),
     };
 
     const { attachment, upload } = await this.requestUpload(req, opts);
@@ -172,6 +184,34 @@ export class AttachmentsResource {
   /** Returns a handle for further operations on a single attachment. */
   one(id: Uuid): AttachmentHandle {
     return new AttachmentHandle(this.client, id);
+  }
+
+  /** `GET /v1/attachments/:id/thumbnail-url` (MS18) — 404 when there is none (`has_thumbnail`). */
+  thumbnailUrl(id: Uuid, opts: AttachmentOptions = {}): Promise<AttachmentAssetUrl> {
+    return this.client.request<AttachmentAssetUrl>({
+      method: 'GET',
+      path: `/v1/attachments/${encodeURIComponent(id)}/thumbnail-url`,
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
+  }
+
+  /** `GET /v1/attachments/:id/preview-url` — a PDF preview of an Office file (`has_preview`). */
+  previewUrl(id: Uuid, opts: AttachmentOptions = {}): Promise<AttachmentAssetUrl> {
+    return this.client.request<AttachmentAssetUrl>({
+      method: 'GET',
+      path: `/v1/attachments/${encodeURIComponent(id)}/preview-url`,
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
+  }
+
+  /** `GET /v1/attachments/:id/versions` — every version, newest first. */
+  async versions(id: Uuid, opts: AttachmentOptions = {}): Promise<Attachment[]> {
+    const res = await this.client.request<{ data: Attachment[] }>({
+      method: 'GET',
+      path: `/v1/attachments/${encodeURIComponent(id)}/versions`,
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
+    return res.data;
   }
 }
 

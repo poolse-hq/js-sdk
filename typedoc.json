@@ -1,0 +1,25 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "poolse SDK",
+  "entryPointStrategy": "packages",
+  "entryPoints": [
+    "packages/theme",
+    "packages/crypto",
+    "packages/sdk",
+    "packages/react",
+    "packages/react-ui",
+    "packages/react-native"
+  ],
+  "packageOptions": {
+    "entryPoints": ["src/index.ts"],
+    "excludeInternal": true,
+    "excludePrivate": true,
+    "skipErrorChecking": true
+  },
+  "out": "docs/api",
+  "readme": "docs/API_REFERENCE.md",
+  "projectDocuments": ["EMBEDDING.md", "examples/README.md"],
+  "excludeExternals": true,
+  "validation": { "notExported": false, "invalidLink": false },
+  "treatWarningsAsErrors": false
+}
