@@ -654,7 +654,8 @@ final class CallCore {
   fileprivate func remoteJoined() { runtime.onRemoteJoined() }
   fileprivate func participants(_ p: [SnapshotParticipant]) {
     runtime.post { [weak self] in self?.roster = p }
-    runtime.onRemoteCount(p.count)
+    // An agent keeps nobody company: a call left with only agents is over.
+    runtime.onRemoteCount(p.filter { !$0.isAgent }.count)
     runtime.reemit()
   }
   fileprivate func route(_ r: String) {

@@ -14,9 +14,17 @@ public struct SnapshotParticipant: Equatable {
   /// Their link to the SFU: `good` | `poor` | `lost` (dropped, coming
   /// back — "Reconnecting…") | `unknown`.
   public var connectionQuality: String
+  /// An agent in the call (AGENTS_IN_CALLS.md §1): shown with the Agent
+  /// badge, named `agentLabel`, never counted as someone keeping the call up.
+  public var isAgent: Bool
+  /// "Scout" / "Jasir's agent" — the agent token's `label`.
+  public var agentLabel: String?
+  /// `notetaker` | `assistant` | `delegate`.
+  public var agentMode: String?
 
   public init(userId: String, externalId: String, speaking: Bool, muted: Bool, cameraOn: Bool,
-              connectionQuality: String = "unknown", screenSharing: Bool = false) {
+              connectionQuality: String = "unknown", screenSharing: Bool = false,
+              isAgent: Bool = false, agentLabel: String? = nil, agentMode: String? = nil) {
     self.userId = userId
     self.externalId = externalId
     self.speaking = speaking
@@ -24,11 +32,22 @@ public struct SnapshotParticipant: Equatable {
     self.cameraOn = cameraOn
     self.connectionQuality = connectionQuality
     self.screenSharing = screenSharing
+    self.isAgent = isAgent
+    self.agentLabel = agentLabel
+    self.agentMode = agentMode
   }
 
   public var dictionary: [String: Any] {
-    ["userId": userId, "externalId": externalId, "speaking": speaking, "muted": muted, "cameraOn": cameraOn,
-     "connectionQuality": connectionQuality, "screenSharing": screenSharing]
+    var d: [String: Any] = [
+      "userId": userId, "externalId": externalId, "speaking": speaking, "muted": muted, "cameraOn": cameraOn,
+      "connectionQuality": connectionQuality, "screenSharing": screenSharing,
+    ]
+    if isAgent {
+      d["isAgent"] = true
+      d["agentLabel"] = agentLabel ?? NSNull()
+      d["agentMode"] = agentMode ?? NSNull()
+    }
+    return d
   }
 }
 

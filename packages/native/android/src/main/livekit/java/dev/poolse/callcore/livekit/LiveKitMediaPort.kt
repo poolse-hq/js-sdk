@@ -592,7 +592,7 @@ class LiveKitMediaPort(
         }
         // The transcript assistant or the recorder joining is nobody answering.
         is RoomEvent.ParticipantConnected -> {
-          if (!isService(event.participant)) events.onRemoteJoined()
+          if (!isService(event.participant) && !isAgent(event.participant)) events.onRemoteJoined()
           emit(room)
           refreshVideo()
         }
@@ -639,9 +639,13 @@ class LiveKitMediaPort(
    * The remote PEOPLE: poolse's transcript assistant and LiveKit Egress's
    * recorder are in the room but are not someone in the call — never in
    * the roster, the count that ends a call left alone, or a video tile.
-   * Phone (SIP) participants are people.
+   * Agents are listed separately ([agents]). Phone (SIP) participants are people.
    */
-  private fun people(r: Room): List<RemoteParticipant> = r.remoteParticipants.values.filterNot(::isService)
+  private fun people(r: Room): List<RemoteParticipant> =
+    r.remoteParticipants.values.filterNot { isService(it) || isAgent(it) }
+
+  private fun isAgent(p: Participant): Boolean =
+    p.metadata?.let { runCatching { JSONObject(it).optBoolean("agent", false) }.getOrNull() } == true
 
   private fun isService(p: Participant): Boolean {
     val kind = when (p.kind) {
@@ -653,10 +657,34 @@ class LiveKitMediaPort(
     return ServiceParticipants.isService(p.identity?.value ?: "", kind)
   }
 
+  /**
+   * Agents invited into the call (AGENTS_IN_CALLS.md §1): kind AGENT like
+   * poolse's room assistant, but marked `agent: true` in their token
+   * metadata — listed (with the badge), unlike the assistant and recorder.
+   */
+  private fun agents(r: Room): List<Pair<RemoteParticipant, JSONObject>> =
+    r.remoteParticipants.values.mapNotNull { p ->
+      val m = p.metadata?.let { runCatching { JSONObject(it) }.getOrNull() }
+      if (m != null && m.optBoolean("agent", false)) p to m else null
+    }
+
   /** The REMOTE roster — the local participant is never included. */
   private fun emit(room: Room) {
+    val agentRows = agents(room).map { (p, m) ->
+      val identity = p.identity?.value ?: ""
+      MediaParticipant(
+        identity = identity,
+        speaking = p.isSpeaking,
+        muted = !p.isMicrophoneEnabled(),
+        connectionQuality = wire(p.connectionQuality),
+        externalId = externalIdOf(p) ?: identity,
+        isAgent = true,
+        agentLabel = m.optString("label", "").ifEmpty { null } ?: p.name?.ifEmpty { null },
+        agentMode = m.optString("mode", "").ifEmpty { null },
+      )
+    }
     events.onParticipants(
-      people(room).map {
+      agentRows.let { agentList -> people(room).map {
         val identity = it.identity?.value ?: ""
         MediaParticipant(
           identity = identity,
@@ -669,7 +697,7 @@ class LiveKitMediaPort(
           connectionQuality = wire(it.connectionQuality),
           externalId = externalIdOf(it) ?: identity,
         )
-      },
+      } + agentList },
     )
   }
 

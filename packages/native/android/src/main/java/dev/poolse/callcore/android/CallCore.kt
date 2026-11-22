@@ -372,15 +372,20 @@ class CallCore private constructor(context: Context) {
       conversationName = conversationName,
       kind = callKind,
       participants = roster.map {
-        mapOf(
-          "userId" to it.identity,
-          "externalId" to it.externalId,
-          "speaking" to it.speaking,
-          "muted" to it.muted,
-          "cameraOn" to it.cameraOn,
-          "screenSharing" to it.screenSharing,
-          "connectionQuality" to it.connectionQuality,
-        )
+        buildMap<String, Any> {
+          put("userId", it.identity)
+          put("externalId", it.externalId)
+          put("speaking", it.speaking)
+          put("muted", it.muted)
+          put("cameraOn", it.cameraOn)
+          put("screenSharing", it.screenSharing)
+          put("connectionQuality", it.connectionQuality)
+          if (it.isAgent) {
+            put("isAgent", true)
+            it.agentLabel?.let { label -> put("agentLabel", label) }
+            it.agentMode?.let { mode -> put("agentMode", mode) }
+          }
+        }
       },
       audioRoute = audioRoute ?: if (loud(state)) "speaker" else "earpiece",
       audioOutputs = audioOutputs.map { mapOf("id" to it.id, "kind" to it.kind, "name" to it.name) },
@@ -514,7 +519,8 @@ class CallCore private constructor(context: Context) {
     override fun onRemoteJoined() = runtime.onRemoteJoined()
     override fun onParticipants(participants: List<MediaParticipant>) {
       runtime.post { roster = participants }
-      runtime.onRemoteCount(participants.size)
+      // An agent keeps nobody company: a call left with only agents is over.
+      runtime.onRemoteCount(participants.count { !it.isAgent })
       runtime.reemit()
     }
     override fun onAudioRoute(route: String) {
@@ -838,4 +844,13 @@ data class MediaParticipant(
   val externalId: String = identity,
   /** Their link to the SFU: `good` | `poor` | `lost` (dropped, coming back) | `unknown`. */
   val connectionQuality: String = "unknown",
+  /**
+   * An agent in the call (AGENTS_IN_CALLS.md §1): shown with the Agent
+   * badge, named [agentLabel], never counted as someone keeping the call up.
+   */
+  val isAgent: Boolean = false,
+  /** "Scout" / "Jasir's agent" — the agent token's `label`. */
+  val agentLabel: String? = null,
+  /** `notetaker` | `assistant` | `delegate`. */
+  val agentMode: String? = null,
 )

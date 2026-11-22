@@ -905,10 +905,11 @@ final class LiveKitMediaPort: NSObject, MediaPort {
   /// The remote PEOPLE: poolse's transcript assistant and LiveKit Egress's
   /// recorder are in the room but are not someone in the call — never in
   /// the roster, the count that ends a call left alone, or a video tile.
-  /// Phone (SIP) participants are people.
+  /// Agents are listed separately (`agents`). Phone (SIP) participants are people.
   private func people(_ r: Room) -> [RemoteParticipant] {
     r.remoteParticipants.values.filter { p in
-      !ServiceParticipants.isService(identity: p.identity?.stringValue ?? "", kind: Self.kindName(p.kind))
+      !ServiceParticipants.isService(identity: p.identity?.stringValue ?? "", kind: Self.kindName(p.kind)) &&
+        Self.metadata(p)?["agent"] as? Bool != true
     }
   }
 
@@ -920,8 +921,39 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     return nil
   }
 
+  /// Agents invited into the call (AGENTS_IN_CALLS.md §1): kind AGENT like
+  /// poolse's room assistant, but marked `agent: true` in their token
+  /// metadata — listed (with the badge), unlike the assistant and recorder.
+  private func agents(_ r: Room) -> [(RemoteParticipant, [String: Any])] {
+    r.remoteParticipants.values.compactMap { p -> (RemoteParticipant, [String: Any])? in
+      guard let m = Self.metadata(p), m["agent"] as? Bool == true else { return nil }
+      return (p, m)
+    }
+  }
+
+  static func metadata(_ p: Participant) -> [String: Any]? {
+    guard let m = p.metadata, let d = m.data(using: .utf8) else { return nil }
+    return (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
+  }
+
   /// The REMOTE roster — the local participant is never included.
   private func emit(_ r: Room) {
+    let agentRows = agents(r).map { entry -> SnapshotParticipant in
+      let (p, m) = entry
+      let identity = p.identity?.stringValue ?? ""
+      return SnapshotParticipant(
+        userId: identity,
+        externalId: externalId(p) ?? identity,
+        speaking: p.isSpeaking,
+        muted: !p.isMicrophoneEnabled(),
+        cameraOn: false,
+        connectionQuality: Self.wire(p.connectionQuality),
+        screenSharing: false,
+        isAgent: true,
+        agentLabel: (m["label"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? p.name,
+        agentMode: m["mode"] as? String
+      )
+    }
     let roster = people(r).map { p -> SnapshotParticipant in
       let identity = p.identity?.stringValue ?? ""
       return SnapshotParticipant(
@@ -934,7 +966,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
         screenSharing: remoteScreen(p) != nil
       )
     }
-    events?.onParticipants(roster)
+    events?.onParticipants(roster + agentRows)
   }
 
   /// The host's own user id, if the server put it in attributes/metadata.
