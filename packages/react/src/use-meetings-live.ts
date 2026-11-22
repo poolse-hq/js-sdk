@@ -10,11 +10,15 @@ import type {
   BreakoutPlan,
   BreakoutRoom,
   BreakoutSession,
+  CallMeeting,
   CallQualityReport,
   CallReaction,
   CallRoom,
-  LiveCall,
   LiveMeetingsListeners,
+  MeetingAttendee,
+  MyRoom,
+  ParticipantQuality,
+  RoomPresenceEntry,
   LobbyState,
   MarkedMoment,
   OpenWhiteboard,
@@ -34,12 +38,14 @@ import {
   CallReactions,
   ScreenAnnotations,
   agendaOverrunMs,
+  meetingNameOf,
   openWhiteboard,
   sortQuestions,
   stageRoleOf,
 } from '@poolse/sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useMe } from './use-me.js';
 import { usePoolse } from './provider.js';
 
 const asError = (err: unknown) => (err instanceof Error ? err : new Error(String(err)));
@@ -65,6 +71,7 @@ function useLiveValue<T>(
   callId: string | null,
   load: (chat: Poolse, callId: string) => Promise<T>,
   listen: (set: (fn: (prev: T | null) => T | null) => void) => LiveMeetingsListeners,
+  subscribeOpts: { selfUserId?: string | null } = {},
 ) {
   const chat = usePoolse();
   const [value, setValue] = useState<T | null>(null);
@@ -75,6 +82,7 @@ function useLiveValue<T>(
   const listenRef = useRef(listen);
   listenRef.current = listen;
   const seq = useRef(0);
+  const selfUserId = subscribeOpts.selfUserId ?? null;
 
   const refresh = useCallback(() => {
     if (!callId) return;
@@ -101,13 +109,14 @@ function useLiveValue<T>(
         seq.current++; // newer than a read in flight
         setValue((prev) => fn(prev));
       }),
+      selfUserId ? { selfUserId } : {},
     );
     const offStatus = onReconnect(chat, refresh);
     return () => {
       off();
       offStatus();
     };
-  }, [chat, conversationId, callId, refresh]);
+  }, [chat, conversationId, callId, refresh, selfUserId]);
 
   const run = useCallback(
     async <R>(fn: () => Promise<R>, apply?: (r: R) => void): Promise<R | null> => {
@@ -148,6 +157,8 @@ export interface UseStage {
   lowerHand: (userId?: string) => Promise<boolean>;
   /** Moderator: bring up (`speaker`), send back (`audience`), hand over (`moderator`). */
   setRole: (userId: string, role: StageRole) => Promise<boolean>;
+  /** Moderator: turn stage mode on (`stage`) or off (`meeting`). */
+  setMode: (mode: 'stage' | 'meeting') => Promise<boolean>;
   error: Error | null;
   pending: boolean;
 }
@@ -163,6 +174,7 @@ export function useStage(
     callId,
     (c, id) => c.live.stage.get(id),
     (set) => ({ onStage: (s) => set(() => s) }),
+    { selfUserId: selfUserId ?? null },
   );
   const ok = (r: unknown) => r !== null;
   const raiseHand = useCallback(
@@ -179,6 +191,11 @@ export function useStage(
       callId ? ok(await run(() => chat.live.stage.setRole(callId, userId, role), setValue)) : false,
     [chat, callId, run, setValue],
   );
+  const setMode = useCallback(
+    async (mode: 'stage' | 'meeting') =>
+      callId ? ok(await run(() => chat.live.stage.setMode(callId, mode), setValue)) : false,
+    [chat, callId, run, setValue],
+  );
   const roleOf = useCallback((userId: string) => stageRoleOf(value, userId), [value]);
   const myRole = value?.myRole ?? 'speaker';
   return {
@@ -190,6 +207,7 @@ export function useStage(
     raiseHand,
     lowerHand,
     setRole,
+    setMode,
     error,
     pending,
   };
@@ -298,8 +316,24 @@ export interface UseBreakouts {
   pending: boolean;
 }
 
+export interface UseBreakoutsOptions {
+  /**
+   * Follow the split by yourself (MEETINGS.md §5): when you get a room,
+   * join it and hand its session to `onJoinRoom` (connect to it, then
+   * leave the main room's media — don't hang up); when the split closes,
+   * return and hand the main room's session to `onReturn`.
+   */
+  auto?: boolean;
+  onJoinRoom?: (session: RoomSession, room: BreakoutRoom) => void;
+  onReturn?: (session: RoomSession) => void;
+}
+
 /** Breakout rooms of a call (CL5), with a ticking countdown. */
-export function useBreakouts(conversationId: string | null, callId: string | null): UseBreakouts {
+export function useBreakouts(
+  conversationId: string | null,
+  callId: string | null,
+  opts: UseBreakoutsOptions = {},
+): UseBreakouts {
   const { chat, value, setValue, error, pending, run } = useLiveValue<BreakoutSession | null>(
     conversationId,
     callId,
@@ -337,6 +371,31 @@ export function useBreakouts(conversationId: string | null, callId: string | nul
     () => (callId ? run(() => chat.live.breakouts.returnToMain(callId)) : Promise.resolve(null)),
     [chat, callId, run],
   );
+  // Following the split: join the assigned room, come back on close.
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+  const inRoom = useRef<string | null>(null);
+  const myRoomId = session?.status === 'open' ? session.myRoomId : null;
+  useEffect(() => {
+    if (!optsRef.current.auto || !callId) return;
+    if (myRoomId && inRoom.current !== myRoomId) {
+      const room = session?.rooms.find((r) => r.id === myRoomId);
+      inRoom.current = myRoomId;
+      void chat.live.breakouts
+        .join(myRoomId)
+        .then((s) => room && optsRef.current.onJoinRoom?.(s, room))
+        .catch(() => {
+          inRoom.current = null;
+        });
+    } else if (!session && inRoom.current) {
+      inRoom.current = null;
+      void chat.live.breakouts
+        .returnToMain(callId)
+        .then((s) => optsRef.current.onReturn?.(s))
+        .catch(() => {});
+    }
+  }, [chat, callId, myRoomId, session]);
+
   return {
     session,
     myRoom: session?.rooms.find((r) => r.id === session.myRoomId) ?? null,
@@ -355,45 +414,90 @@ export function useBreakouts(conversationId: string | null, callId: string | nul
 export interface UseLobby {
   lobby: LobbyState | null;
   waitingCount: number;
-  admit: (entryId: string) => Promise<boolean>;
-  deny: (entryId: string) => Promise<boolean>;
+  admit: (guestId: string) => Promise<boolean>;
+  deny: (guestId: string) => Promise<boolean>;
   admitAll: () => Promise<boolean>;
   error: Error | null;
   pending: boolean;
 }
 
-/** Who is waiting to be let in (CL10), for members who may admit. */
-export function useLobby(conversationId: string | null, callId: string | null): UseLobby {
-  const { chat, value, setValue, error, pending, run } = useLiveValue<LobbyState>(
-    conversationId,
-    callId,
-    (c, id) => c.live.lobby.get(id),
-    (set) => ({ onLobby: (l) => set(() => l) }),
+/**
+ * Who is waiting to be let in (CL10), for members. The lobby is the
+ * conversation's: guests can wait before the call starts (`callId`
+ * null), and an admitted guest joins once one is live.
+ */
+export function useLobby(conversationId: string | null, callId: string | null = null): UseLobby {
+  const chat = usePoolse();
+  const [lobby, setLobby] = useState<LobbyState | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [pending, setPending] = useState(false);
+  const seq = useRef(0);
+  const target = useMemo(
+    () => (conversationId ? { conversationId, callId } : null),
+    [conversationId, callId],
   );
-  const act = useCallback(
-    async (fn: () => Promise<LobbyState>) => (await run(fn, setValue)) !== null,
-    [run, setValue],
+
+  const refresh = useCallback(() => {
+    if (!target) return;
+    const mine = ++seq.current;
+    chat.live.lobby
+      .get(target)
+      .then((l) => {
+        if (mine === seq.current) setLobby(l);
+      })
+      .catch((err) => {
+        if (mine === seq.current) setError(asError(err));
+      });
+  }, [chat, target]);
+
+  useEffect(() => {
+    setLobby(null);
+    setError(null);
+    if (!target) return;
+    refresh();
+    // Lobby events belong to the conversation: the call id doesn't filter them.
+    const off = chat.live.subscribe(target.conversationId, target.callId ?? '', {
+      onLobby: (l) => {
+        seq.current++;
+        setLobby(l);
+      },
+    });
+    const offStatus = onReconnect(chat, refresh);
+    return () => {
+      off();
+      offStatus();
+    };
+  }, [chat, target, refresh]);
+
+  const act = useCallback(async (fn: () => Promise<LobbyState>) => {
+    setPending(true);
+    setError(null);
+    try {
+      const l = await fn();
+      seq.current++;
+      setLobby(l);
+      return true;
+    } catch (err) {
+      setError(asError(err));
+      return false;
+    } finally {
+      setPending(false);
+    }
+  }, []);
+  const admit = useCallback(
+    (id: string) =>
+      target ? act(() => chat.live.lobby.admit(target, id)) : Promise.resolve(false),
+    [chat, target, act],
   );
-  return {
-    lobby: value,
-    waitingCount: value?.waiting.length ?? 0,
-    admit: useCallback(
-      (id: string) =>
-        callId ? act(() => chat.live.lobby.admit(callId, id)) : Promise.resolve(false),
-      [chat, callId, act],
-    ),
-    deny: useCallback(
-      (id: string) =>
-        callId ? act(() => chat.live.lobby.deny(callId, id)) : Promise.resolve(false),
-      [chat, callId, act],
-    ),
-    admitAll: useCallback(
-      () => (callId ? act(() => chat.live.lobby.admitAll(callId)) : Promise.resolve(false)),
-      [chat, callId, act],
-    ),
-    error,
-    pending,
-  };
+  const deny = useCallback(
+    (id: string) => (target ? act(() => chat.live.lobby.deny(target, id)) : Promise.resolve(false)),
+    [chat, target, act],
+  );
+  const admitAll = useCallback(
+    () => (target ? act(() => chat.live.lobby.admitAll(target)) : Promise.resolve(false)),
+    [chat, target, act],
+  );
+  return { lobby, waitingCount: lobby?.waiting.length ?? 0, admit, deny, admitAll, error, pending };
 }
 
 // ── moments (CL14) ───────────────────────────────────────────────────────
@@ -458,7 +562,7 @@ export function useAgenda(conversationId: string | null, callId: string | null):
     (c, id) => c.live.agenda.get(id),
     (set) => ({
       onAgenda: (a) => set(() => a),
-      onAgendaOvertime: (o) => setOvertime(o),
+      onAgendaOvertime: (o) => setOvertime({ itemId: o.itemId, overByMs: o.overByMs }),
     }),
   );
   const agenda = value ?? null;
@@ -578,24 +682,129 @@ export function useScreenAnnotations(
 
 // ── call quality (CL15) ──────────────────────────────────────────────────
 
-/** Your own link in plain words, polled while mounted (CL15). null before the first reading. */
+/**
+ * Your own link in plain words, polled while mounted (CL15). null before
+ * the first reading. With `callId` each change is also reported to the
+ * server (`POST /calls/:id/quality`, throttled), which tells the others.
+ */
 export function useCallQuality(
   room: CallRoom | null,
-  opts: { intervalMs?: number } = {},
+  opts: { intervalMs?: number; callId?: string | null } = {},
 ): CallQualityReport | null {
+  const chat = usePoolse();
   const [report, setReport] = useState<CallQualityReport | null>(null);
   const intervalMs = opts.intervalMs;
+  const callId = opts.callId ?? null;
   useEffect(() => {
     setReport(null);
     if (!room) return;
-    const monitor = new CallQualityMonitor(room, intervalMs ? { intervalMs } : {});
+    const monitor = new CallQualityMonitor(room, {
+      ...(intervalMs ? { intervalMs } : {}),
+      ...(callId ? { report: (body) => chat.live.quality.report(callId, body) } : {}),
+    });
     const off = monitor.subscribe(setReport);
     return () => {
       off();
       monitor.stop();
     };
-  }, [room, intervalMs]);
+  }, [chat, room, intervalMs, callId]);
   return report;
+}
+
+// ── the call's meeting snapshot, captions (CL13) ─────────────────────────
+
+export interface UseCallMeeting {
+  meeting: CallMeeting | null;
+  /** Guests and phones in the call, named. */
+  attendees: MeetingAttendee[];
+  /** Everyone's reported link, by identity. */
+  quality: Record<string, ParticipantQuality>;
+  /**
+   * A name for any identity in the call: a guest's or phone's from the
+   * roster, a member's from `nameFor`, else null — never the id.
+   */
+  nameOf: (
+    identity: string,
+    nameFor?: (userId: string) => string | null | undefined,
+  ) => string | null;
+  refresh: () => void;
+}
+
+/** The call snapshot's `meeting` (GET /calls/:id/meeting), kept live by its events. */
+export function useCallMeeting(
+  conversationId: string | null,
+  callId: string | null,
+): UseCallMeeting {
+  const { value, refresh } = useLiveValue<CallMeeting>(
+    conversationId,
+    callId,
+    (c, id) => c.live.meeting(id),
+    (set) => ({
+      onAttendees: (attendees) => set((m) => (m ? { ...m, attendees } : m)),
+      onQuality: (q) => set((m) => (m ? { ...m, quality: { ...m.quality, [q.identity]: q } } : m)),
+      onCaptions: (c) => set((m) => (m ? { ...m, captionsUserIds: c.userIds } : m)),
+      onBreakouts: (b) =>
+        set((m) => (m ? { ...m, breakout: b.status === 'closed' ? null : b } : m)),
+      onLobby: (l) => set((m) => (m ? { ...m, lobbyWaiting: l.waiting.length } : m)),
+      onStage: (s) =>
+        set((m) => (m ? { ...m, stage: s.mode === 'stage', roles: s.roles, hands: s.hands } : m)),
+    }),
+  );
+  const attendees = useMemo(() => value?.attendees ?? [], [value]);
+  const nameOf = useCallback(
+    (identity: string, nameFor?: (userId: string) => string | null | undefined) => {
+      const a = attendees.find((x) => x.identity === identity);
+      if (a) return a.name;
+      return meetingNameOf(identity, nameFor?.(identity) ?? null);
+    },
+    [attendees],
+  );
+  return { meeting: value, attendees, quality: value?.quality ?? {}, nameOf, refresh };
+}
+
+export interface UseCaptions {
+  /** Your captions are on. */
+  on: boolean;
+  /** Who has captions on. */
+  userIds: string[];
+  setOn: (on: boolean) => Promise<boolean>;
+  toggle: () => Promise<boolean>;
+  error: Error | null;
+  pending: boolean;
+}
+
+/**
+ * Your captions toggle (CL13): `PUT /calls/:id/captions`. While anyone
+ * has them on a live transcript runs — show it with `useLiveTranscript`
+ * and `CaptionsOverlay`. Errors: `captions_disabled`,
+ * `transcription_unavailable`, `transcript_stopped`.
+ */
+export function useCaptions(
+  conversationId: string | null,
+  callId: string | null,
+  selfUserId: string | null | undefined,
+): UseCaptions {
+  const { chat, value, setValue, error, pending, run } = useLiveValue<string[]>(
+    conversationId,
+    callId,
+    async (c, id) => (await c.live.meeting(id)).captionsUserIds,
+    (set) => ({ onCaptions: (cap) => set(() => cap.userIds) }),
+  );
+  const userIds = useMemo(() => value ?? [], [value]);
+  const on = !!selfUserId && userIds.includes(selfUserId);
+  const setOn = useCallback(
+    async (next: boolean) => {
+      if (!callId) return false;
+      const r = await run(
+        () => chat.live.captions.set(callId, next),
+        (cap) => setValue(() => cap.userIds),
+      );
+      return r !== null;
+    },
+    [chat, callId, run, setValue],
+  );
+  const toggle = useCallback(() => setOn(!on), [setOn, on]);
+  return { on, userIds, setOn, toggle, error, pending };
 }
 
 // ── whiteboard (CL12) ────────────────────────────────────────────────────
@@ -655,66 +864,57 @@ export function useWhiteboard(
 
 // ── room presence (CL2) ──────────────────────────────────────────────────
 
+export interface UseRoomPresence {
+  /** Your rooms by name (`GET /me/rooms`), each with who's in. */
+  rooms: MyRoom[];
+  /** Conversation id → who's in (drop-in calls anywhere you're a member, rooms or huddles). */
+  presence: Record<string, RoomPresenceEntry>;
+  refresh: () => void;
+}
+
 /**
- * Who is in each room right now, for a sidebar (CL2): conversation id →
- * the live call (with `participants`) or null when the room is empty.
- * Reads each once, follows `call:*` events, re-reads after a reconnect.
+ * Who is in each room right now, for a sidebar (CL2): reads
+ * `GET /me/rooms`, then follows `room:participants` on your user topic
+ * (every drop-in call of every conversation you're in — no conversation
+ * needs to be open). Re-reads after a reconnect.
  */
-export function useRoomPresence(
-  conversationIds: readonly string[],
-): Record<string, LiveCall | null> {
+export function useRoomPresence(): UseRoomPresence {
   const chat = usePoolse();
-  const [map, setMap] = useState<Record<string, LiveCall | null>>({});
-  const key = [...conversationIds].sort().join(',');
+  const { me } = useMe();
+  const meId = me?.id ?? null;
+  const [rooms, setRooms] = useState<MyRoom[]>([]);
+  const [presence, setPresence] = useState<Record<string, RoomPresenceEntry>>({});
+  const refresh = useCallback(() => {
+    chat.live
+      .rooms()
+      .then((list) => {
+        setRooms(list);
+        setPresence((p) => {
+          const next = { ...p };
+          for (const r of list) next[r.conversationId] = r.presence;
+          return next;
+        });
+      })
+      .catch(() => {});
+  }, [chat]);
   useEffect(() => {
-    const ids = key ? key.split(',') : [];
-    let cancelled = false;
-    setMap((m) => Object.fromEntries(ids.map((id) => [id, m[id] ?? null])));
-    const set = (id: string, call: LiveCall | null) =>
-      !cancelled && setMap((m) => ({ ...m, [id]: call }));
-    const read = (id: string) =>
-      chat.liveCalls
-        .get(id)
-        .then((c) => set(id, c))
-        .catch(() => {});
-    const offs: Array<() => void> = [];
-    for (const id of ids) {
-      void read(id);
-      const conv = chat.realtime.conversation(id);
-      offs.push(conv.onCallStarted((evt) => set(id, evt.call)));
-      offs.push(
-        conv.onCallParticipants((evt) => {
-          setMap((m) => {
-            const c = m[id];
-            if (!c || c.id !== evt.call_id) {
-              void read(id);
-              return m;
-            }
-            const known = new Map(c.participants.map((p) => [p.user_id, p]));
-            return {
-              ...m,
-              [id]: {
-                ...c,
-                participants: evt.participants.map(
-                  (uid) =>
-                    known.get(uid) ?? { user_id: uid, external_id: null, display_name: null },
-                ),
-              },
-            };
-          });
-        }),
-      );
-      offs.push(
-        conv.onCallFinished((evt) =>
-          setMap((m) => (m[id]?.id === evt.call_id ? { ...m, [id]: null } : m)),
-        ),
-      );
-    }
-    offs.push(onReconnect(chat, () => ids.forEach((id) => void read(id))));
+    if (!meId) return;
+    refresh();
+    const off = chat.live.subscribeUser(meId, {
+      onRoomParticipants: (r) => {
+        setPresence((p) => ({ ...p, [r.conversationId]: r }));
+        setRooms((list) =>
+          list.map((room) =>
+            room.conversationId === r.conversationId ? { ...room, presence: r } : room,
+          ),
+        );
+      },
+    });
+    const offStatus = onReconnect(chat, refresh);
     return () => {
-      cancelled = true;
-      offs.forEach((off) => off());
+      off();
+      offStatus();
     };
-  }, [chat, key]);
-  return map;
+  }, [chat, meId, refresh]);
+  return { rooms, presence, refresh };
 }
