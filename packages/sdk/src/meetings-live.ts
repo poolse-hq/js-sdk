@@ -24,6 +24,7 @@
 // the `*FromWire` mappers. Unknown or missing fields map to null / empty
 // rather than throwing.
 
+import { callAgentsFromWire, type CallAgent } from './call-agents.js';
 import type { RestClient } from './rest-client.js';
 import type { Message } from './types.js';
 import type { PoolseRealtime } from './realtime/realtime.js';
@@ -1084,6 +1085,8 @@ export interface CallMeeting {
   /** Who has captions on. */
   captionsUserIds: string[];
   attendees: MeetingAttendee[];
+  /** Agents in the call (AG13): show them with the Agent badge and their `label`. */
+  agents: CallAgent[];
   quality: Record<string, ParticipantQuality>;
   breakout: BreakoutSession | null;
   scheduledMeeting: {
@@ -1160,6 +1163,7 @@ export function callMeetingFromWire(raw: unknown): CallMeeting | null {
     attendees: arr(o.attendees)
       .map(attendeeFromWire)
       .filter((a): a is MeetingAttendee => !!a),
+    agents: callAgentsFromWire(o.agents),
     quality,
     breakout: breakoutsFromWire(o.breakout),
     scheduledMeeting:

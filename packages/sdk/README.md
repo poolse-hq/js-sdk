@@ -324,6 +324,48 @@ gives a `WhiteboardModel` on a Y.Doc synced over the doc relay (Yjs passed in).
 Meeting cards: `meetingCardOf(message)` reads the `meeting_card` body;
 the body has no `my_rsvp` — `rsvpOf(card, me.id)` finds yours.
 
+## Agents in calls
+
+Agents join calls as visible participants (the server's
+docs/AGENTS_IN_CALLS.md). An agent's LiveKit identity is its poolse user
+id; its token metadata says `agent: true`, its `mode` and `label`:
+
+```ts
+await poolse.callAgents.invite(callId, agentId, 'notetaker'); // or 'assistant'
+await poolse.callAgents.setMode(callId, agentId, 'assistant');
+await poolse.callAgents.remove(callId, agentId);
+const off = poolse.callAgents.subscribe(conversationId, callId, { onAgents, onSaid });
+
+// A tile / roster row: the Agent badge, its label, "Taking notes".
+const agent = callAgentOfParticipant(participant, agents); // null for a person
+if (agent) render(agent.label, callAgentStateLabel(callAgentStateOf(agent)));
+```
+
+`CallRoom.getParticipants()` lists agents (last, with `metadata`); they
+never keep a call alive. Guests see them too (`meeting.agents` of their
+session). Inviting an agent starts the call's transcript (the usual
+notice and consent gate).
+
+Whisper (only you see it): `poolse.callAgents.whisper.set(callId, true)`,
+`.get(callId)` for the history, `.subscribe(me.id, callId, { onHint,
+onChanged })`.
+
+Attending for you: write a brief with `poolse.callAgents.briefs.create({
+scheduledMeetingId | callId, text, rules })`. Its questions are
+`poolse.escalations` (`list`, `reply(id, { decision: 'approve' })` or
+`{ answer: 'Only 5%' }`, `subscribe`). From a push without a session:
+
+```ts
+const actions = createNotificationActions({ apiUrl });
+await actions.escalation({
+  escalationId: data.escalation_id,
+  token: data.reply_token,
+  decision: 'approve',
+});
+```
+
+`@poolse/native` does this itself from the lock screen.
+
 ## Several workspaces, offline, speed
 
 Each signed-in workspace is its own `Poolse` instance. Nothing is shared at

@@ -16,6 +16,7 @@ import type {
   LiveKitTrack,
   TrackProcessorsModule,
 } from './livekit-types.js';
+import { isAgentMetadata } from '../call-agents.js';
 import { isServiceParticipant } from '../recording.js';
 
 export type Unsubscribe = () => void;
@@ -281,8 +282,9 @@ export class CallRoom {
     if (!this.room) return [];
 
     const self = this.toParticipant(this.room.localParticipant, true);
-    // poolse's transcript assistant and the recorder are not people.
-    const others = this.peers().map((p) => this.toParticipant(p, false));
+    // poolse's transcript assistant and the recorder are not people; an
+    // agent invited into the call is listed (AG13), last.
+    const others = [...this.peers(), ...this.agents()].map((p) => this.toParticipant(p, false));
 
     return [self, ...others];
   }
@@ -1203,12 +1205,22 @@ export class CallRoom {
     this.aloneTimer = null;
   }
 
-  /** The other people in the room — poolse's assistant and recorder left out. */
+  /**
+   * The other people in the room — poolse's assistant and recorder left
+   * out, and agents too: an agent keeps nobody company, so it never stops
+   * a call left alone from ending.
+   */
   private peers(): LiveKitParticipant[] {
     if (!this.room) return [];
     return [...this.room.remoteParticipants.values()].filter(
-      (p) => !isServiceParticipant(p.identity, p.kind),
+      (p) => !isServiceParticipant(p.identity, p.kind) && !isAgentMetadata(p.metadata),
     );
+  }
+
+  /** Agents in the room (a note-taker, an assistant, someone's agent — AG13). */
+  private agents(): LiveKitParticipant[] {
+    if (!this.room) return [];
+    return [...this.room.remoteParticipants.values()].filter((p) => isAgentMetadata(p.metadata));
   }
 
   private emitError(error: Error): void {

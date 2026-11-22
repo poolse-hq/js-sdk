@@ -25,6 +25,7 @@ import { RoomsResource } from './resources/rooms.js';
 import { AgentsResource, ApprovalsResource } from './agents.js';
 import { MeetingsResource } from './meetings.js';
 import { LiveMeetingsResource } from './meetings-live.js';
+import { CallAgentsResource, EscalationsResource } from './call-agents.js';
 import { CallRoom } from './voice/call-room.js';
 import type { CallRoomOptions } from './voice/livekit-types.js';
 import { RestClient } from './rest-client.js';
@@ -137,6 +138,18 @@ export class Poolse {
    */
   public readonly live: LiveMeetingsResource;
   /**
+   * Agents in a live call (AG13–AG16): `list`, `invite(callId, agentId,
+   * mode)`, `setMode`, `remove`, `subscribe` for `call:agents` /
+   * `agent:said`; `whisper` for your private hints (`get`, `set`,
+   * `subscribe`); `briefs` for an agent attending for you.
+   */
+  public readonly callAgents: CallAgentsResource;
+  /**
+   * Your agent asking you during a meeting it attends for you (AG16):
+   * `list()`, `reply(id, { decision } | { answer })`, `subscribe` for a live view.
+   */
+  public readonly escalations: EscalationsResource;
+  /**
    * Who is online, away, in a call or offline: `get` (REST), a live
    * store (`subscribe` / `peek`), and this device's own activity
    * (`setActivity`, `trackActivity`).
@@ -231,6 +244,8 @@ export class Poolse {
     });
     this.meetings = new MeetingsResource(this.rest);
     this.live = new LiveMeetingsResource(this.rest, this.realtime);
+    this.callAgents = new CallAgentsResource(this.rest, this.realtime);
+    this.escalations = new EscalationsResource(this.rest, this.realtime, this.me);
     const scope = () => this.storageScope();
     this.cache = new LocalCache(scope, this.resolved.cache);
     this.outbox = new Outbox({

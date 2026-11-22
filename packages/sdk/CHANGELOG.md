@@ -8,6 +8,25 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ### Added
 
+- Agents in calls (the server's docs/AGENTS_IN_CALLS.md; every path, field
+  and event in `call-agents.ts`'s WIRE section): `poolse.callAgents`
+  (`list`, `invite(callId, agentId, 'notetaker' | 'assistant')`, `setMode`,
+  `remove`, `subscribe(conversationId, callId, { onAgents, onSaid })` for
+  `call:agents` / `agent:said`), `.whisper` (`get`, `set`, `subscribe` for
+  `whisper:hint` / `whisper:changed`), `.briefs` (`list`, `get`, `create`,
+  `update`, `remove`); `poolse.escalations` (`list`, `reply(id, { decision }
+| { answer })`, a live store on `agent:escalation`);
+  `poolse.notificationActions.escalation({ escalationId, token, decision |
+answer })` for answering with a push's `reply_token`, no session.
+  `CallMeeting.agents`. Helpers: `callAgentOfParticipant` (token metadata
+  `agent: true`, or the call's list), `isAgentMetadata`, `callAgentStateOf`,
+  `callAgentStateLabel` ("Taking notes"), `callAgentModeLabel`,
+  `whisperHintKindLabel`, `whisperErrorMessage`, `escalationStatusLabel`,
+  `escalationErrorMessage`, `parseEscalationOptions`, and the
+  `AgentEscalationPushData` type.
+- `CallRoom.getParticipants()` lists agents in the call (last, with their
+  metadata); they never count as company for `onAlone`.
+
 - Live meetings (`poolse.live`, the server's docs/MEETINGS.md; every
   path/field/event in `meetings-live.ts`'s WIRE section): `stage` (`get`,
   `setMode`, `raiseHand`, `lowerHand`, `setRole`),

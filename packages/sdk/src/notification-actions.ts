@@ -12,6 +12,13 @@ import { resolveConfig, type PoolseConfig } from './config.js';
 import { RestClient } from './rest-client.js';
 import { TokenCache } from './token-cache.js';
 import type { Message, Uuid } from './types.js';
+import {
+  CALL_AGENTS_PATHS,
+  escalationFromWire,
+  escalationReplyBody,
+  type AgentEscalation,
+  type EscalationReply,
+} from './call-agents.js';
 import { safeUuid } from './uuid.js';
 
 /** `POST /v1/notification-actions/reply`. */
@@ -33,6 +40,17 @@ export interface NotificationReadRequest {
   /** The push's `reply_grant`. */
   token: string;
 }
+
+/**
+ * `POST /v1/agent-escalations/:id/reply` with the push's token — answer
+ * your agent from its notification (AG16, AGENTS_IN_CALLS.md §5).
+ */
+export type NotificationEscalationRequest = EscalationReply & {
+  /** The push's `escalation_id`. */
+  escalationId: string;
+  /** The push's `reply_token`: this escalation only, until `expires_at`, once. */
+  token: string;
+};
 
 /** An action a message notification offers (`MessagePushData.actions`). */
 export type NotificationActionId = 'reply' | 'mark_read';
@@ -131,6 +149,29 @@ export class NotificationActions {
       idempotencyKey: id,
       ...(signal ? { signal } : {}),
     });
+  }
+
+  /**
+   * Answer an agent's escalation with the push's token in the body — no
+   * session needed, so it works from a notification handler (the native
+   * core does this itself on the lock screen). Errors: 401
+   * `invalid_token`, 409 `not_pending`, 410 `expired`, 422 a bad answer.
+   */
+  async escalation(
+    req: NotificationEscalationRequest,
+    signal?: AbortSignal,
+  ): Promise<AgentEscalation | null> {
+    const reply: EscalationReply =
+      'answer' in req ? { answer: req.answer } : { decision: req.decision };
+    const res = await this.client.request<unknown>({
+      method: 'POST',
+      path: CALL_AGENTS_PATHS.escalationReply(req.escalationId),
+      body: escalationReplyBody(reply, req.token),
+      // The token works once: never resent behind the user's back.
+      maxRetries: 0,
+      ...(signal ? { signal } : {}),
+    });
+    return escalationFromWire(res);
   }
 
   /** Mark the grant's conversation read up to its newest message. */
