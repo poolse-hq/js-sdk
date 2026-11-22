@@ -350,16 +350,13 @@ const board = useWhiteboard(callId, Y, { selfUserId: me.id });
 ```
 
 Meeting invites in chat: `meetingCardOf(msg)` reads the card; RSVPs go to
-the Workspace API (`onRsvp`), and the card follows the server's rewrite of
-the message.
+`PUT /meetings/:id/rsvp` through the provider's client (pass `onRsvp` to
+record them elsewhere), and the card follows the server's restatement of
+the message. Guests and phones are named by the call ("Phone ···1234"),
+never by id; `RoomPresence` takes `useRoomPresence().presence[id]`.
 
 ```tsx
-<MeetingCardMessageRow
-  msg={msg}
-  meId={me.id}
-  onRsvp={rsvp}
-  onJoin={(c) => openRoom(c.roomConversationId)}
-/>
+<MeetingCardMessageRow msg={msg} onJoin={(c) => openRoom(c.roomConversationId)} />
 ```
 
 ## Layouts

@@ -12,8 +12,11 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   `BreakoutHostPanel`, `LobbyWaiting`, `LobbyAdmitList`, `CaptionsOverlay`,
   `MarkMomentButton`, `ConnectionIndicator`, `NetworkBanner`,
   `RoomPresence`, `AgendaPanel`, `ReactionsOverlay`, `ReactionBar`,
-  `InCallChatPanel`, `BackgroundMenu`, `MoveCallHereBar`.
-- `MeetingCard` (RSVP and Join) and `formatMeetingTime`.
+  `InCallChatPanel` (tags messages with `call_id`), `CaptionsButton`,
+  `BackgroundMenu`, `MoveCallHereBar`.
+- `MeetingCard` (RSVP through `PUT /meetings/:id/rsvp` by default, and
+  Join) and `formatMeetingTime`.
+- `ConversationView` `sendDefaults`: fields merged into every send.
 - `Whiteboard`, `WhiteboardItemSvg`, `AnnotationOverlay`.
 - `usePictureInPicture` and `CallPictureInPicture` (Document PiP, video
   PiP fallback).

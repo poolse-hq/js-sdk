@@ -8,10 +8,13 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ### Added
 
-- Live meeting hooks: `useStage`, `useQuestions`, `useBreakouts`,
-  `useLobby`, `useMoments`, `useAgenda`, `useCallReactions`,
-  `useScreenAnnotations`, `useCallQuality`, `useWhiteboard` (Yjs passed
-  in) and `useRoomPresence` for sidebars.
+- Live meeting hooks: `useStage`, `useQuestions`, `useBreakouts` (`auto`
+  follows the split), `useLobby` (the conversation's, before a call too),
+  `useMoments`, `useAgenda`, `useCaptions`, `useCallMeeting`,
+  `useCallReactions`, `useScreenAnnotations`, `useCallQuality` (`callId`
+  reports to the server), `useWhiteboard` (Yjs passed in) and
+  `useRoomPresence` (`GET /me/rooms` + `room:participants`) for sidebars.
+- `useOptionalPoolse` is exported.
 - `useCallRoom`: `room`, `background` / `setBackground` /
   `backgroundSupported`, `noiseSuppression` / `setNoiseSuppression`,
   `reconnecting`, `disconnectReason`; options `trackProcessors`,

@@ -265,11 +265,12 @@ decides the layout:
 <ConnectionIndicator quality={participant.connectionQuality} />
 <AgendaPanel agenda={useAgenda(convId, callId)} />
 <ReactionsOverlay reactions={reactions.reactions} /> <ReactionBar send={reactions.send} />
-<InCallChatPanel conversationId={convId} />
+<InCallChatPanel conversationId={convId} callId={callId} />
+<CaptionsButton captions={useCaptions(convId, callId, me.id)} />
 <BackgroundMenu media={media} images={[{ url: '/bg/office.jpg', label: 'Office' }]} />
 <MoveCallHereBar visible={inCallElsewhere(live, me.id, media.status === 'connected')} onMove={move} />
-<RoomPresence call={rooms[roomId]} />                       {/* sidebar */}
-<MeetingCard card={meetingCardOf(msg)!} selfUserId={me.id} onRsvp={rsvp} onJoin={join} />
+<RoomPresence call={useRoomPresence().presence[roomId]} /> {/* sidebar */}
+<MeetingCard card={meetingCardOf(msg)!} onJoin={join} /> {/* RSVPs via the server */}
 <Whiteboard board={useWhiteboard(callId, Y, { selfUserId: me.id })} />
 <AnnotationOverlay ink={useScreenAnnotations(media.room, sharer.userId)} />
 ```

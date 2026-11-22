@@ -174,15 +174,17 @@ reconnect:
 const media = useCallRoom(conversationId, { livekit, trackProcessors });
 const stage = useStage(conversationId, callId, me.id); // raiseHand, setRole…
 const qa = useQuestions(conversationId, callId); // ask, toggleVote, setStatus
-const breakouts = useBreakouts(conversationId, callId); // session, myRoom, secondsLeft
-const lobby = useLobby(conversationId, callId); // admit, deny, admitAll
+const breakouts = useBreakouts(conversationId, callId, { auto: true, onJoinRoom, onReturn });
+const lobby = useLobby(conversationId, callId); // the conversation's; callId may be null
 const moments = useMoments(conversationId, callId); // mark()
 const agenda = useAgenda(conversationId, callId); // current, overrunMs, done
 const reactions = useCallReactions(media.room); // reactions, send
 const ink = useScreenAnnotations(media.room, sharerUserId); // pointer and pen
-const quality = useCallQuality(media.room); // report.issues
+const quality = useCallQuality(media.room, { callId }); // report.issues, told to the server
+const captions = useCaptions(conversationId, callId, me.id); // on, toggle
+const meeting = useCallMeeting(conversationId, callId); // attendees, quality, nameOf
 const board = useWhiteboard(callId, Y, { selfUserId: me.id });
-const rooms = useRoomPresence(roomConversationIds); // id → LiveCall | null
+const { rooms, presence } = useRoomPresence(); // GET /me/rooms + room:participants
 ```
 
 `useCallRoom` also gives `background` / `setBackground`,

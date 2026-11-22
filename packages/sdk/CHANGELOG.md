@@ -8,15 +8,27 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ### Added
 
-- Live meetings (`poolse.live`, docs/MEETINGS.md — written against an
-  assumed contract, every path/field/event in `meetings-live.ts`'s WIRE
-  section): `stage` (`get`, `raiseHand`, `lowerHand`, `setRole`),
-  `questions` (`list`, `ask`, `vote`, `unvote`, `setStatus`), `breakouts`
-  (`get`, `open`, `close`, `join`, `returnToMain`), `lobby` (`get`, `admit`,
-  `deny`, `admitAll`), `moments` (`mark`, `list`), `agenda` (`get`,
-  `start`, `done`, `reopen`), `whiteboard(callId)`, `moveHere(callId)` and
-  `subscribe(conversationId, callId, listeners)`. `waitInLobby` for guests
-  without a session. Helpers: `sortQuestions`, `stageRoleOf`,
+- Live meetings (`poolse.live`, the server's docs/MEETINGS.md; every
+  path/field/event in `meetings-live.ts`'s WIRE section): `stage` (`get`,
+  `setMode`, `raiseHand`, `lowerHand`, `setRole`),
+  `questions` (`list`, `ask`, `vote`, `unvote`, `setStatus`, `remove`),
+  `breakouts` (`get`, `open`, `move`, `close`, `join`, `returnToMain` —
+  rooms are parts of the main call), `lobby` (the conversation's: `get`,
+  `admit`, `deny`, `admitAll` on a `LobbyTarget`), `moments` (`mark`,
+  `list`, `remove`), `agenda`, `captions.set`, `quality.report`,
+  `meetings` (`get`, `list`, `rsvp`), `phones` (dial-ins, `call`,
+  `hangUp`), `guestLinks` (`create`, `list`, `revoke`), `meeting(callId)`
+  (the snapshot's `meeting`: attendees, quality, captions…),
+  `messages(callId)`, `react`, `rooms()`, `whiteboard(callId)`,
+  `moveHere(callId)`, `subscribe(conversationId, callId, listeners, {
+selfUserId })` and `subscribeUser(userId, { onRoomParticipants,
+onMeetingStarting, onMeetingBrief })`. `GuestClient` (link, join,
+  waitInLobby, session, leave, hand, react, questions, vote,
+  reportQuality) and `waitInLobby` for browser guests. `call_id` on
+  `MessageCreateRequest` / `Message` (in-call chat); `UserChannel.on`.
+  Identities may be `guest_…` / `sip_…`: `identityKindOf`,
+  `meetingNameOf`, `phoneLabel` ("Phone ···1234"). Helpers:
+  `callMeetingOf`, `sortQuestions`, `stageRoleOf`,
   `participantRoleOf`, `planBreakouts`, `agendaOverrunMs`, `inCallElsewhere`,
   `meetingCardOf`, `rsvpOf`, `meetingJoinable`.
 - `ConversationChannel.on(event, fn)` for topic events without a typed handler.
@@ -30,7 +42,9 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
   (`noiseSuppression` option).
 - `CallReactions` and `ScreenAnnotations` (pointer and pen over a shared
   screen) on the data channel; `CallQualityMonitor`, `diagnoseCallNetwork`,
-  `connectionQualityLabel` for the plain-language network banner.
+  `connectionQualityLabel` for the plain-language network banner;
+  `CallQualityMonitor`'s `report` option sends readings to the server
+  (throttled; `qualityReportBody`).
 - Whiteboard: `WhiteboardModel`, `openWhiteboard`, `bindYDoc` — strokes,
   shapes, text and an eraser in a Y.Doc over the doc relay; Yjs passed in.
 

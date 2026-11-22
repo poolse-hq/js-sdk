@@ -8,6 +8,10 @@ versions follow [semver](https://semver.org).
 
 ### Added
 
+- Live meetings on the final server contract: guests and phones named by
+  the call, `RoomPresence` with `useRoomPresence` entries (guests and phones
+  counted), `MeetingCard` RSVPs through `poolse.live.meetings.rsvp` by
+  default (`onRsvp` overrides, `false` hides).
 - The same agents and meetings components as `@poolse/react-ui`
   (`AgentBadge`, `AgentBadgeInline`, `ApprovalCard`, `MessageApproval`,
   `ApprovalList`, `MessageCitations`, `SummaryCard`, `AskMeetings`,

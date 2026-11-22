@@ -248,66 +248,81 @@ doc.leave();
 
 ## Live meetings
 
-The features of a running call — stage, Q&A, breakouts, lobby, marked
-moments, the agenda, the whiteboard — are `poolse.live` (the server's
+The features of a running call are `poolse.live` (the server's
 docs/MEETINGS.md). Reads are REST; changes arrive on the conversation
-topic:
+topic, and rooms and meeting starts on your user topic:
 
 ```ts
-const stage = await poolse.live.stage.get(callId);
 await poolse.live.stage.raiseHand(callId);
 await poolse.live.stage.setRole(callId, userId, 'speaker'); // moderator: bring up
 await poolse.live.questions.ask(callId, 'When do we ship?', { anonymous: true });
-await poolse.live.questions.vote(questionId);
 await poolse.live.breakouts.open(callId, { count: 3, durationMinutes: 10 });
-await poolse.live.lobby.admit(callId, entryId);
+await poolse.live.lobby.admit({ conversationId, callId }, guestId);
 await poolse.live.moments.mark(callId);
 await poolse.live.agenda.done(callId, itemId);
+await poolse.live.captions.set(callId, true);
+await poolse.live.meetings.rsvp(meetingId, 'accepted');
+await poolse.live.phones.call(callId, '+37060012345', 'Ana (mobile)');
 
-const off = poolse.live.subscribe(conversationId, callId, {
-  onStage,
-  onQuestion,
-  onBreakouts,
-  onLobby,
-  onMoment,
-  onAgenda,
-  onAgendaOvertime,
-});
+const off = poolse.live.subscribe(
+  conversationId,
+  callId,
+  {
+    onStage,
+    onQuestion,
+    onBreakouts,
+    onLobby,
+    onMoment,
+    onAgenda,
+    onQuality,
+    onAttendees,
+    onCaptions,
+  },
+  { selfUserId: me.id },
+);
+const offUser = poolse.live.subscribeUser(me.id, { onRoomParticipants, onMeetingStarting });
 ```
 
-A guest (no session) waits in the lobby with
-`waitInLobby({ apiUrl, entryId, lobbyToken, onStatus })`, which resolves
-`admitted` (with the session), `denied` or `ended`.
+Who is who: a member is in a call as their user id, a browser guest as
+`guest_<id>`, a phone as `sip_…`. Show `meetingNameOf(identity, name)` —
+the guest's typed name, "Phone ···1234" — never the id.
+
+Breakout rooms are parts of the main call: on your `myRoomId`, connect to
+`breakouts.join(roomId)`'s session, then leave the main room's media
+(don't hang up); on close, `breakouts.returnToMain(callId)`.
+
+The lobby is the conversation's: guests can wait before the call starts.
+The browser call page uses `GuestClient` (no account): `link(token)`,
+`join(token, name)`, `waitInLobby()` (admitted once a member let them in
+and a call is live), `session()`, `hand`, `react`, `ask`, `vote`, `leave`.
+
+In-call chat: send with `call_id` (`MessageCreateRequest.call_id`); read
+it back with `live.messages(callId)`.
 
 Peer to peer over the call's data channel, never stored:
-`new CallReactions(room)` (`send('👏')`, `subscribe`) and
-`new ScreenAnnotations(room, sharerUserId)` (`pointer`, `begin` / `extend`
-/ `end`, `undo`, `clear` — coordinates are 0–1 of the shared picture).
-`room.sendData(topic, json)` / `room.onData(topic, fn)` for your own.
+`new CallReactions(room)` and `new ScreenAnnotations(room, sharerUserId)`
+(pointer and pen, 0–1 coordinates). `room.sendData` / `room.onData` for
+your own. `live.react(callId, emoji)` relays through the server instead.
 
 Call quality: each `CallParticipant` has `connectionQuality`;
-`new CallQualityMonitor(room).subscribe(report => …)` turns your own link
-into `report.issues` worded for a banner ("Your network is dropping
-packets"); `diagnoseCallNetwork` does it for any numbers (native too).
+`new CallQualityMonitor(room, { report: (b) => poolse.live.quality.report(callId, b) })`
+words your own link ("Your network is dropping packets") and tells the
+server, which tells the others (`call:quality`).
 
-Background and noise (web): pass `trackProcessors` (`import * as
-trackProcessors from '@livekit/track-processors'`, an optional peer) to
-`poolse.call(…)`, then `room.setBackground({ type: 'blur' })` or
-`{ type: 'image', url }`; `room.setNoiseSuppression(false)`.
+Background and noise (web): pass `trackProcessors` (`@livekit/track-processors`,
+an optional peer) to `poolse.call(…)`, then `room.setBackground({ type: 'blur' })`;
+`room.setNoiseSuppression(false)`.
 
 Move the call to this device: `inCallElsewhere(live, me.id, connectedHere)`
 says when to offer it; `poolse.live.moveHere(callId)` joins here and the
-other device sees `room.onDisconnected('moved')` (web) or `reason: 'moved'`
+other device sees `onDisconnected('moved')` (web) or `reason: 'moved'`
 (`@poolse/native`).
 
 Whiteboard: `openWhiteboard(poolse, Y, await poolse.live.whiteboard(callId))`
-gives a `WhiteboardModel` (`add`, `update`, `eraseAt`, `undo`, `redo`,
-`clear`, `subscribe`) on a Y.Doc synced over the doc relay. Yjs is passed
-in (`import * as Y from 'yjs'`).
+gives a `WhiteboardModel` on a Y.Doc synced over the doc relay (Yjs passed in).
 
-Meeting cards in chat: `meetingCardOf(message)` → `MeetingCard`
-(`rsvps`, `myRsvp`, `status`); `rsvpOf(card, me.id)`, `meetingJoinable(card)`.
-RSVPs are recorded by the Workspace API.
+Meeting cards: `meetingCardOf(message)` reads the `meeting_card` body;
+the body has no `my_rsvp` — `rsvpOf(card, me.id)` finds yours.
 
 ## Several workspaces, offline, speed
 
