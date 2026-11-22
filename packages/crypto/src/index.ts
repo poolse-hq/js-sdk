@@ -131,3 +131,42 @@ export {
   createHttpBlobTransport,
   isValidBlobKey,
 } from './http';
+
+export {
+  type NoteContent,
+  type SealedNote,
+  type NoteRecipient,
+  type NoteShareWrap,
+  type RotatedNote,
+  noteAssociatedData,
+  noteAttachmentAssociatedData,
+  folderAssociatedData,
+  sealNote,
+  openNoteMeta,
+  openNoteContent,
+  envelopeKeyVersion,
+  noteKeyForVersion,
+  sealFolder,
+  openFolderName,
+  shareWrapsFor,
+  rotateNoteKey,
+  shareExpired,
+  recoveryAuth,
+  signForServer,
+  deviceApprovalMessage,
+  recoveryReplaceMessage,
+  signedDeviceGrant,
+  noteAsDocument,
+} from './notes';
+
+export { type SearchDocument, type SearchHit, NoteSearchIndex, searchWords } from './search';
+
+export {
+  type OutboxEntry,
+  type OutboxStorage,
+  type OutboxSendResult,
+  type FlushOptions,
+  type FlushResult,
+  NoteOutbox,
+  MemoryOutboxStorage,
+} from './outbox';

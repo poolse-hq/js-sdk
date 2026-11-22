@@ -64,7 +64,7 @@ describe('composer extras', () => {
           code: 'dlp_warning',
           message: 'warn',
           doc_url: '',
-          details: { matches: [{ rule: 'Card number', excerpt: '4111 •••• •••• 1111' }] },
+          details: { rules: [{ id: 'cards', name: 'Card number' }] },
         }),
       )
       .mockResolvedValueOnce(undefined);

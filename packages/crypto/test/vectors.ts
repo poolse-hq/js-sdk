@@ -55,3 +55,31 @@ export const V1 = {
     '345d0b9a62c03445fa0137f2cc776f6f0000001094d6807df1d5f76c506e91975a2c58f180d308c0' +
     '18fe7592b7329b59454e7b3aa558e818ddd3b989d66fff021f4af931753a',
 } as const;
+
+/**
+ * Notes (apps/workspace/NOTES.md), frozen like `V1`. The note envelopes use
+ * the `item` test key (`00…01`, version 3), the search index the account
+ * key `11…11`, the recovery auth `V1.recovery`.
+ */
+export const NOTES_V1 = {
+  recoveryAuth: '4b67c714482d51161f2c64f0511c0cadc3f03f29c0b5ee12cb0087cdad5bd94d',
+  // deviceApprovalMessage('m-1', 'dev-2', [1, 2, 3])
+  approvalMessage:
+    '706f6f6c73652d6e6f7465732f76312f617070726f7665006d2d31006465762d3200039058c6f2c0' +
+    'cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+  // NoteSearchIndex with n1: {title: 'Café plan', text: 'Ship the beta', updatedAt: 5}
+  searchIndex:
+    '70010101000000013ea812c9180ead51afa5a1bf6f609335712b36c96e0d9cdac10141fbaeb6ca75' +
+    'f4482de83574ced0452312fbde51153c60d9dad3b63e3160fbafefa9ed51587fd942b8663966c7fc' +
+    '1fc051e5a2a4be3ad7d02377b52ffcc72248c8e0926fe788cf58bb0d2c6ca7f3555ba72dc8b43332' +
+    'faaf2561fc6f30fd566f9ca2db3570c6b43ac9561dd7ff7fe390adb0',
+  // sealNote({title: 'Plan', body: 'Hello', metadata: {tags: ['work']}}, note-1, revision 2)
+  meta:
+    '700101010000000368ac0369867ad31cef8a1055143ad4d9059e9ba962f3e8877b36ef841c8ed689' +
+    '9e3581593881d71d49bd2b9075cec12479555c8d9de72bfb37926f825299e6cfbc70634ff4902586' +
+    'bdbad139863fe884beebf201eaae53cc7a51344cbb9eccd101104c0941045d97e44fa1c6',
+  content:
+    '700101010000000368ac0369867ad31cef8a1055143ad4d91a5f87b9285aacb530be4b2c062bff25' +
+    'aa094e21811e83510dfefd40930742afefa9ea1d666fa6eebead555175d380cdb1002391b9ac3bb0' +
+    '9008373f0d49c57d10b9374321f79cc0b6eb74c9d43baf1e15f9efe8d155e2f42d32078d',
+} as const;
