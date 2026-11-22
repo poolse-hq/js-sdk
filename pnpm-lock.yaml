@@ -75,7 +75,7 @@ importers:
   packages/react:
     dependencies:
       '@poolse/sdk':
-        specifier: ^3.9.0
+        specifier: ^3.10.0
         version: link:../sdk
     devDependencies:
       '@testing-library/react':
@@ -97,13 +97,13 @@ importers:
   packages/react-native:
     dependencies:
       '@poolse/react':
-        specifier: ^3.9.0
+        specifier: ^3.10.0
         version: link:../react
       '@poolse/sdk':
-        specifier: ^3.9.0
+        specifier: ^3.10.0
         version: link:../sdk
       '@poolse/theme':
-        specifier: ^3.9.0
+        specifier: ^3.10.0
         version: link:../theme
       expo-clipboard:
         specifier: '*'
@@ -146,13 +146,13 @@ importers:
         specifier: '>=0.3'
         version: 0.8.3(@types/dom-mediacapture-transform@0.1.12)(livekit-client@2.25.0(@types/dom-mediacapture-record@1.0.22))
       '@poolse/react':
-        specifier: ^3.9.0
+        specifier: ^3.10.0
         version: link:../react
       '@poolse/sdk':
-        specifier: ^3.9.0
+        specifier: ^3.10.0
         version: link:../sdk
       '@poolse/theme':
-        specifier: ^3.9.0
+        specifier: ^3.10.0
         version: link:../theme
       react-markdown:
         specifier: ^9.0.1
@@ -6296,7 +6296,7 @@ snapshots:
       postcss: 8.5.15
       resolve-from: 5.0.0
     optionalDependencies:
-      expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-dom@19.2.6(react@19.2.6))(react-native@0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react@19.2.6))(react@19.2.6)(typescript@5.9.3)
+      expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-dom@19.2.6(react@19.2.6))(react-native@0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@19.2.15)(react@19.2.6))(react@19.2.6)(typescript@5.9.3)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -7366,7 +7366,7 @@ snapshots:
       react-refresh: 0.14.2
     optionalDependencies:
       '@babel/runtime': 7.29.7
-      expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-dom@19.2.6(react@19.2.6))(react-native@0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react@19.2.6))(react@19.2.6)(typescript@5.9.3)
+      expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-dom@19.2.6(react@19.2.6))(react-native@0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@19.2.15)(react@19.2.6))(react@19.2.6)(typescript@5.9.3)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -8016,7 +8016,7 @@ snapshots:
 
   expo-keep-awake@56.0.3(expo@56.0.8)(react@19.2.6):
     dependencies:
-      expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-dom@19.2.6(react@19.2.6))(react-native@0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(react@19.2.6))(react@19.2.6)(typescript@5.9.3)
+      expo: 56.0.8(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(react-dom@19.2.6(react@19.2.6))(react-native@0.76.9(@babel/core@7.29.7)(@babel/preset-env@7.29.7(@babel/core@7.29.7))(@types/react@19.2.15)(react@19.2.6))(react@19.2.6)(typescript@5.9.3)
       react: 19.2.6
 
   expo-modules-autolinking@56.0.14(typescript@5.9.3):
