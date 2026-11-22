@@ -151,6 +151,44 @@ server), the core:
 const off = calls.onCanPublishChange((allowed) => setListenOnly(!allowed));
 ```
 
+## Meetings: scheduled rings, background and noise, moving a call
+
+**A meeting starting rings.** When a scheduled meeting is set to ring
+everyone, the server sends the usual ring push with `ring_type: "meeting"`
+and `meeting_title` (also `meeting_id`, `starts_at`). CallKit and the
+Android ring screen then read "Weekly sync is starting" (with the
+workspace, "Weekly sync is starting · Acme", when several are signed in),
+and the Android buttons read Join / Not now. Answering joins the meeting's
+room like any call. The snapshot says so too: `ringType: 'meeting'` and
+`meetingTitle`, so the call screen can name the meeting.
+
+**Noise suppression and background blur.**
+`setNoiseSuppression(on)` / `noiseSuppressionSupported()`: on by default.
+Android switches WebRTC's noise suppression on the microphone (echo
+cancellation stays on). iOS uses Apple's voice processing, which does echo
+cancellation and noise suppression together, so off bypasses both: offer
+"off" only for headphones. `setBackgroundBlur(on)` /
+`backgroundBlurSupported()`: iOS 15+ blurs behind you with Vision person
+segmentation, kept across camera flips. Android has no blur yet: it needs an
+ML Kit segmentation model, so it is planned for later, and
+`backgroundBlurSupported()` is `false` there. Background pictures are not
+available on native yet. The snapshot carries `noiseSuppression` and
+`backgroundBlur`.
+
+**Keep the call while you work.** Picture-in-picture for video calls is
+`setPictureInPictureEnabled(true)` while a video call shows someone, and a
+`<CallVideoView pictureInPicture>` on the main picture (iOS 15+); on Android
+the whole activity floats (the plugin's `pictureInPicture` option), so draw
+a compact layout while `isInPictureInPicture()`.
+
+**Move a call to this device.**
+`moveCallHere(callId, { conversationId, sessionToken, serverId? })` joins a
+call you are on elsewhere from this device. The server keeps one device per
+person in a call, so the other device is let go. Its snapshot gets
+`movedElsewhere: true` and ends with `reason: 'moved'`: show "Moved to your
+other device", not "Call ended". Offer it where `liveCalls` shows you already
+in the call.
+
 ## Ringtone
 
 ```json
@@ -230,15 +268,18 @@ The ring notification's full-screen intent and heads-up tap start it with
 `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP` and these extras (constants
 on `dev.poolse.callcore.android.PoolseIncomingCall`):
 
-| Extra                     | Key                        | Type                   |
-| ------------------------- | -------------------------- | ---------------------- |
-| `EXTRA_CALL_ID`           | `poolse_call_id`           | String                 |
-| `EXTRA_CONVERSATION_ID`   | `poolse_conversation_id`   | String                 |
-| `EXTRA_CONVERSATION_NAME` | `poolse_conversation_name` | String, may be null    |
-| `EXTRA_CALLER_NAME`       | `poolse_caller_name`       | String, may be null    |
-| `EXTRA_CALLER_AVATAR_URL` | `poolse_caller_avatar_url` | String, may be null    |
-| `EXTRA_MEDIA`             | `poolse_media`             | `"audio"` or `"video"` |
-| `EXTRA_RING_DEADLINE`     | `poolse_ring_deadline`     | Long, epoch ms         |
+| Extra                     | Key                        | Type                                                                  |
+| ------------------------- | -------------------------- | --------------------------------------------------------------------- |
+| `EXTRA_CALL_ID`           | `poolse_call_id`           | String                                                                |
+| `EXTRA_CONVERSATION_ID`   | `poolse_conversation_id`   | String                                                                |
+| `EXTRA_CONVERSATION_NAME` | `poolse_conversation_name` | String, may be null                                                   |
+| `EXTRA_CALLER_NAME`       | `poolse_caller_name`       | String, may be null                                                   |
+| `EXTRA_CALLER_AVATAR_URL` | `poolse_caller_avatar_url` | String, may be null                                                   |
+| `EXTRA_MEDIA`             | `poolse_media`             | `"audio"` or `"video"`                                                |
+| `EXTRA_RING_DEADLINE`     | `poolse_ring_deadline`     | Long, epoch ms                                                        |
+| `EXTRA_RING_TYPE`         | `poolse_ring_type`         | `"call"` or `"meeting"`                                               |
+| `EXTRA_MEETING_TITLE`     | `poolse_meeting_title`     | String or null                                                        |
+| `EXTRA_TITLE`             | `poolse_title`             | The headline: "Weekly sync is starting", or the conversation / caller |
 
 plus an opaque `poolse_ring` bundle that the functions below read; pass them
 the Intent you were started with (and the new one in `onNewIntent`):

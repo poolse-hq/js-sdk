@@ -2,6 +2,24 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## [Unreleased]
+
+- Meeting rings (CA4): a ring push with `ring_type: "meeting"` and
+  `meeting_title` shows "Weekly sync is starting" on CallKit and on the
+  Android ring notification and screen, with Join / Not now buttons on
+  Android. `RingContext` gains `ringType`, `meetingTitle` and `meetingId`
+  (defaulted). Snapshots and `waiting` carry `ringType` and `meetingTitle`.
+  Custom Android ring activities get `EXTRA_RING_TYPE`, `EXTRA_MEETING_TITLE`
+  and `EXTRA_TITLE`.
+- Noise suppression and background blur (CL7): `setNoiseSuppression`,
+  `noiseSuppressionSupported`, `setBackgroundBlur` and
+  `backgroundBlurSupported`. Snapshots carry `noiseSuppression` and
+  `backgroundBlur`. Blur works on iOS 15+ (LiveKit's
+  BackgroundBlurVideoProcessor). It is not available on Android yet.
+- Move a call to this device (CL11): `moveCallHere(callId, options)`. The
+  device that lost the call gets `movedElsewhere: true` and ends with the new
+  reason `'moved'`, detected from LiveKit's duplicate-identity disconnect.
+
 ## 3.9.0 — 2026-11-22
 
 - Recording and transcripts (server docs/RECORDING.md). poolse's transcript
