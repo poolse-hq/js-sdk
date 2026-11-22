@@ -1,7 +1,13 @@
 // What draws over a call: live captions (CL13), floating reactions and
 // the reaction bar (CL6), connection marks and the "your network…"
 // banner (CL15), the whiteboard (CL12) and annotations on a shared
-// screen (CL4, view only on phones).
+// screen (CL4: see others' pointer and lines; draw with a finger when
+// given the layer).
+//
+// On @poolse/native the data channel is `callData`:
+//
+//     const { state, annotations } = useScreenAnnotations(callData, sharerUserId);
+//     <AnnotationOverlay state={state} annotations={annotations} drawing={penOn} />
 //
 //     const t = useLiveTranscript(callId, { enabled: captionsOn });
 //     {captionsOn && <CaptionsOverlay segments={t.segments} />}
@@ -11,6 +17,7 @@
 
 import type {
   AnnotationState,
+  ScreenAnnotations,
   CallConnectionQuality,
   CallNetworkIssue,
   CallReaction,
@@ -435,22 +442,77 @@ export function WhiteboardView({
 // ── Annotations on a shared screen (CL4) ─────────────────────────────────
 
 export interface AnnotationOverlayProps {
-  /** `useScreenAnnotations(room, sharerUserId).state`. */
+  /** `useScreenAnnotations(room, sharerUserId).state` (room: `callData` on @poolse/native). */
   state: AnnotationState | null;
+  /**
+   * `useScreenAnnotations(…).annotations`: with it and `drawing`, a
+   * finger draws lines everyone in the call sees.
+   */
+  annotations?: ScreenAnnotations | null;
+  /** Draw instead of passing touches through (a pen toggle). Default false. */
+  drawing?: boolean;
+  /** Pen colour. Default red. */
+  color?: string;
   style?: StyleProp<ViewStyle>;
 }
 
 /**
- * Lines and pointers others draw on a shared screen, laid over the
- * screen's video (same box, `fit="contain"` area). View only.
+ * Lines and pointers drawn on a shared screen, laid over the screen's
+ * video (same box as the picture: size it to the `fit="contain"` area).
+ * View only unless given `annotations` and `drawing`.
  */
-export function AnnotationOverlay({ state, style }: AnnotationOverlayProps) {
+export function AnnotationOverlay({
+  state,
+  annotations,
+  drawing = false,
+  color = '#e5484d',
+  style,
+}: AnnotationOverlayProps) {
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const stroke = useRef<string | null>(null);
+  const canDraw = drawing && !!annotations && box.w > 0 && box.h > 0;
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => canDraw,
+        onMoveShouldSetPanResponder: () => canDraw,
+        onPanResponderGrant: (e) => {
+          if (!annotations) return;
+          const id = annotations.begin({ color });
+          stroke.current = id;
+          annotations.extend(id, e.nativeEvent.locationX / box.w, e.nativeEvent.locationY / box.h);
+        },
+        onPanResponderMove: (e) => {
+          if (!annotations || !stroke.current) return;
+          annotations.extend(
+            stroke.current,
+            e.nativeEvent.locationX / box.w,
+            e.nativeEvent.locationY / box.h,
+          );
+        },
+        onPanResponderRelease: () => {
+          if (annotations && stroke.current) annotations.end(stroke.current);
+          stroke.current = null;
+        },
+        onPanResponderTerminate: () => {
+          if (annotations && stroke.current) annotations.end(stroke.current);
+          stroke.current = null;
+        },
+      }),
+    [canDraw, annotations, color, box.w, box.h],
+  );
   return (
     <View
       style={[StyleSheet.absoluteFill, style]}
-      pointerEvents="none"
+      pointerEvents={canDraw ? 'auto' : 'none'}
       onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
+      {...(canDraw
+        ? {
+            ...pan.panHandlers,
+            accessible: true,
+            accessibilityLabel: 'Shared screen. Draw with one finger',
+          }
+        : {})}
     >
       {state && box.w > 0 ? (
         <Svg width={box.w} height={box.h}>

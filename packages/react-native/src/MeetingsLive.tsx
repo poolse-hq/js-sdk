@@ -29,16 +29,17 @@ import {
   meetingNameOf,
   rsvpOf,
 } from '@poolse/sdk';
-import { useOptionalPoolse } from '@poolse/react';
+import { useBreakouts, useOptionalPoolse } from '@poolse/react';
 import type {
   UseAgenda,
   UseBreakouts,
+  UseBreakoutsOptions,
   UseLobby,
   UseMoments,
   UseQuestions,
   UseStage,
 } from '@poolse/react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -509,8 +510,9 @@ export function QuestionsPanel({
 // ── Breakouts (CL5) ──────────────────────────────────────────────────────
 
 export interface BreakoutBannerProps {
-  breakouts: UseBreakouts;
-  /** You are in your breakout room now (not the main call). */
+  /** `useBreakouts(…)`, or `useNativeBreakouts(…)` on @poolse/native (which moves the call itself). */
+  breakouts: UseBreakouts | UseNativeBreakouts;
+  /** You are in your breakout room now (not the main call). Default: `useNativeBreakouts`' own. */
   inBreakout?: boolean;
   /** Connect to the room's session (switch the call's media to it). */
   onJoined?: (session: RoomSession) => void;
@@ -526,11 +528,13 @@ export interface BreakoutBannerProps {
  */
 export function BreakoutBanner({
   breakouts,
-  inBreakout = false,
+  inBreakout: inBreakoutProp,
   onJoined,
   onReturned,
   style,
 }: BreakoutBannerProps) {
+  const native = 'joinRoom' in breakouts ? breakouts : null;
+  const inBreakout = inBreakoutProp ?? native?.inBreakout ?? false;
   const { theme, text, muted, card } = useText();
   const s = breakouts.session;
   const room = breakouts.myRoom;
@@ -564,6 +568,7 @@ export function BreakoutBanner({
           primary
           disabled={breakouts.pending}
           onPress={async () => {
+            if (native) return void (await native.joinRoom(room.id));
             const session = await breakouts.join(room.id);
             if (session) onJoined?.(session);
           }}
@@ -574,6 +579,7 @@ export function BreakoutBanner({
           label="Return to main"
           disabled={breakouts.pending}
           onPress={async () => {
+            if (native) return void (await native.returnToMainRoom());
             const session = await breakouts.returnToMain();
             if (session) onReturned?.(session);
           }}
@@ -581,6 +587,75 @@ export function BreakoutBanner({
       ) : null}
     </View>
   );
+}
+
+export interface UseNativeBreakoutsOptions extends Omit<UseBreakoutsOptions, 'auto'> {
+  /**
+   * @poolse/native's `moveToRoom`: switches the live call's media to the
+   * session's room and keeps the system call (CallKit / Android's call
+   * service). Injected so this package doesn't depend on the native module.
+   */
+  moveToRoom: (session: RoomSession) => Promise<boolean>;
+  /** Follow the split by yourself (default true): join your room as it opens, come back as it closes. */
+  auto?: boolean;
+}
+
+export interface UseNativeBreakouts extends UseBreakouts {
+  /** The call's media is in a breakout room now (not the main room). */
+  inBreakout: boolean;
+  /** Join a room and move the call into it. False when the server or the core refused. */
+  joinRoom: (roomId: string) => Promise<boolean>;
+  /** Back to the main room. */
+  returnToMainRoom: () => Promise<boolean>;
+}
+
+/**
+ * Breakout rooms on phones (CL5): `useBreakouts` with the native call
+ * core doing the moving. With `auto` (the default) it joins your room
+ * when the split gives you one and returns you when it closes; the
+ * phone's call never ends, only its media changes rooms.
+ *
+ *     import { moveToRoom } from '@poolse/native';
+ *     const breakouts = useNativeBreakouts(conversationId, callId, { moveToRoom });
+ *     <BreakoutBanner breakouts={breakouts} />
+ */
+export function useNativeBreakouts(
+  conversationId: string | null,
+  callId: string | null,
+  opts: UseNativeBreakoutsOptions,
+): UseNativeBreakouts {
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+  const [inBreakout, setInBreakout] = useState(false);
+  const move = useCallback(async (session: RoomSession | null, into: boolean) => {
+    if (!session) return false;
+    const ok = await optsRef.current.moveToRoom(session).catch(() => false);
+    if (ok) setInBreakout(into);
+    return ok;
+  }, []);
+  const breakouts = useBreakouts(conversationId, callId, {
+    auto: opts.auto ?? true,
+    onJoinRoom: (session, room) => {
+      void move(session, true);
+      optsRef.current.onJoinRoom?.(session, room);
+    },
+    onReturn: (session) => {
+      void move(session, false);
+      optsRef.current.onReturn?.(session);
+    },
+  });
+  // A new call starts in its main room.
+  useEffect(() => setInBreakout(false), [callId]);
+  const { join, returnToMain } = breakouts;
+  const joinRoom = useCallback(
+    async (roomId: string) => move(await join(roomId), true),
+    [join, move],
+  );
+  const returnToMainRoom = useCallback(
+    async () => move(await returnToMain(), false),
+    [returnToMain, move],
+  );
+  return { ...breakouts, inBreakout, joinRoom, returnToMainRoom };
 }
 
 // ── Lobby (CL10) ─────────────────────────────────────────────────────────
