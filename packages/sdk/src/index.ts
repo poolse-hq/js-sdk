@@ -338,7 +338,57 @@ export type {
   DevicePlatform,
   RegisterDeviceRequest,
 } from './resources/devices.js';
-export { ConversationMessages, MessageHandle, MessagesResource } from './resources/messages.js';
+export {
+  ConversationMessages,
+  MessageHandle,
+  MessagesResource,
+  ScheduledMessagesResource,
+} from './resources/messages.js';
+export {
+  VIDEO_MESSAGE_MAX_MS,
+  applyLocalVote,
+  attachmentKind,
+  initialBlockValues,
+  isPollClosed,
+  mediaMessageOf,
+  missingInputs,
+  pollPercentages,
+  toggleVote,
+  type AttachmentAssetUrl,
+  type AttachmentKind,
+  type AttachmentListOptions,
+  type AttachmentPage,
+  type AttachmentProcessedEvent,
+  type AttachmentPurpose,
+  type Block,
+  type BlockActionRequest,
+  type BlockElement,
+  type BlockOption,
+  type BlockValues,
+  type ButtonElement,
+  type CatchUp,
+  type CatchUpHighlight,
+  type CatchUpRequest,
+  type ForwardRequest,
+  type ForwardedFrom,
+  type InputBlock,
+  type MessageTranslation,
+  type PinEvent,
+  type Poll,
+  type PollCreate,
+  type PollOption,
+  type PollState,
+  type PollUpdatedEvent,
+  type ProcessingStatus,
+  type ScheduleMessageRequest,
+  type ScheduledMessage,
+  type ScheduledMessageEvent,
+  type ScheduledMessageStatus,
+  type ScheduledMessageUpdate,
+  type SelectElement,
+  type ThreadFollowState,
+  type AttachmentTranscriptStatus,
+} from './messaging-plus.js';
 export { UsersResource } from './resources/users.js';
 export {
   NotificationActions,
@@ -516,3 +566,4 @@ export {
   type OutboxEntry,
 } from './outbox.js';
 export { UnreadResource, type UnreadSummary, type UnreadTotals } from './resources/unread.js';
+export { handNoteToAgent, type NoteHandoff } from './note-handoff.js';

@@ -5,6 +5,17 @@
 // versions stay aligned by following the OpenAPI schema modules verbatim
 // (see poolse/apps/caas_api/lib/caas_api_web/schemas/*.ex).
 
+import type {
+  AttachmentKind,
+  AttachmentPurpose,
+  Block,
+  ForwardedFrom,
+  Poll,
+  PollCreate,
+  ProcessingStatus,
+  AttachmentTranscriptStatus,
+} from './messaging-plus.js';
+
 export type Uuid = string;
 export type IsoDateTime = string;
 
@@ -290,7 +301,7 @@ export interface MembershipCreateRequest {
 
 // ── messages ─────────────────────────────────────────────────────────────
 
-export type MessageType = 'text' | 'system' | 'custom';
+export type MessageType = 'text' | 'system' | 'custom' | 'poll' | 'blocks';
 
 /** Where an unsent message stands in the outbox; see `Message.local_status`. */
 export type LocalMessageStatus = 'sending' | 'queued' | 'failed';
@@ -362,6 +373,19 @@ export interface Message {
    * workspace turned previews off. Absent on older servers.
    */
   link_previews?: LinkPreview[];
+  /** `type: "poll"` only (MS3); the question is `body`. */
+  poll?: Poll | null;
+  /** REST only, poll messages: the caller's votes. */
+  my_option_ids?: string[];
+  /** `type: "blocks"` only (IN4); `body` is the plain-text fallback. */
+  blocks?: Block[];
+  /** Pinned in its conversation (MS13). */
+  pinned_at?: IsoDateTime | null;
+  pinned_by_id?: Uuid | null;
+  /** A forwarded copy: where it came from (MS13). */
+  forwarded_from?: ForwardedFrom | null;
+  /** A thread reply also shown in the channel (MS19). */
+  also_in_channel?: boolean;
   edited_at: IsoDateTime | null;
   /**
    * Set on a tombstone: a deleted message keeps its id, sequence, sender
@@ -521,6 +545,12 @@ export interface MessageCreateRequest {
    * effect on `dlp_blocked`.
    */
   dlp_acknowledged?: boolean;
+  /** `type: "poll"`: the options; `body` is the question (1–500 chars). */
+  poll?: PollCreate;
+  /** `type: "blocks"`: 1–50 blocks, ≤ 16 KB; `body` is required as the fallback. */
+  blocks?: Block[];
+  /** With `reply_to_id`: also show the reply in the channel (MS19). */
+  also_send_to_channel?: boolean;
   /**
    * Client-supplied UUID for retry-safe sends. The SDK fills this in
    * automatically when not provided so the optimistic temp row and
@@ -539,6 +569,9 @@ export interface MessageCreateRequest {
 export interface MessageUpdateRequest {
   body?: string;
   remove_link_previews?: string[] | true;
+  /** A block message's sender replaces its blocks (no edit history). */
+  blocks?: Block[];
+  dlp_acknowledged?: boolean;
 }
 
 /** History options for `messages.list()` and `messages.one(id).replies()`. */
@@ -581,6 +614,23 @@ export interface Attachment {
    * from. Read with `clipOf(attachment)`.
    */
   clip?: { clip_id?: string; recording_id: string; start_ms: number; end_ms: number } | null;
+  /** docs/PLATFORM_PLUS.md §1 — absent on older servers. */
+  conversation_id?: Uuid | null;
+  kind?: AttachmentKind;
+  purpose?: AttachmentPurpose | null;
+  duration_ms?: number | null;
+  processing_status?: ProcessingStatus | null;
+  transcript_status?: AttachmentTranscriptStatus | null;
+  /** Voice and video messages: the Soniox transcript (plain text). */
+  transcript?: string | null;
+  transcript_language?: string | null;
+  /** Video messages: 1–3 sentences. */
+  summary?: string | null;
+  has_thumbnail?: boolean;
+  has_preview?: boolean;
+  /** Versions (MS18): 1 for the first; `version_group_id` is the first version's id. */
+  version?: number;
+  version_group_id?: Uuid;
   inserted_at: IsoDateTime;
   updated_at: IsoDateTime;
 }
@@ -589,6 +639,12 @@ export interface AttachmentUploadRequest {
   content_type: string;
   byte_size: number;
   original_filename?: string;
+  /** A voice message (MS15) or a video message (MS16, ≤ 5 min). */
+  purpose?: AttachmentPurpose;
+  /** The recording's length as the recorder knows it (≤ 3 600 000). */
+  duration_ms?: number;
+  /** This file is a new version of that one (MS18). */
+  replaces_attachment_id?: Uuid;
 }
 
 /** Presigned PUT payload returned by `POST /v1/attachments/upload-url`. */

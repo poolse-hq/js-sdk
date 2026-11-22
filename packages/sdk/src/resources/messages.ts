@@ -10,6 +10,21 @@ import type {
   Uuid,
 } from '../types.js';
 import { safeUuid } from '../uuid.js';
+import type {
+  AttachmentListOptions,
+  AttachmentPage,
+  BlockActionRequest,
+  CatchUp,
+  CatchUpRequest,
+  ForwardRequest,
+  MessageTranslation,
+  PollState,
+  ScheduleMessageRequest,
+  ScheduledMessage,
+  ScheduledMessageStatus,
+  ScheduledMessageUpdate,
+  ThreadFollowState,
+} from '../messaging-plus.js';
 
 /** Per-conversation message collection: send, list, mark-read. */
 export class ConversationMessages {
@@ -72,6 +87,57 @@ export class ConversationMessages {
       method: 'POST',
       path: `/v1/conversations/${this.conversationId}/read`,
       body: { message_id: messageId },
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /**
+   * `POST …/scheduled-messages` (MS1): send `body` at `send_at`. Text
+   * only; checked now as a send would be (word filter, DLP — 422
+   * `dlp_warning` / `dlp_blocked`). 422 `too_many_scheduled` over 100.
+   */
+  schedule(attrs: ScheduleMessageRequest, signal?: AbortSignal): Promise<ScheduledMessage> {
+    return this.client.request<ScheduledMessage>({
+      method: 'POST',
+      path: `/v1/conversations/${this.conversationId}/scheduled-messages`,
+      body: attrs,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /** `GET …/pins` (MS13): pinned messages, newest pin first. */
+  async pins(signal?: AbortSignal): Promise<Message[]> {
+    const res = await this.client.request<{ data: Message[] }>({
+      method: 'GET',
+      path: `/v1/conversations/${this.conversationId}/pins`,
+      ...(signal ? { signal } : {}),
+    });
+    return res.data;
+  }
+
+  /**
+   * `POST …/catch-up` (MS20): "what did I miss" since `since` (default:
+   * your read position). 503 `no_model`, 502 `model_failed`, 10/min.
+   */
+  catchUp(opts: CatchUpRequest = {}, signal?: AbortSignal): Promise<CatchUp> {
+    return this.client.request<CatchUp>({
+      method: 'POST',
+      path: `/v1/conversations/${this.conversationId}/catch-up`,
+      body: opts,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /** `GET …/attachments` (MS18): the conversation's files, newest first, newest version of each. */
+  files(opts: AttachmentListOptions = {}, signal?: AbortSignal): Promise<AttachmentPage> {
+    return this.client.request<AttachmentPage>({
+      method: 'GET',
+      path: `/v1/conversations/${this.conversationId}/attachments`,
+      query: {
+        ...(opts.kind ? { kind: opts.kind } : {}),
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+        ...(opts.before ? { before: opts.before } : {}),
+      },
       ...(signal ? { signal } : {}),
     });
   }
@@ -173,6 +239,115 @@ export class MessageHandle {
     });
   }
 
+  /** `GET /v1/messages/:id/poll` (MS3). */
+  poll(signal?: AbortSignal): Promise<PollState> {
+    return this.client.request<PollState>({
+      method: 'GET',
+      path: `/v1/messages/${this.id}/poll`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /**
+   * `PUT /v1/messages/:id/poll/votes`: replace your votes (`[]` takes
+   * them back). 409 `poll_closed`, 422 `single_choice` / `invalid_option`.
+   */
+  vote(optionIds: string[], signal?: AbortSignal): Promise<PollState> {
+    return this.client.request<PollState>({
+      method: 'PUT',
+      path: `/v1/messages/${this.id}/poll/votes`,
+      body: { option_ids: optionIds },
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /** `POST /v1/messages/:id/poll/close` — the poll's sender or an owner/admin. */
+  closePoll(signal?: AbortSignal): Promise<PollState> {
+    return this.client.request<PollState>({
+      method: 'POST',
+      path: `/v1/messages/${this.id}/poll/close`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /** `POST /v1/messages/:id/pin` (MS13); idempotent. 422 `too_many_pins` over 100. */
+  pin(signal?: AbortSignal): Promise<Message> {
+    return this.client.request<Message>({
+      method: 'POST',
+      path: `/v1/messages/${this.id}/pin`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /** `DELETE /v1/messages/:id/pin`; idempotent. */
+  unpin(signal?: AbortSignal): Promise<Message> {
+    return this.client.request<Message>({
+      method: 'DELETE',
+      path: `/v1/messages/${this.id}/pin`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /**
+   * `POST /v1/messages/:id/forward` (MS13) to 1–10 conversations; one new
+   * message per target, in order. 422 `cannot_forward` (polls, blocks,
+   * system, deleted), 403 when any target refuses.
+   */
+  async forward(req: ForwardRequest, signal?: AbortSignal): Promise<Message[]> {
+    const res = await this.client.request<{ data: Message[] }>({
+      method: 'POST',
+      path: `/v1/messages/${this.id}/forward`,
+      body: req,
+      ...(signal ? { signal } : {}),
+    });
+    return res.data;
+  }
+
+  /** `GET /v1/messages/:id/follow` (MS19) — `:id` may be the root or any reply. */
+  followState(signal?: AbortSignal): Promise<ThreadFollowState> {
+    return this.client.request<ThreadFollowState>({
+      method: 'GET',
+      path: `/v1/messages/${this.id}/follow`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /** Follow (`true`) or unfollow the thread: who gets a push for its replies. */
+  setFollow(following: boolean, signal?: AbortSignal): Promise<ThreadFollowState> {
+    return this.client.request<ThreadFollowState>({
+      method: following ? 'PUT' : 'DELETE',
+      path: `/v1/messages/${this.id}/follow`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /**
+   * `POST /v1/messages/:id/translate` (MS21) into `language` (BCP 47),
+   * cached per message. 422 `nothing_to_translate`, 503 `no_model`.
+   */
+  translate(language: string, signal?: AbortSignal): Promise<MessageTranslation> {
+    return this.client.request<MessageTranslation>({
+      method: 'POST',
+      path: `/v1/messages/${this.id}/translate`,
+      body: { language },
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /**
+   * `POST /v1/messages/:id/actions` (IN4): a button, a select's value, or
+   * a form's `values` with a `submit` button. 202; the app answers by
+   * editing the message (`message:updated`).
+   */
+  action(req: BlockActionRequest, signal?: AbortSignal): Promise<{ action_event_id: Uuid }> {
+    return this.client.request<{ action_event_id: Uuid }>({
+      method: 'POST',
+      path: `/v1/messages/${this.id}/actions`,
+      body: req,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
   removeReaction(emoji: string, signal?: AbortSignal): Promise<Message> {
     return this.client.request<Message>({
       method: 'DELETE',
@@ -221,4 +396,54 @@ export class MessagesResource {
  */
 function generateClientMessageId(): Uuid {
   return safeUuid();
+}
+
+/** `/v1/scheduled-messages` — your own scheduled messages (MS1). */
+export class ScheduledMessagesResource {
+  constructor(private readonly client: RestClient) {}
+
+  /** Soonest first. `status` defaults to `scheduled`. */
+  async list(
+    opts: { conversation_id?: Uuid; status?: ScheduledMessageStatus | 'all' } = {},
+    signal?: AbortSignal,
+  ): Promise<ScheduledMessage[]> {
+    const res = await this.client.request<{ data: ScheduledMessage[] }>({
+      method: 'GET',
+      path: '/v1/scheduled-messages',
+      query: {
+        ...(opts.conversation_id ? { conversation_id: opts.conversation_id } : {}),
+        ...(opts.status ? { status: opts.status } : {}),
+      },
+      ...(signal ? { signal } : {}),
+    });
+    return res.data;
+  }
+
+  /** Change the text or time while it is still scheduled (409 `not_scheduled` after). */
+  update(id: Uuid, attrs: ScheduledMessageUpdate, signal?: AbortSignal): Promise<ScheduledMessage> {
+    return this.client.request<ScheduledMessage>({
+      method: 'PATCH',
+      path: `/v1/scheduled-messages/${encodeURIComponent(id)}`,
+      body: attrs,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /** Cancel: removes it. */
+  cancel(id: Uuid, signal?: AbortSignal): Promise<void> {
+    return this.client.request<void>({
+      method: 'DELETE',
+      path: `/v1/scheduled-messages/${encodeURIComponent(id)}`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+
+  /** Send it now; the message keeps the scheduled id. */
+  sendNow(id: Uuid, signal?: AbortSignal): Promise<Message> {
+    return this.client.request<Message>({
+      method: 'POST',
+      path: `/v1/scheduled-messages/${encodeURIComponent(id)}/send`,
+      ...(signal ? { signal } : {}),
+    });
+  }
 }
