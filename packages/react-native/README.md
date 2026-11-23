@@ -96,6 +96,17 @@ original.
   `remove` over strings, sync or async) they are also saved under
   `poolse:draft:<conversationId>` and come back after a restart;
   `persistDrafts={false}` keeps them in memory only. Sending clears them.
+- **Composer hooks** (`ConversationView` and `ThreadView`): `composerProps`
+  go to the composer (`placeholder`, `disabled`, `formattingToolbar`,
+  `commands`…), `composerAccessory` renders above it, `composerHandle` is a
+  ref with `focus`, `insertText` (at the cursor), `setText`, `getText`,
+  `clear`, `setSelection`, `addFiles`, and
+  `beforeSend={async (draft) => draft | false}` changes or cancels a send
+  (cancelled, the text and files stay).
+- **Message menu.** `extraActions={(msg) => [{ label, icon?, onPress, danger? }]}`
+  adds your own entries to the long-press menu (before Edit / Delete).
+  Deleting asks first: a native "Delete message?" alert, or your own
+  `confirmDelete={(msg) => boolean | Promise<boolean>}`.
 - **New messages.** A "New messages" line sits above the first message that
   was unread when the conversation opened; while it is off screen a pill jumps
   to it, loading older pages as needed. `newMessagesDivider={false}` turns

@@ -23,7 +23,7 @@ import {
   type MessageSlots,
   type TimeFormat,
 } from './layout.js';
-import { MessageActions } from './MessageActions.js';
+import { MessageActions, type MessageExtraAction } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { ReactionStrip } from './Reactions.js';
@@ -88,6 +88,8 @@ export interface MessageRowProps {
    */
   onStartEdit?: () => void;
   onDelete?: () => void;
+  /** The app's own long-press menu entries for this message (before Edit / Delete). */
+  extraActions?: readonly MessageExtraAction[];
   onOpenThread?: () => void;
   onQuote?: () => void;
   labelFor?: (externalId: string) => string;
@@ -163,6 +165,7 @@ export function RowActionsSheet({
   onMarkUnread,
   onRemoveLinkPreview,
   linkPreviews,
+  extraActions,
 }: {
   msg: Message;
   isSelf: boolean;
@@ -179,6 +182,7 @@ export function RowActionsSheet({
   onMarkUnread: (() => void) | undefined;
   onRemoveLinkPreview: ((url: string) => void) | undefined;
   linkPreviews: boolean;
+  extraActions?: readonly MessageExtraAction[] | undefined;
 }) {
   const then = (fn: () => void) => () => {
     close();
@@ -197,6 +201,9 @@ export function RowActionsSheet({
       {...(threads && onOpenThread ? { onReplyInThread: then(onOpenThread) } : {})}
       {...(quotations && onQuote ? { onQuote: then(onQuote) } : {})}
       {...(onMarkUnread ? { onMarkUnread: then(onMarkUnread) } : {})}
+      {...(extraActions && extraActions.length > 0
+        ? { extraActions: extraActions.map((a) => ({ ...a, onPress: then(a.onPress) })) }
+        : {})}
       {...(onRemoveLinkPreview && previewUrls.length > 0
         ? {
             previewUrls,
@@ -319,6 +326,7 @@ function BubbleMessageRow({
   editHistory = true,
   onRetrySend,
   onDiscardSend,
+  extraActions,
 }: MessageRowProps) {
   const theme = useTheme();
   const isSelf = meId !== null && msg.sender_id === meId;
@@ -631,6 +639,7 @@ function BubbleMessageRow({
             onMarkUnread={onMarkUnread}
             onRemoveLinkPreview={onRemoveLinkPreview}
             linkPreviews={linkPreviews}
+            extraActions={extraActions}
           />
         ) : null,
       )}

@@ -8,7 +8,7 @@ import {
   useUser,
   type MentionGroup,
 } from '@poolse/react';
-import { useMemo, useRef, useState } from 'react';
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -59,22 +59,38 @@ interface Candidate {
  * carries their user id in `mentions` — for as long as `@Name` is
  * still in the text.
  */
-export function MentionInput({
-  conversationId,
-  onSend,
-  maxSuggestions = 6,
-  labelFor,
-  value: valueProp,
-  onChangeText,
-  onSelectionChange,
-  groups,
-  ...composerProps
-}: MentionInputProps) {
+export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>(function MentionInput(
+  {
+    conversationId,
+    onSend,
+    maxSuggestions = 6,
+    labelFor,
+    value: valueProp,
+    onChangeText,
+    onSelectionChange,
+    groups,
+    ...composerProps
+  },
+  ref,
+) {
   const theme = useTheme();
   const chat = usePoolse();
   const { me } = useMe();
   const { members } = useMembers(conversationId);
   const composerRef = useRef<MessageComposerHandle>(null);
+  useImperativeHandle(
+    ref,
+    (): MessageComposerHandle => ({
+      addFiles: (inputs) => composerRef.current?.addFiles(inputs),
+      focus: () => composerRef.current?.focus(),
+      clear: () => composerRef.current?.clear(),
+      getText: () => composerRef.current?.getText() ?? '',
+      setText: (t) => composerRef.current?.setText(t),
+      insertText: (t) => composerRef.current?.insertText(t),
+      setSelection: (start, end) => composerRef.current?.setSelection(start, end),
+    }),
+    [],
+  );
   const [innerText, setInnerText] = useState('');
   const text = valueProp ?? innerText;
   const [cursor, setCursor] = useState(0);
@@ -132,8 +148,11 @@ export function MentionInput({
 
   const handleSend: MessageComposerProps['onSend'] = async (body, opts) => {
     const mentions = mentionedUserIds(body, pickedRef.current);
-    await onSend(body, { ...opts, ...(mentions.length > 0 ? { mentions } : {}) });
+    const result = await onSend(body, { ...opts, ...(mentions.length > 0 ? { mentions } : {}) });
+    // Held back (beforeSend): the text and its mentions stay.
+    if (result === false) return false;
     pickedRef.current = [];
+    return undefined;
   };
 
   const suggestions =
@@ -195,7 +214,7 @@ export function MentionInput({
       accessory={suggestions}
     />
   );
-}
+});
 
 function MentionRow({
   externalId,

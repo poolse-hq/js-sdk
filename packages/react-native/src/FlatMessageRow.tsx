@@ -65,6 +65,7 @@ export function FlatMessageRow({
   isEditing = false,
   onStartEdit,
   onDelete,
+  extraActions,
   onOpenThread,
   onQuote,
   labelFor,
@@ -405,6 +406,7 @@ export function FlatMessageRow({
         onMarkUnread={onMarkUnread}
         onRemoveLinkPreview={onRemoveLinkPreview}
         linkPreviews={linkPreviews}
+        extraActions={extraActions}
       />
     ) : null;
 

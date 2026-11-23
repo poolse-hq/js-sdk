@@ -7,6 +7,17 @@ import { useTheme } from './theme/PoolseTheme.js';
 
 const DEFAULT_REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
 
+/** An app's own entry in the long-press menu (`extraActions`). */
+export interface MessageExtraAction {
+  label: string;
+  /** Defaults to `more-h`. */
+  icon?: IconName;
+  /** Called after the menu closes. */
+  onPress: () => void;
+  /** Red, like Delete. */
+  danger?: boolean;
+}
+
 export interface MessageActionsProps {
   visible: boolean;
   onClose: () => void;
@@ -46,6 +57,8 @@ export interface MessageActionsProps {
   /** Translate (MS21), or back to the original when `translated`. */
   onTranslate?: () => void;
   translated?: boolean;
+  /** The app's own actions, listed before Edit / Delete. */
+  extraActions?: readonly MessageExtraAction[];
 }
 
 /**
@@ -75,6 +88,7 @@ export function MessageActions({
   onForward,
   onTranslate,
   translated = false,
+  extraActions = [],
 }: MessageActionsProps) {
   const theme = useTheme();
   const insets = useSafeInsets();
@@ -103,6 +117,14 @@ export function MessageActions({
         onPress: () => onRemovePreview(url),
       });
     }
+  }
+  for (const a of extraActions) {
+    items.push({
+      label: a.label,
+      icon: a.icon ?? 'more-h',
+      onPress: a.onPress,
+      ...(a.danger ? { danger: true } : {}),
+    });
   }
   if (isSelf && onEdit) items.push({ label: 'Edit', icon: 'edit', onPress: onEdit });
   if (isSelf && onDelete)

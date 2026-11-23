@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { AttachmentUploadInput, Message, Uuid } from '@poolse/sdk';
+import type { AttachmentUploadInput, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import {
   applyFormat,
   applySlashCommand,
@@ -32,7 +32,8 @@ export interface MessageComposerProps {
    * Called when the user taps Send. Second arg carries
    * `quoted_message_id` (when replying) and `attachment_ids`
    * (resolved from the composer's upload queue). Awaited so the
-   * composer disables until the send round-trips.
+   * composer disables until the send round-trips. Resolve to `false` to
+   * keep the draft (text and files), e.g. a cancelled `beforeSend`.
    */
   onSend: (body: string, opts?: ComposerSendOptions) => Promise<unknown> | void;
   /** Called on every keystroke. Hook to `useTyping().signalTyping`. */
@@ -92,6 +93,34 @@ export interface MessageComposerProps {
   commands?: readonly SlashCommand[];
 }
 
+/**
+ * `ConversationView` / `ThreadView`'s `beforeSend`: sees the message about
+ * to go out and returns it (changed or not), or `false` to cancel — the
+ * text and files then stay in the composer.
+ */
+export type BeforeSend = (
+  draft: MessageCreateRequest,
+) => MessageCreateRequest | false | Promise<MessageCreateRequest | false>;
+
+/**
+ * `ConversationView` / `ThreadView`'s `composerProps`: passed through to the
+ * composer. The view keeps the text, sending, quoting and editing to
+ * itself; `onTyping` runs alongside its own.
+ */
+export type ComposerPassThroughProps = Partial<
+  Omit<
+    MessageComposerProps,
+    | 'onSend'
+    | 'value'
+    | 'onChangeText'
+    | 'replyingTo'
+    | 'onCancelReply'
+    | 'editingMessage'
+    | 'onCancelEdit'
+    | 'onSaveEdit'
+  >
+>;
+
 /** The second argument of `onSend`. */
 export interface ComposerSendOptions {
   quoted_message_id?: Uuid;
@@ -109,7 +138,14 @@ export interface MessageComposerHandle {
   /** Enqueue ready-to-upload inputs. The picker component is the usual caller; this is the escape hatch. */
   addFiles: (inputs: AttachmentUploadInput[]) => void;
   focus: () => void;
+  /** Empty the input. Queued files stay. */
   clear: () => void;
+  /** The text in the input right now. */
+  getText: () => string;
+  /** Replace the text. */
+  setText: (text: string) => void;
+  /** Insert text at the cursor (replacing a selection). */
+  insertText: (text: string) => void;
   /** Move the cursor (`start === end`) or select a range. */
   setSelection: (start: number, end: number) => void;
 }
@@ -187,6 +223,17 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           if (!controlled) setInnerValue('');
           onChangeTextRef.current?.('');
         },
+        getText: () => valueRef.current,
+        setText: (text) => setValueRef.current(text),
+        insertText: (text) => {
+          const now = valueRef.current;
+          const sel = selectionRef.current ?? { start: now.length, end: now.length };
+          const caret = sel.start + text.length;
+          applyTextRef.current(now.slice(0, sel.start) + text + now.slice(sel.end), {
+            start: caret,
+            end: caret,
+          });
+        },
         setSelection: (start, end) => {
           selectionRef.current = { start, end };
           inputRef.current?.setSelection?.(start, end);
@@ -245,14 +292,20 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           const replyId = replyingTo?.id;
           const attachmentIds = readyAttachmentIds;
           setDraft('');
-          upload.reset();
           const opts: ComposerSendOptions = {
             ...(replyId ? { quoted_message_id: replyId } : {}),
             ...(attachmentIds.length > 0 ? { attachment_ids: attachmentIds } : {}),
           };
           try {
-            await onSend(body, opts);
+            if ((await onSend(body, opts)) === false) {
+              // Held back by the app (beforeSend): text and files stay.
+              if (!controlled) setInnerValue((now) => (now ? now : body));
+              else onChangeTextRef.current?.(body);
+              return;
+            }
+            upload.reset();
           } catch (err) {
+            upload.reset();
             // Data-loss prevention held it back: show why, keep the text.
             const outcome = readDlpError(err);
             if (outcome) setDlp({ outcome, body, opts });
@@ -291,6 +344,13 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       // After React applies the new text, move the native selection.
       setTimeout(() => inputRef.current?.setSelection?.(sel.start, sel.end), 0);
     };
+    // The handle outlives renders: read the latest text and setters.
+    const valueRef = useRef(value);
+    valueRef.current = value;
+    const setValueRef = useRef(setValue);
+    setValueRef.current = setValue;
+    const applyTextRef = useRef(applyText);
+    applyTextRef.current = applyText;
     const format = (kind: FormatKind) => {
       const sel = selectionRef.current ?? { start: value.length, end: value.length };
       const r = applyFormat(value, sel, kind);

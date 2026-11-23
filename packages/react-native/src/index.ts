@@ -24,6 +24,7 @@ export {
 // ── Chat surface (composed conversation view) ─────────────────
 export { ConversationView, type ConversationViewProps } from './ConversationView.js';
 export type { ConversationDraft, DraftStorage } from './internal/drafts.js';
+export type { ConfirmDelete } from './internal/confirmDelete.js';
 export { ChatHeader, type ChatHeaderProps } from './ChatHeader.js';
 export { GroupDetailsSheet, type GroupDetailsSheetProps } from './GroupDetailsSheet.js';
 
@@ -156,6 +157,8 @@ export {
 } from './messageExtras.js';
 export {
   MessageComposer,
+  type BeforeSend,
+  type ComposerPassThroughProps,
   type ComposerSendOptions,
   type MessageComposerProps,
   type MessageComposerHandle,
@@ -167,7 +170,11 @@ export {
   type DlpWarningSheetProps,
   type FormattingToolbarProps,
 } from './ComposerExtras.js';
-export { MessageActions, type MessageActionsProps } from './MessageActions.js';
+export {
+  MessageActions,
+  type MessageActionsProps,
+  type MessageExtraAction,
+} from './MessageActions.js';
 export { MessageList, type MessageListProps, type MessageListItem } from './MessageList.js';
 export { DaySeparator, type DaySeparatorProps } from './DaySeparator.js';
 export { TypingIndicator, type TypingIndicatorProps } from './TypingIndicator.js';

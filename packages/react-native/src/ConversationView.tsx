@@ -1,4 +1,11 @@
-import type { Citation, LiveCall, MeetingMoment, Message, Uuid } from '@poolse/sdk';
+import type {
+  Citation,
+  LiveCall,
+  MeetingMoment,
+  Message,
+  MessageCreateRequest,
+  Uuid,
+} from '@poolse/sdk';
 import { MessageQueuedError, safeUuid } from '@poolse/sdk';
 import {
   canEditOwnMessage,
@@ -25,7 +32,17 @@ import {
   type MessageExtrasHandlers,
   type RenderMedia,
 } from './messageExtras.js';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import {
   AppState,
   KeyboardAvoidingView,
@@ -41,7 +58,15 @@ import { ChatHeader } from './ChatHeader.js';
 import { DaySeparator } from './DaySeparator.js';
 import { LiveCallBanner } from './LiveCallBanner.js';
 import { MentionInput } from './MentionInput.js';
-import { MessageComposer } from './MessageComposer.js';
+import {
+  MessageComposer,
+  type BeforeSend,
+  type ComposerPassThroughProps,
+  type MessageComposerHandle,
+} from './MessageComposer.js';
+import type { MessageExtraAction } from './MessageActions.js';
+import { alertConfirmDelete } from './internal/alertConfirmDelete.js';
+import { confirmThenDelete, type ConfirmDelete } from './internal/confirmDelete.js';
 import { MessageList, type MessageListItem } from './MessageList.js';
 import { MessageRow, type MessageUser } from './MessageRow.js';
 import { NewMessagesDivider } from './NewMessagesDivider.js';
@@ -277,6 +302,33 @@ export interface ConversationViewProps {
   markUnread?: boolean;
   /** Fires after "Mark unread" succeeded (the unread counts follow over realtime). */
   onMarkedUnread?: (conversationId: string, messageId: string) => void;
+  /**
+   * Passed through to the composer (`placeholder`, `disabled`,
+   * `formattingToolbar`, `commands`…). The text, sending, quoting and
+   * editing stay the view's; `onTyping` runs alongside its own. Also used
+   * by the thread sheet's composer.
+   */
+  composerProps?: ComposerPassThroughProps;
+  /** Rendered above the composer (a toolbar, a "scheduled" chip…). */
+  composerAccessory?: ReactNode;
+  /**
+   * The composer's handle: `focus`, `insertText` (at the cursor),
+   * `setText`, `getText`, `clear`, `setSelection`, `addFiles`.
+   */
+  composerHandle?: Ref<MessageComposerHandle>;
+  /**
+   * Runs before every send here and in the thread sheet: return the
+   * message (changed or not), or `false` to cancel — the text and files
+   * stay in the composer.
+   */
+  beforeSend?: BeforeSend;
+  /** The app's own entries in a message's long-press menu, listed before Edit / Delete. */
+  extraActions?: (msg: Message) => readonly MessageExtraAction[];
+  /**
+   * Asked before a message is deleted; resolve `true` to delete. Defaults
+   * to a native "Delete message?" alert. Also used in the thread sheet.
+   */
+  confirmDelete?: ConfirmDelete;
 }
 
 export function ConversationView({
@@ -331,6 +383,12 @@ export function ConversationView({
   acceptedFileTypes,
   markUnread = true,
   onMarkedUnread,
+  composerProps: appComposerProps,
+  composerAccessory,
+  composerHandle,
+  beforeSend,
+  extraActions,
+  confirmDelete = alertConfirmDelete,
 }: ConversationViewProps) {
   const theme = useTheme();
   const chat = usePoolse();
@@ -439,6 +497,20 @@ export function ConversationView({
   // switch never saves one conversation's text under another's id.
   const [draftFor, setDraftFor] = useState(conversationId);
   const [draftText, setDraftText] = useState(() => drafts.peek(conversationId)?.text ?? '');
+  const composerRef = useRef<MessageComposerHandle | null>(null);
+  useImperativeHandle(
+    composerHandle,
+    (): MessageComposerHandle => ({
+      addFiles: (inputs) => composerRef.current?.addFiles(inputs),
+      focus: () => composerRef.current?.focus(),
+      clear: () => composerRef.current?.clear(),
+      getText: () => composerRef.current?.getText() ?? '',
+      setText: (t) => composerRef.current?.setText(t),
+      insertText: (t) => composerRef.current?.insertText(t),
+      setSelection: (start, end) => composerRef.current?.setSelection(start, end),
+    }),
+    [],
+  );
   const [replyingTo, setReplyingTo] = useState<Message | null>(
     () => drafts.peek(conversationId)?.quote ?? null,
   );
@@ -793,7 +865,8 @@ export function ConversationView({
           {...(readState ? { readState } : {})}
           isEditing={editingId === msg.id}
           {...(canEdit ? { onStartEdit: () => setEditingId(msg.id) } : {})}
-          onDelete={() => deleteMsg(msg.id)}
+          onDelete={() => void confirmThenDelete(msg, confirmDelete, deleteMsg)}
+          {...(extraActions ? { extraActions: extraActions(msg) } : {})}
           {...(threads ? { onOpenThread: () => setThreadRoot(msg) } : {})}
           {...(canQuote && !tombstone ? { onQuote: () => setReplyingTo(msg) } : {})}
           onQuotedClick={onQuotedClick}
@@ -835,6 +908,8 @@ export function ConversationView({
       threads,
       editingId,
       deleteMsg,
+      confirmDelete,
+      extraActions,
       labelFor,
       avatarFor,
       showSenderLabels,
@@ -906,9 +981,16 @@ export function ConversationView({
         body: string,
         opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[]; mentions?: Uuid[] },
       ) => {
-        const id = safeUuid();
+        let draft: MessageCreateRequest = { body, ...opts };
+        if (beforeSend) {
+          const changed = await beforeSend(draft);
+          // Cancelled: the composer keeps the text and files.
+          if (changed === false) return false;
+          draft = changed;
+        }
+        const id = draft.id ?? safeUuid();
         try {
-          await send({ body, ...opts, id });
+          await send({ ...draft, id });
         } catch (err) {
           // Offline: queued, it goes out by itself. Refused while the
           // outbox is on: the row stays with Retry / Delete — except a
@@ -930,6 +1012,7 @@ export function ConversationView({
         setReplyingTo(null);
         setAutoReadPaused(false);
         onSent?.(conversationId);
+        return undefined;
       },
       value: draftText,
       onChangeText: (text: string) => {
@@ -937,7 +1020,11 @@ export function ConversationView({
         setDraftText(text);
       },
       emojiPicker,
-      onTyping: signalTyping,
+      ...appComposerProps,
+      onTyping: () => {
+        signalTyping();
+        appComposerProps?.onTyping?.();
+      },
       ...(attachments ? { onAttachPress: () => setPickerOpen(true) } : {}),
       ...(replyingTo ? { replyingTo } : {}),
       onCancelReply: () => setReplyingTo(null),
@@ -968,6 +1055,8 @@ export function ConversationView({
       edit,
       draftText,
       emojiPicker,
+      beforeSend,
+      appComposerProps,
     ],
   );
 
@@ -1126,10 +1215,11 @@ export function ConversationView({
             ) : null}
           </View>
 
+          {showComposer ? composerAccessory : null}
           {!showComposer ? null : mentions ? (
-            <MentionInput conversationId={conversationId} {...composerProps} />
+            <MentionInput ref={composerRef} conversationId={conversationId} {...composerProps} />
           ) : (
-            <MessageComposer {...composerProps} />
+            <MessageComposer ref={composerRef} {...composerProps} />
           )}
 
           {canAttach ? (
@@ -1155,6 +1245,10 @@ export function ConversationView({
               density={density}
               showPresence={showPresence}
               linkPreviews={linkPreviews}
+              confirmDelete={confirmDelete}
+              {...(appComposerProps ? { composerProps: appComposerProps } : {})}
+              {...(beforeSend ? { beforeSend } : {})}
+              {...(extraActions ? { extraActions } : {})}
             />
           ) : null}
         </KeyboardAvoidingView>

@@ -1,6 +1,13 @@
-import type { Message, Uuid } from '@poolse/sdk';
+import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { useMe, usePoolse, useThread, useThreadFollow } from '@poolse/react';
-import { useCallback, useMemo, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { EmptyState } from './EmptyState.js';
 import {
   Animated,
@@ -15,7 +22,15 @@ import {
 } from 'react-native';
 
 import { AttachmentPicker } from './AttachmentPicker.js';
-import { MessageComposer } from './MessageComposer.js';
+import {
+  MessageComposer,
+  type BeforeSend,
+  type ComposerPassThroughProps,
+  type MessageComposerHandle,
+} from './MessageComposer.js';
+import type { MessageExtraAction } from './MessageActions.js';
+import { alertConfirmDelete } from './internal/alertConfirmDelete.js';
+import { confirmThenDelete, type ConfirmDelete } from './internal/confirmDelete.js';
 import { MessageList } from './MessageList.js';
 import { MessageRow } from './MessageRow.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
@@ -46,7 +61,29 @@ export interface ThreadViewProps {
   follow?: boolean;
   /** An "Also send to channel" switch above the composer (MS19). Default `true`; off in DMs. */
   alsoSendToChannel?: boolean;
+  /** Passed through to the composer, as `ConversationView`'s `composerProps`. */
+  composerProps?: ComposerPassThroughProps;
+  /** Rendered above the composer. */
+  composerAccessory?: ReactNode;
+  /** The composer's handle, as `ConversationView`'s `composerHandle`. */
+  composerHandle?: Ref<MessageComposerHandle>;
+  /** Runs before every reply: return it (changed or not), or `false` to cancel. */
+  beforeSend?: BeforeSend;
+  /** The app's own entries in a reply's long-press menu. */
+  extraActions?: (msg: Message) => readonly MessageExtraAction[];
+  /** Asked before a reply is deleted. Defaults to a native "Delete message?" alert. */
+  confirmDelete?: ConfirmDelete;
 }
+
+type ThreadHooks = Pick<
+  ThreadViewProps,
+  | 'composerProps'
+  | 'composerAccessory'
+  | 'composerHandle'
+  | 'beforeSend'
+  | 'extraActions'
+  | 'confirmDelete'
+>;
 
 // Sheet covers the bottom 88% of the screen. The remaining 12% is the
 // pull-down gutter (also the KeyboardAvoidingView's vertical offset).
@@ -81,6 +118,7 @@ export function ThreadView({
   linkPreviews = true,
   follow = true,
   alsoSendToChannel = true,
+  ...hooks
 }: ThreadViewProps) {
   return (
     <Modal
@@ -110,6 +148,7 @@ export function ThreadView({
           linkPreviews={linkPreviews}
           follow={follow}
           alsoSendToChannel={alsoSendToChannel}
+          hooks={hooks}
         />
       </UploadProvider>
     </Modal>
@@ -129,7 +168,9 @@ function ThreadSheet({
   linkPreviews,
   follow,
   alsoSendToChannel,
+  hooks,
 }: {
+  hooks: ThreadHooks;
   onClose: () => void;
   conversationId: Uuid;
   rootMessage: Message;
@@ -193,9 +234,10 @@ function ThreadSheet({
           quotations={false}
           isEditing={editingId === msg.id}
           {...(canEdit ? { onStartEdit: () => setEditingId(msg.id) } : {})}
-          onDelete={() => {
-            void deleteReply(msg.id);
-          }}
+          onDelete={() =>
+            void confirmThenDelete(msg, hooks.confirmDelete ?? alertConfirmDelete, deleteReply)
+          }
+          {...(hooks.extraActions ? { extraActions: hooks.extraActions(msg) } : {})}
           {...(labelFor ? { labelFor } : {})}
           {...(avatarFor ? { avatarFor } : {})}
           {...(layout ? { layout } : {})}
@@ -218,6 +260,7 @@ function ThreadSheet({
       meId,
       editingId,
       deleteReply,
+      hooks,
       labelFor,
       avatarFor,
       layout,
@@ -374,18 +417,28 @@ function ThreadSheet({
               />
             </View>
           ) : null}
+          {hooks.composerAccessory}
           <MessageComposer
+            ref={hooks.composerHandle ?? null}
             onSend={async (body, opts) => {
-              await sendReply({
+              let draft: MessageCreateRequest = {
                 body,
                 ...opts,
                 ...(alsoSendToChannel && alsoToChannel ? { also_send_to_channel: true } : {}),
-              });
+              };
+              if (hooks.beforeSend) {
+                const changed = await hooks.beforeSend(draft);
+                if (changed === false) return false;
+                draft = changed;
+              }
+              await sendReply(draft);
               setAlsoToChannel(false);
+              return undefined;
             }}
             placeholder="Reply to thread…"
             attachments
             onAttachPress={() => setPickerOpen(true)}
+            {...hooks.composerProps}
             editingMessage={editingMessage}
             onCancelEdit={() => setEditingId(null)}
             onSaveEdit={async (body) => {

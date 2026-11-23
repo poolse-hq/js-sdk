@@ -4,6 +4,31 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `ConversationView` / `ThreadView`: `composerProps` (passed through to the
+  composer), `composerAccessory` (rendered above it), `composerHandle`
+  (ref: `focus`, `insertText`, `setText`, `getText`, `clear`,
+  `setSelection`, `addFiles`) and `beforeSend` (`async (draft) => draft |
+  false`: change or cancel a send; cancelled, the text and files stay).
+  `ConversationView` passes them on to its thread sheet.
+- `extraActions={(msg) => MessageExtraAction[]}`: the app's own entries in
+  the long-press menu (`MessageActions` takes `extraActions` too; rows take
+  the resolved list).
+- Deleting a message asks first: a native "Delete message?" alert by
+  default, or `confirmDelete={(msg) => boolean | Promise<boolean>}`.
+- `MessageComposerHandle` gains `getText`, `setText` and `insertText`;
+  `MentionInput` forwards a ref; a composer's `onSend` resolving to `false`
+  keeps the draft. Types `BeforeSend`, `ComposerPassThroughProps`,
+  `MessageExtraAction`, `ConfirmDelete`.
+
+### Changed
+
+- `MessageComposer` clears its file queue once the send returns (it used to
+  clear as Send was pressed), so a held-back send keeps the files.
+
 ## [3.10.1] - 2026-11-23
 
 ### Added
