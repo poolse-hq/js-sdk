@@ -3,7 +3,8 @@
 // even no-image users visually anchored to the brand identity.
 
 import type { Presence, PresenceState } from '@poolse/sdk';
-import { useUserPresence } from '@poolse/react';
+import { useOptionalPoolse, useUserPresence } from '@poolse/react';
+import { useState } from 'react';
 import { PresenceBadge } from './PresenceBadge.js';
 
 export interface AvatarProps {
@@ -49,6 +50,9 @@ export function Avatar({
   className,
 }: AvatarProps) {
   const initials = computeInitials(name);
+  // A broken image falls back to the initials (keyed by src: a new one retries).
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const showImage = !!src && failedSrc !== src;
 
   const classes = [
     'poolse-avatar',
@@ -63,7 +67,7 @@ export function Avatar({
   const badge =
     presence === true ? (
       userId ? (
-        <LivePresenceBadge userId={userId} size={size} />
+        <OptionalLivePresenceBadge userId={userId} size={size} />
       ) : null
     ) : presence ? (
       typeof presence === 'string' ? (
@@ -82,11 +86,21 @@ export function Avatar({
 
   return (
     <span className={classes} aria-label={label} role="img">
-      {src ? <img src={src} alt={name ?? ''} /> : <span aria-hidden="true">{initials}</span>}
+      {showImage ? (
+        <img src={src} alt={name ?? ''} onError={() => setFailedSrc(src)} />
+      ) : (
+        <span aria-hidden="true">{initials}</span>
+      )}
       {agent && size !== 'xs' ? <span className="poolse-avatar__agent" aria-hidden="true" /> : null}
       {badge}
     </span>
   );
+}
+
+// Outside a <PoolseProvider> (a public booking page) there is nobody to
+// ask: no badge, no throw.
+function OptionalLivePresenceBadge(props: { userId: string; size: AvatarProps['size'] }) {
+  return useOptionalPoolse() ? <LivePresenceBadge {...props} /> : null;
 }
 
 // Own component so the presence subscription exists only for avatars

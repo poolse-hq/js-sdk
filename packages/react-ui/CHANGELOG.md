@@ -19,6 +19,12 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   composer's `onSend` resolving to `false` keeps the draft. Types
   `BeforeSend`, `ComposerPassThroughProps`.
 
+### Fixed
+
+- `Avatar` works outside a `PoolseProvider` (a public booking page):
+  `presence={true}` then draws no badge instead of throwing, and a broken
+  `src` falls back to the initials.
+
 ### Changed
 
 - `MessageComposer` keeps sent files' chips until the send finishes

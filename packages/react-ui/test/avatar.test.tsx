@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { Avatar } from '../src/Avatar.js';
 
@@ -35,5 +35,18 @@ describe('<Avatar>', () => {
     expect(sm.querySelector('.poolse-avatar--sm')).not.toBeNull();
     const { container: lg } = render(<Avatar name="x" size="lg" />);
     expect(lg.querySelector('.poolse-avatar--lg')).not.toBeNull();
+  });
+
+  it('works outside a PoolseProvider, even with presence={true}', () => {
+    const { container } = render(<Avatar name="Jane Doe" presence userId="u-1" />);
+    expect(container.textContent).toBe('JD');
+    expect(container.querySelector('.poolse-avatar__badge')).toBeNull();
+  });
+
+  it('falls back to initials when the image fails to load', () => {
+    const { container } = render(<Avatar src="https://x.test/broken.png" name="Jane Doe" />);
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.textContent).toBe('JD');
   });
 });

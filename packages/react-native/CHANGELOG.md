@@ -24,6 +24,12 @@ versions follow [semver](https://semver.org).
   keeps the draft. Types `BeforeSend`, `ComposerPassThroughProps`,
   `MessageExtraAction`, `ConfirmDelete`.
 
+### Fixed
+
+- `Avatar` works outside a `PoolseProvider` (a public booking page):
+  `presence={true}` then draws no badge instead of throwing, and a broken
+  `src` falls back to the initials.
+
 ### Changed
 
 - `MessageComposer` clears its file queue once the send returns (it used to

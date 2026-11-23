@@ -1,5 +1,6 @@
 import type { PresenceState } from '@poolse/sdk';
-import { useUserPresence } from '@poolse/react';
+import { useOptionalPoolse, useUserPresence } from '@poolse/react';
+import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { PresenceBadge } from '../PresenceBadge.js';
@@ -7,7 +8,7 @@ import { useTheme } from '../theme/PoolseTheme.js';
 import { userColor } from './userColor.js';
 
 export interface AvatarProps {
-  /** URL to a profile image. Falls back to initials when omitted. */
+  /** URL to a profile image. Falls back to initials when omitted or it fails to load. */
   src?: string | null;
   /** Used for initials. */
   name?: string | null;
@@ -50,6 +51,8 @@ export function Avatar({
   const theme = useTheme();
   const dim = SIZES[size];
   const initials = computeInitials(name);
+  // A broken image falls back to the initials (keyed by src: a new one retries).
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const tint = seed ? userColor(seed) : theme.colors.accent;
   const fontSize = size === 'xs' ? 9 : size === 'sm' ? 11 : size === 'lg' ? 22 : 15;
   const badgeSize = Math.max(8, Math.round(dim * 0.32));
@@ -71,9 +74,10 @@ export function Avatar({
       accessibilityRole="image"
       accessibilityLabel={agent ? `${name ?? 'Agent'} (agent)` : (name ?? 'avatar')}
     >
-      {src ? (
+      {src && failedSrc !== src ? (
         <Image
           source={{ uri: src }}
+          onError={() => setFailedSrc(src)}
           style={{ width: dim, height: dim, borderRadius: radius }}
           accessible={false}
         />
@@ -103,7 +107,7 @@ export function Avatar({
         />
       ) : null}
       {lookupId ? (
-        <LivePresenceBadge id={lookupId} size={badgeSize} style={badgeStyle} />
+        <OptionalLivePresenceBadge id={lookupId} size={badgeSize} style={badgeStyle} />
       ) : presence && presence !== true ? (
         <PresenceBadge
           state={presence}
@@ -127,6 +131,15 @@ export function Avatar({
       ) : null}
     </View>
   );
+}
+
+// Outside a <PoolseProvider> there is nobody to ask: no badge, no throw.
+function OptionalLivePresenceBadge(props: {
+  id: string;
+  size: number;
+  style: { position: 'absolute'; bottom: number; right: number };
+}) {
+  return useOptionalPoolse() ? <LivePresenceBadge {...props} /> : null;
 }
 
 // Its own component so `useUserPresence` (which needs a provider) only
