@@ -787,6 +787,14 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     return pub.track as? VideoTrack
   }
 
+  /// The shared screen's size as its publisher announced it (the SFU's
+  /// track info); nil while unknown.
+  private func screenDimensions(_ p: RemoteParticipant) -> (width: Int, height: Int)? {
+    guard let pub = p.trackPublications.values.first(where: { $0.source == .screenShareVideo }),
+          let d = pub.dimensions, d.width > 0, d.height > 0 else { return nil }
+    return (Int(d.width), Int(d.height))
+  }
+
   /// `front` | `back` of the published local camera, or nil when none.
   func cameraFacing() -> String? {
     guard let r = room, let track = localCameraTrack(r) else { return nil }
@@ -998,6 +1006,7 @@ final class LiveKitMediaPort: NSObject, MediaPort {
     }
     let roster = people(r).map { p -> SnapshotParticipant in
       let identity = p.identity?.stringValue ?? ""
+      let screen = remoteScreen(p) != nil ? screenDimensions(p) : nil
       return SnapshotParticipant(
         userId: identity,
         externalId: externalId(p) ?? identity,
@@ -1005,7 +1014,9 @@ final class LiveKitMediaPort: NSObject, MediaPort {
         muted: !p.isMicrophoneEnabled(),
         cameraOn: remoteCamera(p) != nil,
         connectionQuality: Self.wire(p.connectionQuality),
-        screenSharing: remoteScreen(p) != nil
+        screenSharing: remoteScreen(p) != nil,
+        screenWidth: screen?.width,
+        screenHeight: screen?.height
       )
     }
     events?.onParticipants(roster + agentRows)

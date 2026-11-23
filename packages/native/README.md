@@ -94,6 +94,8 @@ The full API:
 - Screen sharing: `screenShareSupported`, `startScreenShare`, `stopScreenShare`,
   `snapshot.screenSharing` (yours) and `participants[].screenSharing`; draw a
   shared screen with `<CallVideoView participantId source="screen" fit="contain" />`.
+  `snapshot.screenShare` names who shares and the screen's `width`/`height`
+  (also `participants[].screenWidth` / `screenHeight`).
   iOS needs the `screenShare` plugin option.
 - Video: `<CallVideoView participantId | local mirror fit pictureInPicture />`,
   `setPictureInPictureEnabled`, `isInPictureInPicture`,
@@ -215,6 +217,8 @@ topics and messages as the web and desktop (`poolse.reaction`,
 import { callData } from '@poolse/native';
 const reactions = useCallReactions(callData);
 const { state, annotations } = useScreenAnnotations(callData, sharerUserId);
+// snapshot.screenShare: { userId, externalId, width, height } — size the
+// overlay to the screen's aspect inside the contain-fitted view.
 <CallVideoView participantId={sharerUserId} source="screen" fit="contain" />
 <AnnotationOverlay state={state} annotations={annotations} drawing={penOn} />
 ```

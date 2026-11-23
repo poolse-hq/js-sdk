@@ -823,6 +823,29 @@ final class HttpAndSnapshotTests: XCTestCase {
     let sharing = MachineState(phase: .active, callId: "c1", conversationId: "v").toSnapshot(screenSharing: true)!
     XCTAssertEqual(sharing["screenSharing"] as? Bool, true)
     XCTAssertEqual(active["direction"] as? String, "incoming")
+    XCTAssertTrue(active["screenShare"] is NSNull)
+    XCTAssertTrue(JSONSerialization.isValidJSONObject(snap))
+  }
+
+  func testSnapshotCarriesTheSharedScreensSize() {
+    let viewer = SnapshotParticipant(userId: "u1", externalId: "e1", speaking: false, muted: false, cameraOn: false)
+    let sharer = SnapshotParticipant(userId: "u2", externalId: "e2", speaking: false, muted: false, cameraOn: false,
+                                     screenSharing: true, screenWidth: 2560, screenHeight: 1600)
+    let snap = MachineState(phase: .active, callId: "c1", conversationId: "v")
+      .toSnapshot(participants: [viewer, sharer])!
+    let share = snap["screenShare"] as? [String: Any]
+    XCTAssertEqual(share?["userId"] as? String, "u2")
+    XCTAssertEqual(share?["externalId"] as? String, "e2")
+    XCTAssertEqual(share?["width"] as? Int, 2560)
+    XCTAssertEqual(share?["height"] as? Int, 1600)
+    let rows = snap["participants"] as? [[String: Any]]
+    XCTAssertNil(rows?[0]["screenWidth"])
+    XCTAssertEqual(rows?[1]["screenHeight"] as? Int, 1600)
+    // Size not announced yet: who shares, with null dimensions.
+    let unknown = SnapshotParticipant(userId: "u3", externalId: "e3", speaking: false, muted: false, cameraOn: false,
+                                      screenSharing: true)
+    let early = MachineState(phase: .active, callId: "c1", conversationId: "v").toSnapshot(participants: [unknown])!
+    XCTAssertTrue((early["screenShare"] as? [String: Any])?["width"] is NSNull)
     XCTAssertTrue(JSONSerialization.isValidJSONObject(snap))
   }
 }

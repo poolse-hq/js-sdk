@@ -47,6 +47,19 @@ internal fun MachineState.toSnapshot(
     put("connectionQuality", connectionQuality)
     put("videoPaused", videoPaused)
     put("screenSharing", screenSharing)
+    // Who shares a screen (the first remote sharer) and its size, for
+    // lining up screen drawings (CL4); null when nobody else shares.
+    put(
+      "screenShare",
+      participants.firstOrNull { it["screenSharing"] == true }?.let { p ->
+        mapOf(
+          "userId" to p["userId"],
+          "externalId" to p["externalId"],
+          "width" to p["screenWidth"],
+          "height" to p["screenHeight"],
+        )
+      },
+    )
     put("audioOutputs", audioOutputs)
     put("audioOutputId", audioOutputId)
     // false: listen-only until the server lets go (docs/RECORDING.md §5).

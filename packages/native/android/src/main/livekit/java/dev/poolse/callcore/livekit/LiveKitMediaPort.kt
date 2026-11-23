@@ -455,6 +455,11 @@ class LiveKitMediaPort(
     return pub.track as? VideoTrack
   }
 
+  /** The shared screen's size as its publisher announced it (the SFU's track info); null while unknown. */
+  private fun screenDimensions(p: Participant): Track.Dimensions? =
+    p.getTrackPublication(Track.Source.SCREEN_SHARE)?.dimensions
+      ?.takeIf { it.width > 0 && it.height > 0 }
+
   private fun reportLocalScreen(r: Room) {
     if (room !== r) return
     events.onLocalScreen(localScreenTrack(r) != null)
@@ -725,6 +730,7 @@ class LiveKitMediaPort(
     events.onParticipants(
       agentRows.let { agentList -> people(room).map {
         val identity = it.identity?.value ?: ""
+        val screen = if (remoteScreen(it) != null) screenDimensions(it) else null
         MediaParticipant(
           identity = identity,
           speaking = it.isSpeaking,
@@ -733,6 +739,8 @@ class LiveKitMediaPort(
           // published, subscribed and unmuted.
           cameraOn = remoteCamera(it) != null,
           screenSharing = remoteScreen(it) != null,
+          screenWidth = screen?.width,
+          screenHeight = screen?.height,
           connectionQuality = wire(it.connectionQuality),
           externalId = externalIdOf(it) ?: identity,
         )

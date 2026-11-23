@@ -11,6 +11,10 @@ public struct SnapshotParticipant: Equatable {
   public var cameraOn: Bool
   /// True with a published, subscribed, unmuted screen share.
   public var screenSharing: Bool
+  /// The shared screen's size in pixels as published (nil while unknown or
+  /// not sharing): phones line screen drawings up against it.
+  public var screenWidth: Int?
+  public var screenHeight: Int?
   /// Their link to the SFU: `good` | `poor` | `lost` (dropped, coming
   /// back — "Reconnecting…") | `unknown`.
   public var connectionQuality: String
@@ -24,7 +28,8 @@ public struct SnapshotParticipant: Equatable {
 
   public init(userId: String, externalId: String, speaking: Bool, muted: Bool, cameraOn: Bool,
               connectionQuality: String = "unknown", screenSharing: Bool = false,
-              isAgent: Bool = false, agentLabel: String? = nil, agentMode: String? = nil) {
+              isAgent: Bool = false, agentLabel: String? = nil, agentMode: String? = nil,
+              screenWidth: Int? = nil, screenHeight: Int? = nil) {
     self.userId = userId
     self.externalId = externalId
     self.speaking = speaking
@@ -35,6 +40,8 @@ public struct SnapshotParticipant: Equatable {
     self.isAgent = isAgent
     self.agentLabel = agentLabel
     self.agentMode = agentMode
+    self.screenWidth = screenWidth
+    self.screenHeight = screenHeight
   }
 
   public var dictionary: [String: Any] {
@@ -42,6 +49,10 @@ public struct SnapshotParticipant: Equatable {
       "userId": userId, "externalId": externalId, "speaking": speaking, "muted": muted, "cameraOn": cameraOn,
       "connectionQuality": connectionQuality, "screenSharing": screenSharing,
     ]
+    if screenSharing, let w = screenWidth, let h = screenHeight {
+      d["screenWidth"] = w
+      d["screenHeight"] = h
+    }
     if isAgent {
       d["isAgent"] = true
       d["agentLabel"] = agentLabel ?? NSNull()
@@ -142,6 +153,15 @@ public extension MachineState {
       "recording": jsonObject(recording),
       "transcription": jsonObject(transcription),
     ]
+    // Who shares a screen (the first remote sharer) and its size, for
+    // lining up screen drawings (CL4); null when nobody else shares.
+    out["screenShare"] = participants.first(where: { $0.screenSharing }).map { p -> Any in
+      [
+        "userId": p.userId, "externalId": p.externalId,
+        "width": p.screenWidth.map { $0 as Any } ?? NSNull(),
+        "height": p.screenHeight.map { $0 as Any } ?? NSNull(),
+      ] as [String: Any]
+    } ?? NSNull()
     // The call waiting beside this one: null when none.
     if let w = self.waiting {
       out["waiting"] = [

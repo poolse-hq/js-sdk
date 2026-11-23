@@ -15,6 +15,15 @@ import { requireNativeViewManager, requireOptionalNativeModule } from 'expo-modu
  * ends the snapshot stays `phase: 'ended'` (with `reason`) for ~2.5 s,
  * then becomes `null`.
  */
+/** `Snapshot.screenShare`: a remote participant's shared screen. */
+export interface ScreenShareInfo {
+  /** The sharer's LiveKit identity (their `participants[].userId`). */
+  userId: string;
+  externalId: string;
+  width: number | null;
+  height: number | null;
+}
+
 export interface Snapshot {
   cv: 1;
   callId: string;
@@ -63,6 +72,12 @@ export interface Snapshot {
      * large and with `fit="contain"`. Absent before 3.2.
      */
     screenSharing?: boolean;
+    /**
+     * The shared screen's size in pixels as its publisher announced it;
+     * present only while `screenSharing` and once known. Absent before 3.11.
+     */
+    screenWidth?: number;
+    screenHeight?: number;
     /**
      * Their link to the call: `lost` while they have dropped and are
      * coming back (show "Reconnecting…"), `poor` for a weak signal.
@@ -119,6 +134,14 @@ export interface Snapshot {
   videoPaused?: boolean;
   /** You are sharing your screen. Absent before 3.2. */
   screenSharing?: boolean;
+  /**
+   * Who else shares a screen (the first remote sharer) and its size in
+   * pixels, so screen drawings line up with what is shown (CL4): fit the
+   * overlay to a `width`:`height` box inside the `fit="contain"` view.
+   * `width`/`height` are null until the sharer's size is known. null when
+   * nobody else shares (yours is `screenSharing`); absent before 3.11.
+   */
+  screenShare?: ScreenShareInfo | null;
   /**
    * The server (workspace) this call runs on — the `id` given to
    * `addServer`, or `DEFAULT_SERVER_ID` for the one `configure` set.

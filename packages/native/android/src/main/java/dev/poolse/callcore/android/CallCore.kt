@@ -410,6 +410,10 @@ class CallCore private constructor(context: Context) {
           put("muted", it.muted)
           put("cameraOn", it.cameraOn)
           put("screenSharing", it.screenSharing)
+          if (it.screenSharing && it.screenWidth != null && it.screenHeight != null) {
+            put("screenWidth", it.screenWidth)
+            put("screenHeight", it.screenHeight)
+          }
           put("connectionQuality", it.connectionQuality)
           if (it.isAgent) {
             put("isAgent", true)
@@ -904,6 +908,9 @@ data class MediaParticipant(
   val cameraOn: Boolean = false,
   /** True with a published, subscribed, unmuted screen share — a screen to draw. */
   val screenSharing: Boolean = false,
+  /** The shared screen's size in pixels as published; null while unknown or not sharing. */
+  val screenWidth: Int? = null,
+  val screenHeight: Int? = null,
   /** The host app's own id for the user, when the SFU carries it; else the identity. */
   val externalId: String = identity,
   /** Their link to the SFU: `good` | `poor` | `lost` (dropped, coming back) | `unknown`. */
