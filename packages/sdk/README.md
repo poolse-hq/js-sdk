@@ -55,23 +55,23 @@ poolse.destroy();
 
 ## Configuration
 
-| Field                            | Default                     | Meaning                                                                |
-| -------------------------------- | --------------------------- | ---------------------------------------------------------------------- |
-| `getToken`                       | required                    | `() => Promise<string \| null> \| string \| null`                      |
-| `apiUrl`                         | `https://api.poolse.dev`    | API origin, without `/v1`.                                             |
-| `wsUrl`                          | `apiUrl` with `http` → `ws` | Socket origin.                                                         |
-| `socketPath`                     | `/socket`                   |                                                                        |
-| `fetch`                          | `globalThis.fetch`          |                                                                        |
+| Field                            | Default                     | Meaning                                                                                                                |
+| -------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `getToken`                       | required                    | `() => Promise<string \| null> \| string \| null`                                                                      |
+| `apiUrl`                         | `https://api.poolse.dev`    | API origin, without `/v1`.                                                                                             |
+| `wsUrl`                          | `apiUrl` with `http` → `ws` | Socket origin.                                                                                                         |
+| `socketPath`                     | `/socket`                   |                                                                                                                        |
+| `fetch`                          | `globalThis.fetch`          |                                                                                                                        |
 | `maxRetries`                     | `3`                         | Retries: GET/PUT/DELETE on network errors, 502/503/504, 429; POST/PATCH only on 429 or a connection that never opened. |
-| `baseBackoffMs` / `maxBackoffMs` | `250` / `30000`             | Backoff.                                                               |
-| `generateIdempotencyKey`         | `safeUuid`                  |                                                                        |
-| `onSocketError`                  | —                           | `(err: Error) => void`                                                 |
-| `userResolver`                   | —                           | `(externalId) => { displayName, avatarUrl? } \| null` (sync or async). |
-| `storage`                        | memory only                 | `PoolseStorage` for the outbox, cached history and the user.           |
-| `storageNamespace`               | poolse user id              | Who this session is, known at start (offline start).                   |
-| `outbox`                         | `true`                      | Queue offline sends; keep refused ones as `failed`.                    |
-| `cache`                          | 50 msgs × 50 convs          | `{ messagesPerConversation, conversations, listRows }`.                |
-| `background`                     | `false`                     | Start with the socket closed (`setBackground(false)` opens it).        |
+| `baseBackoffMs` / `maxBackoffMs` | `250` / `30000`             | Backoff.                                                                                                               |
+| `generateIdempotencyKey`         | `safeUuid`                  |                                                                                                                        |
+| `onSocketError`                  | —                           | `(err: Error) => void`                                                                                                 |
+| `userResolver`                   | —                           | `(externalId) => { displayName, avatarUrl? } \| null` (sync or async).                                                 |
+| `storage`                        | memory only                 | `PoolseStorage` for the outbox, cached history and the user.                                                           |
+| `storageNamespace`               | poolse user id              | Who this session is, known at start (offline start).                                                                   |
+| `outbox`                         | `true`                      | Queue offline sends; keep refused ones as `failed`.                                                                    |
+| `cache`                          | 50 msgs × 50 convs          | `{ messagesPerConversation, conversations, listRows }`.                                                                |
+| `background`                     | `false`                     | Start with the socket closed (`setBackground(false)` opens it).                                                        |
 
 ## What's in it
 

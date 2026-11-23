@@ -7,7 +7,7 @@ Formerly `@poolse/react-native-calls` (0.x).
 ### Added
 
 - Shared screen size (CL4): `snapshot.screenShare` (`{ userId,
-  externalId, width, height }` of the first remote sharer, null when
+externalId, width, height }` of the first remote sharer, null when
   none) and `participants[].screenWidth` / `screenHeight`, from the
   publisher's track info on both cores, so phones can line up screen
   drawings instead of assuming 16:9. Type `ScreenShareInfo`.

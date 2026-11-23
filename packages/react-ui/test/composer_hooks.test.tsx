@@ -31,7 +31,9 @@ describe('ConversationView composer hooks', () => {
     );
     await waitFor(() => expect(container.textContent).toContain('message 1'));
     expect(textarea(container).placeholder).toBe('Say hi');
-    expect(container.querySelector('.poolse-conversation__composer-flex .accessory')).not.toBeNull();
+    expect(
+      container.querySelector('.poolse-conversation__composer-flex .accessory'),
+    ).not.toBeNull();
     fireEvent.change(textarea(container), { target: { value: 'x' } });
     expect(onValueChange).toHaveBeenCalledWith('x');
   });

@@ -15,7 +15,11 @@ describe('confirmThenDelete', () => {
 
   it('swallows a failed delete (the row shows its own error)', async () => {
     await expect(
-      confirmThenDelete(msg, () => true, async () => Promise.reject(new Error('nope'))),
+      confirmThenDelete(
+        msg,
+        () => true,
+        async () => Promise.reject(new Error('nope')),
+      ),
     ).resolves.toBeUndefined();
   });
 });

@@ -1,13 +1,6 @@
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { useMe, usePoolse, useThread, useThreadFollow } from '@poolse/react';
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type ReactElement,
-  type ReactNode,
-  type Ref,
-} from 'react';
+import { useCallback, useMemo, useState, type ReactElement, type ReactNode, type Ref } from 'react';
 import { EmptyState } from './EmptyState.js';
 import {
   Animated,

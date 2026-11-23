@@ -26,7 +26,11 @@ const chips = (c: HTMLElement) => Array.from(c.querySelectorAll('.poolse-upload-
 
 describe('composer uploads', () => {
   it('pasting a file queues it with an image thumbnail', async () => {
-    const { container } = renderWithProvider(<MessageComposer onSend={vi.fn()} />, uploadRoutes());
+    // The upload stays in flight: an errored chip drops its thumbnail.
+    const pending = vi.fn(
+      () => new Promise<Response>(() => undefined),
+    ) as unknown as typeof globalThis.fetch;
+    const { container } = renderWithProvider(<MessageComposer onSend={vi.fn()} />, pending);
     const input = container.querySelector('textarea')!;
     fireEvent.paste(input, { clipboardData: { files: [file('shot.png', 'image/png')] } });
     await waitFor(() => expect(chips(container)).toHaveLength(1));

@@ -12,7 +12,7 @@ versions follow [semver](https://semver.org).
   composer), `composerAccessory` (rendered above it), `composerHandle`
   (ref: `focus`, `insertText`, `setText`, `getText`, `clear`,
   `setSelection`, `addFiles`) and `beforeSend` (`async (draft) => draft |
-  false`: change or cancel a send; cancelled, the text and files stay).
+false`: change or cancel a send; cancelled, the text and files stay).
   `ConversationView` passes them on to its thread sheet.
 - `extraActions={(msg) => MessageExtraAction[]}`: the app's own entries in
   the long-press menu (`MessageActions` takes `extraActions` too; rows take

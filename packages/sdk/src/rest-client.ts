@@ -54,7 +54,13 @@ export interface RequestOptions {
 const NON_BODY_METHODS: ReadonlySet<HttpMethod> = new Set(['GET', 'DELETE']);
 const IDEMPOTENT_METHODS: ReadonlySet<HttpMethod> = new Set(['GET']);
 /** Methods a repeat cannot turn into a second action (RFC 9110 §9.2.2). */
-const RETRY_SAFE_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']);
+const RETRY_SAFE_METHODS: ReadonlySet<string> = new Set([
+  'GET',
+  'HEAD',
+  'PUT',
+  'DELETE',
+  'OPTIONS',
+]);
 /** Gateway failures: the upstream was unreachable, overloaded or slow. */
 const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
 
