@@ -4,6 +4,18 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- Retries no longer repeat work: POST/PATCH are never retried on a 5xx or
+  a dropped connection (a failing scheduled send went out four times),
+  only on 429 and on network errors raised before the request left the
+  device (connection refused, DNS). The server's Idempotency-Key cache
+  replays only 2xx responses, so it cannot dedupe a half-succeeded 5xx.
+  GET/PUT/DELETE retry network errors, 502/503/504 and 429; a plain 500
+  is no longer retried. `Retry-After` also accepts an HTTP date.
+
 ## [3.10.1] - 2026-11-23
 
 ### Added

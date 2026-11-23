@@ -62,7 +62,7 @@ poolse.destroy();
 | `wsUrl`                          | `apiUrl` with `http` → `ws` | Socket origin.                                                         |
 | `socketPath`                     | `/socket`                   |                                                                        |
 | `fetch`                          | `globalThis.fetch`          |                                                                        |
-| `maxRetries`                     | `3`                         | Retries for network errors, 5xx and 429.                               |
+| `maxRetries`                     | `3`                         | Retries: GET/PUT/DELETE on network errors, 502/503/504, 429; POST/PATCH only on 429 or a connection that never opened. |
 | `baseBackoffMs` / `maxBackoffMs` | `250` / `30000`             | Backoff.                                                               |
 | `generateIdempotencyKey`         | `safeUuid`                  |                                                                        |
 | `onSocketError`                  | —                           | `(err: Error) => void`                                                 |

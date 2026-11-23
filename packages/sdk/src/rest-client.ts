@@ -4,7 +4,13 @@
 //   * Apply the Bearer JWT from `config.getToken()`.
 //   * Auto-generate an `Idempotency-Key` for non-GET requests so poolse
 //     can dedupe retries safely.
-//   * Retry on transient failures: network errors, 5xx, 429.
+//   * Retry transient failures, only where a repeat cannot duplicate work:
+//     - GET/HEAD/PUT/DELETE/OPTIONS: network errors, 502/503/504, 429.
+//     - POST/PATCH: 429 (the server refused it unprocessed) and network
+//       errors raised before the request left the device (connection
+//       refused, DNS). Never a 5xx or a dropped connection: the server may
+//       have done the work, and its Idempotency-Key cache only replays
+//       2xx responses, so a retry after a half-success would duplicate.
 //     - Backoff = max(Retry-After header, exponential with jitter).
 //     - 401/4xx-other are NOT retried (they won't change on repeat).
 //   * Translate non-2xx into typed `ApiError` subclasses.
@@ -47,6 +53,10 @@ export interface RequestOptions {
 
 const NON_BODY_METHODS: ReadonlySet<HttpMethod> = new Set(['GET', 'DELETE']);
 const IDEMPOTENT_METHODS: ReadonlySet<HttpMethod> = new Set(['GET']);
+/** Methods a repeat cannot turn into a second action (RFC 9110 §9.2.2). */
+const RETRY_SAFE_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']);
+/** Gateway failures: the upstream was unreachable, overloaded or slow. */
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
 
 export class RestClient {
   private readonly config: ResolvedConfig;
@@ -67,6 +77,7 @@ export class RestClient {
     const url = this.buildUrl(opts.path, opts.query);
     const maxRetries = opts.maxRetries ?? this.config.maxRetries;
     const idempotencyKey = this.resolveIdempotencyKey(opts);
+    const retrySafe = RETRY_SAFE_METHODS.has(opts.method);
 
     let attempt = 0;
     let triedAuthRefresh = false;
@@ -98,7 +109,7 @@ export class RestClient {
         if (err instanceof DOMException && err.name === 'AbortError') {
           throw err;
         }
-        if (attempt < maxRetries && isRetryableNetworkError(err)) {
+        if (attempt < maxRetries && isRetryableNetworkError(err, retrySafe)) {
           await sleep(this.backoffDelay(attempt));
           attempt += 1;
           continue;
@@ -128,6 +139,7 @@ export class RestClient {
       }
 
       // 429: retry after the larger of (Retry-After, exponential backoff).
+      // Any method: a rate-limited request was refused before any work.
       if (response.status === 429) {
         const envelope = await parseEnvelope(response);
         const retryAfterMs = retryAfterHeaderMs(response);
@@ -139,10 +151,12 @@ export class RestClient {
         throw new RateLimitedError(envelope, retryAfterMs ?? 0);
       }
 
-      // 5xx: retry if we have budget and the method is safe to retry.
-      // Non-idempotent methods (POST/PATCH/PUT/DELETE) are STILL retried
-      // here because the Idempotency-Key header makes duplicates safe.
-      if (response.status >= 500 && attempt < maxRetries) {
+      // 502/503/504: retry idempotent methods only. A POST/PATCH that got
+      // a 5xx may have half-succeeded, and the server's Idempotency-Key
+      // cache keeps only 2xx responses, so a retry could duplicate it
+      // (a scheduled message sent four times). Plain 500 is a server bug
+      // that a repeat won't fix, so nothing retries it.
+      if (retrySafe && RETRYABLE_STATUSES.has(response.status) && attempt < maxRetries) {
         await sleep(this.backoffDelay(attempt));
         attempt += 1;
         continue;
@@ -232,15 +246,46 @@ async function parseJsonOrNull(response: Response): Promise<unknown> {
 function retryAfterHeaderMs(response: Response): number | null {
   const raw = response.headers.get('retry-after');
   if (!raw) return null;
-  const seconds = Number.parseInt(raw, 10);
-  return Number.isFinite(seconds) ? seconds * 1000 : null;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  // HTTP-date form.
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
 }
 
-function isRetryableNetworkError(err: unknown): boolean {
+/**
+ * Error codes that mean the request never left the device (no connection
+ * was made), so even a POST is safe to send again. Node/undici and React
+ * Native put them on `err.cause.code` (or `err.code`).
+ */
+const PRE_SEND_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+function errorCode(err: unknown): string | null {
+  for (let e: unknown = err, depth = 0; e && typeof e === 'object' && depth < 3; depth++) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+    e = (e as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
+function isRetryableNetworkError(err: unknown, retrySafe: boolean): boolean {
   // Abort is caller intent — never retry.
   if (err instanceof DOMException && err.name === 'AbortError') return false;
-  // Everything else (TypeError from fetch failure, etc.) is fair game.
-  return true;
+  // Idempotent methods: any failure (TypeError from fetch, reset…) is fair game.
+  if (retrySafe) return true;
+  // POST/PATCH: only when the request provably never reached the server.
+  // A browser's opaque "Failed to fetch" could be a dropped response, so
+  // it is not retried.
+  const code = errorCode(err);
+  return code !== null && PRE_SEND_ERROR_CODES.has(code);
 }
 
 function sleep(ms: number): Promise<void> {

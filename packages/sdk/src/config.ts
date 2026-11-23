@@ -42,8 +42,10 @@ export interface PoolseConfig {
   fetch?: typeof globalThis.fetch;
 
   /**
-   * Retry budget for transient failures (network + 5xx + 429). Defaults
-   * to 3 attempts after the initial request. Set to 0 to disable.
+   * Retry budget for transient failures. Defaults to 3 attempts after the
+   * initial request. Set to 0 to disable. GET/PUT/DELETE retry network
+   * errors, 502/503/504 and 429; POST/PATCH retry only 429 and network
+   * errors raised before the request left the device (never a 5xx).
    */
   maxRetries?: number;
 

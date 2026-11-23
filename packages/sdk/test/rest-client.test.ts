@@ -181,7 +181,7 @@ describe('RestClient.request', () => {
     it('retries up to maxRetries then surfaces the final 5xx as ApiError', async () => {
       const envelope = { error: { code: 'oops', message: 'oops', doc_url: '' } };
       const fetchFn = scriptedFetch([
-        jsonResponse(envelope, { status: 500 }),
+        jsonResponse(envelope, { status: 503 }),
         jsonResponse(envelope, { status: 502 }),
         jsonResponse(envelope, { status: 503 }),
         jsonResponse(envelope, { status: 504 }),
@@ -205,6 +205,93 @@ describe('RestClient.request', () => {
 
       const result = await client.request<{ id: string }>({ method: 'GET', path: '/v1/me' });
       expect(result).toEqual({ id: 'u-1' });
+    });
+  });
+
+  describe('retry policy by method', () => {
+    const envelope = { error: { code: 'oops', message: 'oops', doc_url: '' } };
+
+    it('never retries a POST on 5xx (it may have half-succeeded)', async () => {
+      for (const status of [500, 502, 503, 504]) {
+        const fetchFn = scriptedFetch([jsonResponse(envelope, { status })]);
+        const client = buildClient({ fetch: fetchFn });
+
+        const err = await client
+          .request({ method: 'POST', path: '/v1/conversations/c/scheduled-messages', body: {} })
+          .catch((e) => e);
+
+        expect((err as ApiError).status).toBe(status);
+        expect(fetchFn.calls.length).toBe(1);
+      }
+    });
+
+    it('never retries a PATCH on 5xx, even with a caller idempotency key', async () => {
+      const fetchFn = scriptedFetch([jsonResponse(envelope, { status: 503 })]);
+      const client = buildClient({ fetch: fetchFn });
+
+      await expect(
+        client.request({ method: 'PATCH', path: '/v1/x', body: {}, idempotencyKey: 'k' }),
+      ).rejects.toBeInstanceOf(ApiError);
+      expect(fetchFn.calls.length).toBe(1);
+    });
+
+    it('does not retry a plain 500, even on GET', async () => {
+      const fetchFn = scriptedFetch([jsonResponse(envelope, { status: 500 })]);
+      const client = buildClient({ fetch: fetchFn });
+
+      await expect(client.request({ method: 'GET', path: '/v1/me' })).rejects.toBeInstanceOf(
+        ApiError,
+      );
+      expect(fetchFn.calls.length).toBe(1);
+    });
+
+    it('retries PUT and DELETE on 503', async () => {
+      for (const method of ['PUT', 'DELETE'] as const) {
+        const fetchFn = scriptedFetch([
+          jsonResponse(envelope, { status: 503 }),
+          new Response(null, { status: 204 }),
+        ]);
+        const client = buildClient({ fetch: fetchFn });
+
+        await client.request({ method, path: '/v1/x' });
+        expect(fetchFn.calls.length).toBe(2);
+      }
+    });
+
+    it('retries a POST on 429 (refused unprocessed), keeping its Idempotency-Key', async () => {
+      const fetchFn = scriptedFetch([
+        jsonResponse(
+          { error: { code: 'rate_limited', message: 'slow', doc_url: '' } },
+          { status: 429, headers: { 'retry-after': '0' } },
+        ),
+        jsonResponse({ id: 'm-1' }, { status: 201 }),
+      ]);
+      const client = buildClient({ fetch: fetchFn });
+
+      await client.request({ method: 'POST', path: '/v1/x', body: {} });
+      expect(fetchFn.calls.length).toBe(2);
+      expect(fetchFn.calls[1]!.headers.get('idempotency-key')).toBe('idem-fixed');
+    });
+
+    it('retries a POST whose connection never opened (ECONNREFUSED)', async () => {
+      const refused = Object.assign(new TypeError('fetch failed'), {
+        cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+      });
+      const fetchFn = scriptedFetch([{ throws: refused }, jsonResponse({}, { status: 201 })]);
+      const client = buildClient({ fetch: fetchFn });
+
+      await client.request({ method: 'POST', path: '/v1/x', body: {} });
+      expect(fetchFn.calls.length).toBe(2);
+    });
+
+    it('does not retry a POST on an ambiguous network failure', async () => {
+      const fetchFn = scriptedFetch([{ throws: new TypeError('Failed to fetch') }]);
+      const client = buildClient({ fetch: fetchFn });
+
+      await expect(
+        client.request({ method: 'POST', path: '/v1/x', body: {} }),
+      ).rejects.toBeInstanceOf(NetworkError);
+      expect(fetchFn.calls.length).toBe(1);
     });
   });
 
