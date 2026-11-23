@@ -103,6 +103,12 @@ preview>` draws one on its own.
 - **Drafts** per conversation (text and quote) survive switching and reloads;
   `persistDrafts={false}` turns them off, `draftStorage={{ get, set, remove }}`
   stores them elsewhere.
+- **Composer hooks** (`ConversationView` and `ThreadView`): `composerProps`
+  go to the composer (`placeholder`, `disabled`, `formattingToolbar`,
+  `commands`…), `composerAccessory` renders above it, `composerHandle` is a
+  ref with `focus`, `insertText` (at the caret), `setText`, `getText`,
+  `clear`, `addFiles`, and `beforeSend={async (draft) => draft | false}`
+  changes or cancels a send (cancelled, the text and files stay).
 - **Unread.** A "New messages" divider above the first unread message (from
   where you'd read to when you opened the conversation), a "Jump to first
   unread" pill while it's off-screen, and a "Mark unread" action on others'

@@ -4,6 +4,26 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `ConversationView` / `ThreadView`: `composerProps` (passed through to the
+  composer; `onValueChange` / `onTyping` run alongside the view's own),
+  `composerAccessory` (rendered above the composer), `composerHandle` (ref:
+  `focus`, `insertText`, `setText`, `getText`, `clear`, `addFiles`) and
+  `beforeSend` (`async (draft) => draft | false`: change or cancel a send;
+  cancelled, the text and files stay). `ConversationView` passes
+  `composerProps` and `beforeSend` on to its thread pane.
+- `MessageComposerHandle` (exported) gains `insertText` and `clear`; a
+  composer's `onSend` resolving to `false` keeps the draft. Types
+  `BeforeSend`, `ComposerPassThroughProps`.
+
+### Changed
+
+- `MessageComposer` keeps sent files' chips until the send finishes
+  (they used to vanish as Send was pressed), so a held-back send keeps them.
+
 ## [3.10.0] - 2026-11-23
 
 ### Added

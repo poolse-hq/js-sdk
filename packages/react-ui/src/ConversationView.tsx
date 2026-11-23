@@ -37,10 +37,12 @@ import React, {
   Fragment,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from 'react';
 import { usePoolseFonts } from './fonts.js';
 import {
@@ -64,7 +66,12 @@ import {
 } from './layout.js';
 import { LiveCallBanner } from './LiveCallBanner.js';
 import { MentionInput } from './MentionInput.js';
-import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
+import {
+  MessageComposer,
+  type BeforeSend,
+  type ComposerPassThroughProps,
+  type MessageComposerHandle,
+} from './MessageComposer.js';
 import { MessageExtrasProvider, type MessageExtrasHandlers } from './messageExtras.js';
 import { MessageRow, type MessageUser } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
@@ -347,6 +354,27 @@ export interface ConversationViewProps {
    * async `get` / `set` / `remove` with string values.
    */
   draftStorage?: DraftStorage;
+  /**
+   * Passed through to the composer (`MessageComposer`, or `MentionInput`
+   * with `mentionComposer`): `placeholder`, `disabled`,
+   * `formattingToolbar`, `commands`… Sending, quoting and ↑-to-edit stay
+   * the view's; `onValueChange` / `onTyping` run alongside its own. Also
+   * used by the thread pane's composer.
+   */
+  composerProps?: ComposerPassThroughProps;
+  /** Rendered above the composer (a toolbar, a "scheduled" chip…). */
+  composerAccessory?: ReactNode;
+  /**
+   * The composer's handle: `focus`, `insertText` (at the caret),
+   * `setText`, `getText`, `clear`, `addFiles`.
+   */
+  composerHandle?: Ref<MessageComposerHandle>;
+  /**
+   * Runs before every send here and in the thread pane: return the
+   * message (changed or not), or `false` to cancel — the text and files
+   * stay in the composer. Await anything (a confirm dialog, a lookup).
+   */
+  beforeSend?: BeforeSend;
 }
 
 const TRUE = true;
@@ -401,6 +429,10 @@ export function ConversationView({
   sendOn = 'enter',
   keyboardShortcuts = TRUE,
   confirmDelete,
+  composerProps,
+  composerAccessory,
+  composerHandle,
+  beforeSend,
 }: ConversationViewProps) {
   usePoolseFonts(loadFonts);
   const showComposer = composer && !readOnly;
@@ -975,6 +1007,18 @@ export function ConversationView({
   // into it via this imperative ref so dropping on the conversation
   // pane behaves identically to clicking the paperclip.
   const composerRef = useRef<MessageComposerHandle | null>(null);
+  useImperativeHandle(
+    composerHandle,
+    (): MessageComposerHandle => ({
+      addFiles: (files) => composerRef.current?.addFiles(files),
+      getText: () => composerRef.current?.getText() ?? '',
+      setText: (text) => composerRef.current?.setText(text),
+      insertText: (text) => composerRef.current?.insertText(text),
+      clear: () => composerRef.current?.clear(),
+      focus: () => composerRef.current?.focus(),
+    }),
+    [],
+  );
 
   // Drag-and-drop state. `dragDepth` counts nested dragenter/dragleave
   // pairs so the overlay only hides when the drag truly leaves the
@@ -1015,8 +1059,15 @@ export function ConversationView({
   // Sends, and maps the refusals the user can fix to a notice: quoting
   // a message deleted meanwhile drops the quote and puts the text back
   // so it can go out without it. Anything else is rethrown.
-  const sendRequest = async (input: MessageCreateRequest) => {
-    const req = { ...sendDefaults, ...input, id: input.id ?? safeUuid() };
+  const sendRequest = async (input: MessageCreateRequest): Promise<false | void> => {
+    let draft: MessageCreateRequest = { ...sendDefaults, ...input };
+    if (beforeSend) {
+      const changed = await beforeSend(draft);
+      // Cancelled: the composer keeps the text and files.
+      if (changed === false) return false;
+      draft = changed;
+    }
+    const req = { ...draft, id: draft.id ?? safeUuid() };
     try {
       await send(req);
     } catch (err) {
@@ -1157,6 +1208,21 @@ export function ConversationView({
     ...(acceptFileTypes ? { acceptFileTypes } : {}),
   };
 
+  // The app's composerProps win over the view's defaults; the view's own
+  // change/typing/edit-last wiring always runs.
+  const passThrough = {
+    ...composerProps,
+    onValueChange: (text: string) => {
+      onComposerChange(text);
+      composerProps?.onValueChange?.(text);
+    },
+    onTyping: () => {
+      signalTyping();
+      composerProps?.onTyping?.();
+    },
+    onEditLast: editLast,
+  };
+
   // Mention input is only ergonomic when members are loaded. Falls back to
   // the plain composer otherwise. Both variants accept the same
   // `replyingTo` / `onCancelReply` props for the quote-reply chip, and
@@ -1165,31 +1231,27 @@ export function ConversationView({
     <MentionInput
       key={conversationId}
       ref={composerRef}
-      onValueChange={onComposerChange}
       conversationId={conversationId}
       onSend={onSendWithMentions}
-      onTyping={signalTyping}
       keymap={keymap.composer}
-      onEditLast={editLast}
       attachments={attachments}
       emojiPicker={emojiPicker}
       {...attachmentRules}
       {...(labelFor ? { labelFor } : {})}
+      {...passThrough}
       {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
     />
   ) : (
     <MessageComposer
       key={conversationId}
       ref={composerRef}
-      onValueChange={onComposerChange}
       onSend={onSendBody}
-      onTyping={signalTyping}
       keymap={keymap.composer}
-      onEditLast={editLast}
       attachments={attachments}
       emojiPicker={emojiPicker}
       {...attachmentRules}
       {...(labelFor ? { labelFor } : {})}
+      {...passThrough}
       {...(canQuote ? { replyingTo, onCancelReply: () => setReplyingTo(null) } : {})}
     />
   );
@@ -1496,7 +1558,10 @@ export function ConversationView({
             into it via `composerRef.addFiles`. */}
           {showComposer && (
             <div className="poolse-conversation__composer-row">
-              <div className="poolse-conversation__composer-flex">{Composer}</div>
+              <div className="poolse-conversation__composer-flex">
+                {composerAccessory}
+                {Composer}
+              </div>
             </div>
           )}
 
@@ -1525,6 +1590,8 @@ export function ConversationView({
               showPresence={showPresence}
               linkPreviews={linkPreviews}
               {...attachmentRules}
+              {...(composerProps ? { composerProps } : {})}
+              {...(beforeSend ? { beforeSend } : {})}
             />
           </div>
         )}

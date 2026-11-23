@@ -7,11 +7,24 @@
 // `threads` prop drives an opt-in inline integration where clicking
 // "reply" on a message opens this in a right pane.
 
-import type { Message, Uuid } from '@poolse/sdk';
+import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import { useMe, useThread, useThreadFollow } from '@poolse/react';
-import React, { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import React, {
+  Fragment,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import { MessageBubble } from './MessageBubble.js';
-import { MessageComposer, type MessageComposerHandle } from './MessageComposer.js';
+import {
+  MessageComposer,
+  type BeforeSend,
+  type ComposerPassThroughProps,
+  type MessageComposerHandle,
+} from './MessageComposer.js';
 import type { ChatDensity, ChatLayout, TimeFormat } from './layout.js';
 import { EmptyState } from './EmptyState.js';
 import { MessageRow } from './MessageRow.js';
@@ -56,6 +69,14 @@ export interface ThreadViewProps {
    * `true`; turn it off in a direct message.
    */
   alsoSendToChannel?: boolean;
+  /** Passed through to the composer, as `ConversationView`'s `composerProps`. */
+  composerProps?: ComposerPassThroughProps;
+  /** Rendered above the composer. */
+  composerAccessory?: ReactNode;
+  /** The composer's handle: `focus`, `insertText`, `setText`, `getText`, `clear`, `addFiles`. */
+  composerHandle?: Ref<MessageComposerHandle>;
+  /** Runs before every reply: return it (changed or not), or `false` to cancel. */
+  beforeSend?: BeforeSend;
 }
 
 export function ThreadView({
@@ -73,6 +94,10 @@ export function ThreadView({
   acceptFileTypes,
   follow = true,
   alsoSendToChannel = true,
+  composerProps,
+  composerAccessory,
+  composerHandle,
+  beforeSend,
 }: ThreadViewProps) {
   const { me } = useMe();
   const followState = useThreadFollow(follow ? rootMessage.id : null);
@@ -102,6 +127,18 @@ export function ThreadView({
   // Composer ref so drag-and-dropped files on the thread pane forward
   // into the same queue the paperclip + send flow consume.
   const composerRef = useRef<MessageComposerHandle | null>(null);
+  useImperativeHandle(
+    composerHandle,
+    (): MessageComposerHandle => ({
+      addFiles: (files) => composerRef.current?.addFiles(files),
+      getText: () => composerRef.current?.getText() ?? '',
+      setText: (text) => composerRef.current?.setText(text),
+      insertText: (text) => composerRef.current?.insertText(text),
+      clear: () => composerRef.current?.clear(),
+      focus: () => composerRef.current?.focus(),
+    }),
+    [],
+  );
 
   // Drag-and-drop handlers — match ConversationView's behavior so
   // dropping files anywhere on the thread pane enqueues them in the
@@ -269,22 +306,31 @@ export function ThreadView({
       {/* Composer — full attachment surface (paperclip, queue chips,
           text + files together). Drops onto the thread pane forward
           into the same queue via composerRef. */}
+      {composerAccessory}
       <MessageComposer
         ref={composerRef}
         onSend={async (body, opts) => {
-          await sendReply({
+          let draft: MessageCreateRequest = {
             body,
             ...(opts?.attachment_ids && opts.attachment_ids.length > 0
               ? { attachment_ids: opts.attachment_ids }
               : {}),
             ...(opts?.dlp_acknowledged ? { dlp_acknowledged: true } : {}),
             ...(alsoSendToChannel && alsoToChannel ? { also_send_to_channel: true } : {}),
-          });
+          };
+          if (beforeSend) {
+            const changed = await beforeSend(draft);
+            if (changed === false) return false;
+            draft = changed;
+          }
+          await sendReply(draft);
           setAlsoToChannel(false);
+          return undefined;
         }}
         placeholder="Reply in thread…"
         {...(maxFileSize !== undefined ? { maxFileSize } : {})}
         {...(acceptFileTypes ? { acceptFileTypes } : {})}
+        {...composerProps}
       />
       {alsoSendToChannel && (
         <label className="poolse-thread__also">

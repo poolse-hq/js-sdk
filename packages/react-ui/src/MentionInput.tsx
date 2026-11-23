@@ -50,6 +50,7 @@ export interface MentionInputProps {
    * `MessageCreateRequest` shape (so `mentions` is wired correctly),
    * not just `body`. Typically:
    *   `onSend={(req) => send(req)}`  // from useMessages
+   * Resolve to `false` to keep the draft in the composer.
    */
   onSend: (req: MessageCreateRequest) => Promise<unknown> | void;
   onTyping?: () => void;
@@ -194,6 +195,8 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
         addFiles,
         getText: () => valueRef.current,
         setText: (text: string) => setValue(text),
+        insertText: (text: string) => setValue((v) => insertAtCaret(v, text, taRef)),
+        clear: () => setValue(''),
         focus: () => taRef.current?.focus(),
       }),
       [addFiles],
@@ -258,11 +261,13 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
           ...(replyingTo ? { quoted_message_id: replyingTo.id } : {}),
           ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
         };
-        const sent = await dlp.guard(trimmed, (ack) =>
-          onSend(ack ? { ...req, dlp_acknowledged: true } : req),
-        );
-        // Held back by data-loss prevention: the text stays for "Edit".
-        if (!sent) return;
+        let kept = false;
+        const sent = await dlp.guard(trimmed, async (ack) => {
+          if ((await onSend(ack ? { ...req, dlp_acknowledged: true } : req)) === false) kept = true;
+        });
+        // Held back (data-loss prevention, a cancelled beforeSend): the
+        // text stays for "Edit".
+        if (!sent || kept) return;
         setValue('');
         selectedMentions.current = new Map();
         for (const it of ready) uploads.remove(it.localId);

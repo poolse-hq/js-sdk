@@ -6,7 +6,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import type { Message, Uuid } from '@poolse/sdk';
+import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import type { FormatKind, SlashCommand } from '@poolse/react';
 import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
 import {
@@ -27,7 +27,9 @@ export interface MessageComposerProps {
    * optional metadata: `quoted_message_id` when replying, and
    * `attachment_ids` (resolved from the composer's upload queue) when
    * files were attached. Return value is awaited so the composer can
-   * stay disabled until send completes.
+   * stay disabled until send completes. Resolve to `false` to keep the
+   * draft (text and attachments) in the composer, e.g. a cancelled
+   * `beforeSend`.
    */
   onSend: (body: string, opts?: ComposerSendOptions) => Promise<unknown> | void;
   /** Called on every keystroke. Hook this to `useTyping().signalTyping`. */
@@ -93,6 +95,24 @@ export interface MessageComposerProps {
   commands?: readonly SlashCommand[];
 }
 
+/**
+ * `ConversationView` / `ThreadView`'s `beforeSend`: sees the message about
+ * to go out and returns it (changed or not), or `false` to cancel — the
+ * text and files then stay in the composer.
+ */
+export type BeforeSend = (
+  draft: MessageCreateRequest,
+) => MessageCreateRequest | false | Promise<MessageCreateRequest | false>;
+
+/**
+ * `ConversationView` / `ThreadView`'s `composerProps`: passed through to the
+ * composer. The view keeps sending, quoting and editing-last to itself;
+ * `onValueChange` and `onTyping` are called alongside its own.
+ */
+export type ComposerPassThroughProps = Partial<
+  Omit<MessageComposerProps, 'onSend' | 'replyingTo' | 'onCancelReply' | 'onEditLast'>
+>;
+
 /** The second argument of `onSend`. */
 export interface ComposerSendOptions {
   quoted_message_id?: Uuid;
@@ -116,6 +136,10 @@ export interface MessageComposerHandle {
   getText: () => string;
   /** Replace the text in the input (e.g. to restore a draft or a failed send). */
   setText: (text: string) => void;
+  /** Insert text at the caret (replacing a selection), as the emoji button does. */
+  insertText: (text: string) => void;
+  /** Empty the input. Queued attachments stay. */
+  clear: () => void;
   /** Focus the input. */
   focus: () => void;
 }
@@ -194,6 +218,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         addFiles,
         getText: () => valueRef.current,
         setText: (text: string) => setValue(text),
+        insertText: (text: string) => setValue((v) => insertAtCaret(v, text, taRef)),
+        clear: () => setValue(''),
         focus: () => taRef.current?.focus(),
       }),
       [addFiles],
@@ -214,21 +240,28 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
       };
       setValue('');
-      // Sweep ready chips out of the queue now that they've been
-      // attached + sent. Errored chips stay until dismissed.
-      for (const it of ready) uploads.remove(it.localId);
-      uploads.clearRejected();
       setSending(true);
       try {
         // Pass `undefined` (not an empty object) when there are no
         // opts — callers that only care about body can ignore the
         // second arg, and tests that assert on its identity stay clean.
-        const sent = await dlp.guard(trimmed, (ack) => {
+        let kept = false;
+        const sent = await dlp.guard(trimmed, async (ack) => {
           const o: ComposerSendOptions = ack ? { ...opts, dlp_acknowledged: true } : opts;
-          return onSend(trimmed, Object.keys(o).length > 0 ? o : undefined);
+          if ((await onSend(trimmed, Object.keys(o).length > 0 ? o : undefined)) === false) {
+            kept = true;
+          }
         });
-        // Held back by data-loss prevention: put the text back for "Edit".
-        if (!sent) setValue((now) => (now ? now : trimmed));
+        if (sent && !kept) {
+          // Sweep ready chips out of the queue now that they've been
+          // attached + sent. Errored chips stay until dismissed.
+          for (const it of ready) uploads.remove(it.localId);
+          uploads.clearRejected();
+        } else {
+          // Held back (data-loss prevention, a cancelled beforeSend): put
+          // the text back for "Edit"; the files are still queued.
+          setValue((now) => (now ? now : trimmed));
+        }
       } finally {
         setSending(false);
       }

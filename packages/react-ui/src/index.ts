@@ -191,7 +191,10 @@ export { EditedLabel, useEditHistory, type EditedLabelProps } from './EditedLabe
 export { EditableMessageBubble, type EditableMessageBubbleProps } from './EditableMessageBubble.js';
 export {
   MessageComposer,
+  type BeforeSend,
+  type ComposerPassThroughProps,
   type ComposerSendOptions,
+  type MessageComposerHandle,
   type MessageComposerProps,
 } from './MessageComposer.js';
 export {
