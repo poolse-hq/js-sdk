@@ -4,6 +4,15 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `MessageComposer` (and `MentionInput`, `composerProps`): `onMic` shows a
+  mic in the send button's place while there is nothing to send, and
+  `recordingBar` is drawn instead of the input row while set — an inline
+  voice message recorder.
+
 ## [3.10.2] - 2026-11-23
 
 ### Added

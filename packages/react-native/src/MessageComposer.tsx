@@ -91,6 +91,14 @@ export interface MessageComposerProps {
   formattingToolbar?: boolean | readonly FormatKind[];
   /** Slash commands to suggest when the message starts with `/` (IN3). */
   commands?: readonly SlashCommand[];
+  /**
+   * Shows a mic in the send button's place while there is nothing to send
+   * (no text, no ready files, not editing); pressing it calls this, e.g. to
+   * start recording a voice message.
+   */
+  onMic?: () => void;
+  /** Drawn instead of the input row while set, e.g. a voice recording's bar. */
+  recordingBar?: ReactNode;
 }
 
 /**
@@ -173,6 +181,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       accessory,
       formattingToolbar = false,
       commands,
+      onMic,
+      recordingBar,
     },
     ref,
   ) {
@@ -420,76 +430,97 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           />
         ) : null}
 
-        <View style={styles.row}>
-          {attachments && onAttachPress ? (
-            <Pressable
-              onPress={onAttachPress}
-              hitSlop={8}
-              style={styles.iconBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Attach file"
-            >
-              <PoolseIcon name="attachment" size={22} color={theme.colors.textMuted} />
-            </Pressable>
-          ) : null}
+        {recordingBar ? (
+          recordingBar
+        ) : (
+          <View style={styles.row}>
+            {attachments && onAttachPress ? (
+              <Pressable
+                onPress={onAttachPress}
+                hitSlop={8}
+                style={styles.iconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Attach file"
+              >
+                <PoolseIcon name="attachment" size={22} color={theme.colors.textMuted} />
+              </Pressable>
+            ) : null}
 
-          {emojiPicker ? (
-            <Pressable
-              onPress={() => setEmojiOpen(true)}
-              hitSlop={8}
-              style={styles.iconBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Insert emoji"
-            >
-              <PoolseIcon name="emoji" size={22} color={theme.colors.textMuted} label={null} />
-            </Pressable>
-          ) : null}
+            {emojiPicker ? (
+              <Pressable
+                onPress={() => setEmojiOpen(true)}
+                hitSlop={8}
+                style={styles.iconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Insert emoji"
+              >
+                <PoolseIcon name="emoji" size={22} color={theme.colors.textMuted} label={null} />
+              </Pressable>
+            ) : null}
 
-          <TextInput
-            ref={inputRef}
-            value={value}
-            onChangeText={(text) => {
-              setValue(text);
-              onTyping?.();
-            }}
-            onSelectionChange={(e) => {
-              selectionRef.current = e.nativeEvent.selection;
-              setCursor(e.nativeEvent.selection.end);
-              if (!isEditing) onSelectionChange?.(e.nativeEvent.selection);
-            }}
-            placeholder={placeholder}
-            accessibilityLabel={placeholder}
-            placeholderTextColor={theme.colors.textSubtle}
-            multiline
-            editable={!disabled}
-            style={[
-              styles.input,
-              {
-                color: theme.colors.text,
-                backgroundColor: theme.colors.surfaceAlt,
-                borderRadius: theme.radii.lg,
-                fontFamily: theme.fonts.body,
-                fontSize: theme.fonts.sizeMd,
-              },
-            ]}
-          />
+            <TextInput
+              ref={inputRef}
+              value={value}
+              onChangeText={(text) => {
+                setValue(text);
+                onTyping?.();
+              }}
+              onSelectionChange={(e) => {
+                selectionRef.current = e.nativeEvent.selection;
+                setCursor(e.nativeEvent.selection.end);
+                if (!isEditing) onSelectionChange?.(e.nativeEvent.selection);
+              }}
+              placeholder={placeholder}
+              accessibilityLabel={placeholder}
+              placeholderTextColor={theme.colors.textSubtle}
+              multiline
+              editable={!disabled}
+              style={[
+                styles.input,
+                {
+                  color: theme.colors.text,
+                  backgroundColor: theme.colors.surfaceAlt,
+                  borderRadius: theme.radii.lg,
+                  fontFamily: theme.fonts.body,
+                  fontSize: theme.fonts.sizeMd,
+                },
+              ]}
+            />
 
-          <Pressable
-            onPress={handleSend}
-            disabled={submitDisabled}
-            style={[
-              styles.sendBtn,
-              {
-                backgroundColor: submitDisabled ? theme.colors.textSubtle : theme.colors.accent,
-                opacity: submitDisabled ? 0.6 : 1,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Send message"
-          >
-            <PoolseIcon name="send" size={18} color={theme.colors.accentText} />
-          </Pressable>
-        </View>
+            {onMic &&
+            !isEditing &&
+            value.trim().length === 0 &&
+            readyAttachmentIds.length === 0 &&
+            !isUploading ? (
+              <Pressable
+                onPress={onMic}
+                disabled={disabled}
+                hitSlop={8}
+                style={[styles.sendBtn, { backgroundColor: theme.colors.accent }]}
+                accessibilityRole="button"
+                accessibilityLabel="Record a voice message"
+              >
+                <PoolseIcon name="mic" size={18} color={theme.colors.accentText} label={null} />
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={handleSend}
+                disabled={submitDisabled}
+                style={[
+                  styles.sendBtn,
+                  {
+                    backgroundColor: submitDisabled ? theme.colors.textSubtle : theme.colors.accent,
+                    opacity: submitDisabled ? 0.6 : 1,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Send message"
+              >
+                <PoolseIcon name="send" size={18} color={theme.colors.accentText} />
+              </Pressable>
+            )}
+          </View>
+        )}
 
         {emojiPicker && emojiOpen ? (
           <EmojiPicker
