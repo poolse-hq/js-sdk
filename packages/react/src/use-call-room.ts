@@ -14,6 +14,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { usePoolse } from './provider.js';
 
+/** How long a mid-call error (`CallRoom.onError`) stays in `error`. */
+export const ROOM_ERROR_MS = 8000;
+
 export interface UseCallRoomOptions {
   /**
    * `livekit-client`, imported by your app:
@@ -135,6 +138,11 @@ export interface UseCallRoom {
    *     }, [media.alone]);
    */
   alone: boolean;
+  /**
+   * The last failure. A failed `join()` stays until the next attempt; a
+   * problem during the call (`CallRoom.onError`: a device switch, screen
+   * sharing, remote audio…) clears by itself after `ROOM_ERROR_MS`.
+   */
   error: Error | null;
   /**
    * Whether this deployment has an SFU.
@@ -325,7 +333,17 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
     const offAlone = room.onAlone(() => setAlone(true));
 
     const offDevices = room.onDevices(() => refreshDevices(room));
-    const offError = room.onError(setError);
+    // A problem mid-call is news, not a state: it clears by itself
+    // unless something newer replaced it.
+    let errorTimer: ReturnType<typeof setTimeout> | null = null;
+    const offError = room.onError((err) => {
+      setError(err);
+      if (errorTimer) clearTimeout(errorTimer);
+      errorTimer = setTimeout(() => {
+        errorTimer = null;
+        setError((now) => (now === err ? null : now));
+      }, ROOM_ERROR_MS);
+    });
     const offPublish = room.onPublishPermission(() => sync(room));
     setReconnecting(room.isReconnecting());
     setDisconnectReason(null);
@@ -340,6 +358,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       offAlone();
       offDevices();
       offError();
+      if (errorTimer) clearTimeout(errorTimer);
       offPublish();
       offReconnect();
       offDisconnect();

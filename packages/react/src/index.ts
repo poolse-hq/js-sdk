@@ -161,7 +161,12 @@ export type {
 } from '@poolse/sdk';
 
 // ── Calls and rooms ──────────────────────────────────────────────
-export { useCallRoom, type UseCallRoom, type UseCallRoomOptions } from './use-call-room.js';
+export {
+  ROOM_ERROR_MS,
+  useCallRoom,
+  type UseCallRoom,
+  type UseCallRoomOptions,
+} from './use-call-room.js';
 export { useLiveCall, type UseLiveCall } from './use-live-call.js';
 export { useRoom, type UseRoom, type UseRoomOptions } from './use-room.js';
 // Live meeting features (CL2–CL15, CA5) — docs/MEETINGS.md.

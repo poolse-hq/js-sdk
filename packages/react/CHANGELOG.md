@@ -4,9 +4,14 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
-## [3.10.3] - 2026-11-25
+## [3.10.3] - 2026-11-26
 
-No changes; released with the other packages.
+### Changed
+
+- `useCallRoom`: a problem during the call (`CallRoom.onError`: switching a
+  device, screen sharing, remote audio…) no longer stays in `error` until
+  you rejoin; it clears by itself after `ROOM_ERROR_MS` (8 s, exported). A
+  failed `join()` still stays until the next attempt.
 
 ## [3.10.1] - 2026-11-23
 
