@@ -2,6 +2,10 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## [3.10.3] - 2026-11-25
+
+No changes; released with the other packages.
+
 ## [3.10.2] - 2026-11-23
 
 ### Added

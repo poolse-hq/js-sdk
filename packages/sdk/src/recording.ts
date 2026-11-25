@@ -289,7 +289,8 @@ export function captureErrorMessage(err: unknown): string {
   const code = typeof e?.code === 'string' ? e.code : typeof e?.reason === 'string' ? e.reason : '';
   switch (code) {
     case 'recording_unavailable':
-      return 'Recording isn’t set up on this server.';
+      // The server's 503: no recorder set up, or every one busy.
+      return 'Recording isn’t available right now: this server has no recorder free. Try again later.';
     case 'recording_disabled':
       return 'Recording is turned off for this workspace.';
     case 'not_allowed':

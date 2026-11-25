@@ -4,6 +4,15 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [3.10.3] - 2026-11-25
+
+### Changed
+
+- `captureErrorMessage` for `recording_unavailable` (503) no longer says
+  recording isn't set up: the server also answers it when every recorder
+  is busy. It now reads "Recording isn’t available right now: this server
+  has no recorder free. Try again later."
+
 ## [3.10.2] - 2026-11-23
 
 ### Fixed
