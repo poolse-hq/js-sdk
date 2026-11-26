@@ -1,7 +1,12 @@
 import { act } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { Poll } from '@poolse/sdk';
-import { usePoll, useScheduledMessages, useTranslation } from '../src/use-messaging-plus.js';
+import {
+  usePins,
+  usePoll,
+  useScheduledMessages,
+  useTranslation,
+} from '../src/use-messaging-plus.js';
 import {
   jsonResponse,
   noContent,
@@ -101,5 +106,53 @@ describe('useTranslation and useScheduledMessages', () => {
     });
     expect(result.current.scheduled).toHaveLength(0);
     expect(fetchFn.calls[1]?.method).toBe('DELETE');
+  });
+});
+
+describe('stale answers after a key change', () => {
+  it("usePins never shows the previous conversation's pins", async () => {
+    let answerA!: (r: Response) => void;
+    const fetchFn = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/c-a/')) return new Promise<Response>((r) => (answerA = r));
+      return jsonResponse({ data: [{ id: 'pin-b' }] });
+    }) as unknown as typeof globalThis.fetch;
+    const { result, rerender } = renderHookWithProvider(
+      ({ id }: { id: string }) => usePins(id),
+      fetchFn,
+      { initialProps: { id: 'c-a' } },
+    );
+    rerender({ id: 'c-b' });
+    await act(async () => {
+      await tick(10);
+    });
+    expect(result.current.pins.map((p) => p.id)).toEqual(['pin-b']);
+    await act(async () => {
+      answerA(jsonResponse({ data: [{ id: 'pin-a' }] }));
+      await tick(10);
+    });
+    expect(result.current.pins.map((p) => p.id)).toEqual(['pin-b']);
+  });
+
+  it('useTranslation drops a translation for the previous language', async () => {
+    let answer!: (r: Response) => void;
+    const fetchFn = (() =>
+      new Promise<Response>((r) => (answer = r))) as unknown as typeof globalThis.fetch;
+    const { result, rerender } = renderHookWithProvider(
+      ({ lang }: { lang: string }) => useTranslation('m-1', lang),
+      fetchFn,
+      { initialProps: { lang: 'de' } },
+    );
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.translate();
+    });
+    rerender({ lang: 'fr' });
+    await act(async () => {
+      await tick(10);
+      answer(jsonResponse({ message_id: 'm-1', language: 'de', text: 'Hallo', cached: true }));
+      await pending;
+    });
+    expect(result.current.translation).toBeNull();
   });
 });

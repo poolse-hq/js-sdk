@@ -29,6 +29,10 @@ export interface UpdateMeRequest {
  */
 export class MeResource {
   private current: Me | null = null;
+  // Whether `current` came from the server in this session (not only the
+  // offline cache), and the `show` every `ensure` caller shares.
+  private fresh = false;
+  private inflight: Promise<Me> | null = null;
   private readonly listeners = new Set<(me: Me) => void>();
 
   constructor(private readonly client: RestClient) {}
@@ -40,8 +44,22 @@ export class MeResource {
       path: '/v1/me',
       ...(signal ? { signal } : {}),
     });
+    this.fresh = true;
     this.set(me);
     return me;
+  }
+
+  /**
+   * The user, fetched at most once per session: resolves with the one
+   * `show` already returned, or joins the request in flight. For the
+   * many screens that each want the user at mount (`useMe`).
+   */
+  ensure(): Promise<Me> {
+    if (this.fresh && this.current) return Promise.resolve(this.current);
+    this.inflight ??= this.show().finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
   }
 
   /** PATCH /v1/me — the user's own preferences. */

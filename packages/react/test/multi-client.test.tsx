@@ -123,7 +123,7 @@ describe('PoolseProvider with a client', () => {
     await chat.destroy();
   });
 
-  it('destroys a client it built from config', () => {
+  it('destroys a client it built from config', async () => {
     let built: Poolse | null = null;
     function Grab() {
       built = usePoolse();
@@ -138,6 +138,8 @@ describe('PoolseProvider with a client', () => {
       </PoolseProvider>,
     );
     unmount();
+    // Right after the unmount (a StrictMode remount would cancel it).
+    await new Promise((r) => setTimeout(r, 0));
     expect(built!.destroyed).toBe(true);
   });
 

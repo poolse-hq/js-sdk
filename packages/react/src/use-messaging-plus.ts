@@ -20,6 +20,7 @@ import {
   type Uuid,
 } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMeId } from './capture-state.js';
 import { usePoolse } from './provider.js';
 
 export interface UsePoll {
@@ -134,40 +135,54 @@ export function usePins(conversationId: Uuid): UsePins {
   const [pins, setPins] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  // Only the newest read writes: an older one (another conversation's,
+  // after a switch) is dropped.
+  const seq = useRef(0);
 
   const refresh = useCallback(async () => {
+    const mine = ++seq.current;
     try {
-      setPins(await chat.conversations.one(conversationId).messages.pins());
+      const next = await chat.conversations.one(conversationId).messages.pins();
+      if (mine !== seq.current) return;
+      setPins(next);
       setError(null);
     } catch (err) {
-      setError(err);
+      if (mine === seq.current) setError(err);
     } finally {
-      setLoading(false);
+      if (mine === seq.current) setLoading(false);
     }
   }, [chat, conversationId]);
 
   useEffect(() => {
+    setPins([]);
+    setError(null);
     setLoading(true);
     void refresh();
     const conv = chat.realtime.conversation(conversationId);
-    return conv.onPinChanged(() => void refresh());
+    const off = conv.onPinChanged(() => void refresh());
+    return () => {
+      seq.current++;
+      off();
+    };
   }, [chat, conversationId, refresh]);
 
-  return {
-    pins,
-    loading,
-    error,
-    refresh,
-    pin: async (id) => {
+  const pin = useCallback(
+    async (id: Uuid) => {
       await chat.messages.one(id).pin();
       await refresh();
     },
-    unpin: async (id) => {
+    [chat, refresh],
+  );
+  const unpin = useCallback(
+    async (id: Uuid) => {
       setPins((p) => p.filter((m) => m.id !== id));
       await chat.messages.one(id).unpin();
       await refresh();
     },
-  };
+    [chat, refresh],
+  );
+
+  return { pins, loading, error, refresh, pin, unpin };
 }
 
 export interface UseThreadFollow {
@@ -195,10 +210,8 @@ export function useThreadFollow(rootId: Uuid | null | undefined): UseThreadFollo
       live = false;
     };
   }, [chat, rootId]);
-  return {
-    following,
-    error,
-    setFollowing: async (on) => {
+  const setFollowing = useCallback(
+    async (on: boolean) => {
       if (!rootId) return;
       const before = following;
       setState(on);
@@ -209,7 +222,9 @@ export function useThreadFollow(rootId: Uuid | null | undefined): UseThreadFollo
         setError(err);
       }
     },
-  };
+    [chat, rootId, following],
+  );
+  return { following, error, setFollowing };
 }
 
 export interface UseCatchUp {
@@ -225,25 +240,31 @@ export function useCatchUp(conversationId: Uuid): UseCatchUp {
   const [result, setResult] = useState<CatchUp | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  return {
-    result,
-    loading,
-    error,
-    run: async (opts) => {
+  const current = useRef(conversationId);
+  current.current = conversationId;
+  useEffect(() => {
+    setResult(null);
+    setError(null);
+  }, [conversationId]);
+  const run = useCallback(
+    async (opts?: CatchUpRequest) => {
       setLoading(true);
       setError(null);
       try {
         const r = await chat.conversations.one(conversationId).messages.catchUp(opts);
+        if (current.current !== conversationId) return null;
         setResult(r);
         return r;
       } catch (err) {
-        setError(err);
+        if (current.current === conversationId) setError(err);
         return null;
       } finally {
-        setLoading(false);
+        if (current.current === conversationId) setLoading(false);
       }
     },
-  };
+    [chat, conversationId],
+  );
+  return { result, loading, error, run };
 }
 
 export interface UseTranslation {
@@ -262,24 +283,31 @@ export function useTranslation(messageId: Uuid, language: string): UseTranslatio
   const [translation, setTranslation] = useState<MessageTranslation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  useEffect(() => setTranslation(null), [messageId, language]);
-  return {
-    translation,
-    loading,
-    error,
-    reset: () => setTranslation(null),
-    translate: async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        setTranslation(await chat.messages.one(messageId).translate(language));
-      } catch (err) {
-        setError(err);
-      } finally {
-        setLoading(false);
-      }
-    },
-  };
+  // A translation that lands after the message or language changed is
+  // for something no longer shown.
+  const key = `${messageId}\u0000${language}`;
+  const current = useRef(key);
+  current.current = key;
+  useEffect(() => {
+    setTranslation(null);
+    setError(null);
+    setLoading(false);
+  }, [messageId, language]);
+  const reset = useCallback(() => setTranslation(null), []);
+  const translate = useCallback(async () => {
+    const asked = `${messageId}\u0000${language}`;
+    setLoading(true);
+    setError(null);
+    try {
+      const t = await chat.messages.one(messageId).translate(language);
+      if (current.current === asked) setTranslation(t);
+    } catch (err) {
+      if (current.current === asked) setError(err);
+    } finally {
+      if (current.current === asked) setLoading(false);
+    }
+  }, [chat, messageId, language]);
+  return { translation, loading, error, reset, translate };
 }
 
 export interface UseScheduledMessages {
@@ -299,49 +327,67 @@ export function useScheduledMessages(conversationId?: Uuid): UseScheduledMessage
   const [scheduled, setScheduled] = useState<ScheduledMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const seq = useRef(0);
+  // Known only after `GET /v1/me` on a cold start: follow the user topic
+  // from then on, not only when the user was already known at mount.
+  const meId = useMeId(chat);
   const refresh = useCallback(async () => {
+    const mine = ++seq.current;
     try {
-      setScheduled(
-        await chat.scheduledMessages.list(
-          conversationId ? { conversation_id: conversationId } : {},
-        ),
+      const list = await chat.scheduledMessages.list(
+        conversationId ? { conversation_id: conversationId } : {},
       );
+      if (mine !== seq.current) return;
+      setScheduled(list);
       setError(null);
     } catch (err) {
-      setError(err);
+      if (mine === seq.current) setError(err);
     } finally {
-      setLoading(false);
+      if (mine === seq.current) setLoading(false);
     }
   }, [chat, conversationId]);
   useEffect(() => {
+    setScheduled([]);
+    setLoading(true);
     void refresh();
-    const me = chat.me.peek()?.id;
-    if (!me) return;
-    return chat.realtime.user(me).onScheduledMessage(() => void refresh());
-  }, [chat, refresh]);
-  return {
-    scheduled,
-    loading,
-    error,
-    refresh,
-    schedule: async (cid, req) => {
+    return () => {
+      seq.current++;
+    };
+  }, [refresh]);
+  useEffect(() => {
+    if (!meId) return;
+    return chat.realtime.user(meId).onScheduledMessage(() => void refresh());
+  }, [chat, meId, refresh]);
+  const schedule = useCallback(
+    async (cid: Uuid, req: ScheduleMessageRequest) => {
       const s = await chat.conversations.one(cid).messages.schedule(req);
       await refresh();
       return s;
     },
-    cancel: async (id) => {
+    [chat, refresh],
+  );
+  const cancel = useCallback(
+    async (id: Uuid) => {
       setScheduled((l) => l.filter((s) => s.id !== id));
       await chat.scheduledMessages.cancel(id);
     },
-    sendNow: async (id) => {
+    [chat],
+  );
+  const sendNow = useCallback(
+    async (id: Uuid) => {
       setScheduled((l) => l.filter((s) => s.id !== id));
       await chat.scheduledMessages.sendNow(id);
     },
-    reschedule: async (id, sendAt) => {
+    [chat],
+  );
+  const reschedule = useCallback(
+    async (id: Uuid, sendAt: string) => {
       await chat.scheduledMessages.update(id, { send_at: sendAt });
       await refresh();
     },
-  };
+    [chat, refresh],
+  );
+  return { scheduled, loading, error, refresh, schedule, cancel, sendNow, reschedule };
 }
 
 export interface UseFiles {
@@ -360,29 +406,44 @@ export function useFiles(conversationId: Uuid, kind?: AttachmentKind): UseFiles 
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  // Bumped when the conversation or kind changes: a page that lands after
+  // that is another list's.
+  const epoch = useRef(0);
   const load = useCallback(
     async (before: string | null) => {
+      const mine = epoch.current;
       setLoading(true);
       try {
         const page = await chat.conversations
           .one(conversationId)
           .messages.files({ ...(kind ? { kind } : {}), ...(before ? { before } : {}) });
-        setFiles((f) => (before ? [...f, ...page.data] : page.data));
+        if (mine !== epoch.current) return;
+        setFiles((f) => {
+          const have = new Set(f.map((a) => a.id));
+          if (before) return [...f, ...page.data.filter((a) => !have.has(a.id))];
+          // The first page: files that arrived live meanwhile stay on top.
+          const inPage = new Set(page.data.map((a) => a.id));
+          return [...f.filter((a) => !inPage.has(a.id)), ...page.data];
+        });
         setCursor(page.next_cursor);
         setHasMore(page.next_cursor !== null);
         setError(null);
       } catch (err) {
-        setError(err);
+        if (mine === epoch.current) setError(err);
       } finally {
-        setLoading(false);
+        if (mine === epoch.current) setLoading(false);
       }
     },
     [chat, conversationId, kind],
   );
   useEffect(() => {
+    setFiles([]);
+    setCursor(null);
+    setHasMore(false);
+    setError(null);
     void load(null);
     const conv = chat.realtime.conversation(conversationId);
-    return conv.onAttachmentProcessed((evt) => {
+    const off = conv.onAttachmentProcessed((evt) => {
       if (kind && evt.attachment.kind !== kind) return;
       setFiles((f) => {
         const group = evt.attachment.version_group_id;
@@ -392,14 +453,13 @@ export function useFiles(conversationId: Uuid, kind?: AttachmentKind): UseFiles 
         return [evt.attachment, ...rest];
       });
     });
+    return () => {
+      epoch.current++;
+      off();
+    };
   }, [chat, conversationId, kind, load]);
-  return {
-    files,
-    loading,
-    error,
-    hasMore,
-    loadMore: async () => {
-      if (cursor) await load(cursor);
-    },
-  };
+  const loadMore = useCallback(async () => {
+    if (cursor) await load(cursor);
+  }, [cursor, load]);
+  return { files, loading, error, hasMore, loadMore };
 }

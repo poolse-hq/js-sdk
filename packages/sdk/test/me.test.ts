@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { bodyJson, buildPoolse, jsonResponse, scriptedFetch } from './_helpers.js';
 
 describe('MeResource', () => {
+  it('ensure() shares one request and then answers from memory', async () => {
+    const me = { id: 'u-1', external_id: 'alice' };
+    const fetchFn = scriptedFetch([jsonResponse(me)]);
+    const chat = buildPoolse(fetchFn);
+    const [a, b] = await Promise.all([chat.me.ensure(), chat.me.ensure()]);
+    expect(a).toEqual(me);
+    expect(b).toEqual(me);
+    expect((await chat.me.ensure()).id).toBe('u-1');
+    expect(fetchFn.calls).toHaveLength(1);
+  });
+
   it('GETs /v1/me and returns the parsed user', async () => {
     const me = {
       id: 'u-1',

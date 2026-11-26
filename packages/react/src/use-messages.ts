@@ -221,6 +221,8 @@ export function useMessages(conversationId: string): UseMessagesState {
 
     refetchRef.current = async () => {
       const page = await handle.list({ limit: PAGE_SIZE });
+      // Switched conversation meanwhile: this page isn't for the list shown.
+      if (cancelled) return;
       const ordered = [...page.data].reverse();
       setMessages((prev) => keepLocal(ordered, prev));
       setHasMore(page.data.length === PAGE_SIZE);
@@ -345,6 +347,7 @@ export function useMessages(conversationId: string): UseMessagesState {
     if (before !== null) opts.before = before;
 
     const page = await chat.conversations.one(conversationId).messages.list(opts);
+    if (rowsForRef.current !== conversationId) return;
     if (page.data.length === 0) {
       setHasMore(false);
       return;
@@ -371,6 +374,7 @@ export function useMessages(conversationId: string): UseMessagesState {
         const before = oldestSequenceRef.current;
         if (before === null || !hasMoreRef.current) return false;
         const page = await handle.list({ limit: PAGE_SIZE, before });
+        if (rowsForRef.current !== conversationId) return false;
         const older = [...page.data].reverse();
         if (older.length > 0) {
           // A concurrent `loadMore` may have fetched the same page.
@@ -431,7 +435,8 @@ export function useMessages(conversationId: string): UseMessagesState {
         // Queued (offline) or refused: the row stays, following the
         // outbox; the rejection tells the caller which.
         const sent = await chat.outbox.send(conversationId, { ...attrs, id }, tempMsg);
-        setMessages((prev) => upsertById(prev, sent));
+        // Another conversation is shown now: its list isn't this one's.
+        if (rowsForRef.current === conversationId) setMessages((prev) => upsertById(prev, sent));
         return sent;
       }
 
@@ -441,10 +446,11 @@ export function useMessages(conversationId: string): UseMessagesState {
         const sent = await chat.conversations.one(conversationId).messages.send({ ...attrs, id });
         // Both REST and realtime carry the same id; whichever lands
         // first wins, and the second is an idempotent replace.
-        setMessages((prev) => upsertById(prev, sent));
+        if (rowsForRef.current === conversationId) setMessages((prev) => upsertById(prev, sent));
         return sent;
       } catch (err) {
-        setMessages((prev) => prev.filter((m) => m.id !== id));
+        if (rowsForRef.current === conversationId)
+          setMessages((prev) => prev.filter((m) => m.id !== id));
         throw err;
       }
     },
@@ -595,9 +601,23 @@ function applyOutbox(prev: Message[], entries: ReadonlyArray<OutboxEntry>): Mess
 }
 
 /** A fresh page, plus the unsent rows that aren't in it. */
+// A fresh page replaces the list, but keeps unsent rows and live rows
+// newer than the page (a `message:new` that arrived while the page was
+// on its way, from a snapshot taken before it).
 function keepLocal(page: Message[], prev: Message[]): Message[] {
-  const local = prev.filter((m) => m.local_status && !page.some((p) => p.id === m.id));
-  return local.length === 0 ? page : [...page, ...local];
+  const inPage = new Set(page.map((p) => p.id));
+  const newest = page.reduce((max, m) => Math.max(max, m.sequence), -Infinity);
+  const newer = prev
+    .filter(
+      (m) =>
+        !m.local_status &&
+        !inPage.has(m.id) &&
+        m.conversation_id === page[0]?.conversation_id &&
+        m.sequence > newest,
+    )
+    .sort((a, b) => a.sequence - b.sequence);
+  const local = prev.filter((m) => m.local_status && !inPage.has(m.id));
+  return newer.length === 0 && local.length === 0 ? page : [...page, ...newer, ...local];
 }
 
 function patchById(prev: Message[], id: Uuid, fn: (m: Message) => Message): Message[] {

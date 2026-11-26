@@ -26,7 +26,6 @@ export function useMe(): UseMeState {
 
   useEffect(() => {
     let cancelled = false;
-    const controller = new AbortController();
 
     // Every screen shares one user: a change made anywhere (say,
     // read receipts turned off) re-renders all of them.
@@ -34,8 +33,10 @@ export function useMe(): UseMeState {
       if (!cancelled) setState({ me, loading: false, error: null });
     });
 
+    // One request for every screen that mounts at once (opening one
+    // conversation mounts about ten users of this hook), none once known.
     chat.me
-      .show(controller.signal)
+      .ensure()
       .then((me) => {
         if (!cancelled) setState({ me, loading: false, error: null });
       })
@@ -52,7 +53,6 @@ export function useMe(): UseMeState {
     return () => {
       cancelled = true;
       off();
-      controller.abort();
     };
   }, [chat]);
 
