@@ -92,7 +92,20 @@ export function createIndexedDbStorage(opts: IndexedDbStorageOptions = {}): Pool
           req.result.createObjectStore(storeName);
         }
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        // A connection the browser closes (WebKit drops them) or a newer
+        // version needs is reopened on next use, instead of every later
+        // call falling back to memory for the rest of the session.
+        db.onclose = () => {
+          dbPromise = null;
+        };
+        db.onversionchange = () => {
+          db.close();
+          dbPromise = null;
+        };
+        resolve(db);
+      };
       req.onerror = () => resolve(null);
       req.onblocked = () => resolve(null);
     });
@@ -110,9 +123,19 @@ export function createIndexedDbStorage(opts: IndexedDbStorageOptions = {}): Pool
       try {
         const tx = db.transaction(storeName, mode);
         const req = fn(tx.objectStore(storeName));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(orElse() as T);
+        if (mode === 'readonly') {
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(orElse() as T);
+        } else {
+          // A write counts once its transaction commits; one that aborts
+          // afterwards (quota) is not saved.
+          tx.oncomplete = () => resolve(req.result);
+          tx.onabort = () => resolve(orElse() as T);
+          tx.onerror = () => resolve(orElse() as T);
+        }
       } catch {
+        // The connection is gone (InvalidStateError): open a new one next time.
+        dbPromise = null;
         resolve(orElse() as T);
       }
     });
