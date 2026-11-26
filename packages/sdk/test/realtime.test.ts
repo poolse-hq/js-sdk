@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Poolse } from '../src/index.js';
+import { CONVERSATION_IDLE_LEAVE_MS, applyPresenceDiff } from '../src/realtime/realtime.js';
 
 // We don't run a real WebSocket in tests — we observe surface behaviour
 // (status changes, lazy connect, handle reuse) that doesn't require the
@@ -226,6 +227,98 @@ describe('transcript channel', () => {
     channelOf(conv).trigger('recording:consent', { call_id: 'call-1', decision: 'declined' });
     expect(started).toHaveBeenCalledWith({ call_id: 'call-1', notice: 'banner' });
     expect(consent).toHaveBeenCalledOnce();
+    c.destroy();
+  });
+});
+
+describe('ConversationChannel lifetime', () => {
+  const build = () =>
+    new Poolse({
+      apiUrl: 'https://chat.example',
+      getToken: () => 'tok',
+      fetch: vi.fn() as unknown as typeof globalThis.fetch,
+    });
+  type Raw = {
+    state: string;
+    trigger(e: string, p?: unknown): void;
+    joinPush: { matchReceive(r: { status: string; response: unknown }): void };
+  };
+  const raw = (handle: unknown) => (handle as { channel: Raw }).channel;
+
+  it('a refused join closes the handle with the reason instead of retrying for good', () => {
+    const c = build();
+    const handle = c.realtime.conversation('c-1');
+    const closed = vi.fn();
+    handle.onClosed(closed);
+    const channel = raw(handle);
+    channel.joinPush.matchReceive({ status: 'error', response: { reason: 'forbidden' } });
+    expect(closed).toHaveBeenCalledWith('forbidden');
+    expect(handle.closedReason).toBe('forbidden');
+    expect(['leaving', 'closed']).toContain(channel.state);
+    expect(c.realtime.conversation('c-1')).not.toBe(handle);
+    c.destroy();
+  });
+
+  it('leaves a topic nobody listens to after a minute and joins again on next use', () => {
+    vi.useFakeTimers();
+    try {
+      const c = build();
+      const handle = c.realtime.conversation('c-1');
+      const off = handle.onMessage(() => {});
+      const first = raw(handle);
+      vi.advanceTimersByTime(CONVERSATION_IDLE_LEAVE_MS * 2);
+      expect(first.state).not.toMatch(/leaving|closed/);
+
+      off();
+      vi.advanceTimersByTime(CONVERSATION_IDLE_LEAVE_MS - 1);
+      expect(first.state).not.toMatch(/leaving|closed/);
+      vi.advanceTimersByTime(1);
+      expect(['leaving', 'closed']).toContain(first.state);
+
+      // Same handle, a fresh channel, and listeners work on it.
+      expect(c.realtime.conversation('c-1')).toBe(handle);
+      const got = vi.fn();
+      handle.onMessage(got);
+      const second = raw(handle);
+      expect(second).not.toBe(first);
+      second.trigger('message:new', { id: 'm-1' });
+      expect(got).toHaveBeenCalledWith({ id: 'm-1' });
+      // The old channel's close is not reported as the handle closing.
+      expect(handle.closedReason).toBeNull();
+      c.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('presence diffs', () => {
+  const meta = (ref: string) => ({ phx_ref: ref, online_at: 1, external_id: 'ana' });
+
+  it('a user with two tabs stays present when one leaves', () => {
+    let state = applyPresenceDiff({}, { joins: { u1: { metas: [meta('a')] } } });
+    state = applyPresenceDiff(state, { joins: { u1: { metas: [meta('b')] } } });
+    expect(state.u1!.metas.map((m) => m.phx_ref)).toEqual(['a', 'b']);
+    state = applyPresenceDiff(state, { leaves: { u1: { metas: [meta('a')] } } });
+    expect(state.u1!.metas.map((m) => m.phx_ref)).toEqual(['b']);
+    state = applyPresenceDiff(state, { leaves: { u1: { metas: [meta('b')] } } });
+    expect(state.u1).toBeUndefined();
+  });
+
+  it('onPresence gives the merged state', () => {
+    const c = new Poolse({
+      apiUrl: 'https://chat.example',
+      getToken: () => 'tok',
+      fetch: vi.fn() as unknown as typeof globalThis.fetch,
+    });
+    const conv = c.realtime.conversation('c-1');
+    const seen = vi.fn();
+    conv.onPresence(seen);
+    const ch = (conv as unknown as { channel: { trigger(e: string, p: unknown): void } }).channel;
+    ch.trigger('presence_state', { u1: { metas: [meta('a'), meta('b')] } });
+    ch.trigger('presence_diff', { joins: {}, leaves: { u1: { metas: [meta('a')] } } });
+    expect(Object.keys(seen.mock.lastCall![0])).toEqual(['u1']);
+    expect(conv.getPresenceState().u1!.metas).toHaveLength(1);
     c.destroy();
   });
 });

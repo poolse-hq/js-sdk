@@ -298,7 +298,10 @@ export class PoolseRealtime {
    */
   conversation(conversationId: string): ConversationChannel {
     const existing = this.conversations.get(conversationId);
-    if (existing) return existing;
+    if (existing) {
+      existing._touch();
+      return existing;
+    }
 
     this.connect();
 
@@ -306,11 +309,20 @@ export class PoolseRealtime {
       throw new PoolseError('socket not initialised — call connect() first');
     }
 
-    const channel = this.socket.channel(`conversation:${conversationId}`, {});
+    // The handle opens a fresh Phoenix channel whenever it needs one: it
+    // leaves the topic after a minute with no listeners (so a session
+    // that opened 200 conversations isn't joined to 200 topics, and a
+    // reconnect doesn't rejoin them all) and joins again on next use.
+    const open = (): Channel => {
+      this.connect();
+      if (!this.socket) throw new PoolseError('socket not initialised — call connect() first');
+      return this.socket.channel(`conversation:${conversationId}`, {});
+    };
     // A channel the server closes (the user was removed from the
-    // conversation) is never rejoined: drop the handle so the next
-    // `conversation(id)` — say after being added back — joins afresh.
-    const handle: ConversationChannel = new ConversationChannel(conversationId, channel, () => {
+    // conversation) or refuses to join is never rejoined: drop the handle
+    // so the next `conversation(id)` — say after being added back — joins
+    // afresh.
+    const handle: ConversationChannel = new ConversationChannel(conversationId, open, () => {
       if (this.conversations.get(conversationId) === handle)
         this.conversations.delete(conversationId);
     });
@@ -405,14 +417,21 @@ export class PoolseRealtime {
 
 // ── ConversationChannel ────────────────────────────────────────────────
 
+/** How long a conversation channel with no listeners stays joined. */
+export const CONVERSATION_IDLE_LEAVE_MS = 60_000;
+
 export class ConversationChannel {
   public readonly conversationId: string;
-  private readonly channel: Channel;
+  private channel: Channel;
+  private readonly open: (() => Channel) | null;
+  private readonly onGone: (() => void) | undefined;
 
   // Map from event-name → set of listeners. We bind one Phoenix `.on(...)`
   // per event name (no matter how many JS listeners) and fan out
   // ourselves — much cheaper than re-binding on every subscription.
   private readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
+  // Event names bound on the current Phoenix channel.
+  private readonly bound = new Set<string>();
 
   // Phoenix.Presence pushes `presence_state` exactly ONCE right after
   // join, then `presence_diff` for every change. Late subscribers
@@ -422,16 +441,35 @@ export class ConversationChannel {
   // state here and replay it on subscribe.
   private presenceState: PresenceSnapshot = {};
   private presenceStateSeen = false;
-  private readonly closedListeners = new Set<() => void>();
+  private readonly closedListeners = new Set<(reason: string) => void>();
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  // Left for being idle (not closed): the next use joins again.
+  private idle = false;
+  private gone = false;
+  private _closedReason: string | null = null;
 
-  constructor(conversationId: string, channel: Channel, onGone?: () => void) {
+  constructor(conversationId: string, channel: Channel | (() => Channel), onGone?: () => void) {
     this.conversationId = conversationId;
-    this.channel = channel;
+    this.open = typeof channel === 'function' ? channel : null;
+    this.channel = typeof channel === 'function' ? channel() : channel;
+    this.onGone = onGone;
+    this.attach(this.channel);
+  }
 
+  /**
+   * Why the channel closed for good: the server's join refusal
+   * (`forbidden`, `not_found`), `closed` when the server closed it, or
+   * `left` after `leave()`. Null while it is open.
+   */
+  get closedReason(): string | null {
+    return this._closedReason;
+  }
+
+  private attach(channel: Channel): void {
     channel.onClose(() => {
-      onGone?.();
-      this.closedListeners.forEach((l) => l());
-      this.closedListeners.clear();
+      // An idle leave, or a channel this handle already replaced.
+      if (channel !== this.channel || this.idle) return;
+      this.finish('closed');
     });
 
     // Bind presence handlers eagerly (not via the lazy `subscribe`
@@ -441,14 +479,24 @@ export class ConversationChannel {
       this.presenceStateSeen = true;
       const listeners = this.listeners.get('presence_state');
       if (listeners) listeners.forEach((l) => l(this.presenceState));
+      this.listeners.get(PRESENCE)?.forEach((l) => l(this.presenceState));
     });
     channel.on('presence_diff', (payload: unknown) => {
       const diff = (payload ?? {}) as { joins?: PresenceSnapshot; leaves?: PresenceSnapshot };
-      const next: PresenceSnapshot = { ...this.presenceState };
-      if (diff.joins) for (const [k, v] of Object.entries(diff.joins)) next[k] = v;
-      if (diff.leaves) for (const k of Object.keys(diff.leaves)) delete next[k];
-      this.presenceState = next;
+      this.presenceState = applyPresenceDiff(this.presenceState, diff);
       const listeners = this.listeners.get('presence_diff');
+      if (listeners) listeners.forEach((l) => l(payload));
+      this.listeners.get(PRESENCE)?.forEach((l) => l(this.presenceState));
+    });
+    for (const event of this.listeners.keys()) this.bind(event);
+  }
+
+  private bind(event: string): void {
+    if (event === 'presence_state' || event === 'presence_diff' || event === PRESENCE) return;
+    if (this.bound.has(event)) return;
+    this.bound.add(event);
+    this.channel.on(event, (payload: unknown) => {
+      const listeners = this.listeners.get(event);
       if (listeners) listeners.forEach((l) => l(payload));
     });
   }
@@ -633,23 +681,33 @@ export class ConversationChannel {
   }
 
   onPresenceState(fn: (state: PresenceSnapshot) => void): Unsubscribe {
-    let set = this.listeners.get('presence_state');
-    if (!set) {
-      set = new Set();
-      this.listeners.set('presence_state', set);
-    }
-    set.add(fn as (p: unknown) => void);
+    const off = this.subscribe('presence_state', fn as (p: unknown) => void);
     // Replay the cached presence_state to late subscribers — Phoenix
     // pushes it once on join and never resends, so MemberList mounted
     // after ConversationView would otherwise stay empty.
     if (this.presenceStateSeen) fn(this.presenceState);
-    return () => {
-      set.delete(fn as (p: unknown) => void);
-    };
+    return off;
   }
 
+  /**
+   * The raw `presence_diff` payload — `{ joins, leaves }`, each a
+   * {@link PresenceSnapshot} of the metas that joined or left (a user
+   * with two tabs who closes one is in `leaves` while still present).
+   * Prefer {@link onPresence}, which applies the diff for you.
+   */
   onPresenceDiff(fn: (diff: PresenceSnapshot) => void): Unsubscribe {
     return this.subscribe('presence_diff', fn as (p: unknown) => void);
+  }
+
+  /**
+   * Who has the conversation open, as the merged presence state: called
+   * with the current state on subscribe (once known) and after every
+   * change. A user stays in it while any of their tabs or devices is.
+   */
+  onPresence(fn: (state: PresenceSnapshot) => void): Unsubscribe {
+    const off = this.subscribe(PRESENCE, fn as (p: unknown) => void);
+    if (this.presenceStateSeen) fn(this.presenceState);
+    return off;
   }
 
   /**
@@ -658,10 +716,12 @@ export class ConversationChannel {
    * events arrive on this handle; `realtime.conversation(id)` returns a
    * fresh one.
    */
-  onClosed(fn: () => void): Unsubscribe {
+  onClosed(fn: (reason: string) => void): Unsubscribe {
     this.closedListeners.add(fn);
+    this.cancelIdle();
     return () => {
       this.closedListeners.delete(fn);
+      this.maybeIdle();
     };
   }
 
@@ -681,15 +741,91 @@ export class ConversationChannel {
 
   /** Send a typing ping to the server. Debounced server-side. */
   sendTyping(): void {
+    this._touch();
+    if (this.gone) return;
     this.channel.push('typing', {});
   }
 
   /** @internal — called by `PoolseRealtime.conversation/1`. */
   _join(): void {
-    this.channel.join();
+    const channel = this.channel;
+    channel.join().receive('error', (reply: unknown) => {
+      if (channel !== this.channel) return;
+      // Phoenix would retry a refused join every 10 s for good; the
+      // server only refuses for `forbidden` / `not_found`, which no
+      // retry changes. Close the handle and say why.
+      const reason =
+        reply &&
+        typeof reply === 'object' &&
+        typeof (reply as { reason?: unknown }).reason === 'string'
+          ? (reply as { reason: string }).reason
+          : 'error';
+      this.finish(reason);
+      channel.leave();
+    });
+    this.maybeIdle();
+  }
+
+  /**
+   * Used again (`realtime.conversation(id)`, a push): join again if the
+   * channel was left for being idle, and restart the idle countdown.
+   *
+   * @internal
+   */
+  _touch(): void {
+    if (this.gone) return;
+    if (this.idle && this.open) {
+      this.idle = false;
+      this.bound.clear();
+      this.channel = this.open();
+      this.attach(this.channel);
+      this._join();
+      return;
+    }
+    this.maybeIdle();
+  }
+
+  private listenerCount(): number {
+    let n = this.closedListeners.size;
+    for (const set of this.listeners.values()) n += set.size;
+    return n;
+  }
+
+  private cancelIdle(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  // Nobody listening: leave the topic after a while (only handles that
+  // can open a fresh channel; a hand-built one stays joined).
+  private maybeIdle(): void {
+    if (!this.open || this.gone || this.idle) return;
+    this.cancelIdle();
+    if (this.listenerCount() > 0) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (this.gone || this.idle || this.listenerCount() > 0) return;
+      this.idle = true;
+      this.bound.clear();
+      this.presenceState = {};
+      this.presenceStateSeen = false;
+      this.channel.leave();
+    }, CONVERSATION_IDLE_LEAVE_MS);
+  }
+
+  private finish(reason: string): void {
+    if (this.gone) return;
+    this.gone = true;
+    this._closedReason = reason;
+    this.cancelIdle();
+    this.onGone?.();
+    const listeners = [...this.closedListeners];
+    this.closedListeners.clear();
+    listeners.forEach((l) => l(reason));
   }
 
   private request<T>(event: string, payload: object): Promise<T> {
+    this._touch();
     return new Promise<T>((resolve, reject) => {
       this.channel
         .push(event, payload)
@@ -702,7 +838,9 @@ export class ConversationChannel {
   /** @internal — called when the consumer leaves this conversation. */
   _destroy(): void {
     this.listeners.clear();
-    this.channel.leave();
+    const wasIdle = this.idle;
+    this.finish('left');
+    if (!wasIdle) this.channel.leave();
   }
 
   private subscribe(event: string, fn: (payload: unknown) => void): Unsubscribe {
@@ -710,16 +848,48 @@ export class ConversationChannel {
     if (!set) {
       set = new Set();
       this.listeners.set(event, set);
-      this.channel.on(event, (payload: unknown) => {
-        const listeners = this.listeners.get(event);
-        if (listeners) listeners.forEach((l) => l(payload));
-      });
     }
     set.add(fn);
+    this.cancelIdle();
+    this._touch();
+    this.bind(event);
     return () => {
       set.delete(fn);
+      this.maybeIdle();
     };
   }
+}
+
+// Listener key for the merged presence state (`onPresence`).
+const PRESENCE = '\u0000presence';
+
+/**
+ * Apply a Phoenix.Presence diff the way `Presence.syncDiff` does: joins
+ * add their metas, leaves remove only the metas that left (by
+ * `phx_ref`), and a user goes only when no meta is left.
+ */
+export function applyPresenceDiff(
+  state: PresenceSnapshot,
+  diff: { joins?: PresenceSnapshot; leaves?: PresenceSnapshot },
+): PresenceSnapshot {
+  const next: PresenceSnapshot = { ...state };
+  for (const [key, joined] of Object.entries(diff.joins ?? {})) {
+    const have = next[key]?.metas ?? [];
+    const refs = new Set(have.map((m) => m.phx_ref));
+    next[key] = {
+      ...joined,
+      metas: [...have, ...(joined?.metas ?? []).filter((m) => !refs.has(m.phx_ref))],
+    };
+  }
+  for (const [key, left] of Object.entries(diff.leaves ?? {})) {
+    const current = next[key];
+    if (!current) continue;
+    const gone = new Set((left?.metas ?? []).map((m) => m.phx_ref));
+    const metas = current.metas.filter((m) => !gone.has(m.phx_ref));
+    if (metas.length === 0) delete next[key];
+    else next[key] = { ...current, metas };
+  }
+  return next;
 }
 
 // ── TranscriptChannel ──────────────────────────────────────────────────

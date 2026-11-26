@@ -44,27 +44,9 @@ export function usePresence(conversationId: string): UsePresenceState {
     if (!conversationId) return;
 
     const conv = chat.realtime.conversation(conversationId);
-
-    const applyState = (state: PresenceSnapshot) => {
-      setOnline(new Set(externalIdsFrom(state)));
-    };
-
-    const applyDiff = (diff: { joins?: PresenceSnapshot; leaves?: PresenceSnapshot }) => {
-      setOnline((prev) => {
-        const next = new Set(prev);
-        if (diff.joins) externalIdsFrom(diff.joins).forEach((ext) => next.add(ext));
-        if (diff.leaves) externalIdsFrom(diff.leaves).forEach((ext) => next.delete(ext));
-        return next;
-      });
-    };
-
-    const offState = conv.onPresenceState(applyState);
-    const offDiff = conv.onPresenceDiff(applyDiff as (s: PresenceSnapshot) => void);
-
-    return () => {
-      offState();
-      offDiff();
-    };
+    // The sdk applies each diff by meta (`phx_ref`), so a user who closes
+    // one of two tabs stays online here.
+    return conv.onPresence((state) => setOnline(new Set(externalIdsFrom(state))));
   }, [chat, conversationId]);
 
   return { online };
