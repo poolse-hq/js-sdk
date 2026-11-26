@@ -231,10 +231,15 @@ export function VoiceRecorder({
     cancel: boolean;
   } | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Waiting on the browser's camera/mic prompt: a second click must not
+  // start a second recorder, and unmounting meanwhile must not start one.
+  const starting = useRef(false);
+  const mounted = useRef(true);
 
   const stopTracks = () => rec.current?.stream.getTracks().forEach((t) => t.stop());
   useEffect(
     () => () => {
+      mounted.current = false;
       if (timer.current) clearInterval(timer.current);
       if (rec.current) {
         rec.current.cancel = true;
@@ -246,21 +251,29 @@ export function VoiceRecorder({
   );
 
   const start = async () => {
+    if (starting.current || rec.current) return;
+    starting.current = true;
     try {
       const md = navigator.mediaDevices;
       const stream =
         video === 'screen'
           ? await md.getDisplayMedia({ video: true, audio: true })
           : await md.getUserMedia(video ? { audio: true, video: true } : { audio: true });
+      if (!mounted.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       const mr = new MediaRecorder(stream);
       const r = { mr, stream, chunks: [] as Blob[], start: Date.now(), cancel: false };
       rec.current = r;
       mr.ondataavailable = (e) => e.data.size > 0 && r.chunks.push(e.data);
       mr.onstop = () => {
         if (timer.current) clearInterval(timer.current);
-        stopTracks();
+        // This recording's own stream, whatever rec.current is by now.
+        r.stream.getTracks().forEach((t) => t.stop());
         const ms = Date.now() - r.start;
-        rec.current = null;
+        if (rec.current === r) rec.current = null;
+        if (!mounted.current) return;
         if (r.cancel || r.chunks.length === 0) {
           setState('idle');
           return;
@@ -280,8 +293,12 @@ export function VoiceRecorder({
         if (ms >= limit && mr.state === 'recording') mr.stop();
       }, 200);
     } catch (err) {
-      setState('idle');
-      onError?.(err);
+      if (mounted.current) {
+        setState('idle');
+        onError?.(err);
+      }
+    } finally {
+      starting.current = false;
     }
   };
   const stop = (cancel: boolean) => {

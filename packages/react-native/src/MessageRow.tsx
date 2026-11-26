@@ -402,7 +402,10 @@ function BubbleMessageRow({
           translateX.setValue(translated);
         },
         onPanResponderRelease: (_, g) => {
-          const past = Math.abs(g.dx) >= SWIPE_REPLY_THRESHOLD;
+          // Only the direction the bubble moved counts: towards the
+          // centre (right for theirs, left for yours), as in Move.
+          const dx = isSelf ? Math.min(0, g.dx) : Math.max(0, g.dx);
+          const past = Math.abs(dx) >= SWIPE_REPLY_THRESHOLD;
           if (past && onQuote) onQuote();
           Animated.spring(translateX, {
             toValue: 0,
