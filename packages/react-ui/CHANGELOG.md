@@ -33,6 +33,13 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   uses the same order (`displayNameOf` from `@poolse/react`): `labelFor`,
   then the `userResolver` profile — bubble headers now use `labelFor` too,
   and the DM title in `ChatHeader` asks the resolver.
+- `ForwardDialog` shows an error when the forward fails and keeps the
+  picks and the comment; it used to stay open with no message.
+- `BlockRenderer` shows an error when a button, menu or form action
+  fails, and renders a link button whose `url` is not
+  `http:`/`https:`/`mailto:` as plain text (a `javascript:` URL used to
+  run on click under React 18). Block images with a non-web URL are not
+  loaded.
 
 ## [3.10.3] - 2026-11-26
 

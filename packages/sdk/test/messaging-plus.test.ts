@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   applyLocalVote,
   attachmentKind,
+  blockActionErrorMessage,
+  forwardErrorMessage,
   handNoteToAgent,
   initialBlockValues,
   isPollClosed,
   mediaMessageOf,
   missingInputs,
   pollPercentages,
+  safeImageUrl,
+  safeLinkUrl,
   toggleVote,
   type Block,
   type Poll,
@@ -238,5 +242,49 @@ describe('blocks and attachment helpers', () => {
     const a = { id: 'v', purpose: 'voice' } as never;
     expect(mediaMessageOf({ attachments: [{ id: 'f' } as never, a] })).toBe(a);
     expect(mediaMessageOf({})).toBeNull();
+  });
+});
+
+describe('safe link urls', () => {
+  it('keeps http, https and mailto links', () => {
+    expect(safeLinkUrl('https://example.com/a?b=1')).toBe('https://example.com/a?b=1');
+    expect(safeLinkUrl('  HTTP://example.com ')).toBe('HTTP://example.com');
+    expect(safeLinkUrl('mailto:hello@example.com')).toBe('mailto:hello@example.com');
+  });
+
+  it('drops script, data, relative and app-scheme urls', () => {
+    for (const bad of [
+      'javascript:alert(1)',
+      ' JavaScript:alert(1)',
+      'java\nscript:alert(1)',
+      '\u0001javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'vbscript:msgbox(1)',
+      'file:///etc/passwd',
+      'intent://scan#Intent;end',
+      'tel:+123',
+      '/relative/path',
+      '//example.com',
+      '',
+      null,
+      undefined,
+    ]) {
+      expect(safeLinkUrl(bad)).toBeNull();
+    }
+  });
+
+  it('images take only http and https', () => {
+    expect(safeImageUrl('https://example.com/a.png')).toBe('https://example.com/a.png');
+    expect(safeImageUrl('mailto:a@b.c')).toBeNull();
+    expect(safeImageUrl('javascript:alert(1)')).toBeNull();
+  });
+});
+
+describe('forward and block action error text', () => {
+  it('maps statuses to plain words', () => {
+    expect(forwardErrorMessage({ status: 403 })).toMatch(/can't forward/);
+    expect(forwardErrorMessage(new Error('x'))).toBe("Couldn't forward the message. Try again.");
+    expect(blockActionErrorMessage({ status: 404 })).toMatch(/no longer available/);
+    expect(blockActionErrorMessage(null)).toBe("That didn't go through. Try again.");
   });
 });

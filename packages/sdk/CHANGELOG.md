@@ -4,6 +4,19 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- `safeLinkUrl(url)` / `safeImageUrl(url)`: the URL when it is an
+  absolute `http:`/`https:` (or, for links, `mailto:`) URL, else `null`.
+  Both UI packages use them for block buttons, block images and link
+  previews, so a `javascript:` or `data:` URL from an integration is
+  never rendered or opened.
+- `forwardErrorMessage(err)` and `blockActionErrorMessage(err)`: the
+  plain-words text the forward dialogs and block renderers show when the
+  request fails.
+
 ## [3.10.3] - 2026-11-26
 
 ### Changed

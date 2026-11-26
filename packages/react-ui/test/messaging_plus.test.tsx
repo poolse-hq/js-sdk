@@ -75,6 +75,39 @@ describe('PollCard', () => {
 });
 
 describe('BlockRenderer', () => {
+  it('shows an error when an action fails', async () => {
+    const onAction = vi.fn().mockRejectedValue(new Error('boom'));
+    const { getByText, getByRole } = render(
+      <BlockRenderer
+        blocks={[{ type: 'actions', elements: [{ type: 'button', action_id: 'go', text: 'Go' }] }]}
+        onAction={onAction}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(getByText('Go'));
+    });
+    expect(getByRole('alert').textContent).toBe("That didn't go through. Try again.");
+  });
+
+  it('never renders a javascript: link or image', () => {
+    const { getByText, container } = render(
+      <BlockRenderer
+        blocks={[
+          { type: 'image', url: 'javascript:alert(1)', alt: 'x' },
+          {
+            type: 'actions',
+            elements: [
+              { type: 'button', action_id: 'x', text: 'Evil', url: 'javascript:alert(1)' },
+            ],
+          },
+        ]}
+      />,
+    );
+    expect(getByText('Evil').getAttribute('href')).toBeNull();
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.querySelector('img')).toBeNull();
+  });
+
   const blocks: Block[] = [
     { type: 'section', text: '**Deploy 4.2** is waiting' },
     { type: 'divider' },
@@ -230,6 +263,27 @@ describe('forward, catch-up, translate, note card', () => {
     });
     expect(onForward).toHaveBeenCalledWith(['c1', 'c2'], 'fyi');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('ForwardDialog shows an error and keeps the picks when the forward fails', async () => {
+    const onForward = vi.fn().mockRejectedValue(Object.assign(new Error('nope'), { status: 500 }));
+    const onClose = vi.fn();
+    const { getByLabelText, getByText, getByRole } = render(
+      <ForwardDialog
+        targets={[{ id: 'c1', name: 'general' }]}
+        onForward={onForward}
+        onClose={onClose}
+      />,
+    );
+    fireEvent.click(getByLabelText('general'));
+    fireEvent.change(getByLabelText('Add a message'), { target: { value: 'fyi' } });
+    await act(async () => {
+      fireEvent.click(getByText('Forward'));
+    });
+    expect(getByRole('alert').textContent).toBe("Couldn't forward the message. Try again.");
+    expect(onClose).not.toHaveBeenCalled();
+    expect((getByLabelText('general') as HTMLInputElement).checked).toBe(true);
+    expect((getByLabelText('Add a message') as HTMLTextAreaElement).value).toBe('fyi');
   });
 
   it('CatchUpCard shows the summary and opens highlights', () => {

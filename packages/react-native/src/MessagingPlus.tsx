@@ -10,11 +10,15 @@
 // `AudioRecorderAdapter`.
 
 import {
+  blockActionErrorMessage,
   formatClock,
+  forwardErrorMessage,
   initialBlockValues,
   isPollClosed,
   missingInputs,
   pollPercentages,
+  safeImageUrl,
+  safeLinkUrl,
   type Attachment,
   type Block,
   type BlockActionRequest,
@@ -140,13 +144,17 @@ export function BlockRenderer({ blocks, onAction, disabled = false }: BlockRende
   const [busy, setBusy] = useState<string | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
   const [openSelect, setOpenSelect] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const off = disabled || !onAction || busy !== null;
   const set = (id: string, v: string | string[]) => setValues((p) => ({ ...p, [id]: v }));
   const run = async (req: BlockActionRequest) => {
     if (!onAction) return;
     setBusy(req.action_id);
+    setError(null);
     try {
       await onAction(req);
+    } catch (err) {
+      setError(blockActionErrorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -238,16 +246,18 @@ export function BlockRenderer({ blocks, onAction, disabled = false }: BlockRende
             );
           case 'divider':
             return <View key={key} style={[s.divider, { backgroundColor: theme.colors.border }]} />;
-          case 'image':
-            return (
+          case 'image': {
+            const uri = safeImageUrl(b.url);
+            return uri ? (
               <Image
                 key={key}
-                source={{ uri: b.url }}
+                source={{ uri }}
                 accessibilityLabel={b.alt ?? ''}
                 style={[s.blockImage, { borderRadius: theme.radii.md }]}
                 resizeMode="cover"
               />
-            );
+            ) : null;
+          }
           case 'actions':
             return (
               <View key={key} style={s.row}>
@@ -257,7 +267,9 @@ export function BlockRenderer({ blocks, onAction, disabled = false }: BlockRende
                         e.text,
                         () => {
                           if (e.url) {
-                            void Linking.openURL(e.url);
+                            // Only http(s) and mailto links open; anything else does nothing.
+                            const url = safeLinkUrl(e.url);
+                            if (url) void Linking.openURL(url).catch(() => undefined);
                             return;
                           }
                           if (e.submit) {
@@ -339,6 +351,11 @@ export function BlockRenderer({ blocks, onAction, disabled = false }: BlockRende
             return null;
         }
       })}
+      {error ? (
+        <Text accessibilityRole="alert" style={[s.meta, { color: theme.colors.danger }]}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -405,6 +422,15 @@ export function ForwardSheet({
   const [picked, setPicked] = useState<Uuid[]>([]);
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Hosts keep the sheet mounted and toggle `visible`: every open starts clean.
+  useEffect(() => {
+    if (!visible) return;
+    setQuery('');
+    setPicked([]);
+    setComment('');
+    setError(null);
+  }, [visible]);
   const q = query.trim().toLowerCase();
   const shown = targets.filter((t) => !q || t.name.toLowerCase().includes(q)).slice(0, 50);
   return (
@@ -470,6 +496,11 @@ export function ForwardSheet({
               },
             ]}
           />
+          {error ? (
+            <Text accessibilityRole="alert" style={[s.meta, { color: theme.colors.danger }]}>
+              {error}
+            </Text>
+          ) : null}
           <View style={s.actions}>
             <Pressable
               onPress={onClose}
@@ -481,9 +512,13 @@ export function ForwardSheet({
               disabled={picked.length === 0 || sending}
               onPress={async () => {
                 setSending(true);
+                setError(null);
                 try {
                   await onForward(picked, comment.trim());
                   onClose();
+                } catch (err) {
+                  // Keep the picks and the comment so a retry is one tap.
+                  setError(forwardErrorMessage(err));
                 } finally {
                   setSending(false);
                 }

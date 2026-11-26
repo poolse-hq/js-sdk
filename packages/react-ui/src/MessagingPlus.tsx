@@ -6,10 +6,14 @@
 // state (usePoll, usePins, useFiles, useCatchUp, useTranslation).
 
 import {
+  blockActionErrorMessage,
+  forwardErrorMessage,
   initialBlockValues,
   isPollClosed,
   missingInputs,
   pollPercentages,
+  safeImageUrl,
+  safeLinkUrl,
   type Attachment,
   type Block,
   type BlockActionRequest,
@@ -137,13 +141,17 @@ export function BlockRenderer({
   const [values, setValues] = useState<BlockValues>(() => initialBlockValues(blocks));
   const [busy, setBusy] = useState<string | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const formId = useId();
 
   const run = async (req: BlockActionRequest) => {
     if (!onAction) return;
     setBusy(req.action_id);
+    setError(null);
     try {
       await onAction(req);
+    } catch (err) {
+      setError(blockActionErrorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -174,31 +182,44 @@ export function BlockRenderer({
             );
           case 'divider':
             return <hr key={key} className="poolse-blocks__divider" />;
-          case 'image':
-            return (
+          case 'image': {
+            const src = safeImageUrl(b.url);
+            return src ? (
               <img
                 key={key}
                 className="poolse-blocks__image"
-                src={b.url}
+                src={src}
                 alt={b.alt ?? ''}
                 loading="lazy"
               />
-            );
+            ) : null;
+          }
           case 'actions':
             return (
               <div key={key} className="poolse-blocks__actions">
                 {b.elements.map((e) =>
                   e.type === 'button' ? (
                     e.url ? (
-                      <a
-                        key={e.action_id}
-                        className="poolse-blocks__button"
-                        href={e.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {e.text}
-                      </a>
+                      // A link button with an unsafe URL (javascript:, data:…) renders as plain text.
+                      safeLinkUrl(e.url) === null ? (
+                        <span
+                          key={e.action_id}
+                          className="poolse-blocks__button"
+                          aria-disabled="true"
+                        >
+                          {e.text}
+                        </span>
+                      ) : (
+                        <a
+                          key={e.action_id}
+                          className="poolse-blocks__button"
+                          href={safeLinkUrl(e.url) ?? undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {e.text}
+                        </a>
+                      )
                     ) : (
                       <button
                         key={e.action_id}
@@ -324,6 +345,11 @@ export function BlockRenderer({
             return null;
         }
       })}
+      {error ? (
+        <div className="poolse-blocks__error" role="alert">
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -392,6 +418,7 @@ export function ForwardDialog({ targets, onForward, onClose, max = 10 }: Forward
   const [picked, setPicked] = useState<Uuid[]>([]);
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const titleId = useId();
   const q = query.trim().toLowerCase();
   const shown = targets.filter((t) => !q || t.name.toLowerCase().includes(q)).slice(0, 50);
@@ -444,6 +471,11 @@ export function ForwardDialog({ targets, onForward, onClose, max = 10 }: Forward
           onChange={(e) => setComment(e.target.value)}
           rows={2}
         />
+        {error ? (
+          <p className="poolse-panel__error" role="alert">
+            {error}
+          </p>
+        ) : null}
         <div className="poolse-dlp-dialog__actions">
           <button type="button" className="poolse-dlp-dialog__edit" onClick={onClose}>
             Cancel
@@ -454,9 +486,13 @@ export function ForwardDialog({ targets, onForward, onClose, max = 10 }: Forward
             disabled={picked.length === 0 || sending}
             onClick={async () => {
               setSending(true);
+              setError(null);
               try {
                 await onForward(picked, comment.trim());
                 onClose();
+              } catch (err) {
+                // Keep the picks and the comment so a retry is one tap.
+                setError(forwardErrorMessage(err));
               } finally {
                 setSending(false);
               }

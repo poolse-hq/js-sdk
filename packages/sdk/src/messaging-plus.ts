@@ -306,6 +306,44 @@ export function initialBlockValues(blocks: readonly Block[]): BlockValues {
   return out;
 }
 
+/** URL schemes a link from a message (block button, image, link preview) may use. */
+const SAFE_LINK_SCHEME = /^(https?|mailto):/i;
+
+/**
+ * The URL when it is an absolute `http:`, `https:` or `mailto:` link, else
+ * `null`. Block buttons and link previews come from integrations and agents,
+ * so a `javascript:`, `data:`, relative or app-scheme URL is never rendered
+ * or opened. Parsed by hand: React Native's `URL` has no `protocol`.
+ */
+export function safeLinkUrl(url: string | null | undefined): string | null {
+  if (typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  return SAFE_LINK_SCHEME.test(trimmed) ? trimmed : null;
+}
+
+/** The URL when it is an absolute `http:` or `https:` URL (images), else `null`. */
+export function safeImageUrl(url: string | null | undefined): string | null {
+  const ok = safeLinkUrl(url);
+  return ok && !/^mailto:/i.test(ok) ? ok : null;
+}
+
+/** What to tell the user when forwarding a message fails. */
+export function forwardErrorMessage(err: unknown): string {
+  const status = (err as { status?: unknown } | null)?.status;
+  if (status === 403) return "You can't forward to one of those conversations.";
+  if (status === 404) return 'That message is no longer available.';
+  if (status === 429) return 'Too many forwards. Try again in a moment.';
+  return "Couldn't forward the message. Try again.";
+}
+
+/** What to tell the user when a block button, menu or form action fails. */
+export function blockActionErrorMessage(err: unknown): string {
+  const status = (err as { status?: unknown } | null)?.status;
+  if (status === 404) return 'That action is no longer available.';
+  if (status === 429) return 'Too many tries. Try again in a moment.';
+  return "That didn't go through. Try again.";
+}
+
 // ── Files (MS18) and media (MS15, MS16) ──────────────────────────────────
 
 export type AttachmentKind = 'image' | 'video' | 'audio' | 'document' | 'other';

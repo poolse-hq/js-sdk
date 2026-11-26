@@ -1,4 +1,4 @@
-import type { LinkPreview } from '@poolse/sdk';
+import { safeLinkUrl, type LinkPreview } from '@poolse/sdk';
 import { useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -33,7 +33,10 @@ export function LinkPreviewCard({
   const [imageFailed, setImageFailed] = useState(false);
   const [faviconFailed, setFaviconFailed] = useState(false);
   const onBrand = tone === 'onBrand';
-  const open = () => void Linking.openURL(preview.url).catch(() => undefined);
+  const open = () => {
+    const url = safeLinkUrl(preview.url);
+    if (url) void Linking.openURL(url).catch(() => undefined);
+  };
   const site = preview.site_name || hostOf(preview.url);
   const text = onBrand ? theme.colors.ownBubbleText : theme.colors.text;
   const muted = onBrand ? theme.colors.ownBubbleText : theme.colors.textMuted;

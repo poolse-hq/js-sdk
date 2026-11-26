@@ -27,6 +27,12 @@ versions follow [semver](https://semver.org).
   prefer the profile, so it could disagree with the row's screen-reader
   label. `UserName`'s `fallback` is now only for a null `externalId` (as its
   doc said).
+- `ForwardSheet` starts clean each time it opens (no picks, comment or
+  search left from the last forward), and shows an error when the
+  forward fails instead of nothing.
+- `BlockRenderer` shows an error when an action fails, and opens a link
+  button or a link preview only when its URL is
+  `http:`/`https:`/`mailto:`.
 
 ## [3.10.3] - 2026-11-26
 
