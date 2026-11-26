@@ -1041,14 +1041,31 @@ export function VoiceRecorder({
   const startedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const active = useRef(false);
+  // The finger is on the button. start() can wait on the permission
+  // dialog; a release during that wait must not leave the mic running.
+  const held = useRef(false);
+  const starting = useRef(false);
+  const mounted = useRef(true);
 
   const clear = () => {
     if (timer.current) clearInterval(timer.current);
     timer.current = null;
   };
-  useEffect(() => clear, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      clear();
+      // Leaving the screen mid-recording discards it.
+      if (active.current) {
+        active.current = false;
+        void recorder.cancel().catch(() => {});
+      }
+    };
+  }, [recorder]);
 
   const finish = async (send: boolean) => {
+    held.current = false;
     if (!active.current) return;
     active.current = false;
     clear();
@@ -1064,8 +1081,16 @@ export function VoiceRecorder({
     }
   };
   const begin = async () => {
+    held.current = true;
+    if (starting.current || active.current) return;
+    starting.current = true;
     try {
       await recorder.start();
+      if (!held.current || !mounted.current) {
+        // Let go (or left) while the recorder was starting: nothing to send.
+        await recorder.cancel().catch(() => {});
+        return;
+      }
       active.current = true;
       startedAt.current = Date.now();
       setElapsed(0);
@@ -1077,6 +1102,8 @@ export function VoiceRecorder({
       }, 200);
     } catch (err) {
       onError?.(err);
+    } finally {
+      starting.current = false;
     }
   };
 

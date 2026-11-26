@@ -1,13 +1,16 @@
 import type { Attachment } from '@poolse/sdk';
 import { useAttachmentUrl } from '@poolse/react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 export interface AttachmentPreviewProps {
   attachment: Attachment;
-  /** Optional tap handler. For images defaults to opening the source URL. */
+  /**
+   * Tap handler. Defaults to opening the file's (presigned) URL with
+   * the system: the browser or the app registered for its type.
+   */
   onPress?: () => void;
   /** Render at this max width. Defaults to 280. */
   maxWidth?: number;
@@ -28,10 +31,12 @@ export function AttachmentPreview({
   const theme = useTheme();
   const isImage = (attachment.content_type ?? '').startsWith('image/');
   const { url } = useAttachmentUrl(attachment.id);
+  const open =
+    onPress ?? (url && /^https?:\/\//i.test(url) ? () => void Linking.openURL(url) : undefined);
 
   if (isImage) {
     return (
-      <Pressable onPress={onPress} disabled={!onPress}>
+      <Pressable onPress={open} disabled={!open}>
         {url ? (
           <Image
             source={{ uri: url }}
@@ -68,8 +73,10 @@ export function AttachmentPreview({
 
   return (
     <Pressable
-      onPress={onPress}
-      disabled={!onPress}
+      onPress={open}
+      disabled={!open}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${attachment.original_filename ?? 'file'}`}
       style={[
         styles.fileCard,
         {

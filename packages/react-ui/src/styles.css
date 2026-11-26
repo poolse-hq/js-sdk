@@ -1591,6 +1591,46 @@
   background: rgba(255, 255, 255, 0.22);
 }
 
+.poolse-lightbox__step {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.poolse-lightbox__step:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.poolse-lightbox__step--prev {
+  left: max(16px, env(safe-area-inset-left));
+}
+
+.poolse-lightbox__step--next {
+  right: max(16px, env(safe-area-inset-right));
+}
+
+.poolse-lightbox__position {
+  position: fixed;
+  top: max(28px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--poolse-font-body);
+  font-size: 14px;
+}
+
 .poolse-lightbox__download {
   position: fixed;
   bottom: max(24px, env(safe-area-inset-bottom));

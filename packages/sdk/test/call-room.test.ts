@@ -150,6 +150,54 @@ describe('CallRoom availability', () => {
   });
 });
 
+describe('CallRoom join races', () => {
+  it('two joins at once share one connection', async () => {
+    const h = harness();
+    let rooms = 0;
+    const Room = h.module.Room;
+    h.module.Room = function (this: unknown, ...a: never[]) {
+      rooms += 1;
+      return (Room as unknown as (...x: never[]) => unknown).apply(this, a);
+    } as unknown as typeof h.module.Room;
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    const [a, b] = await Promise.all([room.join(), room.join()]);
+    expect([a, b]).toEqual([true, true]);
+    expect(rooms).toBe(1);
+    expect(h.connect).toHaveBeenCalledTimes(1);
+    // Two holders: one leave keeps the call up.
+    room.leave();
+    expect(h.disconnect).not.toHaveBeenCalled();
+    room.leave();
+    await Promise.resolve();
+    expect(h.disconnect).toHaveBeenCalled();
+  });
+
+  it('leaving while the token is fetched never connects', async () => {
+    const h = harness();
+    let give!: (c: typeof CONNECTION) => void;
+    const room = new CallRoom({
+      livekit: h.module,
+      tokenProvider: () => new Promise((r) => (give = r)),
+    });
+    const joining = room.join();
+    room.leave();
+    give(CONNECTION);
+    await expect(joining).resolves.toBe(false);
+    expect(h.connect).not.toHaveBeenCalled();
+    expect(room.getStatus()).toBe('idle');
+  });
+
+  it('a call the SFU dropped can be joined again', async () => {
+    const h = harness();
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    await room.join();
+    h.handlers.get('disconnected')?.(undefined as never);
+    await Promise.resolve();
+    await room.join();
+    expect(h.connect).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('CallRoom publishing', () => {
   it('publishes only after the room accepts us', async () => {
     // Acquiring the camera before connecting would light the capture

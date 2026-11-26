@@ -119,19 +119,65 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
   );
 }
 
+/**
+ * The full-screen viewer for the images of one message, opened at
+ * `index`; ← / → (and the buttons) step through all of them, including
+ * those the bubble's mosaic has no tile for.
+ */
+export function ImageGallery({
+  images,
+  index,
+  onIndex,
+  onClose,
+}: {
+  images: Array<Attachment | { id: Uuid }>;
+  index: number;
+  onIndex: (index: number) => void;
+  onClose: () => void;
+}) {
+  const att = images[index];
+  const { url } = useAttachmentUrl(att?.id ?? null);
+  if (!att || !url) return null;
+  const filename = 'original_filename' in att ? (att.original_filename ?? null) : null;
+  const n = images.length;
+  return (
+    <Lightbox
+      url={url}
+      filename={filename}
+      onClose={onClose}
+      {...(n > 1
+        ? {
+            position: `${index + 1} of ${n}`,
+            ...(index > 0 ? { onPrev: () => onIndex(index - 1) } : {}),
+            ...(index < n - 1 ? { onNext: () => onIndex(index + 1) } : {}),
+          }
+        : {})}
+    />
+  );
+}
+
 function Lightbox({
   url,
   filename,
   onClose,
+  onPrev,
+  onNext,
+  position,
 }: {
   url: string;
   filename: string | null;
   onClose: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  /** "2 of 6", when it's one of several. */
+  position?: string;
 }) {
-  // ESC closes; lock background scroll while open.
+  // ESC closes, arrows step; lock background scroll while open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft' && onPrev) onPrev();
+      else if (e.key === 'ArrowRight' && onNext) onNext();
     };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
@@ -140,7 +186,7 @@ function Lightbox({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+  }, [onClose, onPrev, onNext]);
 
   // `position: fixed` escapes the scrollable messages container
   // because nothing in that ancestor chain creates a new containing
@@ -175,6 +221,33 @@ function Lightbox({
         alt={filename ?? 'attachment'}
         onClick={(e) => e.stopPropagation()}
       />
+      {onPrev && (
+        <button
+          type="button"
+          className="poolse-lightbox__step poolse-lightbox__step--prev"
+          aria-label="Previous image"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPrev();
+          }}
+        >
+          ‹
+        </button>
+      )}
+      {onNext && (
+        <button
+          type="button"
+          className="poolse-lightbox__step poolse-lightbox__step--next"
+          aria-label="Next image"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNext();
+          }}
+        >
+          ›
+        </button>
+      )}
+      {position && <span className="poolse-lightbox__position">{position}</span>}
       <a
         className="poolse-lightbox__download"
         href={url}

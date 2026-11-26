@@ -288,7 +288,7 @@ function ThreadSheet({
         linkPreviews={linkPreviews}
       />
     ),
-    [rootMessage, meId, labelFor, avatarFor, layout, timeFormat, linkPreviews],
+    [rootMessage, meId, labelFor, avatarFor, layout, timeFormat, density, linkPreviews],
   );
 
   return (

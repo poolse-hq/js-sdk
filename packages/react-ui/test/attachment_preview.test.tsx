@@ -59,3 +59,37 @@ describe('<AttachmentPreview>', () => {
     expect(container.textContent).toMatch(/loading/i);
   });
 });
+
+describe('<ImageMosaic> viewer', () => {
+  it('steps through every image, not just the four with a tile', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const { ImageMosaic } = await import('../src/MessageBubble.js');
+    const { routedFetch } = await import('./_helpers.js');
+    const images = Array.from({ length: 6 }, (_, i) => ({
+      ...imageAtt,
+      id: `img-${i + 1}`,
+      original_filename: `p${i + 1}.png`,
+    }));
+    const routes = Object.fromEntries(
+      images.map((a) => [
+        `GET /v1/attachments/${a.id}/download-url`,
+        () => jsonResponse({ url: `https://cdn.test/${a.id}.png`, method: 'get' }),
+      ]),
+    );
+    const { container, findByText, getByLabelText } = renderWithProvider(
+      <ImageMosaic images={images} />,
+      routedFetch(routes),
+    );
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(4));
+    // The fourth tile carries "+2"; it opens the viewer there.
+    fireEvent.click(container.querySelectorAll('.poolse-attachment__image-button')[3]!);
+    expect(await findByText('4 of 6')).toBeTruthy();
+    fireEvent.click(getByLabelText('Next image'));
+    fireEvent.click(await waitFor(() => getByLabelText('Next image')));
+    expect(await findByText('6 of 6')).toBeTruthy();
+    expect(container.querySelector('.poolse-lightbox__image')?.getAttribute('src')).toBe(
+      'https://cdn.test/img-6.png',
+    );
+    expect(container.querySelector('[aria-label="Next image"]')).toBeNull();
+  });
+});

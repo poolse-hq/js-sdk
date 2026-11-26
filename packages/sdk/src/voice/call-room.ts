@@ -161,6 +161,10 @@ export class CallRoom {
   // both hold the same call, and the second holder must not open a
   // second SFU connection or tear the first one down on leaving.
   private holders = 0;
+  /** The join in progress, shared by every caller until it settles. */
+  private joining: Promise<boolean> | null = null;
+  /** Bumped by teardown; a join that sees it change was left meanwhile. */
+  private generation = 0;
 
   /**
    * Whether anyone else has ever been on this call.
@@ -299,30 +303,42 @@ export class CallRoom {
    * failed call.
    */
   async join(): Promise<boolean> {
-    if (this.room) {
-      this.holders += 1;
-      return true;
-    }
-
     this.holders += 1;
+    // Joining already: everyone waits for the same connection, rather
+    // than each building a Room (the first would stay connected, mic
+    // live, with nobody holding it).
+    if (this.joining) return this.joining;
+    if (this.room) return true;
+    this.joining = this.connect().finally(() => {
+      this.joining = null;
+    });
+    return this.joining;
+  }
+
+  private async connect(): Promise<boolean> {
     this.setStatus('connecting');
+    const generation = this.generation;
+    // Left (leave() or a teardown) while this was waiting.
+    const abandoned = () => generation !== this.generation;
 
     let connection: CallConnection | null;
     try {
       connection = await this.tokenProvider();
     } catch (err) {
-      this.holders = Math.max(0, this.holders - 1);
+      if (abandoned()) return false;
+      this.holders = 0;
       this.setStatus('error');
       const error = new Error(`call token unavailable: ${String(err)}`);
       this.emitError(error);
       throw error;
     }
+    if (abandoned()) return false;
 
     if (!connection) {
       // No SFU configured. Not an error, and deliberately distinguishable
       // from one so the caller can fall back instead of telling the user
       // their call failed.
-      this.holders = Math.max(0, this.holders - 1);
+      this.holders = 0;
       this.setStatus('idle');
       return false;
     }
@@ -384,11 +400,15 @@ export class CallRoom {
         // and failing the whole call over it would be far worse.
       }
 
+      // Left while connecting: teardown already disconnected the room.
+      if (abandoned()) return false;
       this.setStatus('connected');
       this.emitParticipants();
       return true;
     } catch (err) {
-      this.holders = Math.max(0, this.holders - 1);
+      // Left while connecting: the disconnect is why connect() threw.
+      if (abandoned()) return false;
+      this.holders = 0;
       this.setStatus('error');
       const error = new Error(`call media failed: ${String(err)}`);
       this.emitError(error);
@@ -1038,10 +1058,13 @@ export class CallRoom {
     if (disconnected) {
       room.on(disconnected, ((reason?: unknown) => {
         // The SFU dropped us. Reflect it rather than showing a call that
-        // looks live and carries nothing.
+        // looks live and carries nothing, and let go of the dead Room: a
+        // join() after this must connect again, not find it and return
+        // true (teardown also resets the state for that next call).
         this.setReconnecting(false);
         this.setStatus('idle');
         this.emitParticipants();
+        if (this.room === room) void this.teardown();
         const why = disconnectReasonOf(reason);
         for (const fn of this.disconnectListeners) fn(why);
       }) as never);
@@ -1123,6 +1146,8 @@ export class CallRoom {
   private async teardown(): Promise<void> {
     const room = this.room;
     this.room = null;
+    // A join still in progress gives up at its next step.
+    this.generation += 1;
     this.selfId = null;
     this.holders = 0;
 

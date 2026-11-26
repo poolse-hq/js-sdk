@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AgentBadge } from './AgentBadge.js';
-import { AttachmentPreview } from './AttachmentPreview.js';
+import { AttachmentPreview, ImageGallery } from './AttachmentPreview.js';
 import { MessageApproval, MessageCitations } from './Agents.js';
 import { ClipPlayer } from './Meetings.js';
 import { useEditHistory } from './EditedLabel.js';
@@ -454,6 +454,8 @@ export function isImageContentType(ct: string | null | undefined): boolean {
 //   4+ → 2×2 grid; the 4th tile shows a "+N more" overlay when there
 //        are more than four images.
 export function ImageMosaic({ images }: { images: Attachment[] }) {
+  // The viewer holds every image, not just the four with a tile.
+  const [openAt, setOpenAt] = useState<number | null>(null);
   const total = images.length;
   // Cap the visible tiles at 4; anything past that surfaces via the
   // overflow badge on the last tile.
@@ -469,7 +471,7 @@ export function ImageMosaic({ images }: { images: Attachment[] }) {
         const isOverflowTile = i === visible.length - 1 && overflow > 0;
         return (
           <div className="poolse-message__media-tile" key={att.id}>
-            <AttachmentPreview attachment={att} />
+            <AttachmentPreview attachment={att} onClick={() => setOpenAt(i)} />
             {isOverflowTile && (
               <div className="poolse-message__media-overflow" aria-hidden="true">
                 +{overflow}
@@ -478,6 +480,14 @@ export function ImageMosaic({ images }: { images: Attachment[] }) {
           </div>
         );
       })}
+      {openAt !== null && (
+        <ImageGallery
+          images={images}
+          index={openAt}
+          onIndex={setOpenAt}
+          onClose={() => setOpenAt(null)}
+        />
+      )}
     </div>
   );
 }

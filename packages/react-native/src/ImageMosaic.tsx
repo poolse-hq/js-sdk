@@ -1,7 +1,16 @@
 import type { Attachment } from '@poolse/sdk';
 import { useAttachmentUrl } from '@poolse/react';
-import { useState } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  Image,
+  Modal,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
@@ -192,7 +201,9 @@ export function ImageMosaic({
       >
         {viewerIndex !== null ? (
           <FullScreenViewer
-            attachment={images[viewerIndex]!}
+            images={images}
+            index={viewerIndex}
+            onIndex={setViewerIndex}
             onClose={() => setViewerIndex(null)}
           />
         ) : null}
@@ -238,18 +249,40 @@ function Tile({
   );
 }
 
+// Every image of the message, not only the four with a tile: swipe
+// sideways or use the arrows to step through them.
 function FullScreenViewer({
-  attachment,
+  images,
+  index,
+  onIndex,
   onClose,
 }: {
-  attachment: Attachment;
+  images: Attachment[];
+  index: number;
+  onIndex: (index: number) => void;
   onClose: () => void;
 }) {
+  const attachment = images[index]!;
   const { url } = useAttachmentUrl(attachment.id);
   const { width, height } = useWindowDimensions();
   const insets = useSafeInsets();
+  const n = images.length;
+  const prev = index > 0 ? () => onIndex(index - 1) : null;
+  const next = index < n - 1 ? () => onIndex(index + 1) : null;
+  const step = useRef({ prev, next });
+  step.current = { prev, next };
+  const swipe = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) =>
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderRelease: (_e, g) => {
+        if (g.dx <= -50) step.current.next?.();
+        else if (g.dx >= 50) step.current.prev?.();
+      },
+    }),
+  ).current;
   return (
-    <Pressable style={styles.viewer} onPress={onClose}>
+    <Pressable style={styles.viewer} onPress={onClose} {...swipe.panHandlers}>
       {url ? (
         <Image
           source={{ uri: url }}
@@ -258,6 +291,33 @@ function FullScreenViewer({
           accessible
           accessibilityLabel={attachment.original_filename ?? 'image'}
         />
+      ) : null}
+      {n > 1 ? (
+        <Text style={[styles.position, { top: insets.top + 18 }]}>{`${index + 1} of ${n}`}</Text>
+      ) : null}
+      {prev ? (
+        <Pressable
+          onPress={prev}
+          hitSlop={12}
+          style={[styles.stepBtn, { left: insets.left + 12 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Previous image"
+        >
+          <View style={{ transform: [{ scaleX: -1 }] }}>
+            <PoolseIcon name="chevron-right" size={24} color="#ffffff" />
+          </View>
+        </Pressable>
+      ) : null}
+      {next ? (
+        <Pressable
+          onPress={next}
+          hitSlop={12}
+          style={[styles.stepBtn, { right: insets.right + 12 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Next image"
+        >
+          <PoolseIcon name="chevron-right" size={24} color="#ffffff" />
+        </Pressable>
       ) : null}
       <Pressable
         onPress={onClose}
@@ -321,6 +381,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  position: {
+    position: 'absolute',
+    alignSelf: 'center',
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+  },
+  stepBtn: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -22,
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 22,
   },
   closeBtn: {
     position: 'absolute',
