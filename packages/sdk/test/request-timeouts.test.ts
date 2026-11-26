@@ -24,7 +24,7 @@ function spyRequests(): RequestOptions[] {
 }
 
 const timeoutOf = (seen: RequestOptions[], method: string, path: string) =>
-  seen.find((o) => o.method === method && o.path === path)?.timeoutMs;
+  seen.find((o) => o.method === method && o.path === path)?.minTimeoutMs;
 
 describe('per-endpoint request timeouts', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -76,6 +76,6 @@ describe('per-endpoint request timeouts', () => {
       .catch(() => {});
 
     expect(seen.length).toBeGreaterThanOrEqual(3);
-    for (const o of seen) expect(o.timeoutMs).toBeUndefined();
+    for (const o of seen) expect(o.timeoutMs ?? o.minTimeoutMs).toBeUndefined();
   });
 });

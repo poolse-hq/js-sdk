@@ -829,7 +829,7 @@ export class MeetingsResource {
       },
       // Answers cost model time: no silent repeats.
       maxRetries: 0,
-      timeoutMs: AI_REQUEST_TIMEOUT_MS,
+      minTimeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
     return meetingAnswerFromWire(res);
@@ -862,7 +862,7 @@ export class MeetingsResource {
         ...(opts.post !== undefined ? { post: opts.post } : {}),
       },
       maxRetries: 0,
-      timeoutMs: AI_REQUEST_TIMEOUT_MS,
+      minTimeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
     return requireSummary(res);
@@ -971,7 +971,7 @@ export class MeetingsResource {
       path: `${call(callId)}/summary/follow-up`,
       body: { channel: opts.channel ?? 'message', ...(instructions ? { instructions } : {}) },
       maxRetries: 0,
-      timeoutMs: AI_REQUEST_TIMEOUT_MS,
+      minTimeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
     return followUpFromWire(res, callId);

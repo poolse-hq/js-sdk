@@ -55,6 +55,11 @@ export interface RequestOptions {
    */
   timeoutMs?: number;
   /**
+   * A floor under `config.requestTimeoutMs` for an endpoint that waits on
+   * a model: the app's own longer deadline, or none (0), still wins.
+   */
+  minTimeoutMs?: number;
+  /**
    * Authorize with this token instead of the user's session — for the
    * endpoints a call-scoped token authorizes (a call's control token).
    * A 401 then surfaces at once: refreshing the session cannot fix a
@@ -111,7 +116,7 @@ export class RestClient {
       );
 
       let response: Response;
-      const timeoutMs = opts.timeoutMs ?? this.config.requestTimeoutMs;
+      const timeoutMs = opts.timeoutMs ?? atLeast(this.config.requestTimeoutMs, opts.minTimeoutMs);
       const attemptSignal = withTimeout(opts.signal, timeoutMs);
       try {
         const init: RequestInit = { method: opts.method, headers };
@@ -365,4 +370,10 @@ function withTimeout(
       signal?.removeEventListener('abort', onAbort);
     },
   };
+}
+
+/** The configured deadline, raised to `min` — except "none" (0 or less), which stays none. */
+function atLeast(configured: number, min: number | undefined): number {
+  if (!(configured > 0) || min === undefined) return configured;
+  return Math.max(configured, min);
 }

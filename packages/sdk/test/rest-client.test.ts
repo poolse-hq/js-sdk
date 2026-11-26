@@ -510,6 +510,33 @@ describe('RestClient.request', () => {
       await expect(pending).resolves.toEqual({ ok: true });
     });
 
+    it('minTimeoutMs raises a shorter requestTimeoutMs', async () => {
+      const fetchFn = hangingFetch();
+      const client = buildClient({ fetch: fetchFn, requestTimeoutMs: 10 });
+      const err = await client
+        .request({ method: 'POST', path: '/v1/x', body: {}, minTimeoutMs: 40 })
+        .catch((e) => e);
+      expect((err as Error).message).toMatch(/after 40 ms/);
+    });
+
+    it('minTimeoutMs keeps a longer requestTimeoutMs, and no deadline stays none', async () => {
+      const fetchFn = hangingFetch();
+      const longer = buildClient({ fetch: fetchFn, requestTimeoutMs: 50 });
+      const err = await longer
+        .request({ method: 'POST', path: '/v1/x', body: {}, minTimeoutMs: 20 })
+        .catch((e) => e);
+      expect((err as Error).message).toMatch(/after 50 ms/);
+
+      let settled = false;
+      const none = buildClient({ fetch: hangingFetch(), requestTimeoutMs: 0 });
+      void none
+        .request({ method: 'POST', path: '/v1/x', body: {}, minTimeoutMs: 20 })
+        .catch(() => {})
+        .finally(() => (settled = true));
+      await new Promise((r) => setTimeout(r, 60));
+      expect(settled).toBe(false);
+    });
+
     it('a caller abort is still an AbortError, not a timeout', async () => {
       const fetchFn = hangingFetch();
       const client = buildClient({ fetch: fetchFn, requestTimeoutMs: 5_000 });

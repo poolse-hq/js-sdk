@@ -68,7 +68,7 @@ export interface PoolseConfig {
    * `NetworkError`: GET/PUT/DELETE retry it, POST/PATCH don't (the
    * server may have done the work; the outbox resends messages safely
    * by id). Endpoints that wait on a model (ask, catch-up, translate,
-   * summaries, follow-up drafts) use `AI_REQUEST_TIMEOUT_MS` instead.
+   * summaries, follow-up drafts) get at least `AI_REQUEST_TIMEOUT_MS`.
    */
   requestTimeoutMs?: number;
 

@@ -125,7 +125,7 @@ export class ConversationMessages {
       method: 'POST',
       path: `/v1/conversations/${this.conversationId}/catch-up`,
       body: opts,
-      timeoutMs: AI_REQUEST_TIMEOUT_MS,
+      minTimeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(signal ? { signal } : {}),
     });
   }
@@ -332,7 +332,7 @@ export class MessageHandle {
       method: 'POST',
       path: `/v1/messages/${this.id}/translate`,
       body: { language },
-      timeoutMs: AI_REQUEST_TIMEOUT_MS,
+      minTimeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(signal ? { signal } : {}),
     });
   }
