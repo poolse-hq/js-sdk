@@ -167,6 +167,8 @@ export class CallRoom {
   private holders = 0;
   /** The join in progress, shared by every caller until it settles. */
   private joining: Promise<boolean> | null = null;
+  /** The `generation` `joining` connects for; older means it was left. */
+  private joiningGeneration = 0;
   /** Bumped by teardown; a join that sees it change was left meanwhile. */
   private generation = 0;
   // Bumped by every connect attempt, so a teardown can tell a join that
@@ -314,12 +316,28 @@ export class CallRoom {
     // Joining already: everyone waits for the same connection, rather
     // than each building a Room (the first would stay connected, mic
     // live, with nobody holding it).
-    if (this.joining) return this.joining;
+    if (this.joining && this.joiningGeneration === this.generation) return this.joining;
     if (this.room) return true;
-    this.joining = this.connect().finally(() => {
-      this.joining = null;
+    // A join that was left (leave() mid-connect) is still winding down:
+    // it resolves false, which callers read as "no SFU". Wait for it to
+    // let go, then connect again for this join.
+    const stale = this.joining;
+    const generation = this.generation;
+    let attempt: Promise<boolean>;
+    if (stale) {
+      this.setStatus('connecting');
+      attempt = stale
+        .catch(() => false)
+        .then(() => (generation === this.generation ? this.connect() : false));
+    } else {
+      attempt = this.connect();
+    }
+    const joining: Promise<boolean> = attempt.finally(() => {
+      if (this.joining === joining) this.joining = null;
     });
-    return this.joining;
+    this.joining = joining;
+    this.joiningGeneration = generation;
+    return joining;
   }
 
   private async connect(): Promise<boolean> {

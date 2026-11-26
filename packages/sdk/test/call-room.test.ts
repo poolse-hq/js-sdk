@@ -187,6 +187,50 @@ describe('CallRoom join races', () => {
     expect(room.getStatus()).toBe('idle');
   });
 
+  it('joining again while a left join is still fetching its token connects', async () => {
+    const h = harness();
+    const gives: Array<(c: typeof CONNECTION) => void> = [];
+    const room = new CallRoom({
+      livekit: h.module,
+      tokenProvider: () => new Promise((r) => gives.push(r)),
+    });
+    const first = room.join();
+    room.leave(); // the first join is still waiting for its token
+    const second = room.join();
+    gives[0]!(CONNECTION); // the abandoned join lets go...
+    await expect(first).resolves.toBe(false);
+    await vi.waitFor(() => expect(gives).toHaveLength(2)); // ...then the second fetches its own
+    gives[1]!(CONNECTION);
+    await expect(second).resolves.toBe(true);
+    expect(room.getStatus()).toBe('connected');
+    expect(h.connect).toHaveBeenCalledTimes(1);
+    // One holder: a single leave ends the call.
+    room.leave();
+    await Promise.resolve();
+    expect(h.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('joining again while a left join is still connecting to the SFU connects', async () => {
+    const h = harness();
+    let fail: ((e: Error) => void) | null = null;
+    h.connect.mockImplementationOnce(() => new Promise<void>((_r, reject) => (fail = reject)));
+    // Like LiveKit: disconnecting mid-connect makes connect() reject.
+    h.disconnect.mockImplementation(async () => fail?.(new Error('disconnected')));
+    const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });
+    const first = room.join();
+    await vi.waitFor(() => expect(h.connect).toHaveBeenCalledTimes(1));
+    room.leave();
+    const second = room.join();
+    await expect(first).resolves.toBe(false);
+    await expect(second).resolves.toBe(true);
+    expect(room.getStatus()).toBe('connected');
+    expect(h.connect).toHaveBeenCalledTimes(2);
+    const disconnects = h.disconnect.mock.calls.length;
+    room.leave();
+    await Promise.resolve();
+    expect(h.disconnect.mock.calls.length).toBe(disconnects + 1);
+  });
+
   it("a late Disconnected from the left room doesn't touch a quick rejoin", async () => {
     const rooms: Array<{ handlers: Map<string, (...a: never[]) => void>; release: () => void }> =
       [];
