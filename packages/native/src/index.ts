@@ -4,8 +4,10 @@
 // the native cores; nothing here decides anything about a call.
 //
 // On a platform or build without the native module (Expo Go, web,
-// unlinked), every command is a safe no-op and the state stays idle —
-// so a host can render against this unconditionally.
+// unlinked), the state stays idle and fire-and-forget commands are safe
+// no-ops — so a host can render against this unconditionally. Commands
+// that start or take a call (place, join, moveCallHere, startRoom,
+// ringIntoCall) reject instead, so the host can tell the user.
 import { createElement, type ComponentType, type ReactElement } from 'react';
 import { View, type ViewProps } from 'react-native';
 import { requireNativeViewManager, requireOptionalNativeModule } from 'expo-modules-core';
@@ -509,6 +511,27 @@ export const nativeCallsAvailable = native != null;
 // Kept for startRoom, the one command that talks to the server from JS.
 let apiOrigin: string | null = null;
 
+const NO_CORE = 'The native call core is not in this build.';
+
+/** How long startRoom / ringIntoCall wait for the server before giving up. */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/** `fetch` that gives up after `REQUEST_TIMEOUT_MS` with a plain-words error. */
+async function fetchWithTimeout(url: string, init: RequestInit, what: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(`${what}: the server didn't answer. Check the connection and try again.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Configure once, before any call can arrive. No secrets — just the API
  * origin, which becomes the default server (`DEFAULT_SERVER_ID`).
@@ -607,21 +630,30 @@ export function onCallState(cb: (snapshot: Snapshot | null) => void): Unsubscrib
   return () => sub.remove();
 }
 
+/** Place a call. Rejects when the native call core is not in this build. */
 export function place(conversationId: string, options: PlaceOptions): Promise<void> {
-  return (
-    native?.place(conversationId, options.media, options.sessionToken, options.serverId ?? null) ??
-    Promise.resolve()
+  if (!native) return Promise.reject(new Error(NO_CORE));
+  return native.place(
+    conversationId,
+    options.media,
+    options.sessionToken,
+    options.serverId ?? null,
   );
 }
 
-/** `serverId`: the server the session token is for — leave it out for the default one. */
+/**
+ * Join a live call. `serverId`: the server the session token is for —
+ * leave it out for the default one. Rejects when the native call core is
+ * not in this build.
+ */
 export function join(
   callId: string,
   conversationId: string | null,
   sessionToken: string,
   serverId?: string,
 ): Promise<void> {
-  return native?.join(callId, conversationId, sessionToken, serverId ?? null) ?? Promise.resolve();
+  if (!native) return Promise.reject(new Error(NO_CORE));
+  return native.join(callId, conversationId, sessionToken, serverId ?? null);
 }
 
 /** What {@link moveCallHere} needs besides the call id. */
@@ -670,17 +702,21 @@ export async function startRoom(
   conversationId: string,
   options: PlaceOptions,
 ): Promise<StartRoomResult> {
-  if (!native) throw new Error('The native call core is not in this build.');
+  if (!native) throw new Error(NO_CORE);
   const origin = originOf(options.serverId);
   if (!origin) throw new Error('Call configure() (or addServer) before startRoom().');
-  const res = await fetch(`${origin}/v1/conversations/${encodeURIComponent(conversationId)}/room`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${options.sessionToken}`,
-      'content-type': 'application/json',
+  const res = await fetchWithTimeout(
+    `${origin}/v1/conversations/${encodeURIComponent(conversationId)}/room`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${options.sessionToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ media: options.media }),
     },
-    body: JSON.stringify({ media: options.media }),
-  });
+    "Couldn't start the room",
+  );
   const body = (await res.json().catch(() => null)) as {
     created?: boolean;
     call?: { id?: string };
@@ -719,17 +755,21 @@ export async function ringIntoCall(people: RingIntoCallOptions): Promise<string[
   // The call's own server: it may be another workspace than the default.
   const origin = control.apiBaseUrl || originOf(control.serverId);
   if (!origin) throw new Error('Call configure() before ringIntoCall().');
-  const res = await fetch(`${origin}/v1/calls/${encodeURIComponent(control.callId)}/ring`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${control.controlToken}`,
-      'content-type': 'application/json',
+  const res = await fetchWithTimeout(
+    `${origin}/v1/calls/${encodeURIComponent(control.callId)}/ring`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${control.controlToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_ids: people.userIds ?? [],
+        external_ids: people.externalIds ?? [],
+      }),
     },
-    body: JSON.stringify({
-      user_ids: people.userIds ?? [],
-      external_ids: people.externalIds ?? [],
-    }),
-  });
+    "Couldn't ring them",
+  );
   const body = (await res.json().catch(() => null)) as {
     rung_user_ids?: string[];
     error?: { message?: string };
@@ -933,6 +973,12 @@ let activeServer: string | null = null;
  * the user is reading them — and opening it clears the notifications
  * already shown for it. Signed in to several servers, pass the one it is
  * on (`serverId`); without it, the conversation id alone decides.
+ *
+ * Platforms: Android drops the on-screen conversation's notifications
+ * itself. iOS only clears the ones already shown; not alerting for new
+ * ones is up to the app's notification handler (use
+ * {@link shouldPresentMessage} in expo-notifications'
+ * `setNotificationHandler`).
  */
 export function setActiveConversation(conversationId: string | null, serverId?: string): void {
   activeConversation = conversationId;

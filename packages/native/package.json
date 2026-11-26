@@ -40,7 +40,8 @@
   "scripts": {
     "build": "tsup",
     "prepublishOnly": "tsup",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "expo": "*",

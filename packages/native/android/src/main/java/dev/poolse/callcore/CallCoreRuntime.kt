@@ -61,12 +61,6 @@ class CallCoreRuntime(
    */
   private var gen = 0
 
-  /**
-   * callIds already resolved on this device (ended, declined, timed
-   * out, rung-off remotely, busy-declined). Push + socket + FCM's own
-   * redelivery can hand us the same ring several times, sometimes after
-   * the call is over; a bounded LRU drops those instead of re-ringing.
-   */
   /** The call whose media has had someone else in it (for [onRemoteCount]). */
   private var remoteSeenFor: String? = null
 
@@ -76,6 +70,12 @@ class CallCoreRuntime(
    */
   private var movingFrom: CallSessionBundle? = null
 
+  /**
+   * callIds already resolved on this device (ended, declined, timed
+   * out, rung-off remotely, busy-declined). Push + socket + FCM's own
+   * redelivery can hand us the same ring several times, sometimes after
+   * the call is over; a bounded LRU drops those instead of re-ringing.
+   */
   private val resolved = object : LinkedHashMap<String, Unit>(RESOLVED_LRU, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Unit>?) = size > RESOLVED_LRU
   }

@@ -96,6 +96,29 @@ class CallMessagingService : FirebaseMessagingService() {
     }
   }
 
+  // The same payload rules as iOS (VoipPush.swift `media` / `deadlineMs`),
+  // so both cores accept the same ring contract.
+
+  /** "audio" or "video"; anything else falls back to `has_video`. */
+  private fun Map<String, String>.ringMedia(): String {
+    val m = this["media"]?.trim()?.lowercase()
+    if (m == "video" || m == "audio") return m
+    return if (this["has_video"]?.trim()?.lowercase() in setOf("1", "true", "yes")) "video" else "audio"
+  }
+
+  /**
+   * Epoch ms; a seconds value (< 1e12) is scaled. Missing: sent_at (or now)
+   * + 60 s — the server's ring_ended(timeout) is the real cut-off. A missing
+   * deadline used to become 0, so the ring was stale and never shown.
+   */
+  private fun Map<String, String>.ringDeadlineMs(): Long {
+    fun num(key: String): Long? = this[key]?.trim()?.let { it.toLongOrNull() ?: it.toDoubleOrNull()?.toLong() }
+    fun ms(v: Long): Long = if (v < 1_000_000_000_000L) v * 1000 else v
+    num("ring_deadline")?.takeIf { it > 0 }?.let { return ms(it) }
+    val base = num("sent_at")?.takeIf { it > 0 }?.let { ms(it) } ?: System.currentTimeMillis()
+    return base + 60_000
+  }
+
   private fun Map<String, String>.toRingContext(): RingContext? {
     val callId = this["call_id"] ?: return null
     val conversationId = this["conversation_id"] ?: return null
@@ -105,9 +128,9 @@ class CallMessagingService : FirebaseMessagingService() {
       conversationId = conversationId,
       conversationName = this["conversation_name"]?.ifEmpty { null },
       callerName = this["caller_name"]?.ifEmpty { null },
-      media = this["media"] ?: "audio",
+      media = ringMedia(),
       grant = grant,
-      ringDeadlineEpochMs = this["ring_deadline"]?.toLongOrNull() ?: 0L,
+      ringDeadlineEpochMs = ringDeadlineMs(),
       // The push's own picture if the server ever sends one, else the
       // app's template filled with the caller's ids.
       callerAvatarUrl = this["caller_avatar_url"]?.ifEmpty { null }

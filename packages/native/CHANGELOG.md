@@ -2,6 +2,40 @@
 
 Formerly `@poolse/react-native-calls` (0.x).
 
+## [Unreleased]
+
+### Fixed
+
+- `place()`, `join()` and `moveCallHere()` reject with "The native call
+  core is not in this build." when the native module is missing, as
+  `startRoom` and `ringIntoCall` already did; they used to resolve as if
+  the call had started. Fire-and-forget commands (`answer`, `hangUp`, …)
+  stay no-ops.
+- `startRoom()` and `ringIntoCall()` give up after 15 s with a
+  plain-words error when the server does not answer, instead of waiting
+  forever.
+- Android: a ring push without `ring_deadline` (or with one in seconds)
+  is shown, as on iOS: the deadline defaults to `sent_at` (or now) +
+  60 s and seconds are scaled to ms; it used to be 0, so the ring was
+  dropped as stale. `media` is checked, with the `has_video` fallback
+  iOS uses.
+- Android: after a failed notification reply, the next Reply shows
+  "Sending…" instead of the old failure reason.
+- iOS: an audio room (on the speaker) no longer turns the screen off
+  when something covers the proximity sensor, matching Android.
+- iOS: `removeServer` takes down the server's notifications even when it
+  was added without `tenantId` (as Android does); the host app's own
+  notifications are not touched.
+- iOS: a waiting call from a ring with no server id shows the workspace
+  of the server it resolved to, as on Android.
+
+### Changed
+
+- The `setActiveConversation` doc says what each platform does (Android
+  drops new notifications itself; on iOS the app's notification handler
+  does, with `shouldPresentMessage`). Stale comments fixed in the Kotlin
+  and Swift sources.
+
 ## [3.10.3] - 2026-11-26
 
 No changes; released with the other packages.

@@ -552,8 +552,10 @@ final class CallCore {
       out["meetingTitle"] = NSNull()
     }
     if var waiting = out["waiting"] as? [String: Any], let w = runtime.waitingRing {
-      waiting["serverId"] = (w.serverId ?? server(of: w.callId)) ?? NSNull()
-      waiting["workspaceName"] = (w.workspaceName ?? servers.get(w.serverId)?.name) ?? NSNull()
+      // The resolved server for both, as Kotlin does.
+      let waitingServer = w.serverId ?? server(of: w.callId)
+      waiting["serverId"] = waitingServer ?? NSNull()
+      waiting["workspaceName"] = (w.workspaceName ?? servers.get(waitingServer)?.name) ?? NSNull()
       waiting["ringType"] = w.isMeeting ? "meeting" : "call"
       waiting["meetingTitle"] = w.meetingTitle ?? NSNull()
       out["waiting"] = waiting
@@ -649,7 +651,9 @@ final class CallCore {
   private func reconcileDevice(_ state: MachineState) {
     let inCall = state.phase == .active || state.phase == .reconnecting ||
       state.phase == .ringingOut || state.phase == .connecting
-    let route = audioRoute ?? (state.media == "video" ? "speaker" : "earpiece")
+    // Same default as the snapshot (and Kotlin's `loud`): video calls and
+    // rooms start on the speaker, so an audio room never blanks the screen.
+    let route = audioRoute ?? (state.media == "video" || callKind == "room" ? "speaker" : "earpiece")
     let want = inCall && state.media == "audio" && route == "earpiece"
     if UIDevice.current.isProximityMonitoringEnabled != want { UIDevice.current.isProximityMonitoringEnabled = want }
   }

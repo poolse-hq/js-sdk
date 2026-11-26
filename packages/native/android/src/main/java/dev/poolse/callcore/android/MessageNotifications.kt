@@ -163,6 +163,8 @@ object MessageNotifications {
   internal fun onReplying(context: Context, serverId: String?, conversationId: String, clientId: String, text: String) {
     val state = load(context, bucket(serverId), conversationId) ?: Conversation(conversationId, bucket(serverId))
     state.lines.removeAll { it.self && it.id == clientId }
+    // A new try: the last failure's reason must not stand over "Sending…".
+    state.failure = null
     state.lines += Line(
       id = clientId,
       sender = "You",

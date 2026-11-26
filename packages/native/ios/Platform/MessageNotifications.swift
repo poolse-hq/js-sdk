@@ -286,6 +286,25 @@ final class MessageNotifications: NSObject, NotificationDelegate {
     }
   }
 
+  /// A server signed out: every poolse notification that belongs to it
+  /// goes, as on Android. `servers` is the list from before the removal,
+  /// so a notification without a `tenant_id` (a server added without
+  /// `tenantId`, or an older server) goes when this was the server it
+  /// resolved to. The host app's own notifications are never touched.
+  static func clearServer(_ serverId: String, servers: CallServers) {
+    let ours: Set<String> = [Self.category, Self.meetingCategory, EscalationNotifications.category]
+    let center = UNUserNotificationCenter.current()
+    center.getDeliveredNotifications { delivered in
+      let ids = delivered.filter {
+        let content = $0.request.content
+        let tenant = (content.userInfo["tenant_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        guard tenant != nil || ours.contains(content.categoryIdentifier) else { return false }
+        return servers.resolve(tenantId: tenant)?.id == serverId
+      }.map { $0.request.identifier }
+      if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
+    }
+  }
+
   /// A workspace signed out: its notifications go (those of a tenant).
   static func clearTenant(_ tenantId: String) {
     let center = UNUserNotificationCenter.current()

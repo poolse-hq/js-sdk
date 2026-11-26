@@ -748,7 +748,6 @@ class LiveKitMediaPort(
     )
   }
 
-  /** The host's own user id, if the server put it in attributes/metadata. */
   // ── connection quality ──────────────────────────────────────────────
 
   /**
@@ -819,6 +818,7 @@ class LiveKitMediaPort(
 
   private fun reportNetwork() = events.onNetwork(localQuality, videoPaused)
 
+  /** A participant's app (external) id, if the server put it in attributes/metadata. */
   private fun externalIdOf(p: Participant): String? =
     runCatching { p.attributes["external_id"] }.getOrNull()?.ifEmpty { null }
       ?: p.metadata?.let { m ->

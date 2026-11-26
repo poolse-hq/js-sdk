@@ -3,7 +3,7 @@ import XCTest
 @testable import PoolseCallCore
 
 // Breakout rooms (MEETINGS.md §5): the same call, another LiveKit room.
-// Mirrored by call-core-android's BreakoutTest.kt.
+// Mirrored by the breakout tests at the end of call-core-android's RuntimeTest.kt.
 
 func breakoutBundle(_ callId: String = "c1", room: String = "split.2") -> CallSessionBundle {
   var b = bundle(callId)

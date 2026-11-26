@@ -84,9 +84,11 @@ public class PoolseCallsModule: Module {
     // Signed out of one workspace: forget it and take its notifications
     // down. A call in progress on it carries on to its end.
     AsyncFunction("removeServer") { (id: String) in
-      let tenant = ServerRegistry.shared.servers.get(id)?.tenantId
+      // Resolved against the servers as they were, so notifications
+      // without a tenant (a server added without `tenantId`) go too.
+      let before = ServerRegistry.shared.servers
       ServerRegistry.shared.remove(id)
-      if let tenant = tenant { MessageNotifications.clearTenant(tenant) }
+      MessageNotifications.clearServer(id, servers: before)
     }.runOnQueue(.main)
 
     Function("listServers") { () -> [[String: Any]] in
