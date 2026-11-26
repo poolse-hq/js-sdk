@@ -1,16 +1,27 @@
 name: CI
 
+# `dev` is where work lands; `main` is frozen. GitHub-hosted runners are
+# not available to this organisation, so the job runs on our own Linux
+# build runner (labels as on the lab machine: self-hosted, Linux, X64,
+# poolse-build). A runner with those labels has to be registered for
+# this repository (or the organisation), or the job waits in the queue.
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   pull_request:
-    branches: [main]
+    branches: [dev, main]
+  workflow_dispatch:
 
-# Single fast job: install, typecheck, lint, format-check, test, build.
-# Matches `pnpm check` locally so green-on-CI === green-on-laptop.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Single job: install, then exactly `pnpm check` (typecheck, lint,
+# format-check, test, build), so green on CI means green on a laptop.
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, poolse-build]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -26,11 +37,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Build first so cross-workspace imports (`@poolse/react` →
-      # `@poolse/sdk`) resolve at runtime in the test step. The
-      # tsconfig also maps these to source for typecheck, but the
-      # tests load real built artifacts through Vite's resolver.
+      # `@poolse/sdk`) resolve to built artifacts in the test step.
       - run: pnpm build
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm format:check
-      - run: pnpm test
+      - run: pnpm check
