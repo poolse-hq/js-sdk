@@ -32,10 +32,12 @@ export function EditableMessageBubble({
   onSave,
   onCancel,
 }: EditableMessageBubbleProps) {
-  // Local draft — initial value tracks the message body each time we
-  // enter edit mode (handled by `editing ? ... : ...` key on textarea).
+  // Local draft, seeded from the body when the component mounts — the
+  // rows mount it afresh for each edit.
   const [draft, setDraft] = useState<string>(message.body ?? '');
   const [saving, setSaving] = useState(false);
+  // Why the last save didn't go through; the draft stays for a retry.
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (!editing) {
     return (
@@ -51,8 +53,11 @@ export function EditableMessageBubble({
     const trimmed = draft.trim();
     if (!trimmed || saving) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await onSave(trimmed);
+    } catch {
+      setSaveError("Couldn't save the change. Try again.");
     } finally {
       setSaving(false);
     }
@@ -81,7 +86,6 @@ export function EditableMessageBubble({
   return (
     <div className={className}>
       <textarea
-        key={message.id} // reset draft when switching message
         className="poolse-message__edit"
         autoFocus
         value={draft}
@@ -90,6 +94,11 @@ export function EditableMessageBubble({
         rows={Math.max(1, draft.split('\n').length)}
         disabled={saving}
       />
+      {saveError ? (
+        <p className="poolse-composer__error" role="alert">
+          {saveError}
+        </p>
+      ) : null}
       <div className="poolse-message__edit-actions">
         <button
           type="button"

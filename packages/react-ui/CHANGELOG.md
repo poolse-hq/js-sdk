@@ -80,6 +80,12 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   full screen (an iframe without `allowfullscreen`, fullscreen turned
   off) even when a fallback video is passed, so the button is hidden
   instead of doing nothing.
+- `MentionInput`: a draft restored after switching conversations or a reload
+  still notifies the people it @-mentions (their names are matched against
+  the members at send time; the pick itself was not saved).
+- `PoolseInbox`: a "New chat" or "New group" that can't be created says so
+  over the list (it failed silently). `EditableMessageBubble`: a save that
+  fails keeps the draft and shows why, instead of an unhandled rejection.
 
 ## [3.10.3] - 2026-11-26
 

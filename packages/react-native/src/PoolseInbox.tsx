@@ -170,6 +170,8 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
     const [activeId, setActiveId] = useState<Uuid | null>(null);
     const [userPickerOpen, setUserPickerOpen] = useState(false);
     const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+    // A "New chat" / "New group" that couldn't be created, said over the list.
+    const [notice, setNotice] = useState<string | null>(null);
 
     const slide = useRef(new Animated.Value(0)).current;
     // Flipped to true while the user is dragging the detail pane via
@@ -380,6 +382,15 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
             </View>
           </View>
 
+          {notice ? (
+            <Text
+              style={[styles.notice, { color: theme.colors.danger }]}
+              accessibilityRole="alert"
+              onPress={() => setNotice(null)}
+            >
+              {notice}
+            </Text>
+          ) : null}
           <ConversationList
             conversations={conversations}
             hasMore={conversationsHaveMore}
@@ -446,7 +457,8 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
             excludeIds={meExternalId ? [meExternalId] : []}
             mode="single"
             onPickDirect={(externalId) => {
-              void openDirect(externalId);
+              setNotice(null);
+              openDirect(externalId).catch(() => setNotice("Couldn't start the chat. Try again."));
             }}
           />
         ) : null}
@@ -459,7 +471,8 @@ export const PoolseInbox = forwardRef<PoolseInboxHandle, PoolseInboxProps>(
             excludeIds={meExternalId ? [meExternalId] : []}
             mode="group"
             onCreateGroup={(name, ids) => {
-              void openGroup(name, ids);
+              setNotice(null);
+              openGroup(name, ids).catch(() => setNotice("Couldn't create the group. Try again."));
             }}
           />
         ) : null}
@@ -602,6 +615,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
   },
+  notice: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 8 },
   listTitle: {
     flex: 1,
     fontSize: 20,

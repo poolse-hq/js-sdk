@@ -1074,7 +1074,13 @@ export function ConversationView({
       onCancelEdit: () => setEditingId(null),
       onSaveEdit: async (body: string) => {
         if (!editingId) return;
-        await edit(editingId, body);
+        try {
+          await edit(editingId, body);
+        } catch (err) {
+          // Still editing, with the text: say why it didn't save.
+          setNotice("Couldn't save the change. Try again.");
+          throw err;
+        }
         setEditingId(null);
       },
     }),

@@ -373,3 +373,27 @@ describe('empty states', () => {
     );
   });
 });
+
+describe('editing a message', () => {
+  it('a save that fails keeps the draft and says so', async () => {
+    const onSave = vi.fn().mockRejectedValue(new Error('offline'));
+    const { container } = renderWithProvider(
+      <EditableMessageBubble
+        message={msg(1, 'u-me') as unknown as Message}
+        currentUserId="u-me"
+        editing
+        onSave={onSave}
+        onCancel={() => undefined}
+      />,
+      routedFetch({}),
+    );
+    const ta = container.querySelector('textarea')!;
+    fireEvent.change(ta, { target: { value: 'fixed typo' } });
+    await act(async () => {
+      fireEvent.keyDown(ta, { key: 'Enter' });
+    });
+    expect(onSave).toHaveBeenCalledWith('fixed typo');
+    expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/Couldn't save/);
+    expect(container.querySelector('textarea')!.value).toBe('fixed typo');
+  });
+});
