@@ -16,7 +16,14 @@
 //   * Translate non-2xx into typed `ApiError` subclasses.
 
 import type { ResolvedConfig } from './config.js';
-import { ApiError, AuthError, NetworkError, RateLimitedError } from './errors.js';
+import {
+  ApiError,
+  AuthError,
+  NetworkError,
+  RateLimitedError,
+  abortError,
+  isAbortError,
+} from './errors.js';
 import type { TokenCache } from './token-cache.js';
 import type { ErrorEnvelope } from './types.js';
 
@@ -43,6 +50,11 @@ export interface RequestOptions {
   /** AbortSignal for caller-driven cancellation. */
   signal?: AbortSignal;
   /**
+   * Per-attempt timeout in ms; defaults to `config.requestTimeoutMs`.
+   * 0 turns it off (for an endpoint that is slow by design).
+   */
+  timeoutMs?: number;
+  /**
    * Authorize with this token instead of the user's session — for the
    * endpoints a call-scoped token authorizes (a call's control token).
    * A 401 then surfaces at once: refreshing the session cannot fix a
@@ -51,7 +63,6 @@ export interface RequestOptions {
   bearer?: string;
 }
 
-const NON_BODY_METHODS: ReadonlySet<HttpMethod> = new Set(['GET', 'DELETE']);
 const IDEMPOTENT_METHODS: ReadonlySet<HttpMethod> = new Set(['GET']);
 /** Methods a repeat cannot turn into a second action (RFC 9110 §9.2.2). */
 const RETRY_SAFE_METHODS: ReadonlySet<string> = new Set([
@@ -100,28 +111,43 @@ export class RestClient {
       );
 
       let response: Response;
+      const timeoutMs = opts.timeoutMs ?? this.config.requestTimeoutMs;
+      const attemptSignal = withTimeout(opts.signal, timeoutMs);
       try {
         const init: RequestInit = { method: opts.method, headers };
         if (body !== undefined) init.body = body;
-        if (opts.signal) init.signal = opts.signal;
+        if (attemptSignal.signal) init.signal = attemptSignal.signal;
         response = await this.config.fetch(url, init);
       } catch (err) {
+        attemptSignal.done();
         // AbortError is caller intent (component unmount, conv switch,
         // StrictMode double-effect). Re-throw AS-IS so callers can
         // distinguish it from a real network failure. Wrapping it as
         // NetworkError previously caused hooks like useMembers to fall
         // into their "failed to load" branch whenever the aborted fetch
         // resolved after a newly-mounted fetcher already cleared state.
-        if (err instanceof DOMException && err.name === 'AbortError') {
+        if (attemptSignal.timedOut()) {
+          // Our own timeout, not the caller's abort: a stalled connection.
+          // POST/PATCH may have reached the server, so only safe methods
+          // try again.
+          if (retrySafe && attempt < maxRetries) {
+            await sleep(this.backoffDelay(attempt), opts.signal);
+            attempt += 1;
+            continue;
+          }
+          throw new NetworkError(`Request timed out after ${timeoutMs} ms`, err);
+        }
+        if (isAbortError(err)) {
           throw err;
         }
         if (attempt < maxRetries && isRetryableNetworkError(err, retrySafe)) {
-          await sleep(this.backoffDelay(attempt));
+          await sleep(this.backoffDelay(attempt), opts.signal);
           attempt += 1;
           continue;
         }
         throw new NetworkError('Network request failed', err);
       }
+      attemptSignal.done();
 
       if (response.status >= 200 && response.status < 300) {
         const parsed = (await parseJsonOrNull(response)) as T;
@@ -149,8 +175,11 @@ export class RestClient {
       if (response.status === 429) {
         const envelope = await parseEnvelope(response);
         const retryAfterMs = retryAfterHeaderMs(response);
-        if (attempt < maxRetries) {
-          await sleep(Math.max(retryAfterMs ?? 0, this.backoffDelay(attempt)));
+        // A server asking for a longer pause than `maxBackoffMs` is not
+        // waited out here (an hour-long sleep would park the caller);
+        // the caller gets the error with `retryAfterMs` and decides.
+        if (attempt < maxRetries && (retryAfterMs ?? 0) <= this.config.maxBackoffMs) {
+          await sleep(Math.max(retryAfterMs ?? 0, this.backoffDelay(attempt)), opts.signal);
           attempt += 1;
           continue;
         }
@@ -163,7 +192,7 @@ export class RestClient {
       // (a scheduled message sent four times). Plain 500 is a server bug
       // that a repeat won't fix, so nothing retries it.
       if (retrySafe && RETRYABLE_STATUSES.has(response.status) && attempt < maxRetries) {
-        await sleep(this.backoffDelay(attempt));
+        await sleep(this.backoffDelay(attempt), opts.signal);
         attempt += 1;
         continue;
       }
@@ -224,10 +253,6 @@ export class RestClient {
   }
 }
 
-function _unusedNonBodyMethods(): unknown {
-  return NON_BODY_METHODS;
-}
-
 async function parseEnvelope(response: Response): Promise<ErrorEnvelope['error']> {
   try {
     const json = (await response.json()) as ErrorEnvelope;
@@ -261,8 +286,9 @@ function retryAfterHeaderMs(response: Response): number | null {
 
 /**
  * Error codes that mean the request never left the device (no connection
- * was made), so even a POST is safe to send again. Node/undici and React
- * Native put them on `err.cause.code` (or `err.code`).
+ * was made), so even a POST is safe to send again. Node/undici put them
+ * on `err.cause.code` (or `err.code`). Browsers and React Native reject
+ * with a bare `TypeError` and no code, so there a POST is not retried.
  */
 const PRE_SEND_ERROR_CODES: ReadonlySet<string> = new Set([
   'ECONNREFUSED',
@@ -284,7 +310,7 @@ function errorCode(err: unknown): string | null {
 
 function isRetryableNetworkError(err: unknown, retrySafe: boolean): boolean {
   // Abort is caller intent — never retry.
-  if (err instanceof DOMException && err.name === 'AbortError') return false;
+  if (isAbortError(err)) return false;
   // Idempotent methods: any failure (TypeError from fetch, reset…) is fair game.
   if (retrySafe) return true;
   // POST/PATCH: only when the request provably never reached the server.
@@ -294,6 +320,49 @@ function isRetryableNetworkError(err: unknown, retrySafe: boolean): boolean {
   return code !== null && PRE_SEND_ERROR_CODES.has(code);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Wait `ms`; rejects with an AbortError as soon as `signal` aborts. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortError());
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * The caller's signal plus a per-attempt timeout, as one signal. Built by
+ * hand (no `AbortSignal.any` / `AbortSignal.timeout`, missing on older
+ * React Native).
+ */
+function withTimeout(
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal | undefined; timedOut: () => boolean; done: () => void } {
+  if (!(timeoutMs > 0) || typeof AbortController !== 'function') {
+    return { signal, timedOut: () => false, done: () => {} };
+  }
+  const controller = new AbortController();
+  let fired = false;
+  const onAbort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', onAbort, { once: true });
+  const timer = setTimeout(() => {
+    fired = true;
+    controller.abort();
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    timedOut: () => fired && !signal?.aborted,
+    done: () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    },
+  };
 }

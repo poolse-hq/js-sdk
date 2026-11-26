@@ -61,10 +61,10 @@ export class RateLimitedError extends ApiError {
 }
 
 /**
- * Auth failure (401, including expired/revoked tokens). Callers should
- * refresh the JWT (via `getToken`) and retry — the SDK does NOT do this
- * automatically, because the failure could also mean "the user signed
- * out on another tab" and silent re-auth would hide that.
+ * Auth failure (401, including expired/revoked tokens). The SDK already
+ * asked `getToken` for a fresh token once and retried; this error means
+ * the fresh one was refused too (or the request carried a caller-supplied
+ * `bearer` token), so the session is really gone: sign the user in again.
  */
 export class AuthError extends ApiError {
   public override readonly name: string = 'AuthError';
@@ -96,4 +96,22 @@ export class ChannelReplyError extends PoolseError {
     this.reason = reason;
     this.response = body;
   }
+}
+
+/**
+ * Whether `err` is a cancellation (`AbortError`), from fetch, an XHR or
+ * a timer. Checks the name only: `instanceof DOMException` throws where
+ * the runtime has no `DOMException` global (older React Native/Hermes).
+ */
+export function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === 'object' && err !== null && (err as { name?: unknown }).name === 'AbortError'
+  );
+}
+
+/** An `AbortError`, as a `DOMException` where the runtime has one. @internal */
+export function abortError(message = 'Aborted'): Error {
+  const D = (globalThis as { DOMException?: new (m: string, n: string) => Error }).DOMException;
+  if (typeof D === 'function') return new D(message, 'AbortError');
+  return Object.assign(new Error(message), { name: 'AbortError' });
 }

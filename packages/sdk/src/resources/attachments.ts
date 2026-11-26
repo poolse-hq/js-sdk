@@ -21,6 +21,7 @@
 //     PUT in one call, returning the (now-ready) attachment row.
 //     Works with browser File/Blob and any BodyInit-compatible value.
 
+import { abortError } from '../errors.js';
 import type { RestClient } from '../rest-client.js';
 import type {
   Attachment,
@@ -293,12 +294,13 @@ function xhrPut(
     };
     xhr.onerror = () => reject(new Error('Poolse: presigned upload PUT failed (network error)'));
     xhr.onabort = () => {
-      // Surface as DOMException('AbortError') so callers can detect.
-      reject(new DOMException('Upload aborted', 'AbortError'));
+      // Surface as an AbortError so callers can detect it.
+      reject(abortError('Upload aborted'));
     };
     if (opts.signal) {
       if (opts.signal.aborted) {
-        xhr.abort();
+        // abort() before send() fires no abort event: reject here.
+        reject(abortError('Upload aborted'));
         return;
       }
       opts.signal.addEventListener('abort', () => xhr.abort(), { once: true });

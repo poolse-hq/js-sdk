@@ -443,4 +443,101 @@ describe('RestClient.request', () => {
       expect(fetchFn.calls.length).toBe(1);
     });
   });
+  describe('timeouts, Retry-After and aborts', () => {
+    // A fetch that never answers, but honours its signal like a real one.
+    const hangingFetch = () => {
+      const calls: RequestInit[] = [];
+      const fn = vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            calls.push(init ?? {});
+            const fail = () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+            if (init?.signal?.aborted) fail();
+            init?.signal?.addEventListener('abort', () =>
+              reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+            );
+          }),
+      ) as unknown as typeof globalThis.fetch;
+      return Object.assign(fn, { calls });
+    };
+
+    it('gives up on a stalled GET after requestTimeoutMs, as a NetworkError', async () => {
+      const fetchFn = hangingFetch();
+      const client = buildClient({ fetch: fetchFn, maxRetries: 1, requestTimeoutMs: 20 });
+      const err = await client.request({ method: 'GET', path: '/v1/me' }).catch((e) => e);
+      expect(err).toBeInstanceOf(NetworkError);
+      expect((err as Error).message).toMatch(/timed out/);
+      expect(fetchFn.calls).toHaveLength(2); // a GET is retried
+    });
+
+    it('does not retry a timed-out POST (it may have reached the server)', async () => {
+      const fetchFn = hangingFetch();
+      const client = buildClient({ fetch: fetchFn, requestTimeoutMs: 20 });
+      const err = await client.request({ method: 'POST', path: '/v1/x', body: {} }).catch((e) => e);
+      expect(err).toBeInstanceOf(NetworkError);
+      expect(fetchFn.calls).toHaveLength(1);
+    });
+
+    it('a caller abort is still an AbortError, not a timeout', async () => {
+      const fetchFn = hangingFetch();
+      const client = buildClient({ fetch: fetchFn, requestTimeoutMs: 5_000 });
+      const controller = new AbortController();
+      const pending = client
+        .request({ method: 'GET', path: '/v1/me', signal: controller.signal })
+        .catch((e) => e);
+      controller.abort();
+      expect(((await pending) as Error).name).toBe('AbortError');
+    });
+
+    it('surfaces a Retry-After longer than maxBackoffMs at once', async () => {
+      const envelope = { error: { code: 'rate_limited', message: 'slow down', doc_url: '' } };
+      const fetchFn = scriptedFetch([
+        new Response(JSON.stringify(envelope), {
+          status: 429,
+          headers: { 'content-type': 'application/json', 'retry-after': '3600' },
+        }),
+      ]);
+      const client = buildClient({ fetch: fetchFn, maxBackoffMs: 30_000 });
+      const err = await client.request({ method: 'GET', path: '/v1/me' }).catch((e) => e);
+      expect(err).toBeInstanceOf(RateLimitedError);
+      expect((err as RateLimitedError).retryAfterMs).toBe(3_600_000);
+      expect(fetchFn.calls).toHaveLength(1);
+    });
+
+    it('an abort during the backoff wait rejects at once', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.99);
+      const fetchFn = scriptedFetch([{ throws: new TypeError('Failed to fetch') }]);
+      const client = buildClient({ fetch: fetchFn, baseBackoffMs: 60_000, maxBackoffMs: 60_000 });
+      const controller = new AbortController();
+      const started = Date.now();
+      const pending = client
+        .request({ method: 'GET', path: '/v1/me', signal: controller.signal })
+        .catch((e) => e);
+      setTimeout(() => controller.abort(), 10);
+      expect(((await pending) as Error).name).toBe('AbortError');
+      expect(Date.now() - started).toBeLessThan(1_000);
+      vi.restoreAllMocks();
+    });
+
+    it('works where the runtime has no DOMException global (React Native)', async () => {
+      const g = globalThis as { DOMException?: unknown };
+      const saved = g.DOMException;
+      delete g.DOMException;
+      try {
+        const abort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
+        const client = buildClient({ fetch: scriptedFetch([{ throws: abort }]) });
+        await expect(client.request({ method: 'GET', path: '/v1/me' })).rejects.toBe(abort);
+
+        const failing = buildClient({
+          fetch: scriptedFetch([{ throws: new TypeError('Network request failed') }]),
+          maxRetries: 0,
+        });
+        await expect(failing.request({ method: 'GET', path: '/v1/me' })).rejects.toBeInstanceOf(
+          NetworkError,
+        );
+      } finally {
+        g.DOMException = saved;
+      }
+    });
+  });
 });

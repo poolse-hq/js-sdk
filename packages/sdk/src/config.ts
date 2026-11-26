@@ -56,8 +56,21 @@ export interface PoolseConfig {
    */
   baseBackoffMs?: number;
 
-  /** Hard cap on a single retry delay. Default 30_000 ms. */
+  /**
+   * Hard cap on a single retry delay. Default 30_000 ms. A 429 whose
+   * `Retry-After` asks for longer is not waited out: it surfaces at once
+   * as `RateLimitedError` (with `retryAfterMs`).
+   */
   maxBackoffMs?: number;
+
+  /**
+   * Give up on one HTTP attempt after this long, in milliseconds
+   * (default 30_000; 0 turns it off). A timed-out attempt is a
+   * `NetworkError`: GET/PUT/DELETE retry it, POST/PATCH don't (the
+   * server may have done the work; the outbox resends messages safely
+   * by id).
+   */
+  requestTimeoutMs?: number;
 
   /**
    * Override the idempotency-key generator. Defaults to
@@ -167,6 +180,7 @@ export interface ResolvedConfig {
   maxRetries: number;
   baseBackoffMs: number;
   maxBackoffMs: number;
+  requestTimeoutMs: number;
   generateIdempotencyKey: () => string;
   wsUrl: string | undefined;
   socketPath: string;
@@ -182,6 +196,7 @@ export interface ResolvedConfig {
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_BACKOFF_MS = 250;
 const DEFAULT_MAX_BACKOFF_MS = 30_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 export function resolveConfig(config: PoolseConfig): ResolvedConfig {
   if (typeof config.getToken !== 'function') {
@@ -210,6 +225,7 @@ export function resolveConfig(config: PoolseConfig): ResolvedConfig {
     maxRetries: config.maxRetries ?? DEFAULT_MAX_RETRIES,
     baseBackoffMs: config.baseBackoffMs ?? DEFAULT_BASE_BACKOFF_MS,
     maxBackoffMs: config.maxBackoffMs ?? DEFAULT_MAX_BACKOFF_MS,
+    requestTimeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     generateIdempotencyKey: config.generateIdempotencyKey ?? defaultIdempotencyKey,
     wsUrl: config.wsUrl,
     socketPath: config.socketPath ?? '/socket',

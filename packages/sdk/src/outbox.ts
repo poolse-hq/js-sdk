@@ -295,7 +295,7 @@ export class Outbox {
     for (;;) {
       const busy = this.older(id)
         .map((e) => this.inflight.get(e.id))
-        .filter((p): p is Promise<unknown> => p !== undefined);
+        .filter((p): p is Promise<Message> => p !== undefined);
       if (busy.length === 0) return;
       await Promise.allSettled(busy);
     }

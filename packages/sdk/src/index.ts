@@ -11,7 +11,9 @@ export {
   PoolseError,
   NetworkError,
   RateLimitedError,
+  isAbortError,
 } from './errors.js';
+export type { HttpMethod, RequestOptions, RestClient } from './rest-client.js';
 
 // Re-export the resource classes so callers can use them in type
 // signatures (e.g. dependency injection). They aren't normally
