@@ -238,3 +238,11 @@ export function useComposerAttachments(enabled: boolean, rules: AttachmentRules)
     accept: rules.acceptFileTypes?.join(',') || undefined,
   };
 }
+
+/** One readable line for a failed send. */
+export function sendErrorText(err: unknown): string {
+  const raw = err instanceof Error ? err.message : '';
+  // `[422] code: message` from the REST client → `message`.
+  const text = raw.replace(/^\[\d+\]\s*[^:]*:\s*/, '').trim();
+  return text ? `Couldn't send: ${text}` : "Couldn't send. Try again.";
+}

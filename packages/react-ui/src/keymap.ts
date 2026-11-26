@@ -145,6 +145,19 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return !!el.closest('input, textarea, select, [contenteditable="true"]');
 }
 
+/**
+ * Whether a keydown belongs to an IME composition (Chinese, Japanese,
+ * Korean input): the Enter that picks a candidate must not send or save.
+ * Safari reports `isComposing` false on that last Enter, but keyCode 229.
+ */
+export function isImeComposing(e: {
+  nativeEvent?: { isComposing?: boolean };
+  isComposing?: boolean;
+  keyCode?: number;
+}): boolean {
+  return !!(e.nativeEvent?.isComposing ?? e.isComposing) || e.keyCode === 229;
+}
+
 /** What a composer keydown means, given its keymap. */
 export function composerAction(
   e: KeyLike,

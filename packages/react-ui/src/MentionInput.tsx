@@ -29,14 +29,19 @@ import {
 } from 'react';
 import { AgentBadge } from './AgentBadge.js';
 import { Avatar } from './Avatar.js';
-import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
+import {
+  ComposerEmojiButton,
+  insertAtCaret,
+  sendErrorText,
+  useComposerAttachments,
+} from './composerParts.js';
 import {
   DlpWarningDialog,
   FormattingToolbar,
   useComposerExtras,
   useDlpGuard,
 } from './composerExtras.js';
-import { composerAction, DEFAULT_KEYMAP, type ComposerKeymap } from './keymap.js';
+import { composerAction, DEFAULT_KEYMAP, isImeComposing, type ComposerKeymap } from './keymap.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
@@ -155,6 +160,9 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     const { members } = useMembers(conversationId);
     const [value, setValue] = useState('');
     const [sending, setSending] = useState(false);
+    const [sendError, setSendError] = useState<string | null>(null);
+    // The files of a send held back by data-loss prevention.
+    const heldRef = useRef<readonly { localId: string }[]>([]);
     const [mention, setMention] = useState<MentionState | null>(null);
     const [activeIdx, setActiveIdx] = useState(0);
     const menuId = useId();
@@ -250,6 +258,8 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       const ready = uploads.ready;
       const hasReady = ready.length > 0;
       if ((!trimmed && !hasReady) || sending || uploading) return;
+      heldRef.current = ready;
+      setSendError(null);
       setSending(true);
       try {
         const mentions = [...selectedMentions.current]
@@ -272,6 +282,9 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
         selectedMentions.current = new Map();
         for (const it of ready) uploads.remove(it.localId);
         uploads.clearRejected();
+      } catch (err) {
+        // Nothing went out: the text and files stay; say why.
+        setSendError(sendErrorText(err));
       } finally {
         setSending(false);
       }
@@ -349,6 +362,8 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     };
 
     const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Mid-composition (CJK input): the keys belong to the IME.
+      if (isImeComposing(e)) return;
       if (mention && filtered.length > 0) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
@@ -440,6 +455,11 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
             disabled={disabled || sending}
             {...(Array.isArray(formattingToolbar) ? { actions: formattingToolbar } : {})}
           />
+        )}
+        {sendError && (
+          <p className="poolse-composer__error" role="alert">
+            {sendError}
+          </p>
         )}
         {replyingTo && (
           <div className="poolse-composer__reply" role="status">
@@ -570,15 +590,17 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
             }}
             onSendAnyway={() => {
               const retry = dlp.pending!.retry;
+              const held = heldRef.current;
               setSending(true);
               void retry()
-                .then(() => {
+                .then((sent) => {
+                  if (!sent) return;
                   setValue('');
                   selectedMentions.current = new Map();
-                  for (const it of uploads.ready) uploads.remove(it.localId);
+                  for (const it of held) uploads.remove(it.localId);
                   uploads.clearRejected();
                 })
-                .catch(() => undefined)
+                .catch((err: unknown) => setSendError(sendErrorText(err)))
                 .finally(() => setSending(false));
             }}
           />

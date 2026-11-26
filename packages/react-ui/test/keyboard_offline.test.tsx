@@ -1,7 +1,7 @@
 // Keyboard shortcuts (scoped to the focused view), unsent messages from
 // the outbox, empty states, and two workspaces side by side.
 
-import { Poolse } from '@poolse/sdk';
+import { Poolse, type Message } from '@poolse/sdk';
 import { PoolseProvider } from '@poolse/react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
@@ -10,6 +10,9 @@ import {
   ConversationList,
   ConversationView,
   DEFAULT_KEYMAP,
+  EditableMessageBubble,
+  MentionInput,
+  MessageComposer,
   matchesKey,
   resolveKeymap,
 } from '../src/index.js';
@@ -41,6 +44,50 @@ describe('keymap', () => {
     expect(km.composer.newline).toContain('Enter');
     expect(resolveKeymap({ messageList: { reply: [] } }).messageList.reply).toEqual([]);
     expect(DEFAULT_KEYMAP.messageList.next).toEqual(['j', 'ArrowDown']);
+  });
+});
+
+describe('IME composition', () => {
+  // The Enter that confirms a CJK candidate: isComposing, or keyCode 229 (Safari).
+  const composing = [{ isComposing: true }, { keyCode: 229 }];
+  it('Enter while composing neither sends nor saves', async () => {
+    const onSend = vi.fn();
+    const composer = renderWithProvider(<MessageComposer onSend={onSend} />, routedFetch({}));
+    const mention = renderWithProvider(
+      <MentionInput conversationId="c-1" onSend={onSend} />,
+      routedFetch({ 'GET /v1/conversations/c-1/members': () => jsonResponse({ data: [] }) }),
+    );
+    for (const { container } of [composer, mention]) {
+      const ta = container.querySelector('textarea')!;
+      fireEvent.change(ta, { target: { value: 'にほん' } });
+      for (const init of composing) fireEvent.keyDown(ta, { key: 'Enter', ...init });
+      expect(onSend).not.toHaveBeenCalled();
+      expect(ta.value).toBe('にほん');
+    }
+    const onSave = vi.fn();
+    const onCancel = vi.fn();
+    const edit = renderWithProvider(
+      <EditableMessageBubble
+        message={msg(1, 'u-me') as unknown as Message}
+        currentUserId="u-me"
+        editing
+        onSave={onSave}
+        onCancel={onCancel}
+      />,
+      routedFetch({}),
+    );
+    const ta = edit.container.querySelector('textarea')!;
+    for (const init of composing) {
+      fireEvent.keyDown(ta, { key: 'Enter', ...init });
+      fireEvent.keyDown(ta, { key: 'Escape', ...init });
+    }
+    expect(onSave).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    // Once composition ends, Enter sends as usual.
+    await act(async () => {
+      fireEvent.keyDown(composer.container.querySelector('textarea')!, { key: 'Enter' });
+    });
+    expect(onSend).toHaveBeenCalledTimes(1);
   });
 });
 

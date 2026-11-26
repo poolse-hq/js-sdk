@@ -12,6 +12,7 @@ import {
 } from '@poolse/react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { EmojiCategoryData } from './emojiData.js';
+import { isImeComposing } from './keymap.js';
 
 export interface EmojiPickerProps {
   /** An emoji was chosen. */
@@ -253,6 +254,7 @@ export function EmojiPicker({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
+          if (isImeComposing(e)) return;
           if (e.key === 'Enter') {
             e.preventDefault();
             const first = results?.[0];

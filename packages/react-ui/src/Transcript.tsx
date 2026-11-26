@@ -15,6 +15,7 @@ import {
   useTranscript,
 } from '@poolse/react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { isImeComposing } from './keymap.js';
 import { PoolseIcon } from './PoolseIcon.js';
 
 export interface LiveTranscriptPanelProps {
@@ -226,7 +227,7 @@ export function TranscriptViewer({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !isImeComposing(e)) {
                 e.preventDefault();
                 step(e.shiftKey ? -1 : 1);
               }

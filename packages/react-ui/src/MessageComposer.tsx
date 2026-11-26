@@ -8,14 +8,19 @@ import {
 } from 'react';
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import type { FormatKind, SlashCommand } from '@poolse/react';
-import { ComposerEmojiButton, insertAtCaret, useComposerAttachments } from './composerParts.js';
+import {
+  ComposerEmojiButton,
+  insertAtCaret,
+  sendErrorText,
+  useComposerAttachments,
+} from './composerParts.js';
 import {
   DlpWarningDialog,
   FormattingToolbar,
   useComposerExtras,
   useDlpGuard,
 } from './composerExtras.js';
-import { composerAction, DEFAULT_KEYMAP, type ComposerKeymap } from './keymap.js';
+import { composerAction, DEFAULT_KEYMAP, isImeComposing, type ComposerKeymap } from './keymap.js';
 import { handleListEnter } from './listAutocomplete.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { UploadQueueStrip } from './UploadQueueStrip.js';
@@ -227,9 +232,20 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       [addFiles],
     );
 
+    // Sweep ready chips out of the queue once they've been attached and
+    // sent. Errored chips stay until dismissed.
+    const sweepSent = (sent: readonly { localId: string }[]) => {
+      for (const it of sent) uploads.remove(it.localId);
+      uploads.clearRejected();
+    };
+    // The files of a send held back by data-loss prevention: "Send
+    // anyway" sends them, so they're swept then.
+    const heldRef = useRef<readonly { localId: string }[]>([]);
+
     const submit = async () => {
       const trimmed = value.trim();
       const ready = uploads.ready;
+      heldRef.current = ready;
       const hasReady = ready.length > 0;
       // Allow attachment-only sends (no body).
       if ((!trimmed && !hasReady) || sending || uploading) return;
@@ -256,10 +272,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           }
         });
         if (sent && !kept) {
-          // Sweep ready chips out of the queue now that they've been
-          // attached + sent. Errored chips stay until dismissed.
-          for (const it of ready) uploads.remove(it.localId);
-          uploads.clearRejected();
+          sweepSent(ready);
         } else {
           // Held back (data-loss prevention, a cancelled beforeSend): put
           // the text back for "Edit"; the files are still queued.
@@ -276,6 +289,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     };
 
     const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Mid-composition (CJK input): the keys belong to the IME.
+      if (isImeComposing(e)) return;
       if (extras.onKeyDown(e)) return;
       const action = composerAction(e, keymap);
       if (action === 'editLast') {
@@ -434,10 +449,18 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             }}
             onSendAnyway={() => {
               const { retry, body } = dlp.pending!;
+              const held = heldRef.current;
               setValue('');
               setSending(true);
               void retry()
-                .catch(() => setValue((now) => (now ? now : body)))
+                .then((sent) => {
+                  if (sent) sweepSent(held);
+                  else setValue((now) => (now ? now : body));
+                })
+                .catch((err: unknown) => {
+                  setValue((now) => (now ? now : body));
+                  setSendError(sendErrorText(err));
+                })
                 .finally(() => setSending(false));
             }}
           />
@@ -479,12 +502,4 @@ function ReplyChip({
       )}
     </div>
   );
-}
-
-/** One readable line for a failed send. */
-function sendErrorText(err: unknown): string {
-  const raw = err instanceof Error ? err.message : '';
-  // `[422] code: message` from the REST client → `message`.
-  const text = raw.replace(/^\[\d+\]\s*[^:]*:\s*/, '').trim();
-  return text ? `Couldn't send: ${text}` : "Couldn't send. Try again.";
 }

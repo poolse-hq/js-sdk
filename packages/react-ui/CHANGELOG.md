@@ -12,6 +12,14 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   `conversationId` in place no longer clears the new conversation's draft,
   reply chip or unread divider; its outcome goes to the draft of the
   conversation it was sent from (a failed text goes back there).
+- `MessageComposer`: after "Send anyway" on a data-loss-prevention warning
+  the files that went out leave the queue (they were sent again with the
+  next message). `MentionInput` sweeps only the files of that send, and
+  shows why a send failed instead of an unhandled rejection.
+- Enter during IME composition (Chinese, Japanese, Korean input) no longer
+  sends or saves a half-typed message: `MessageComposer`, `MentionInput`,
+  `EditableMessageBubble`, the emoji search and the transcript search leave
+  those keys to the input method.
 
 ## [3.10.3] - 2026-11-26
 

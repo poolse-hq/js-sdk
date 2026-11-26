@@ -267,7 +267,8 @@ export function useDlpGuard() {
     outcome: DlpOutcome;
     /** The text that was held back. */
     body: string;
-    retry: () => Promise<void>;
+    /** Sends again, acknowledged; resolves `true` when it went through. */
+    retry: () => Promise<boolean>;
   } | null>(null);
   /** Returns `true` when the send went through, `false` when the dialog is now showing. */
   const guard = async (
@@ -286,7 +287,7 @@ export function useDlpGuard() {
         body,
         retry: async () => {
           setPending(null);
-          await guard(body, send, true);
+          return guard(body, send, true);
         },
       });
       return false;

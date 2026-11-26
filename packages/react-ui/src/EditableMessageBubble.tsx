@@ -9,6 +9,7 @@
 
 import type { Message } from '@poolse/sdk';
 import { useState, type KeyboardEvent } from 'react';
+import { isImeComposing } from './keymap.js';
 import { MessageBubble } from './MessageBubble.js';
 
 export interface EditableMessageBubbleProps {
@@ -58,6 +59,8 @@ export function EditableMessageBubble({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Mid-composition (CJK input): Enter picks a candidate, Esc drops it.
+    if (isImeComposing(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void submit();

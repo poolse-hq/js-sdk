@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@poolse/sdk';
 import { MessageComposer } from '../src/MessageComposer.js';
 import { MentionInput } from '../src/MentionInput.js';
-import { jsonResponse, renderWithProvider, scriptedFetch } from './_helpers.js';
+import { jsonResponse, renderWithProvider, routedFetch, scriptedFetch } from './_helpers.js';
 
 const input = (c: HTMLElement) => c.querySelector('.poolse-composer__input') as HTMLTextAreaElement;
 const tick = () => new Promise((r) => setTimeout(r, 20));
@@ -87,6 +87,77 @@ describe('composer extras', () => {
     expect(container.querySelector('.poolse-dlp-dialog')).toBeNull();
     expect(ta.value).toBe('');
   });
+
+  // A ready upload: the presign route answers, the PUT goes through fetch.
+  const uploadOk = () =>
+    routedFetch({
+      'POST /v1/attachments/upload-url': () =>
+        jsonResponse({
+          attachment: {
+            id: 'att-1',
+            tenant_id: 't-1',
+            message_id: null,
+            sender_id: 'u-me',
+            content_type: 'text/plain',
+            byte_size: 4,
+            sha256: null,
+            original_filename: 'a.txt',
+            status: 'pending',
+          },
+          upload: { url: 'https://store.test/put', method: 'put', headers: {} },
+        }),
+      'PUT /put': () => new Response(null, { status: 200 }),
+      'GET /v1/conversations/c-1/members': () => jsonResponse({ data: [] }),
+    });
+  const dlpWarning = () =>
+    new ApiError(422, {
+      code: 'dlp_warning',
+      message: 'warn',
+      doc_url: '',
+      details: { rules: [{ id: 'cards', name: 'Card number' }] },
+    });
+
+  for (const kind of ['MessageComposer', 'MentionInput'] as const) {
+    it(`${kind}: "Send anyway" sweeps the files it sent`, async () => {
+      const xhr = globalThis.XMLHttpRequest;
+      // @ts-expect-error -- the SDK PUTs through fetch without XHR.
+      delete globalThis.XMLHttpRequest;
+      try {
+        const onSend = vi.fn().mockRejectedValueOnce(dlpWarning()).mockResolvedValue(undefined);
+        const { container, getByText } = renderWithProvider(
+          kind === 'MessageComposer' ? (
+            <MessageComposer onSend={onSend} />
+          ) : (
+            <MentionInput conversationId="c-1" onSend={onSend} />
+          ),
+          uploadOk(),
+        );
+        const picker = container.querySelector('input[type="file"]') as HTMLInputElement;
+        fireEvent.change(picker, {
+          target: { files: [new File([new Uint8Array(4)], 'a.txt', { type: 'text/plain' })] },
+        });
+        await waitFor(() =>
+          expect(container.querySelector('.poolse-upload-chip')?.textContent).not.toMatch(
+            /upload/i,
+          ),
+        );
+        const ta = input(container);
+        fireEvent.change(ta, { target: { value: 'card 4111111111111111' } });
+        await act(async () => {
+          fireEvent.keyDown(ta, { key: 'Enter' });
+          await tick();
+        });
+        await act(async () => {
+          fireEvent.click(getByText('Send anyway'));
+          await tick();
+        });
+        expect(JSON.stringify(onSend.mock.calls.at(-1))).toContain('att-1');
+        expect(container.querySelector('.poolse-upload-chip')).toBeNull();
+      } finally {
+        globalThis.XMLHttpRequest = xhr;
+      }
+    });
+  }
 
   it('offers no "Send anyway" on a block', async () => {
     const onSend = vi
