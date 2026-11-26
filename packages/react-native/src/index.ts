@@ -200,8 +200,10 @@ export { LinkPreviewCard, type LinkPreviewCardProps } from './LinkPreviewCard.js
 export { EmojiPicker, type EmojiPickerProps } from './EmojiPicker.js';
 export { UploadQueueStrip } from './UploadQueueStrip.js';
 export {
+  ReactionChips,
   ReactionStrip,
   ReactionPicker,
+  type ReactionChipsProps,
   type ReactionStripProps,
   type ReactionPickerProps,
 } from './Reactions.js';

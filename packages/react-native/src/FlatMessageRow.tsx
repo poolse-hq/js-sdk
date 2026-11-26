@@ -43,7 +43,7 @@ import {
 import { Avatar } from './primitives/Avatar.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { userColor } from './primitives/userColor.js';
-import { ReactionStrip } from './Reactions.js';
+import { ReactionChips } from './Reactions.js';
 import { messageA11yLabel } from './internal/a11y.js';
 import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
@@ -350,11 +350,11 @@ export function FlatMessageRow({
   const reactionsEl =
     reactions && !inert ? (
       <View style={styles.reactions}>
-        <ReactionStrip
-          messageId={msg.id}
-          conversationId={msg.conversation_id}
+        <ReactionChips
+          reactions={reactionsApi.reactions}
           meId={meId}
-          {...(msg.reactions ? { initialReactions: msg.reactions } : {})}
+          onAdd={reactionsApi.addReaction}
+          onRemove={reactionsApi.removeReaction}
           {...(actions ? { onMorePress: () => setEmojiOpen(true) } : {})}
         />
       </View>

@@ -26,7 +26,7 @@ import {
 import { MessageActions, type MessageExtraAction } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './primitives/PoolseIcon.js';
-import { ReactionStrip } from './Reactions.js';
+import { ReactionChips } from './Reactions.js';
 import { messageA11yLabel } from './internal/a11y.js';
 import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
@@ -338,8 +338,8 @@ function BubbleMessageRow({
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Per-row useReactions subscription so the long-press → React picker
-  // and the inline ReactionStrip share the same realtime state. Adds
+  // One useReactions per row: the long-press picker adds through it and
+  // the chips below render it, so a pick shows at once. Adds
   // one realtime listener per visible row, which is fine — they're
   // server-filtered by messageId and the FlatList only mounts rows in
   // view. Initial seed comes from msg.reactions so the strip renders
@@ -610,11 +610,11 @@ function BubbleMessageRow({
           slotContext,
           reactions && !tombstone ? (
             <View style={[styles.reactionsRow, { alignSelf: isSelf ? 'flex-end' : 'flex-start' }]}>
-              <ReactionStrip
-                messageId={msg.id}
-                conversationId={msg.conversation_id}
+              <ReactionChips
+                reactions={reactionsApi.reactions}
                 meId={meId}
-                {...(msg.reactions ? { initialReactions: msg.reactions } : {})}
+                onAdd={reactionsApi.addReaction}
+                onRemove={reactionsApi.removeReaction}
                 {...(actions ? { onMorePress: () => setEmojiOpen(true) } : {})}
               />
             </View>

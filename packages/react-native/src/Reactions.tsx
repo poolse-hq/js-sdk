@@ -28,12 +28,45 @@ export function ReactionStrip({
   initialReactions,
   onMorePress,
 }: ReactionStripProps) {
-  const theme = useTheme();
   const { reactions, addReaction, removeReaction } = useReactions(messageId, {
     conversationId,
     currentUserId: meId,
     ...(initialReactions ? { initialReactions } : {}),
   });
+  return (
+    <ReactionChips
+      reactions={reactions}
+      meId={meId}
+      onAdd={addReaction}
+      onRemove={removeReaction}
+      {...(onMorePress ? { onMorePress } : {})}
+    />
+  );
+}
+
+export interface ReactionChipsProps {
+  reactions: Record<string, Uuid[]>;
+  meId: string | null;
+  onAdd: (emoji: string) => Promise<unknown> | void;
+  onRemove: (emoji: string) => Promise<unknown> | void;
+  onMorePress?: () => void;
+}
+
+/**
+ * The chips alone, for a row that already holds `useReactions`: what it
+ * adds from its own picker shows here at once (and offline), instead of
+ * waiting for the realtime echo to reach a second subscription.
+ */
+export function ReactionChips({
+  reactions,
+  meId,
+  onAdd,
+  onRemove,
+  onMorePress,
+}: ReactionChipsProps) {
+  const theme = useTheme();
+  const removeReaction = (emoji: string) => void Promise.resolve(onRemove(emoji)).catch(() => {});
+  const addReaction = (emoji: string) => void Promise.resolve(onAdd(emoji)).catch(() => {});
   const entries = Object.entries(reactions);
   if (entries.length === 0) return null;
 
