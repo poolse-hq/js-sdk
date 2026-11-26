@@ -475,11 +475,11 @@ export function ClipPlayer({
   // minute; after that the clip can't play and says so.
   const renewal = useMediaRenewal(
     () => {
+      if (mode === 'file') fileUrl.refresh();
       if (mode === 'range') recUrl.refresh();
       if (mode === 'clip') cut.refresh();
     },
     `${mode}:${attachment?.id ?? clipId ?? rangeClip?.recordingId ?? ''}`,
-    mode === 'file' ? { max: 0 } : undefined,
   );
 
   const props = {
