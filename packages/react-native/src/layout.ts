@@ -17,38 +17,14 @@ export type ChatLayout = 'bubbles' | 'list' | 'compact';
 
 export type ChatDensity = 'comfortable' | 'compact';
 
-/** `'12h'`, `'24h'`, or your own formatter. Omitted: the locale's default. */
-export type TimeFormat = '12h' | '24h' | ((date: Date) => string);
-
-/** Time of day in the chosen format (a formatter function is used as-is). */
-export function formatClock(date: Date, format?: TimeFormat): string {
-  if (typeof format === 'function') return format(date);
-  if (format === '12h') {
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-  }
-  if (format === '24h') {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-  }
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-/** The gutter's form of a time: no space before AM/PM, so it fits. */
-export function gutterTime(time: string): string {
-  return time.replace(/\s+(?=[AaPp]\.?[Mm]\.?$)/, '').replace(/\u202f/g, '');
-}
-
-/** A message's time of day, as the `list` and `compact` rows show it. */
-export function formatMessageTime(iso: string | null | undefined, format?: TimeFormat): string {
-  if (!iso) return '';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  return formatClock(date, format);
-}
-
-/** Someone else's message that @-mentions the viewer. */
-export function mentionsViewer(msg: Message, meId: string | null): boolean {
-  return meId !== null && msg.sender_id !== meId && (msg.mentions ?? []).includes(meId);
-}
+// Time and mention helpers shared with web (@poolse/react).
+export {
+  formatMessageTime,
+  formatTimeOfDay as formatClock,
+  gutterTime,
+  mentionsViewer,
+  type TimeFormat,
+} from '@poolse/react';
 
 /** What each slot function receives. */
 export interface MessageSlotProps {

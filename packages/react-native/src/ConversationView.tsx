@@ -286,7 +286,8 @@ export interface ConversationViewProps {
   /**
    * Where drafts persist — `{ get, set, remove }` over string values
    * (MMKV, AsyncStorage, …); each may return a promise. Keys are
-   * `poolse:draft:<conversationId>`.
+   * `<namespace>:draft:<conversationId>`, the namespace being the
+   * client's (server + user).
    */
   draftStorage?: DraftStorage;
   /** An emoji button in the composer. Defaults to `true`. */

@@ -6,6 +6,17 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Behaviour now matches React Native (one shared implementation in
+  `@poolse/react`): a call shows over do-not-disturb on the presence badge,
+  and `presenceText` adds " · Do not disturb" to Online / Away;
+  `formatRelativeTime` says "yesterday" only for the calendar day before and
+  names the weekday within a week (it said "yesterday" for anything 24–48 h
+  old, then "4d ago"); the default message time is the locale's ("9:05 AM",
+  not "09:05 AM"); file sizes read the same everywhere; the quick reactions
+  are one set.
+
 ### Fixed
 
 - `ConversationView`: a send that settles after the host switched

@@ -5,8 +5,11 @@
 // The state comes from `useUserPresence` / `usePresenceMany` in
 // @poolse/react; `<Avatar presence>` wires it for you.
 
-import type { Presence, PresenceState } from '@poolse/sdk';
-import { formatRelativeTime } from './relativeTime.js';
+import type { PresenceState } from '@poolse/sdk';
+import { presenceBadgeKind, presenceStateLabel } from '@poolse/react';
+
+// The text helpers are shared with React Native; re-exported here as before.
+export { presenceStateLabel, presenceText } from '@poolse/react';
 
 export interface PresenceBadgeProps {
   /** `online`, `away`, `in_call` or `offline` (offline renders nothing). */
@@ -14,7 +17,7 @@ export interface PresenceBadgeProps {
   /**
    * The person paused notifications or is in their quiet hours
    * (`Presence.do_not_disturb`): a moon replaces the dot while they are
-   * not offline.
+   * online or away (a call still shows the phone).
    */
   doNotDisturb?: boolean;
   /** Matches the avatar it sits on. Defaults to `md`. */
@@ -28,9 +31,9 @@ export function PresenceBadge({
   size = 'md',
   className,
 }: PresenceBadgeProps) {
-  if (!state || state === 'offline') return null;
-  const kind = doNotDisturb ? 'dnd' : state;
-  const label = doNotDisturb ? 'Do not disturb' : presenceStateLabel(state);
+  const kind = presenceBadgeKind(state, doNotDisturb);
+  if (!kind || !state) return null;
+  const label = kind === 'dnd' ? 'Do not disturb' : presenceStateLabel(state);
   return (
     <span
       className={[
@@ -49,37 +52,6 @@ export function PresenceBadge({
       {kind === 'in_call' ? <PhoneGlyph /> : kind === 'dnd' ? <MoonGlyph /> : null}
     </span>
   );
-}
-
-/** "Online", "Away", "In a call", "Offline". */
-export function presenceStateLabel(state: PresenceState): string {
-  switch (state) {
-    case 'online':
-      return 'Online';
-    case 'away':
-      return 'Away';
-    case 'in_call':
-      return 'In a call';
-    default:
-      return 'Offline';
-  }
-}
-
-/**
- * The line a header or roster shows under a name: "Online", "Away",
- * "In a call", "Last seen 5m ago" (offline with a known time), else
- * "Offline". Null when presence isn't known yet.
- */
-export function presenceText(
-  presence: Presence | null | undefined,
-  now = Date.now(),
-): string | null {
-  if (!presence) return null;
-  if (presence.state === 'offline') {
-    const ago = formatRelativeTime(presence.last_seen_at, now);
-    return ago ? `Last seen ${ago}` : 'Offline';
-  }
-  return presenceStateLabel(presence.state);
 }
 
 function PhoneGlyph() {

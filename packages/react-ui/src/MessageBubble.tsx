@@ -2,9 +2,9 @@ import type { Attachment, Message, QuotedMessagePreview, Uuid } from '@poolse/sd
 import {
   approvalIdOf,
   citationsOf,
-  clipOf,
   displayNameOf,
   messageAgent,
+  partitionAttachments,
   useUser,
 } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
@@ -72,7 +72,8 @@ export interface MessageBubbleProps {
   /**
    * Render the body as GitHub-flavored Markdown (bold, italic, lists,
    * fenced code, blockquotes, strikethrough, autolinks). Defaults to
-   * `false`. `<ConversationView>` flips this on by default.
+   * `false` (React Native's bubble defaults to `true`);
+   * `<ConversationView>` flips this on by default.
    */
   markdown?: boolean;
   /**
@@ -187,12 +188,12 @@ export function MessageBubble({
     showAttachments && !message.deleted_at && Array.isArray(message.attachments)
       ? message.attachments
       : [];
-  const imageAttachments = attachmentList.filter((a) => isImageContentType(a.content_type));
   // Clips cut from a recording (RT9) play inline instead of a file card.
-  const clipAttachments = attachmentList.filter((a) => !!clipOf(a));
-  const fileAttachments = attachmentList.filter(
-    (a) => !isImageContentType(a.content_type) && !clipOf(a),
-  );
+  const {
+    images: imageAttachments,
+    clips: clipAttachments,
+    files: fileAttachments,
+  } = partitionAttachments(attachmentList);
   const hasAnyAttachment =
     imageAttachments.length > 0 || fileAttachments.length > 0 || clipAttachments.length > 0;
   const citations = citationsOf(message);
@@ -447,14 +448,9 @@ export function MessageBubble({
   );
 }
 
-// Whether a content-type string represents an image. The Attachment
-// row always carries `content_type` from the server — for messages
-// authored on older clients (or partially-populated rows during a
-// realtime echo race) we fall back to "treat as file" which is the
-// safer of the two paths.
-export function isImageContentType(ct: string | null | undefined): boolean {
-  return typeof ct === 'string' && ct.toLowerCase().startsWith('image/');
-}
+// Whether a content-type string is an image (any case); shared with
+// React Native through @poolse/react. No type: a file card.
+export { isImageContentType } from '@poolse/react';
 
 // Image mosaic — WhatsApp-style layout for one or more images inside
 // the bubble. Picks a grid template by count:

@@ -51,12 +51,10 @@ export interface MessageComposerProps {
   /** Tap on the paperclip — wire to `<AttachmentPicker>` from the same package. */
   onAttachPress?: () => void;
   /**
-   * Distance from the top of the screen to the top of the
-   * KeyboardAvoidingView — typically the height of any navigation
-   * header sitting above the chat. Pass this when the iOS keyboard
-   * suggestions strip ends up covering the composer (a sign the
-   * computed offset is wrong). Defaults to 0; on Android it's
-   * ignored.
+   * @deprecated Has no effect: the composer has no KeyboardAvoidingView
+   * of its own. Set `keyboardOffset` on `<ConversationView>` (the
+   * height of any header above the chat), which wraps the list and the
+   * composer in one.
    */
   keyboardOffset?: number;
   /**

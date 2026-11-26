@@ -61,7 +61,9 @@ export function sameDay(a: string, b: string): boolean {
 export function formatDayLabel(iso: string, now: Date = new Date()): string {
   const d = new Date(iso);
   const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diffDays = Math.floor((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  // Rounded: across a daylight-saving change two midnights are 23 or
+  // 25 hours apart, and flooring 23 h made yesterday "Today".
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) {

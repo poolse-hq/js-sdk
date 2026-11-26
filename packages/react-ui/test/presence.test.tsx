@@ -92,6 +92,15 @@ describe('<PresenceBadge>', () => {
     expect(badge?.getAttribute('aria-label')).toBe('Do not disturb');
   });
 
+  it('a call shows over do not disturb, as on React Native', () => {
+    const { container } = render(<PresenceBadge state="in_call" doNotDisturb />);
+    expect(container.querySelector('.poolse-presence-badge--in_call')).not.toBeNull();
+    expect(container.querySelector('.poolse-presence-badge--dnd')).toBeNull();
+    expect(
+      presenceText({ ...presence('a', 'online'), do_not_disturb: true } as never, Date.now()),
+    ).toBe('Online · Do not disturb');
+  });
+
   it('presenceText reads state or last seen', () => {
     const now = Date.parse('2026-01-01T02:00:00Z');
     expect(presenceText(presence('a', 'online') as never, now)).toBe('Online');

@@ -1,5 +1,5 @@
 import type { Uuid } from '@poolse/sdk';
-import { useReactions } from '@poolse/react';
+import { QUICK_REACTIONS, useReactions } from '@poolse/react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EmojiGlyph } from './EmojiGlyph.js';
@@ -8,8 +8,6 @@ import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { reactionA11yLabel } from './internal/a11y.js';
 import { useTheme } from './theme/PoolseTheme.js';
-
-const DEFAULT_EMOJIS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
 
 export interface ReactionStripProps {
   messageId: Uuid;
@@ -135,14 +133,14 @@ export interface ReactionPickerProps {
   onClose: () => void;
   onPick: (emoji: string) => void;
   /** Override the default 6-emoji set. */
-  emojis?: string[];
+  emojis?: readonly string[];
 }
 
 export function ReactionPicker({
   visible,
   onClose,
   onPick,
-  emojis = DEFAULT_EMOJIS,
+  emojis = QUICK_REACTIONS,
 }: ReactionPickerProps) {
   const theme = useTheme();
   const insets = useSafeInsets();

@@ -4,7 +4,7 @@
 // presigned GET URL is fetched on demand.
 
 import type { Attachment, Uuid } from '@poolse/sdk';
-import { useAttachmentUrl } from '@poolse/react';
+import { formatBytes, isImageContentType, useAttachmentUrl } from '@poolse/react';
 import { useEffect, useState } from 'react';
 import { PoolseIcon } from './PoolseIcon.js';
 
@@ -47,7 +47,7 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
   // Discriminate image vs file. Content-type from the row when we
   // have it; otherwise infer from the URL's extension as a fallback.
   const ct = isFullRow ? attachment.content_type : guessContentType(url);
-  const isImage = ct.startsWith('image/');
+  const isImage = isImageContentType(ct);
 
   if (isImage) {
     const filename = isFullRow ? attachment.original_filename : null;
@@ -282,11 +282,4 @@ function guessContentType(url: string): string {
   const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg']);
   if (imageExts.has(ext)) return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
   return 'application/octet-stream';
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }

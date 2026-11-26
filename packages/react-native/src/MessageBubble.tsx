@@ -2,9 +2,9 @@ import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
 import {
   approvalIdOf,
   citationsOf,
-  clipOf,
   displayNameOf,
   messageAgent,
+  partitionAttachments,
   useUser,
 } from '@poolse/react';
 import { useState, type ReactNode } from 'react';
@@ -169,17 +169,10 @@ export function MessageBubble({
   const truncated = trimmable && !expanded ? body.slice(0, maxBodyLength) + '…' : body;
   const time = formatTime(message.inserted_at, timeFormat);
 
-  const images =
-    showAttachments && !isDeleted
-      ? (message.attachments ?? []).filter((a) => isImageContentType(a.content_type))
-      : [];
-  const files =
-    showAttachments && !isDeleted
-      ? (message.attachments ?? []).filter((a) => !isImageContentType(a.content_type) && !clipOf(a))
-      : [];
   // Clips cut from a recording (RT9) play inline instead of a file card.
-  const clips =
-    showAttachments && !isDeleted ? (message.attachments ?? []).filter((a) => !!clipOf(a)) : [];
+  const { images, files, clips } = partitionAttachments(
+    showAttachments && !isDeleted ? message.attachments : [],
+  );
   const citations = citationsOf(message);
   // An agent waiting for a yes (AG4): its card, for the person asked.
   const approvalId = approvalIdOf(message);
@@ -568,10 +561,8 @@ export function QuotedCard({
   );
 }
 
-export function isImageContentType(ct: string | null | undefined): boolean {
-  if (!ct) return false;
-  return ct.startsWith('image/');
-}
+// Any case (`Image/PNG` is an image too); shared with web through @poolse/react.
+export { isImageContentType } from '@poolse/react';
 
 // HH:MM if same calendar day, "Yesterday HH:MM" if yesterday, "Mon DD"
 // if older than a week, otherwise weekday abbreviation. Matches the
@@ -583,9 +574,9 @@ function formatTime(iso: string, format?: TimeFormat): string {
     const d = new Date(iso);
     if (typeof format === 'function') return format(d);
     const now = new Date();
-    const sameDay = isSameDay(d, now);
+    const today = isSameDay(d, now);
     const time = formatClock(d, format);
-    if (sameDay) return time;
+    if (today) return time;
 
     const yesterday = new Date(now);
     yesterday.setDate(now.getDate() - 1);

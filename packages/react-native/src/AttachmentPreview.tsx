@@ -1,5 +1,5 @@
 import type { Attachment } from '@poolse/sdk';
-import { useAttachmentUrl } from '@poolse/react';
+import { formatBytes, isImageContentType, useAttachmentUrl } from '@poolse/react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
@@ -29,7 +29,7 @@ export function AttachmentPreview({
   tone = 'default',
 }: AttachmentPreviewProps) {
   const theme = useTheme();
-  const isImage = (attachment.content_type ?? '').startsWith('image/');
+  const isImage = isImageContentType(attachment.content_type);
   const { url, refresh } = useAttachmentUrl(attachment.id);
   const open =
     onPress ?? (url && /^https?:\/\//i.test(url) ? () => void Linking.openURL(url) : undefined);
@@ -101,13 +101,6 @@ export function AttachmentPreview({
       </View>
     </Pressable>
   );
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
 const styles = StyleSheet.create({

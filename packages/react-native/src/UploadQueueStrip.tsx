@@ -1,3 +1,4 @@
+import { formatBytes, isImageContentType } from '@poolse/react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon } from './primitives/PoolseIcon.js';
@@ -37,7 +38,7 @@ export function UploadQueueStrip() {
       {live.map((item) => {
         const isError = item.status === 'error';
         const isUploading = item.status === 'uploading' || item.status === 'pending';
-        const isImage = (item.contentType ?? '').startsWith('image/');
+        const isImage = isImageContentType(item.contentType);
         const previewUri = getPreview(item.filename);
         const canTerminate = isUploading || item.status === 'ready' || isError;
 
@@ -147,19 +148,11 @@ function FileTile({
           {filename}
         </Text>
         <Text style={[styles.fileSize, { color: theme.colors.textSubtle }]}>
-          {formatBytes(size)}
+          {size ? formatBytes(size) : ''}
         </Text>
       </View>
     </View>
   );
-}
-
-function formatBytes(n: number): string {
-  if (!n || n < 0) return '';
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
 const TILE = 64;

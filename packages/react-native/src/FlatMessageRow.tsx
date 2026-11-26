@@ -14,9 +14,9 @@
 import {
   approvalIdOf,
   citationsOf,
-  clipOf,
   displayNameOf,
   isTombstone,
+  partitionAttachments,
   messageAgent,
   useReactions,
   useUser,
@@ -34,7 +34,7 @@ import { emojiFontSize, emojiOnlyCount, hasMarkdown } from './internal/bubbleTex
 import { renderMarkdown } from './internal/markdown.js';
 import { formatMessageTime, gutterTime, renderSlot, type MessageSlotContext } from './layout.js';
 import { LinkPreviewCard } from './LinkPreviewCard.js';
-import { isImageContentType, QuotedCard } from './MessageBubble.js';
+import { QuotedCard } from './MessageBubble.js';
 import {
   RowActionsSheet,
   RowSheets,
@@ -207,15 +207,9 @@ export function FlatMessageRow({
     </View>
   ) : null;
 
-  const images =
-    attachments && !deleted
-      ? (msg.attachments ?? []).filter((a) => isImageContentType(a.content_type))
-      : [];
-  const files =
-    attachments && !deleted
-      ? (msg.attachments ?? []).filter((a) => !isImageContentType(a.content_type) && !clipOf(a))
-      : [];
-  const clips = attachments && !deleted ? (msg.attachments ?? []).filter((a) => !!clipOf(a)) : [];
+  const { images, files, clips } = partitionAttachments(
+    attachments && !deleted ? msg.attachments : [],
+  );
   const citations = citationsOf(msg);
   const approvalId = approvalIdOf(msg);
   const mediaWidth = Math.min(screenWidth - GUTTER - 48, 320);

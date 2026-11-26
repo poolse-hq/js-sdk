@@ -2,7 +2,7 @@
 // inserting text at the caret, and the attachment queue (checks,
 // paste, thumbnails).
 
-import { useAttachmentUpload, type UploadItem } from '@poolse/react';
+import { formatBytes, useAttachmentUpload, type UploadItem } from '@poolse/react';
 import {
   useCallback,
   useEffect,
@@ -108,18 +108,6 @@ function matchesType(file: File, rule: string): boolean {
   const type = (file.type || '').toLowerCase();
   if (r.endsWith('/*')) return type.startsWith(r.slice(0, -1));
   return type === r;
-}
-
-/** `25 MB`, `512 KB`, `900 B`. */
-export function formatBytes(n: number): string {
-  if (n >= 1024 * 1024 * 1024) return `${trim(n / (1024 * 1024 * 1024))} GB`;
-  if (n >= 1024 * 1024) return `${trim(n / (1024 * 1024))} MB`;
-  if (n >= 1024) return `${trim(n / 1024)} KB`;
-  return `${n} B`;
-}
-
-function trim(x: number): string {
-  return x >= 10 ? String(Math.round(x)) : String(Math.round(x * 10) / 10);
 }
 
 const fileKey = (name: string, size: number, type: string) => `${name}\u0000${size}\u0000${type}`;

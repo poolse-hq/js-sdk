@@ -14,9 +14,9 @@ import type { Attachment } from '@poolse/sdk';
 import {
   approvalIdOf,
   citationsOf,
-  clipOf,
   displayNameOf,
   messageAgent,
+  partitionAttachments,
   useReactions,
   useUser,
 } from '@poolse/react';
@@ -34,7 +34,7 @@ import { EditableMessageBubble } from './EditableMessageBubble.js';
 import { useEditHistory } from './EditedLabel.js';
 import { formatMessageTime, gutterTime, renderSlot, type MessageSlotContext } from './layout.js';
 import { MessageActions } from './MessageActions.js';
-import { ImageMosaic, isImageContentType, QuotedCard, QuotedPlaceholder } from './MessageBubble.js';
+import { ImageMosaic, QuotedCard, QuotedPlaceholder } from './MessageBubble.js';
 import type { MessageRowProps, MessageUser } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { ignoreRolledBack, InlineReactions, useRowActions } from './rowParts.js';
@@ -200,9 +200,7 @@ export function FlatMessageRow({
 
   const attachmentList: Attachment[] =
     attachments && !deleted && Array.isArray(msg.attachments) ? msg.attachments : [];
-  const images = attachmentList.filter((a) => isImageContentType(a.content_type));
-  const clips = attachmentList.filter((a) => !!clipOf(a));
-  const files = attachmentList.filter((a) => !isImageContentType(a.content_type) && !clipOf(a));
+  const { images, clips, files } = partitionAttachments(attachmentList);
   const citations = citationsOf(msg);
   const approvalId = approvalIdOf(msg);
   const attachmentsEl =

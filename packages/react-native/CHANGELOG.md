@@ -23,6 +23,15 @@ versions follow [semver](https://semver.org).
 - `UploadQueueStrip`: × on an upload in flight drops its tile (it used to
   stay, cancelled, with no way to remove it); cancelled uploads are not
   shown.
+- Behaviour now matches web (one shared implementation in `@poolse/react`):
+  relative times and dates use the viewer's locale instead of always
+  `en-US`; `presenceText` says "Offline" for someone offline with no
+  last-seen time (it returned nothing); `formatBytes` reads "1.5 KB" where
+  it said "2 KB"; the quick reactions are web's set (😢 instead of 🔥),
+  defined once; an image attachment whose type is in capitals (`Image/PNG`)
+  shows as an image, not a file card. `MessageComposer`'s `keyboardOffset`
+  (which never did anything) is marked deprecated, and the draft-key docs
+  give the real key.
 
 ### Fixed
 

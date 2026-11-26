@@ -1,11 +1,10 @@
+import { QUICK_REACTIONS } from '@poolse/react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PoolseIcon, type IconName } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { useTheme } from './theme/PoolseTheme.js';
-
-const DEFAULT_REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🙏', '🔥'];
 
 /** An app's own entry in the long-press menu (`extraActions`). */
 export interface MessageExtraAction {
@@ -27,7 +26,7 @@ export interface MessageActionsProps {
    * one to fire `onPickReaction(emoji)` and immediately close. When
    * omitted (or `onPickReaction` is omitted) the row is hidden.
    */
-  emojis?: string[];
+  emojis?: readonly string[];
   onPickReaction?: (emoji: string) => void;
   onReply?: () => void;
   onReplyInThread?: () => void;
@@ -71,7 +70,7 @@ export function MessageActions({
   visible,
   onClose,
   isSelf,
-  emojis = DEFAULT_REACTION_EMOJIS,
+  emojis = QUICK_REACTIONS,
   onPickReaction,
   onReply,
   onReplyInThread,

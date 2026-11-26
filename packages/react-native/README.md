@@ -94,7 +94,8 @@ original.
 - **Drafts.** Unsent text and the quote target stay with each conversation
   while you switch (in memory, always). With `draftStorage` (`get` / `set` /
   `remove` over strings, sync or async) they are also saved under
-  `poolse:draft:<conversationId>` and come back after a restart;
+  `<namespace>:draft:<conversationId>` (the client's namespace: server +
+  user) and come back after a restart;
   `persistDrafts={false}` keeps them in memory only. Sending clears them.
 - **Composer hooks** (`ConversationView` and `ThreadView`): `composerProps`
   go to the composer (`placeholder`, `disabled`, `formattingToolbar`,

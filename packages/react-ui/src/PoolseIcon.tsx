@@ -12,9 +12,8 @@
 //   <PoolseIcon name="send" size={20} />        // explicit pixel size
 //   <PoolseIcon name="presence" className="poolse-icon--presence" />
 //
-// Internally the SVG path data is bundled (~3KB total for the whole
-// 41-icon set, tree-shaken by Rollup when only one is imported via
-// the per-icon helpers in `./icons/`).
+// The SVG path data for the whole set is bundled from `./icons-data.ts`
+// (a few KB); `IconName` lists every icon.
 
 import { type ReactElement, type SVGProps } from 'react';
 import { ICONS, type IconName } from './icons-data.js';

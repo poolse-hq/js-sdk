@@ -2,13 +2,17 @@
 // message + an emoji picker popover. Powered by `useReactions`.
 
 import type { Uuid } from '@poolse/sdk';
-import { useCustomEmoji, useReactions, type CustomEmoji, type ReactionMap } from '@poolse/react';
+import {
+  QUICK_REACTIONS,
+  useCustomEmoji,
+  useReactions,
+  type CustomEmoji,
+  type ReactionMap,
+} from '@poolse/react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { EmojiGlyph, EmojiPicker, loadEmojiData, rememberEmoji } from './EmojiPicker.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { ignoreRolledBack } from './rowParts.js';
-
-const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '😢', '🙏'] as const;
 
 export interface ReactionStripProps {
   messageId: Uuid;
@@ -193,7 +197,7 @@ export function ReactionPicker({
       aria-label="Pick a reaction"
       onKeyDown={onKey}
     >
-      {COMMON_EMOJIS.map((e) => (
+      {QUICK_REACTIONS.map((e) => (
         <button
           key={e}
           type="button"

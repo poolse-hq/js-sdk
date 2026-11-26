@@ -90,7 +90,11 @@ export interface MessageRowProps {
   groupPosition?: BubbleGroupPosition;
   /** Trim threshold for long messages. 0 disables. */
   maxBodyLength?: number;
-  /** Render body as GitHub-flavored Markdown. */
+  /**
+   * Render body as GitHub-flavored Markdown. Defaults to `false` on a
+   * bare row (React Native's `MessageRow` defaults to `true`);
+   * `<ConversationView>` turns it on for every row.
+   */
   markdown?: boolean;
   /**
    * Show a colored sender label above the bubble body (other-side

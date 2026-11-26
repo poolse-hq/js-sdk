@@ -40,6 +40,32 @@ export {
 } from './use-attachment-upload.js';
 export { ATTACHMENT_URL_REFRESH_MS, useAttachmentUrl } from './use-attachment-url.js';
 export {
+  QUICK_REACTIONS,
+  USER_COLORS,
+  emojiFontSize,
+  emojiOnlyCount,
+  formatBytes,
+  hasMarkdown,
+  isImageContentType,
+  mentionsViewer,
+  partitionAttachments,
+  userColor,
+} from './chat-format.js';
+export {
+  formatMessageTime,
+  formatTimeOfDay,
+  gutterTime,
+  relativeTime,
+  useNow,
+  type TimeFormat,
+} from './chat-time.js';
+export {
+  presenceBadgeKind,
+  presenceStateLabel,
+  presenceText,
+  type PresenceBadgeKind,
+} from './presence-text.js';
+export {
   displayNameOf,
   UNKNOWN_USER_LABEL,
   useUserLabel,

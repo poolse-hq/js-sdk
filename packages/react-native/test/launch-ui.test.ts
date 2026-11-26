@@ -67,7 +67,7 @@ describe('presence', () => {
     expect(presenceText({ state: 'offline', last_seen_at: ago(5 * MIN) }, NOW)).toBe(
       'Last seen 5m ago',
     );
-    expect(presenceText({ state: 'offline', last_seen_at: null }, NOW)).toBeNull();
+    expect(presenceText({ state: 'offline', last_seen_at: null }, NOW)).toBe('Offline');
     expect(presenceText(null, NOW)).toBeNull();
   });
 });

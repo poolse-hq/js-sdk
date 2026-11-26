@@ -6,24 +6,23 @@ All notable changes to `@poolse/react` are documented here. Format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- `PoolseProvider` with `config` works under React StrictMode in development: the client it built is destroyed right after unmount (a tick later), and StrictMode's remount cancels that.
-- `useMessages`: `refetch`, `loadMore`, `loadUntil` and `send` that settle after a conversation switch no longer write into the conversation now shown. The first page keeps a `message:new` that arrived before it.
-- `usePins`, `useFiles`, `useScheduledMessages`, `useTranslation`, `useCatchUp`: an answer for the previous conversation (or language) is dropped and the list is cleared on a key change; `useFiles` keeps files that arrived live while the first page loaded; `useScheduledMessages` follows the user topic once the user is known, not only when known at mount. Their actions keep their identity across renders.
-- `useMe` mounts share one `GET /v1/me` (about ten at once when a conversation opens) and send none once the user is known.
-- `useReactions` follows the message's `reactions` when they change after mount (a reconnect catch-up), so changes missed while offline show.
-- `usePresence` keeps a user online while another of their tabs is open.
-- Live hooks (`useStage` and the other meeting values, `useLobby`, `useLiveCall`, `useRecording`, `useTranscript`, the capture lists, `useCallSummary`) drop a read still in flight when the call or conversation changes.
-- `useCallRoom` clears the previous call's error when the room changes. `useAgents`/`useMemory`/`useFollowups` load again for a new client. `useRoom`'s `join`/`leave` keep their identity. A thread reply's optimistic row shows on the sender's side at once. `uploadAll` rejects only after every upload settled, as documented.
-- `useAttachmentUrl`: the URL is fetched again before the server's one-hour
-  signature expires (`ATTACHMENT_URL_REFRESH_MS`, 50 min), so links and
-  images in a chat left open keep working; a new `refresh()` fetches one now
-  (ignored within 5 s of the last fetch). When the id changes, `url` is null
-  until the new one arrives instead of showing the previous attachment.
-
 ### Added
 
+- `displayNameOf(externalId, sources)` and
+  `useUserLabel(externalId, labelFor?, fallback?)`: the one order
+  every web and React Native component now uses to name a user — the host's
+  `labelFor`, then the `userResolver` profile, then an agent's name, then
+  `UNKNOWN_USER_LABEL` ("Unknown user"). A source that only echoes the
+  external id counts as no name.
+- Shared chat helpers, so web and React Native decide the same way (both UI
+  packages now use them): `isImageContentType` (any case),
+  `partitionAttachments` (images / clips / files), `formatBytes` ("1.5 KB",
+  "47 KB", "3.2 MB"), `userColor` / `USER_COLORS`, `hasMarkdown` /
+  `emojiOnlyCount` / `emojiFontSize`, `mentionsViewer`, `QUICK_REACTIONS`,
+  `formatTimeOfDay` / `formatMessageTime` / `gutterTime` and the
+  `TimeFormat` type, `relativeTime` (calendar "yesterday", the viewer's
+  locale) and `useNow`, `presenceStateLabel` / `presenceBadgeKind` /
+  `presenceText`.
 - `displayNameOf(externalId, { labelFor, profileName, agentName, fallback
 })` and `useUserLabel(externalId, labelFor?, fallback?)`: the one order
   every web and React Native component now uses to name a user — the host's
@@ -40,6 +39,24 @@ All notable changes to `@poolse/react` are documented here. Format follows
 ### Changed
 
 - README lists every exported hook; `useOptionalPoolse` is public.
+- `formatDayLabel`: across the spring daylight-saving change the day labels
+  are no longer one day off (the day before said "Today").
+
+### Fixed
+
+- `PoolseProvider` with `config` works under React StrictMode in development: the client it built is destroyed right after unmount (a tick later), and StrictMode's remount cancels that.
+- `useMessages`: `refetch`, `loadMore`, `loadUntil` and `send` that settle after a conversation switch no longer write into the conversation now shown. The first page keeps a `message:new` that arrived before it.
+- `usePins`, `useFiles`, `useScheduledMessages`, `useTranslation`, `useCatchUp`: an answer for the previous conversation (or language) is dropped and the list is cleared on a key change; `useFiles` keeps files that arrived live while the first page loaded; `useScheduledMessages` follows the user topic once the user is known, not only when known at mount. Their actions keep their identity across renders.
+- `useMe` mounts share one `GET /v1/me` (about ten at once when a conversation opens) and send none once the user is known.
+- `useReactions` follows the message's `reactions` when they change after mount (a reconnect catch-up), so changes missed while offline show.
+- `usePresence` keeps a user online while another of their tabs is open.
+- Live hooks (`useStage` and the other meeting values, `useLobby`, `useLiveCall`, `useRecording`, `useTranscript`, the capture lists, `useCallSummary`) drop a read still in flight when the call or conversation changes.
+- `useCallRoom` clears the previous call's error when the room changes. `useAgents`/`useMemory`/`useFollowups` load again for a new client. `useRoom`'s `join`/`leave` keep their identity. A thread reply's optimistic row shows on the sender's side at once. `uploadAll` rejects only after every upload settled, as documented.
+- `useAttachmentUrl`: the URL is fetched again before the server's one-hour
+  signature expires (`ATTACHMENT_URL_REFRESH_MS`, 50 min), so links and
+  images in a chat left open keep working; a new `refresh()` fetches one now
+  (ignored within 5 s of the last fetch). When the id changes, `url` is null
+  until the new one arrives instead of showing the previous attachment.
 
 ## [3.10.3] - 2026-11-26
 
