@@ -1,4 +1,4 @@
-import { fireEvent, waitFor } from '@testing-library/react';
+import { act, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationView, type DraftStorage } from '../src/index.js';
 import { msg, viewRoutes } from './_fixtures.js';
@@ -88,5 +88,48 @@ describe('drafts', () => {
     fireEvent.change(textarea(container), { target: { value: 'gone' } });
     expect(draftStorage.set).not.toHaveBeenCalled();
     expect(draftStorage.get).not.toHaveBeenCalled();
+  });
+
+  it('a send that resolves after a conversation switch leaves the new one alone', async () => {
+    let release: () => void = () => undefined;
+    const fetch = routedFetch(
+      viewRoutes([msg(1)], {
+        'GET /v1/conversations/c-2/messages': () =>
+          jsonResponse({ data: [{ ...msg(7), id: 'x7', conversation_id: 'c-2' }] }),
+        'GET /v1/conversations/c-2/members': () => jsonResponse({ data: [] }),
+        'POST /v1/conversations/c-2/read': () => noContent(),
+        'POST /v1/conversations/c-1/messages': (() =>
+          new Promise<Response>((resolve) => {
+            release = () => resolve(jsonResponse(msg(2, 'u-me')));
+          })) as never,
+      }),
+    );
+    const key2 = 'poolse:v1:https://chat.test#u-me:draft:c-2';
+    const { container, rerender } = renderWithProvider(
+      <ConversationView conversationId="c-1" loadFonts={false} />,
+      fetch,
+    );
+    await waitFor(() => expect(container.textContent).toContain('message 1'));
+    fireEvent.change(textarea(container), { target: { value: 'for c-1' } });
+    fireEvent.submit(container.querySelector('form.poolse-composer')!);
+    await waitFor(() =>
+      expect(fetch.calls.some((r) => r.method === 'POST' && r.url.includes('c-1/messages'))).toBe(
+        true,
+      ),
+    );
+
+    rerender(<ConversationView conversationId="c-2" loadFonts={false} />);
+    await waitFor(() => expect(container.textContent).toContain('message 7'));
+    fireEvent.click(container.querySelector('[data-message-id="x7"] [aria-label="Reply"]')!);
+    fireEvent.change(textarea(container), { target: { value: 'typed in c-2' } });
+    await waitFor(() => expect(localStorage.getItem(key2)).toContain('typed in c-2'));
+
+    await act(async () => {
+      release();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(localStorage.getItem(key2)).toContain('typed in c-2');
+    expect(container.querySelector('.poolse-composer__reply')?.textContent).toContain('message 7');
+    expect(textarea(container).value).toBe('typed in c-2');
   });
 });

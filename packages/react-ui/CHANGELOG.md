@@ -4,6 +4,15 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- `ConversationView`: a send that settles after the host switched
+  `conversationId` in place no longer clears the new conversation's draft,
+  reply chip or unread divider; its outcome goes to the draft of the
+  conversation it was sent from (a failed text goes back there).
+
 ## [3.10.3] - 2026-11-26
 
 No changes; released with the other packages.

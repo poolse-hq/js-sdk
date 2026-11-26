@@ -4,6 +4,17 @@ All notable changes to `@poolse/react-native` are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [semver](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- `ConversationView`: a `beforeSend` that throws puts the text back (with a
+  notice); the files stay.
+- `ConversationView`: a send that settles after the host switched
+  `conversationId` in place no longer clears the new conversation's reply
+  chip or drops the old text into it; the outcome goes to the draft of the
+  conversation it was sent from.
+
 ## [3.10.3] - 2026-11-26
 
 ### Added

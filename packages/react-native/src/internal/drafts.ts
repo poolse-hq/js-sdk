@@ -113,6 +113,25 @@ export class DraftStore {
     }
   }
 
+  /**
+   * A send from `conversationId` settled while another conversation was
+   * on screen: `sent` drops the quote that went out; otherwise `body`
+   * goes back into that conversation's draft (unless it has text again).
+   */
+  settleSend(
+    conversationId: string,
+    outcome: { sent: true } | { sent: false; body: string },
+    storage?: DraftStorage,
+  ): void {
+    const d = this.peek(conversationId);
+    if (outcome.sent) {
+      if (d?.quote) this.save(conversationId, { text: d.text, quote: null }, storage);
+      return;
+    }
+    if (d && d.text.trim().length > 0) return;
+    this.save(conversationId, { text: outcome.body, quote: d?.quote ?? null }, storage);
+  }
+
   clear(conversationId: string, storage?: DraftStorage): void {
     this.memory.delete(conversationId);
     if (storage && !this.namespace) {

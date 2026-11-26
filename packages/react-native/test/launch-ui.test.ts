@@ -168,6 +168,22 @@ describe('DraftStore', () => {
     expect(parseDraft('{oops')).toBeNull();
     expect(parseDraft('{"text":1}')).toBeNull();
   });
+  it('settles a send from a conversation no longer on screen', () => {
+    const store = new DraftStore();
+    // Sent: the quote went out with it; text typed meanwhile stays.
+    store.save('a', { text: '', quote });
+    store.settleSend('a', { sent: true });
+    expect(store.peek('a')).toBeNull();
+    store.save('a', { text: 'later', quote });
+    store.settleSend('a', { sent: true });
+    expect(store.peek('a')).toEqual({ text: 'later', quote: null });
+    // Failed: the words go back, with the quote; new text wins.
+    store.save('b', { text: '', quote });
+    store.settleSend('b', { sent: false, body: 'lost words' });
+    expect(store.peek('b')).toEqual({ text: 'lost words', quote });
+    store.settleSend('b', { sent: false, body: 'older' });
+    expect(store.peek('b')?.text).toBe('lost words');
+  });
 });
 
 describe('emoji', () => {

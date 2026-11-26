@@ -497,6 +497,10 @@ export function ConversationView({
   // `draftFor` says which conversation the state belongs to, so a
   // switch never saves one conversation's text under another's id.
   const [draftFor, setDraftFor] = useState(conversationId);
+  // The conversation on screen now — a send that settles after a switch
+  // checks it, so its outcome lands in its own conversation's draft.
+  const conversationIdRef = useRef(conversationId);
+  conversationIdRef.current = conversationId;
   const [draftText, setDraftText] = useState(() => drafts.peek(conversationId)?.text ?? '');
   const composerRef = useRef<MessageComposerHandle | null>(null);
   useImperativeHandle(
@@ -982,9 +986,25 @@ export function ConversationView({
         body: string,
         opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[]; mentions?: Uuid[] },
       ) => {
+        // The conversation this send belongs to (the closure's id); the
+        // view may be showing another one by the time it settles.
+        const sentFrom = conversationId;
+        const switched = () => conversationIdRef.current !== sentFrom;
         let draft: MessageCreateRequest = { body, ...opts };
         if (beforeSend) {
-          const changed = await beforeSend(draft);
+          let changed: MessageCreateRequest | false;
+          try {
+            changed = await beforeSend(draft);
+          } catch (err) {
+            // The app's hook threw: nothing went out, the text goes back
+            // (the composer keeps the files).
+            if (switched()) drafts.settleSend(sentFrom, { sent: false, body }, storage);
+            else {
+              setDraftText((now) => (now ? now : body));
+              setNotice(sendErrorNotice(err));
+            }
+            throw err;
+          }
           // Cancelled: the composer keeps the text and files.
           if (changed === false) return false;
           draft = changed;
@@ -993,6 +1013,14 @@ export function ConversationView({
         try {
           await send({ ...draft, id });
         } catch (err) {
+          if (switched()) {
+            if (readDlpError(err) || isQuoteGone(err)) discardSend(id);
+            const kept =
+              !readDlpError(err) &&
+              (err instanceof MessageQueuedError || (chat.outboxEnabled && !isQuoteGone(err)));
+            drafts.settleSend(sentFrom, kept ? { sent: true } : { sent: false, body }, storage);
+            return undefined;
+          }
           // Offline: queued, it goes out by itself. Refused while the
           // outbox is on: the row stays with Retry / Delete — except a
           // deleted quote, which isn't worth a retry.
@@ -1016,9 +1044,12 @@ export function ConversationView({
           setNotice(sendErrorNotice(err));
           throw err;
         }
-        setReplyingTo(null);
-        setAutoReadPaused(false);
-        onSent?.(conversationId);
+        if (switched()) drafts.settleSend(sentFrom, { sent: true }, storage);
+        else {
+          setReplyingTo(null);
+          setAutoReadPaused(false);
+        }
+        onSent?.(sentFrom);
         return undefined;
       },
       value: draftText,
@@ -1064,6 +1095,8 @@ export function ConversationView({
       emojiPicker,
       beforeSend,
       appComposerProps,
+      drafts,
+      storage,
     ],
   );
 

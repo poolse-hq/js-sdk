@@ -1070,10 +1070,33 @@ export function ConversationView({
       draft = changed;
     }
     const req = { ...draft, id: draft.id ?? safeUuid() };
+    // The conversation (and its draft) this send belongs to. When the
+    // host swaps `conversationId` while it's in flight, what follows
+    // applies to that conversation's stored draft, never to the one
+    // now on screen.
+    const forConversation = conversationIdRef.current;
+    const keyAtSend = draftKeyFor();
+    const replyAtSend = replyingTo;
+    const switched = () => conversationIdRef.current !== forConversation;
     try {
       await send(req);
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'quoted_message_deleted') {
+      const quoteGone = err instanceof ApiError && err.code === 'quoted_message_deleted';
+      if (switched()) {
+        // Queued, or a failed row with Retry: nothing to put back.
+        const kept = err instanceof MessageQueuedError || (chat.outboxEnabled && !quoteGone);
+        if (kept && !readDlpError(err)) return;
+        if (quoteGone || readDlpError(err)) discardSend(req.id);
+        // Nothing went out: the text waits in that conversation's draft.
+        if (keyAtSend && req.body) {
+          drafts.write(storage, keyAtSend, {
+            text: req.body,
+            replyTo: quoteGone ? null : replyAtSend,
+          });
+        }
+        return;
+      }
+      if (quoteGone) {
         // Not worth a Retry: the text goes back into the composer.
         discardSend(req.id);
         setReplyingTo(null);
@@ -1099,12 +1122,17 @@ export function ConversationView({
       // stays with Retry / Delete. Either way the composer is done.
       if (!(err instanceof MessageQueuedError) && !chat.outboxEnabled) throw err;
     }
+    if (switched()) {
+      // Sent from a conversation no longer on screen: clear its draft
+      // (the quote went out), leave this one's text and reply alone.
+      if (keyAtSend) drafts.clear(storage, keyAtSend);
+      return;
+    }
     setReplyingToState(null);
     // Sending is reading: the divider goes.
     setUnreadMarker(null);
     draftRef.current = { text: '', replyTo: null };
-    const key = draftKeyFor();
-    if (key) drafts.clear(storage, key);
+    if (keyAtSend) drafts.clear(storage, keyAtSend);
   };
 
   // Every delete asks first (the host's confirmDelete, else the
