@@ -140,7 +140,10 @@ export function whiteboardItemOf(id: string, raw: unknown): WhiteboardItem | nul
       return {
         ...base,
         kind: 'stroke',
-        points: points.slice(0, WHITEBOARD_LIMITS.pointsPerStroke * 2 - (points.length % 2)),
+        points: points.slice(
+          0,
+          Math.min(points.length - (points.length % 2), WHITEBOARD_LIMITS.pointsPerStroke * 2),
+        ),
         width: finite(o.width) ? Math.min(64, Math.max(1, o.width)) : 3,
       };
     }
@@ -344,16 +347,51 @@ export class WhiteboardModel {
 /**
  * Keep a Y.Doc in sync with one {@link DocChannel}: sync on every
  * (re)join, apply remote updates, send local ones. Returns a function
- * that unbinds (the channel and the doc stay open).
+ * that unbinds (the channel and the doc stay open); its `setCanWrite`
+ * applies rights that changed without a rejoin (a token refresh).
+ *
+ * Edits made before the join, while read-only, or whose send failed
+ * (a timeout while reconnecting, a rate limit) are not lost: the doc's
+ * state goes out again on the next join with write rights, or shortly
+ * after a failed send. Peers drop what they already have.
  */
-export function bindYDoc(Y: YjsModule, ydoc: YDocLike, channel: DocChannel): () => void {
+export function bindYDoc(
+  Y: YjsModule,
+  ydoc: YDocLike,
+  channel: DocChannel,
+): (() => void) & { setCanWrite: (canWrite: boolean) => void } {
   const origin = Symbol('relay');
   const doc = ydoc as never;
   let canWrite = false;
+  let joined = false;
+  // Local edits peers may not have.
+  let unsent = false;
+  let retry: ReturnType<typeof setTimeout> | null = null;
+  let unbound = false;
+
+  const send = (update: Uint8Array) => {
+    channel.sendUpdate(update).catch(() => {
+      unsent = true;
+      if (!retry && !unbound) {
+        retry = setTimeout(() => {
+          retry = null;
+          resend();
+        }, RESEND_DELAY_MS);
+      }
+    });
+  };
+  const resend = () => {
+    if (unbound || !unsent || !joined || !canWrite) return;
+    unsent = false;
+    send(Y.encodeStateAsUpdate(doc));
+  };
+
   const offs = [
     channel.onJoined((info) => {
+      joined = true;
       canWrite = info.rights === 'write';
       void channel.requestSync(Y.encodeStateVector(doc)).catch(() => {});
+      resend();
     }),
     channel.onUpdate((u) => Y.applyUpdate(doc, u, origin)),
     channel.onSyncReply((u) => Y.applyUpdate(doc, u, origin)),
@@ -362,15 +400,29 @@ export function bindYDoc(Y: YjsModule, ydoc: YDocLike, channel: DocChannel): () 
     }),
   ];
   const onLocal = (update: Uint8Array, from: unknown) => {
-    if (from === origin || !canWrite) return;
-    void channel.sendUpdate(update).catch(() => {});
+    if (from === origin) return;
+    if (!joined || !canWrite) {
+      unsent = true;
+      return;
+    }
+    send(update);
   };
   ydoc.on('update', onLocal);
-  return () => {
+  const unbind = () => {
+    unbound = true;
+    if (retry) clearTimeout(retry);
     offs.forEach((off) => off());
     ydoc.off('update', onLocal);
   };
+  return Object.assign(unbind, {
+    setCanWrite: (next: boolean) => {
+      canWrite = next;
+      resend();
+    },
+  });
 }
+
+const RESEND_DELAY_MS = 2_000;
 
 /** What {@link openWhiteboard} returns: the model plus the connection behind it. */
 export interface OpenWhiteboard {
@@ -412,7 +464,14 @@ export function openWhiteboard(
     timer = setTimeout(
       () => {
         void opts.refreshAccess!()
-          .then((next) => channel.refresh(next.docToken).then(() => schedule(next.expiresAt)))
+          .then((next) =>
+            channel.refresh(next.docToken).then((r) => {
+              // A refresh can change what you may do (the meeting ended).
+              rights = r.rights;
+              unbind.setCanWrite(r.rights === 'write');
+              schedule(r.expiresAt ?? next.expiresAt);
+            }),
+          )
           .catch(() => {});
       },
       Math.max(5_000, left * 0.8),

@@ -33,6 +33,7 @@ import { diagnoseCallNetwork, qualityReportBody } from '../src/voice/call-qualit
 import { disconnectReasonOf } from '../src/voice/call-room.js';
 import {
   WhiteboardModel,
+  bindYDoc,
   whiteboardItemOf,
   type YjsModule,
   type YDocLike,
@@ -349,6 +350,57 @@ describe('whiteboard', () => {
     expect(a.getItems().map((i) => i.kind)).toContain('stroke');
     a.destroy();
     b.destroy();
+  });
+
+  it('sends edits made before the join, and again after a failed send', async () => {
+    vi.useFakeTimers();
+    try {
+      const joined: Array<(i: { rights: string }) => void> = [];
+      let fail = true;
+      const sent: Uint8Array[] = [];
+      const channel = {
+        onJoined: (fn: (i: { rights: string }) => void) => (joined.push(fn), () => {}),
+        onUpdate: () => () => {},
+        onSyncReply: () => () => {},
+        onSyncRequest: () => () => {},
+        requestSync: () => Promise.resolve(),
+        sendSyncReply: () => Promise.resolve(),
+        sendUpdate: (u: Uint8Array) => {
+          if (fail) return Promise.reject(new Error('timeout'));
+          sent.push(u);
+          return Promise.resolve();
+        },
+      };
+      const doc = newDoc();
+      const unbind = bindYDoc(Ymod, doc, channel as never);
+      const model = new WhiteboardModel(Ymod, doc, 'ana');
+      model.add({ kind: 'stroke', points: [0, 0, 10, 10], color: '#000000', width: 2 });
+
+      joined.forEach((fn) => fn({ rights: 'write' })); // the first send fails
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sent).toHaveLength(0);
+      fail = false;
+      await vi.advanceTimersByTimeAsync(2_000); // resent on its own
+      expect(sent).toHaveLength(1);
+      const peer = newDoc();
+      Y.applyUpdate(peer as never, sent[0]!);
+      expect(new WhiteboardModel(Ymod, peer, 'ben').getItems()).toHaveLength(1);
+
+      // A refresh that takes write rights away stops sending.
+      unbind.setCanWrite(false);
+      model.add({ kind: 'stroke', points: [1, 1, 2, 2], color: '#000000', width: 2 });
+      expect(sent).toHaveLength(1);
+      unbind.setCanWrite(true);
+      expect(sent).toHaveLength(2);
+      unbind();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps strokes to whole points', () => {
+    const item = whiteboardItemOf('x', { kind: 'stroke', points: [1, 2, 3, 4, 5] });
+    expect(item && 'points' in item ? item.points : null).toEqual([1, 2, 3, 4]);
   });
 
   it('never trusts stored values', () => {
