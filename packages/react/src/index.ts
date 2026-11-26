@@ -359,6 +359,11 @@ export {
   type UseRecordingUrl,
 } from './use-meetings.js';
 export {
+  useMediaRenewal,
+  type UseMediaRenewal,
+  type UseMediaRenewalOptions,
+} from './use-media-renewal.js';
+export {
   ASK_QUESTION_MAX,
   PLAYBACK_RATES,
   activeSegmentIndex,

@@ -30,6 +30,7 @@ import {
   useAttachmentUrl,
   useCallSummary,
   useClip,
+  useMediaRenewal,
   useMembers,
   useRecordingPlayback,
   useRecordingUrl,
@@ -470,6 +471,16 @@ export function ClipPlayer({
   const label = info ? formatTimeRange(info.startMs, info.endMs) : null;
   const title = mode === 'clip' ? cut.clip?.title : null;
   const status = mode === 'clip' ? cut.clip?.status : null;
+  // A media error renews the link (they expire), at most three times a
+  // minute; after that the clip can't play and says so.
+  const renewal = useMediaRenewal(
+    () => {
+      if (mode === 'range') recUrl.refresh();
+      if (mode === 'clip') cut.refresh();
+    },
+    `${mode}:${attachment?.id ?? clipId ?? rangeClip?.recordingId ?? ''}`,
+    mode === 'file' ? { max: 0 } : undefined,
+  );
 
   const props = {
     ref: (el: HTMLMediaElement | null) => {
@@ -488,10 +499,7 @@ export function ClipPlayer({
         if (media.current.currentTime * 1000 >= rangeClip.endMs) media.current.pause();
       }
     },
-    onError: () => {
-      if (mode === 'range') recUrl.refresh();
-      if (mode === 'clip') cut.refresh();
-    },
+    onError: () => void renewal.renew(),
   };
 
   return (
@@ -519,6 +527,10 @@ export function ClipPlayer({
         </p>
       ) : error ? (
         <p className="poolse-clip__error">{meetingsErrorMessage(error)}</p>
+      ) : renewal.exhausted ? (
+        <p className="poolse-clip__error" role="alert">
+          The clip couldn’t be played.
+        </p>
       ) : !url ? (
         <div className="poolse-clip__loading" aria-busy="true">
           Loading…
@@ -594,7 +606,7 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
     // Where to be once the (new) source has loaded: a seek before
     // metadata, or the spot an expired link broke off at.
     const resume = useRef<{ ms: number; play: boolean } | null>(null);
-    const renewals = useRef<number[]>([]);
+    const renewal = useMediaRenewal(refresh, recordingId);
 
     const seekMedia = (mediaMs: number, play: boolean) => {
       const el = media.current;
@@ -681,13 +693,9 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
       onError: () => {
         // Most likely the five-minute link ran out: renew it (at most
         // three times a minute) and carry on from the same spot.
-        const now = Date.now();
-        renewals.current = renewals.current.filter((t) => now - t < 60_000);
-        if (renewals.current.length >= 3) return;
-        renewals.current.push(now);
         const el = media.current;
-        resume.current = { ms: el ? el.currentTime * 1000 : posMs, play: el ? !el.paused : false };
-        refresh();
+        const at = { ms: el ? el.currentTime * 1000 : posMs, play: el ? !el.paused : false };
+        if (renewal.renew()) resume.current = at;
       },
     };
 
@@ -700,6 +708,10 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
           {error && !url ? (
             <p className="poolse-player__note" role="alert">
               {meetingsErrorMessage(error)}
+            </p>
+          ) : renewal.exhausted ? (
+            <p className="poolse-player__note" role="alert">
+              The recording couldn’t be played. Try again later.
             </p>
           ) : !url ? (
             <p className="poolse-player__note" aria-busy="true">

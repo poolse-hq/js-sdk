@@ -31,6 +31,7 @@ import {
   useAttachmentUrl,
   useCallSummary,
   useClip,
+  useMediaRenewal,
   useMembers,
   useRecordingPlayback,
   useRecordingUrl,
@@ -528,6 +529,16 @@ export function ClipPlayer({
   const isVideo = !!contentType?.startsWith('video/');
   const ranged = mode === 'range';
   const status = mode === 'clip' ? cut.clip?.status : null;
+  // A media error renews the link (they expire), at most three times a
+  // minute; after that the clip can't play and says so.
+  const renewal = useMediaRenewal(
+    () => {
+      if (mode === 'range') recUrl.refresh();
+      if (mode === 'clip') cut.refresh();
+    },
+    `${mode}:${attachment?.id ?? clipId ?? rangeClip?.recordingId ?? ''}`,
+    mode === 'file' ? { max: 0 } : undefined,
+  );
   const m = useMediaState();
   const subtle = { color: theme.colors.textSubtle, fontFamily: theme.fonts.body };
   const label = info ? formatTimeRange(info.startMs, info.endMs) : null;
@@ -565,6 +576,10 @@ export function ClipPlayer({
           <Text style={[styles.meta, { color: theme.colors.danger }]}>
             {meetingsErrorMessage(error)}
           </Text>
+        ) : renewal.exhausted ? (
+          <Text style={[styles.meta, { color: theme.colors.danger }]} accessibilityRole="alert">
+            The clip couldn’t be played.
+          </Text>
         ) : url ? (
           <>
             {render({
@@ -583,10 +598,7 @@ export function ClipPlayer({
                 if (ranged && rangeClip) m.seekTo(rangeClip.startMs);
               },
               onEnd: () => m.setPaused(true),
-              onError: () => {
-                if (mode === 'range') recUrl.refresh();
-                if (mode === 'clip') cut.refresh();
-              },
+              onError: () => void renewal.renew(),
               ...(isVideo ? { style: styles.clipVideo } : {}),
             })}
             <View style={styles.controls}>
@@ -660,7 +672,7 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
     const m = useMediaState();
     const [rate, setRate] = useState<PlaybackRate>(1);
     const [skip, setSkip] = useState(defaultSkipSilence);
-    const renewals = useRef<number[]>([]);
+    const renewal = useMediaRenewal(refresh, recordingId);
     const resumeAt = useRef<number | null>(null);
 
     useImperativeHandle(ref, () => ({
@@ -704,6 +716,10 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
           <Text style={[styles.note, { color: theme.colors.danger }]} accessibilityRole="alert">
             {meetingsErrorMessage(error)}
           </Text>
+        ) : renewal.exhausted ? (
+          <Text style={[styles.note, { color: theme.colors.danger }]} accessibilityRole="alert">
+            The recording couldn’t be played. Try again later.
+          </Text>
         ) : !url ? (
           <Text style={[styles.note, subtle]}>Loading the recording…</Text>
         ) : (
@@ -736,12 +752,8 @@ export const RecordingPlayer = forwardRef<RecordingPlayerHandle, RecordingPlayer
               onError: () => {
                 // Most likely the five-minute link ran out: renew it (at
                 // most three times a minute) and go on from the same spot.
-                const now = Date.now();
-                renewals.current = renewals.current.filter((t) => now - t < 60_000);
-                if (renewals.current.length >= 3) return;
-                renewals.current.push(now);
-                resumeAt.current = m.posMs;
-                refresh();
+                const at = m.posMs;
+                if (renewal.renew()) resumeAt.current = at;
               },
               ...(isAudio ? {} : { style: styles.video }),
             })}

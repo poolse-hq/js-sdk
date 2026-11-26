@@ -22,6 +22,10 @@ All notable changes to `@poolse/react` are documented here. Format follows
   `labelFor`, then the `userResolver` profile, then an agent's name, then
   `UNKNOWN_USER_LABEL` ("Unknown user"). A source that only echoes the
   external id counts as no name.
+- `useMediaRenewal(refresh, key, { max, windowMs })`: renew an expiring
+  media link from a player's `onError`, at most `max` times (default 3)
+  a minute, with `exhausted` once the cap is reached. Used by
+  `ClipPlayer` and `RecordingPlayer` on both platforms.
 
 ## [3.10.3] - 2026-11-26
 

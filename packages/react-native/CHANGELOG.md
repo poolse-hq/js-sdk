@@ -39,6 +39,10 @@ versions follow [semver](https://semver.org).
 - `meetingTimeText` names the end day when a meeting runs past midnight
   ("Tue 21 Nov · 23:00 – Wed 22 Nov 01:00"), as web does, and takes an
   optional `locale`.
+- `ClipPlayer` renews a broken link at most three times a minute and
+  then shows "The clip couldn’t be played." instead of fetching a new
+  link on every media error; `RecordingPlayer` shows an error once its
+  renewals run out.
 
 ## [3.10.3] - 2026-11-26
 

@@ -45,6 +45,10 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 - `MeetingCard` disables the answers while one is saving, so a quick
   second click can no longer roll back to a stale answer when the first
   fails.
+- `ClipPlayer` renews a broken link at most three times a minute and
+  then shows "The clip couldn’t be played."; it used to fetch a new link
+  on every media error, forever. `RecordingPlayer` says the recording
+  couldn't be played once its renewals run out instead of going quiet.
 
 ## [3.10.3] - 2026-11-26
 

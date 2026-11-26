@@ -9,7 +9,7 @@ import { Avatar } from '../src/Avatar.js';
 import { ConversationView } from '../src/ConversationView.js';
 import { MemberList } from '../src/MemberList.js';
 import { MessageExtrasProvider } from '../src/messageExtras.js';
-import { AskMeetings, RecordingPlayer, SummaryCard } from '../src/Meetings.js';
+import { AskMeetings, ClipPlayer, RecordingPlayer, SummaryCard } from '../src/Meetings.js';
 import { member, me, msg, names, viewRoutes } from './_fixtures.js';
 import { jsonResponse, renderWithProvider, routedFetch } from './_helpers.js';
 
@@ -343,5 +343,32 @@ describe('RecordingPlayer', () => {
     expect(screen.getByText('Pricing')).toBeTruthy();
     expect(screen.getByText('Hello all')).toBeTruthy();
     expect(screen.getByText('Marko')).toBeTruthy();
+  });
+});
+
+describe('ClipPlayer', () => {
+  it('renews a broken link at most three times, then says the clip cannot play', async () => {
+    let n = 0;
+    const { container } = renderWithProvider(
+      <ClipPlayer clip={{ recordingId: 'r-9', startMs: 0, endMs: 5000 }} />,
+      routedFetch({
+        'GET /v1/recordings/r-9/download-url': () =>
+          jsonResponse({
+            url: `https://files.test/r-9.ogg?sig=${++n}`,
+            expires_at: '2026-11-21T11:00:00Z',
+            content_type: 'audio/ogg',
+          }),
+      }),
+    );
+    for (let i = 1; i <= 4; i++) {
+      await waitFor(() =>
+        expect(container.querySelector('audio')?.getAttribute('src')).toBe(
+          `https://files.test/r-9.ogg?sig=${i}`,
+        ),
+      );
+      fireEvent.error(container.querySelector('audio')!);
+    }
+    await screen.findByText('The clip couldn’t be played.');
+    expect(n).toBe(4);
   });
 });
