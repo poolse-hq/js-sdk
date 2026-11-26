@@ -13,7 +13,10 @@ import type { Conversation, Message, Uuid } from './types.js';
 export interface LocalCacheOptions {
   /** Newest messages kept per conversation. Default 50. */
   messagesPerConversation?: number;
-  /** Conversations whose messages are kept (least recently used dropped). Default 50. */
+  /**
+   * Conversations whose messages are kept, in memory and in storage; the
+   * least recently used is dropped from both. Default 50.
+   */
   conversations?: number;
   /** Conversation-list rows kept. Default 200. */
   listRows?: number;
@@ -31,6 +34,11 @@ export class LocalCache {
   private readonly maxConversations: number;
   private readonly listRows: number;
   private destroyed = false;
+  // Set while `clear()` runs: a flush in progress stops writing.
+  private clearing = false;
+  // Most recently used last, as stored under INDEX_KEY (bounds storage
+  // across restarts).
+  private stored: Uuid[] | null = null;
 
   constructor(
     /** Resolves to this client's storage slice once its namespace is known; null without storage. */
@@ -109,10 +117,14 @@ export class LocalCache {
       const scope = await this.scope();
       const writes = [...this.pendingWrites];
       this.pendingWrites.clear();
-      if (!scope || this.destroyed) return;
+      if (!scope || this.destroyed || this.clearing) return;
       for (const [key, value] of writes) {
+        // Sign-out may land between two writes: write nothing after it.
+        if (this.destroyed || this.clearing) return;
         if (value === null) await scope.remove(key);
         else await scope.setJson(key, value);
+        const id = key.startsWith(MESSAGES_PREFIX) ? key.slice(MESSAGES_PREFIX.length) : null;
+        if (id !== null) await this.noteStored(scope, id, value !== null);
       }
     })().finally(() => {
       this.flushing = null;
@@ -122,13 +134,26 @@ export class LocalCache {
     return run;
   }
 
-  /** Drop everything, in memory and in storage. */
+  /**
+   * Drop everything in memory and stop writing; resolves once a write in
+   * progress has stopped, so the caller can then clear the storage
+   * without the cache writing history back into it.
+   */
   async clear(): Promise<void> {
+    this.clearing = true;
     if (this.writeTimer) clearTimeout(this.writeTimer);
     this.writeTimer = null;
     this.pendingWrites.clear();
     this.messages.clear();
     this.list = null;
+    this.stored = null;
+    try {
+      await this.flushing;
+    } catch {
+      // A failed write is no reason to keep data around.
+    }
+    this.pendingWrites.clear();
+    this.clearing = false;
   }
 
   /** @internal */
@@ -152,6 +177,29 @@ export class LocalCache {
     }
   }
 
+  // Track which conversations have history in storage, most recently
+  // written last, and delete the ones past the bound.
+  private async noteStored(
+    scope: ScopedStorage,
+    conversationId: Uuid,
+    kept: boolean,
+  ): Promise<void> {
+    if (!this.stored) {
+      const index = await scope.getJson<Uuid[]>(INDEX_KEY);
+      this.stored ??= Array.isArray(index) ? index.filter((id) => typeof id === 'string') : [];
+    }
+    const list = this.stored.filter((id) => id !== conversationId);
+    if (kept) list.push(conversationId);
+    const evicted = list.splice(0, Math.max(0, list.length - this.maxConversations));
+    this.stored = list;
+    for (const id of evicted) {
+      if (this.destroyed || this.clearing) return;
+      await scope.remove(messagesKey(id));
+    }
+    if (this.destroyed || this.clearing) return;
+    await scope.setJson(INDEX_KEY, list);
+  }
+
   private queueWrite(key?: string, value?: unknown): void {
     if (key !== undefined) this.pendingWrites.set(key, value);
     if (this.writeTimer || this.flushing) return;
@@ -163,4 +211,6 @@ export class LocalCache {
 }
 
 const LIST_KEY = 'conversations';
-const messagesKey = (id: Uuid) => `messages:${id}`;
+const INDEX_KEY = 'messages-index';
+const MESSAGES_PREFIX = 'messages:';
+const messagesKey = (id: Uuid) => `${MESSAGES_PREFIX}${id}`;

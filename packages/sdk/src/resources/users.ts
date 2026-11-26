@@ -61,10 +61,15 @@ export class UsersResource {
       return null;
     }
 
-    const promise = Promise.resolve()
+    // `invalidate()` while this call runs replaces it with a newer one:
+    // only the call still current may write the cache, or an old answer
+    // landing late would bring back the stale profile.
+    const current = () => this.pending.get(externalId) === promise;
+    const promise: Promise<PoolseUserProfile | null> = Promise.resolve()
       .then(() => resolver(externalId))
       .then(
         (profile) => {
+          if (!current()) return this.cache.get(externalId) ?? profile ?? null;
           this.cache.set(externalId, profile ?? null);
           this.pending.delete(externalId);
           this.notify(externalId);
@@ -76,6 +81,7 @@ export class UsersResource {
           // endpoint on every re-render. Customers can call
           // `invalidate(externalId)` to retry.
           console.error('[poolse] userResolver failed for', externalId, err);
+          if (!current()) return this.cache.get(externalId) ?? null;
           this.cache.set(externalId, null);
           this.pending.delete(externalId);
           this.notify(externalId);
