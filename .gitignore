@@ -18,3 +18,4 @@ packages/native/android/local.properties
 
 # Generated API reference (pnpm docs:api)
 docs/api/
+*.tgz

@@ -36,6 +36,8 @@ export interface ThreadViewProps {
   rootMessage: Message;
   /** Triggered when the user closes the pane (X button). */
   onClose?: () => void;
+  /** Asked before a reply is deleted. Defaults to `window.confirm`; false keeps it. */
+  confirmDelete?: (message: Message) => boolean | Promise<boolean>;
   /**
    * Optional override for rendering each reply. Defaults to the
    * brand-styled <MessageBubble>.
@@ -98,6 +100,7 @@ export function ThreadView({
   composerAccessory,
   composerHandle,
   beforeSend,
+  confirmDelete,
 }: ThreadViewProps) {
   const { me } = useMe();
   const followState = useThreadFollow(follow ? rootMessage.id : null);
@@ -219,7 +222,17 @@ export function ThreadView({
         await edit(msg.id, body);
         setEditingId(null);
       }}
-      onDelete={() => void deleteReply(msg.id)}
+      onDelete={() => {
+        const ask =
+          confirmDelete ??
+          ((): boolean =>
+            typeof globalThis.confirm === 'function'
+              ? globalThis.confirm('Delete this message?')
+              : false);
+        void Promise.resolve(ask(msg))
+          .then((ok) => (ok ? deleteReply(msg.id) : undefined))
+          .catch(() => undefined);
+      }}
       {...(layout ? { layout } : {})}
       {...(timeFormat ? { timeFormat } : {})}
       {...(showAvatars !== undefined ? { showAvatar: showAvatars } : {})}

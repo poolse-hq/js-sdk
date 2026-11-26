@@ -1,7 +1,7 @@
 {
   "name": "@poolse/react-ui",
   "version": "3.10.3",
-  "description": "React chat UI components — ConversationView, PoolseInbox, MessageBubble, TypingIndicator, ReactionPicker, ThreadView. CSS-variable theming, render-prop escape hatches. MIT — alternative to Sendbird, Stream, TalkJS, CometChat.",
+  "description": "React chat UI components — ConversationView, PoolseInbox, MessageBubble, TypingIndicator, ReactionPicker, ThreadView. CSS-variable theming, render-prop escape hatches. An alternative to Sendbird, Stream, TalkJS, CometChat.",
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [
     "chat",

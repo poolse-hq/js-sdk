@@ -114,7 +114,8 @@ export interface ConversationViewProps {
   /** The message-list shortcuts (j / k / r / t / e / Delete). Defaults to `true`. */
   keyboardShortcuts?: boolean;
   /**
-   * Asked before the Delete shortcut deletes a message. Defaults to
+   * Asked before a message is deleted, from the Delete shortcut or the
+   * message's Delete action (and in threads). Defaults to
    * `window.confirm`. Return false to keep it.
    */
   confirmDelete?: (message: Message) => boolean | Promise<boolean>;
@@ -1106,6 +1107,20 @@ export function ConversationView({
     if (key) drafts.clear(storage, key);
   };
 
+  // Every delete asks first (the host's confirmDelete, else the
+  // browser's), and says so when it didn't go through.
+  const askThenDelete = (m: Message) => {
+    const ask =
+      confirmDelete ??
+      ((): boolean =>
+        typeof globalThis.confirm === 'function'
+          ? globalThis.confirm('Delete this message?')
+          : false);
+    void Promise.resolve(ask(m))
+      .then((ok) => (ok ? deleteMsg(m.id) : undefined))
+      .catch(() => setSendNotice("Couldn't delete the message. Try again."));
+  };
+
   // ↑ in an empty composer: edit the last message you can still edit.
   const editLast = () => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -1187,15 +1202,7 @@ export function ConversationView({
         setEditingId(focusedMsg.id);
       } else if (matchesAny(e, km.delete) && isSelf && actions) {
         handled();
-        const ask =
-          confirmDelete ??
-          ((): boolean =>
-            typeof globalThis.confirm === 'function'
-              ? globalThis.confirm('Delete this message?')
-              : false);
-        void Promise.resolve(ask(focusedMsg)).then((ok) => {
-          if (ok) void deleteMsg(focusedMsg.id).catch(() => undefined);
-        });
+        askThenDelete(focusedMsg);
       }
     }
   };
@@ -1457,7 +1464,7 @@ export function ConversationView({
                       await edit(msg.id, body);
                       setEditingId(null);
                     }}
-                    onDelete={() => void deleteMsg(msg.id)}
+                    onDelete={() => askThenDelete(msg)}
                     onOpenThread={() => setThreadRootId(msg.id)}
                     onQuote={() => setReplyingTo(msg)}
                     {...(!isSelf && msg.sequence !== Number.MAX_SAFE_INTEGER
@@ -1604,6 +1611,7 @@ export function ConversationView({
               {...attachmentRules}
               {...(composerProps ? { composerProps } : {})}
               {...(beforeSend ? { beforeSend } : {})}
+              {...(confirmDelete ? { confirmDelete } : {})}
             />
           </div>
         )}

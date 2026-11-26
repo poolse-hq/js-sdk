@@ -59,16 +59,22 @@ final class CallKitController: NSObject, CXProviderDelegate {
 
   weak var actions: CallKitActions?
 
+  /// The host app's name as the user sees it under its icon.
+  static let appName: String =
+    (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+      ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String)
+      ?? "Call"
+
   private override init() {
     // init(localizedName:) is deprecated (iOS 14 reads the bundle's
-    // display name) but still honoured; the label is the product's.
-    let config = CXProviderConfiguration(localizedName: "Loop")
+    // display name) but still honoured: the host app's own name.
+    let config = CXProviderConfiguration(localizedName: CallKitController.appName)
     config.supportsVideo = true
     // Two groups: room for a second call to ring beside the live one, so
     // iOS presents its call-waiting screen (End & Accept / Decline). With
     // one, a second call rang as a plain Accept/Decline that silently
-    // ended the first. There is never a second call in progress — Loop
-    // cannot hold: answering one ends the other (`callKitHoldForWaiting`).
+    // ended the first. There is never a second call in progress — the
+    // core cannot hold: answering one ends the other (`callKitHoldForWaiting`).
     config.maximumCallGroups = 2
     config.maximumCallsPerCallGroup = 1
     config.supportedHandleTypes = [.generic]
@@ -260,7 +266,7 @@ final class CallKitController: NSObject, CXProviderDelegate {
   private func update(title: String?, handle: String?, video: Bool) -> CXCallUpdate {
     let u = CXCallUpdate()
     if let handle = handle { u.remoteHandle = CXHandle(type: .generic, value: handle) }
-    u.localizedCallerName = title ?? "Loop"
+    u.localizedCallerName = title ?? CallKitController.appName
     u.hasVideo = video
     u.supportsHolding = false
     u.supportsGrouping = false
