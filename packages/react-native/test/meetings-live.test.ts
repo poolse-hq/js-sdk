@@ -4,6 +4,7 @@ import {
   avatarOverflow,
   captionLines,
   formatCountdown,
+  meetingTimeText,
   overrunText,
   pointsToPath,
   qualityBars,
@@ -55,6 +56,23 @@ describe('live meeting helpers', () => {
   it('nudges only past a whole minute', () => {
     expect(overrunText('Budget review', 59_000)).toBeNull();
     expect(overrunText('Budget review', 3 * 60_000 + 5)).toBe('Budget review is 3 min over');
+  });
+
+  it('names the end day when a meeting runs past midnight', () => {
+    const start = new Date(2026, 10, 24, 23, 0);
+    const end = new Date(2026, 10, 25, 1, 0);
+    const text = meetingTimeText(
+      { startsAt: start.toISOString(), endsAt: end.toISOString() },
+      'en-GB',
+    )!;
+    expect(text).toContain(' – ');
+    expect(text.split(' – ')[1]).toContain('25');
+    const same = meetingTimeText(
+      { startsAt: start.toISOString(), endsAt: new Date(2026, 10, 24, 23, 30).toISOString() },
+      'en-GB',
+    )!;
+    expect(same).not.toContain(' – ');
+    expect(same).toContain('–');
   });
 
   it('summarises RSVPs', () => {

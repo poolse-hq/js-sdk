@@ -40,6 +40,11 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   `http:`/`https:`/`mailto:` as plain text (a `javascript:` URL used to
   run on click under React 18). Block images with a non-web URL are not
   loaded.
+- `LobbyAdmitList` shows the lobby error when Admit, Deny or Admit all
+  fails; the host used to see nothing.
+- `MeetingCard` disables the answers while one is saving, so a quick
+  second click can no longer roll back to a stale answer when the first
+  fails.
 
 ## [3.10.3] - 2026-11-26
 

@@ -33,6 +33,12 @@ versions follow [semver](https://semver.org).
 - `BlockRenderer` shows an error when an action fails, and opens a link
   button or a link preview only when its URL is
   `http:`/`https:`/`mailto:`.
+- `MeetingCard` shows "Your answer wasn’t saved. Try again." when an
+  RSVP fails (as on web) and disables the answers while one is saving.
+  `onRsvp` may now return `false` to report a failure.
+- `meetingTimeText` names the end day when a meeting runs past midnight
+  ("Tue 21 Nov · 23:00 – Wed 22 Nov 01:00"), as web does, and takes an
+  optional `locale`.
 
 ## [3.10.3] - 2026-11-26
 

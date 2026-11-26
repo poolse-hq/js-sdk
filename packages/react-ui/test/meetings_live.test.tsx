@@ -1,6 +1,6 @@
 // Live meeting pieces: stage, Q&A, lobby, agenda, quality, cards, board.
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -139,6 +139,25 @@ describe('lobby, agenda, quality, presence', () => {
     expect(hook.admit).toHaveBeenCalledWith('e1');
   });
 
+  it('shows the lobby error when admitting fails', () => {
+    const hook: UseLobby = {
+      lobby: {
+        callId: 'c',
+        conversationId: 'c-1',
+        enabled: true,
+        waiting: [{ id: 'e1', name: 'Ana', guest: true, userId: null, requestedAt: null }],
+      },
+      waitingCount: 1,
+      admit: vi.fn(async () => false),
+      deny: vi.fn(async () => false),
+      admitAll: vi.fn(async () => false),
+      error: new Error("Couldn't admit Ana"),
+      pending: false,
+    };
+    render(<LobbyAdmitList lobby={hook} />);
+    expect(screen.getByRole('alert').textContent).toBe("Couldn't admit Ana");
+  });
+
   it('nudges when an agenda item runs over', () => {
     const hook = {
       agenda: {
@@ -243,6 +262,20 @@ describe('MeetingCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Join' }));
     expect(onJoin).toHaveBeenCalled();
     expect(await violations(container)).toEqual([]);
+  });
+
+  it('disables the answers while one is saving', async () => {
+    let finish: (ok: boolean) => void = () => undefined;
+    const onRsvp = vi.fn(() => new Promise<boolean>((r) => (finish = r)));
+    render(<MeetingCard card={card} selfUserId="u1" onRsvp={onRsvp} />);
+    fireEvent.click(screen.getByRole('radio', { name: 'Decline' }));
+    expect((screen.getByRole('radio', { name: 'Maybe' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: 'Maybe' }));
+    expect(onRsvp).toHaveBeenCalledTimes(1);
+    await act(async () => finish(true));
+    expect((screen.getByRole('radio', { name: 'Maybe' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 });
 

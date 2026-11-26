@@ -87,6 +87,7 @@ export function MeetingCard({
           : null));
   const [mine, setMine] = useState<RsvpResponse | null>(() => rsvpOf(card, self));
   const [failed, setFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => setMine(rsvpOf(card, self)), [card, self]);
   useEffect(() => {
@@ -116,12 +117,17 @@ export function MeetingCard({
     const before = mine;
     setMine(value);
     setFailed(false);
+    // One answer at a time: a second click while the first is saving
+    // could roll back to a stale choice when the first fails.
+    setSaving(true);
     try {
       const ok = await record?.(value, card);
       if (ok === false) throw new Error('rsvp failed');
     } catch {
       setMine(before);
       setFailed(true);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -164,6 +170,7 @@ export function MeetingCard({
                   type="button"
                   role="radio"
                   aria-checked={mine === r.value}
+                  disabled={saving}
                   className={`poolse-meetcard__rsvpbtn${mine === r.value ? ' poolse-meetcard__rsvpbtn--on' : ''}`}
                   onClick={() => void answer(r.value)}
                 >

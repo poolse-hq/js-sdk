@@ -969,7 +969,7 @@ export interface MeetingCardProps {
    * through the provider's client; `false` hides the buttons. The card
    * updates when the server restates the message.
    */
-  onRsvp?: ((response: RsvpResponse) => void | Promise<void>) | false;
+  onRsvp?: ((response: RsvpResponse) => boolean | void | Promise<boolean | void>) | false;
   /** Join the meeting's room. */
   onJoin?: (card: MeetingCardData) => void;
   nameForUserId?: NameFor;
@@ -1010,6 +1010,7 @@ export function MeetingCard({
     return () => clearInterval(t);
   }, []);
   const [pending, setPending] = useState<RsvpResponse | null>(null);
+  const [failed, setFailed] = useState(false);
   const mine = pending ?? rsvpOf(card, self);
   const when = meetingTimeText(card);
   const counts = rsvpSummary(card);
@@ -1064,16 +1065,21 @@ export function MeetingCard({
             ? (['accepted', 'tentative', 'declined'] as const).map((r) => (
                 <Pressable
                   key={r}
+                  disabled={pending !== null}
                   onPress={async () => {
                     setPending(r);
+                    setFailed(false);
                     try {
-                      await record(r);
+                      // A resolved `false` is a failure too, as on web.
+                      if ((await record(r)) === false) throw new Error('rsvp failed');
+                    } catch {
+                      setFailed(true);
                     } finally {
                       setPending(null);
                     }
                   }}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: mine === r }}
+                  accessibilityState={{ selected: mine === r, disabled: pending !== null }}
                   accessibilityLabel={RSVP_LABELS[r]}
                   hitSlop={4}
                   style={[
@@ -1110,6 +1116,14 @@ export function MeetingCard({
             />
           ) : null}
         </View>
+      ) : null}
+      {failed ? (
+        <Text
+          style={[styles.small, { color: theme.colors.danger, fontFamily: theme.fonts.body }]}
+          accessibilityRole="alert"
+        >
+          Your answer wasn’t saved. Try again.
+        </Text>
       ) : null}
     </View>
   );

@@ -654,6 +654,11 @@ export function LobbyAdmitList({ lobby, className }: LobbyAdmitListProps) {
           </li>
         ))}
       </ul>
+      {lobby.error ? (
+        <p className="poolse-panel__error" role="alert">
+          {lobby.error.message}
+        </p>
+      ) : null}
     </section>
   );
 }

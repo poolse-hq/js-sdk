@@ -69,21 +69,25 @@ export function overrunText(title: string, overrunMs: number): string | null {
   return `${title} is ${min} min over`;
 }
 
-/** "Tue 21 Nov · 10:00–10:30" in the device's locale. */
-export function meetingTimeText(card: Pick<MeetingCard, 'startsAt' | 'endsAt'>): string | null {
+/**
+ * "Tue 21 Nov · 10:00–10:30" in the device's locale (or `locale`). An end
+ * on another day names that day too: "Tue 21 Nov · 23:00 – Wed 22 Nov 01:00".
+ */
+export function meetingTimeText(
+  card: Pick<MeetingCard, 'startsAt' | 'endsAt'>,
+  locale?: string,
+): string | null {
   if (!card.startsAt) return null;
   const start = new Date(card.startsAt);
   if (Number.isNaN(start.getTime())) return null;
-  const day = start.toLocaleDateString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  });
-  const time = (d: Date) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const dayOf = (d: Date) =>
+    d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
+  const time = (d: Date) => d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   const end = card.endsAt ? new Date(card.endsAt) : null;
-  return end && !Number.isNaN(end.getTime())
-    ? `${day} · ${time(start)}–${time(end)}`
-    : `${day} · ${time(start)}`;
+  if (!end || Number.isNaN(end.getTime())) return `${dayOf(start)} · ${time(start)}`;
+  return end.toDateString() === start.toDateString()
+    ? `${dayOf(start)} · ${time(start)}–${time(end)}`
+    : `${dayOf(start)} · ${time(start)} – ${dayOf(end)} ${time(end)}`;
 }
 
 /** "4 accepted · 1 maybe · 2 declined" (empty parts left out), or null. */
