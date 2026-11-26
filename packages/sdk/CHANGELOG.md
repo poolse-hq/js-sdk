@@ -6,6 +6,24 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `waitInLobby` removes its abort listener after each poll; a long lobby
+  wait used to add one listener per poll to the `signal`.
+- Outbox: messages of one conversation go out in order — a new send waits for older ones still on the wire and goes behind older queued ones instead of overtaking them. A message the server keeps failing (5xx, 429) holds only its own conversation; the others still send. `send()` and `flush()` no longer hang when `storage` is set without `storageNamespace` and `GET /v1/me` can't answer (offline cold start): they wait at most 2 s for the stored queue.
+- REST: every attempt has a timeout (`requestTimeoutMs`, default 30 s); a timed-out GET/PUT/DELETE is retried, a POST/PATCH is not (a `NetworkError`). A `Retry-After` longer than `maxBackoffMs` surfaces at once as `RateLimitedError` instead of parking the request. An abort during the backoff wait rejects at once.
+- No code relies on a global `DOMException` (missing on older React Native/Hermes), which turned network failures into a `ReferenceError`. An upload aborted before it started now settles.
+- A conversation channel the server refuses to join (`forbidden`, `not_found`) is closed with that reason (`onClosed(reason)`, `closedReason`) instead of being retried every 10 s for good.
+- Conversation channels nobody listens to are left after a minute (`CONVERSATION_IDLE_LEAVE_MS`) and joined again on next use, under the same handle; a session that opened many conversations no longer stays joined to all of them or rejoins them all on every reconnect.
+- Presence: a `presence_diff` leave removes only the metas that left, so a user who closes one of two tabs stays present (cached state for late subscribers too).
+- Sign-out with `clearStorage` waits for a cache write in progress, so no history is written back after the storage was cleared. Conversations dropped from the warm cache are deleted from `storage` too, across restarts.
+- `users`: an answer from `userResolver` that was running when `invalidate()` was called no longer overwrites the newer profile.
+- Approvals and escalations: a list in flight no longer deletes an item that arrived meanwhile or brings back an answered one as pending (one shared store behind both).
+- Whiteboard: edits made before the relay join, while read-only, or whose send failed go out again (on the next join, or 2 s after the failure); a token refresh applies the rights it returns. A stroke with an odd number of coordinates drops the dangling one.
+- `CallRoom`: a late `Disconnected` from a room already left no longer resets a quick rejoin's status or reports a disconnect; LiveKit reasons 11–14 (connection timeout and others) read as `lost`.
+- Screen annotations: undo skips lines that were trimmed or faded. `whisper:changed` events without a call id are ignored rather than applied to every call. Summary overviews keep their paragraphs.
+- IndexedDB storage: a write counts once its transaction commits, and a connection the browser closed is reopened instead of falling back to memory for the rest of the session.
+
 ### Added
 
 - `safeLinkUrl(url)` / `safeImageUrl(url)`: the URL when it is an
@@ -19,11 +37,15 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 - `callAgentInviteErrorMessage(err)`: the plain-words text for a failed
   agent invite in a call, used by both UI packages (it was a private
   copy in each). Re-exported from `@poolse/react`.
+- `requestTimeoutMs` config and a per-request `timeoutMs`.
+- `MeResource.ensure()`: the user, fetched at most once per session; concurrent callers share one request.
+- `ConversationChannel.onPresence(state)` (merged presence state), `closedReason`, and `applyPresenceDiff`.
+- `bindYDoc(...)` returns an unbind function with `setCanWrite(boolean)`.
+- `isAbortError(err)`; `RestClient`, `RequestOptions` and `HttpMethod` exported as types (for `Poolse.rest`).
 
-### Fixed
+### Changed
 
-- `waitInLobby` removes its abort listener after each poll; a long lobby
-  wait used to add one listener per poll to the `signal`.
+- Docs: `apiUrl` should always be set to your own server; the `https://api.poolse.dev` fallback is kept only for compatibility. The `AuthError` doc says the SDK already refreshed the token once.
 
 ## [3.10.3] - 2026-11-26
 

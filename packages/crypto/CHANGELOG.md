@@ -4,6 +4,13 @@ All notable changes to `@poolse/crypto` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Account key pinning: `unwrapAccountKeyForDevice(wrap, device, { accountId, expectedAccountKeyId })` refuses (`wrong-key`) a wrap holding any key but the pinned `AccountKey.id`, and `checkPinnedAccountKey(key, pinnedId)` does the same check for a key obtained another way. A wrap from the server proves nothing on its own (anyone can wrap to a device's public key); the README's threat model now says so and how to pin.
+- `NoteOutbox.load({ ..., ifUnreadable: 'discard' })` starts empty over a queue it can't read (corrupt, or sealed under another account's key) instead of throwing on every start; `discardedUnreadable` says it happened.
+
 ## [3.10.3] - 2026-11-26
 
 No changes; released with the other packages.
