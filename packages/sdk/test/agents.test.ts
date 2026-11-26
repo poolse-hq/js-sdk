@@ -197,6 +197,42 @@ describe('approvals', () => {
   });
 });
 
+describe('approvals store ordering', () => {
+  it('a list in flight neither drops a new pending one nor undoes an answer', async () => {
+    let answer!: (r: Response) => void;
+    const fetchFn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/approve')) return jsonResponse({ data: approvalRow('ap-1', 'running') });
+      if (init?.method === undefined || init.method === 'GET')
+        return new Promise<Response>((r) => (answer = r));
+      throw new Error(url);
+    }) as unknown as typeof globalThis.fetch;
+    const chat = new Poolse({
+      apiUrl: 'https://chat.example',
+      getToken: () => 'tok',
+      fetch: fetchFn,
+    });
+    chat.approvals._apply(approvalFromWire(approvalRow('ap-1'))!);
+    const listing = chat.approvals.list();
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    // Meanwhile: a new request arrives, and the user answers ap-1.
+    chat.approvals._apply(approvalFromWire(approvalRow('ap-2'))!);
+    await chat.approvals.approve('ap-1');
+    // The server's snapshot predates both.
+    answer(jsonResponse({ data: [approvalRow('ap-1')] }));
+    await listing;
+    expect(chat.approvals.peek('ap-1')?.status).toBe('running');
+    expect(chat.approvals.peek('ap-2')?.status).toBe('pending');
+    // A later list without ap-2 means it was answered elsewhere.
+    const again = chat.approvals.list();
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(3));
+    answer(jsonResponse({ data: [] }));
+    await again;
+    expect(chat.approvals.peek('ap-2')).toBeUndefined();
+    void chat.destroy();
+  });
+});
+
 describe('scopes, memory, follow-ups', () => {
   it('reads and narrows a scope', async () => {
     const scope = {

@@ -18,6 +18,7 @@ import type { Unsubscribe } from './realtime/types.js';
 import type { MeResource } from './resources/me.js';
 import type { RestClient } from './rest-client.js';
 import type { Me, Message, Uuid } from './types.js';
+import { PendingItems } from './pending-store.js';
 
 /** What the UI needs to know about an agent. */
 export interface AgentInfo {
@@ -621,7 +622,8 @@ export interface ApprovalListOptions {
  * approval a message points at.
  */
 export class ApprovalsResource {
-  private readonly byId = new Map<string, AgentApproval>();
+  private readonly store = new PendingItems<AgentApproval>();
+  private readonly byId = this.store.byId;
   private readonly listeners = new Set<() => void>();
   private unbind: (() => void) | null = null;
   private allInflight: Promise<void> | null = null;
@@ -637,6 +639,7 @@ export class ApprovalsResource {
   /** `GET /v1/me/approvals?status=pending|all` — the ones waiting for you (or all of yours). */
   async list(opts: ApprovalListOptions = {}): Promise<AgentApproval[]> {
     const status = opts.status ?? 'pending';
+    const since = this.store.begin();
     const res = await this.rest.request<unknown>({
       method: 'GET',
       path: '/v1/me/approvals',
@@ -647,14 +650,9 @@ export class ApprovalsResource {
       .map(approvalFromWire)
       .filter((a): a is AgentApproval => !!a)
       .map((a) => this.withAgent(a));
-    for (const a of rows) this.byId.set(a.id, a);
-    // A pending one the server no longer lists was answered elsewhere.
-    if (status === 'pending') {
-      const listed = new Set(rows.map((a) => a.id));
-      for (const [id, a] of this.byId) {
-        if (a.status === 'pending' && !listed.has(id)) this.byId.delete(id);
-      }
-    }
+    // A pending one the server no longer lists was answered elsewhere;
+    // one that arrived while the request ran stays.
+    this.store.merge(rows, since, status === 'pending');
     this.notify();
     return rows;
   }
@@ -725,10 +723,7 @@ export class ApprovalsResource {
 
   /** Record an approval seen elsewhere. A decided one is never undone by an older pending copy. */
   _apply(a: AgentApproval): void {
-    const prev = this.byId.get(a.id);
-    if (prev && prev.status !== 'pending' && a.status === 'pending') return;
-    this.byId.set(a.id, this.withAgent(a));
-    this.notify();
+    if (this.store.apply(this.withAgent(a))) this.notify();
   }
 
   /** @internal The directory learned names: fill them in. */
@@ -776,9 +771,8 @@ export class ApprovalsResource {
           reason: reason ?? null,
           decidedAt: new Date().toISOString(),
         };
-    this.byId.set(id, next);
-    this.notify();
-    return next;
+    if (this.store.apply(next)) this.notify();
+    return this.byId.get(id) ?? next;
   }
 
   private activate(): void {

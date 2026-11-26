@@ -27,6 +27,7 @@ import type { Unsubscribe } from './realtime/types.js';
 import type { MeResource } from './resources/me.js';
 import type { RestClient } from './rest-client.js';
 import type { Me } from './types.js';
+import { PendingItems } from './pending-store.js';
 
 // ── WIRE (adjust here when the server contract changes) ─────────────────
 
@@ -912,7 +913,8 @@ export class BriefsApi {
  * `list`, your replies and `agent:escalation` on your user topic feed it.
  */
 export class EscalationsResource {
-  private readonly byId = new Map<string, AgentEscalation>();
+  private readonly store = new PendingItems<AgentEscalation>();
+  private readonly byId = this.store.byId;
   private readonly listeners = new Set<() => void>();
   private off: Unsubscribe | null = null;
 
@@ -927,6 +929,7 @@ export class EscalationsResource {
     opts: { status?: 'pending' | 'all'; signal?: AbortSignal } = {},
   ): Promise<AgentEscalation[]> {
     const status = opts.status ?? 'pending';
+    const since = this.store.begin();
     const res = await this.rest.request<unknown>({
       method: 'GET',
       path: CALL_AGENTS_PATHS.escalations(),
@@ -936,13 +939,9 @@ export class EscalationsResource {
     const list = rows(res, 'escalations')
       .map(escalationFromWire)
       .filter((e): e is AgentEscalation => !!e);
-    // A pending one the server no longer lists was answered elsewhere.
-    if (status === 'pending') {
-      const listed = new Set(list.map((e) => e.id));
-      for (const [id, e] of this.byId)
-        if (e.status === 'pending' && !listed.has(id)) this.byId.delete(id);
-    }
-    for (const e of list) this.byId.set(e.id, e);
+    // A pending one the server no longer lists was answered elsewhere;
+    // one that arrived while the request ran stays.
+    this.store.merge(list, since, status === 'pending');
     this.notify();
     return list;
   }
@@ -1005,10 +1004,7 @@ export class EscalationsResource {
 
   /** Record one seen elsewhere (a push, a notification reply). An answered one is never undone by an older pending copy. */
   _apply(e: AgentEscalation): void {
-    const prev = this.byId.get(e.id);
-    if (prev && prev.status !== 'pending' && e.status === 'pending') return;
-    this.byId.set(e.id, e);
-    this.notify();
+    if (this.store.apply(e)) this.notify();
   }
 
   private bind(): void {
