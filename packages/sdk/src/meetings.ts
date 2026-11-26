@@ -232,6 +232,18 @@ function clip(s: string, max: number): string {
   return t.length > max ? t.slice(0, max - 1) + '…' : t;
 }
 
+// Like `clip`, but paragraphs and line breaks stay (an overview can
+// have several).
+function clipParagraphs(s: string, max: number): string {
+  const t = s
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return t.length > max ? t.slice(0, max - 1) + '…' : t;
+}
+
 function itemFromWire(x: unknown, max = 1000): SummaryItem | null {
   if (typeof x === 'string') {
     return x.trim() ? { text: clip(x, max), startMs: null, endMs: null, recordingMs: null } : null;
@@ -326,7 +338,7 @@ export function summaryFromWire(raw: unknown): CallSummary | null {
     status,
     style: str(o.style) ?? 'default',
     language: str(o.language),
-    overview: overview ? clip(overview, 4000) : null,
+    overview: overview ? clipParagraphs(overview, 4000) : null,
     decisions: items(o.decisions),
     actionItems,
     openQuestions: items(o.open_questions),

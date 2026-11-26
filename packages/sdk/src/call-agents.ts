@@ -832,8 +832,12 @@ export class WhisperApi {
     if (listeners.onChanged)
       offs.push(
         user.on(CALL_AGENTS_USER_EVENTS.whisperChanged, (p) => {
+          // The event names its call (on the payload or the whisper);
+          // without one it can't be told apart from another call's.
+          const named = str(obj(p)?.call_id) ?? str(obj(obj(p)?.whisper)?.call_id);
+          if (named !== callId) return;
           const w = whisperFromWire(p, callId);
-          if (w && w.callId === callId) listeners.onChanged!(w);
+          if (w) listeners.onChanged!(w);
         }),
       );
     return () => offs.forEach((off) => off());

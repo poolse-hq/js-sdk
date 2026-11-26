@@ -320,6 +320,7 @@ describe('call quality', () => {
   it('maps LiveKit disconnect reasons', () => {
     expect(disconnectReasonOf(2)).toBe('moved');
     expect(disconnectReasonOf(1)).toBe('left');
+    expect(disconnectReasonOf(14)).toBe('lost'); // CONNECTION_TIMEOUT
     expect(disconnectReasonOf(undefined)).toBe('unknown');
   });
 });

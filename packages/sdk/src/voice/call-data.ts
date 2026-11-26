@@ -436,8 +436,17 @@ export class ScreenAnnotations {
     while (this.strokes.size > ANNOTATION_LIMITS.strokes) {
       const first = this.strokes.keys().next().value;
       if (first === undefined) break;
-      this.strokes.delete(first);
+      this.forgetStroke(first);
     }
+  }
+
+  // A line gone (trimmed, faded): undo must not pop it, and a flush must
+  // not wait for it.
+  private forgetStroke(id: string): void {
+    this.strokes.delete(id);
+    this.pending.delete(id);
+    const at = this.mine.indexOf(id);
+    if (at >= 0) this.mine.splice(at, 1);
   }
 
   private sweep(): void {
@@ -453,7 +462,7 @@ export class ScreenAnnotations {
     if (fade > 0) {
       for (const [id, s] of this.strokes) {
         if (s.done && now - s.updatedAt >= fade) {
-          this.strokes.delete(id);
+          this.forgetStroke(id);
           changed = true;
         }
       }

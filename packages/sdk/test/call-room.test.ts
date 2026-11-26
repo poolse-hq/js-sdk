@@ -187,6 +187,40 @@ describe('CallRoom join races', () => {
     expect(room.getStatus()).toBe('idle');
   });
 
+  it("a late Disconnected from the left room doesn't touch a quick rejoin", async () => {
+    const rooms: Array<{ handlers: Map<string, (...a: never[]) => void>; release: () => void }> =
+      [];
+    const module = {
+      ...harness().module,
+      Room: function Room(this: unknown) {
+        const handlers = new Map<string, (...a: never[]) => void>();
+        let release!: () => void;
+        const r = {
+          localParticipant: harness().local,
+          remoteParticipants: new Map(),
+          connect: vi.fn(async () => {}),
+          disconnect: vi.fn(() => new Promise<void>((done) => (release = done))),
+          on: (e: string, h: (...a: never[]) => void) => handlers.set(e, h),
+          off: (e: string) => handlers.delete(e),
+        };
+        rooms.push({ handlers, release: () => release() });
+        return r;
+      } as unknown as LiveKitModule['Room'],
+    } as LiveKitModule;
+    const room = new CallRoom({ livekit: module, tokenProvider: async () => CONNECTION });
+    const reasons: string[] = [];
+    room.onDisconnected((why) => reasons.push(why));
+    await room.join();
+    room.leave(); // the first room is still disconnecting
+    await room.join();
+    expect(room.getStatus()).toBe('connected');
+    rooms[0]!.handlers.get('disconnected')?.(1 as never);
+    rooms[0]!.release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(room.getStatus()).toBe('connected');
+    expect(reasons).toEqual([]);
+  });
+
   it('a call the SFU dropped can be joined again', async () => {
     const h = harness();
     const room = new CallRoom({ livekit: h.module, tokenProvider: async () => CONNECTION });

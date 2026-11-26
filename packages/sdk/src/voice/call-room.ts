@@ -74,10 +74,14 @@ export function disconnectReasonOf(raw: unknown): CallDisconnectReason {
     case 5: // ROOM_DELETED
     case 10: // ROOM_CLOSED
       return 'ended';
-    case 3:
-    case 6:
-    case 7:
-    case 9:
+    case 3: // SERVER_SHUTDOWN
+    case 6: // STATE_MISMATCH
+    case 7: // JOIN_FAILURE
+    case 9: // SIGNAL_CLOSE
+    case 11: // USER_UNAVAILABLE
+    case 12: // USER_REJECTED
+    case 13: // SIP_TRUNK_FAILURE
+    case 14: // CONNECTION_TIMEOUT
       return 'lost';
     default:
       return 'unknown';
@@ -165,6 +169,9 @@ export class CallRoom {
   private joining: Promise<boolean> | null = null;
   /** Bumped by teardown; a join that sees it change was left meanwhile. */
   private generation = 0;
+  // Bumped by every connect attempt, so a teardown can tell a join that
+  // started after it.
+  private connects = 0;
 
   /**
    * Whether anyone else has ever been on this call.
@@ -212,7 +219,7 @@ export class CallRoom {
   /** The previous video byte count, for the bitrate in `getNetworkStats`. */
   private lastVideoSample: { bytes: number; at: number } | null = null;
 
-  /** Bound once so `off()` in teardown removes the same references. */
+  /** Re-read the roster; shared by every roster event of the room. */
   private readonly onRoomChange = () => this.emitParticipants();
 
   /**
@@ -316,6 +323,7 @@ export class CallRoom {
   }
 
   private async connect(): Promise<boolean> {
+    this.connects += 1;
     this.setStatus('connecting');
     const generation = this.generation;
     // Left (leave() or a teardown) while this was waiting.
@@ -1051,12 +1059,25 @@ export class CallRoom {
       ['Reconnected', false],
     ] as const) {
       const event = RoomEvent[name];
-      if (event) room.on(event, () => this.setReconnecting(on));
+      if (event)
+        room.on(event, () => {
+          if (this.room === room) this.setReconnecting(on);
+        });
     }
 
     const disconnected = RoomEvent['Disconnected'];
     if (disconnected) {
       room.on(disconnected, ((reason?: unknown) => {
+        const why = disconnectReasonOf(reason);
+        if (this.room !== room) {
+          // A room this object already let go (leave, then a quick
+          // rejoin): its late event must not touch the new call. Only
+          // report it when nothing replaced it.
+          if (!this.room && !this.joining) {
+            for (const fn of this.disconnectListeners) fn(why);
+          }
+          return;
+        }
         // The SFU dropped us. Reflect it rather than showing a call that
         // looks live and carries nothing, and let go of the dead Room: a
         // join() after this must connect again, not find it and return
@@ -1064,8 +1085,7 @@ export class CallRoom {
         this.setReconnecting(false);
         this.setStatus('idle');
         this.emitParticipants();
-        if (this.room === room) void this.teardown();
-        const why = disconnectReasonOf(reason);
+        void this.teardown();
         for (const fn of this.disconnectListeners) fn(why);
       }) as never);
     }
@@ -1161,6 +1181,7 @@ export class CallRoom {
     this.clearAloneTimer();
 
     for (const track of [...this.audioSinks.keys()]) this.stopAudio(track);
+    const connects = this.connects;
 
     if (room) {
       try {
@@ -1171,6 +1192,9 @@ export class CallRoom {
       }
     }
 
+    // A join started while the old room was disconnecting owns the
+    // status now.
+    if (this.room || this.connects !== connects) return;
     this.setStatus('idle');
     this.emitParticipants();
   }

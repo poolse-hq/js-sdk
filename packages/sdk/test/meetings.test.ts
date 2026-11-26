@@ -85,6 +85,16 @@ describe('call summaries', () => {
       overview: 'Pricing and the contract.',
       shortened: false,
     });
+    const paragraphs = parseCallSummary({
+      id: 'm-2',
+      conversation_id: 'c-1',
+      type: 'system',
+      body: JSON.stringify({
+        ...JSON.parse(summaryBody),
+        overview: '  First   part.\r\n\n\n\nSecond  part. ',
+      }),
+    })!;
+    expect(paragraphs.overview).toBe('First part.\n\nSecond part.');
     expect(s.decisions).toEqual([
       { text: 'Ship on Friday', startMs: 60_000, endMs: 61_000, recordingMs: 55_000 },
     ]);
