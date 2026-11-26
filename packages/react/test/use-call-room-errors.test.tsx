@@ -13,8 +13,14 @@ function fakeRoom(joinError?: Error) {
     {
       get: (_t, prop: string) => {
         if (prop === 'then') return undefined;
+        // Like CallRoom: a failed join reports through onError, then throws
+        // the same error.
         if (prop === 'join')
-          return () => (joinError ? Promise.reject(joinError) : Promise.resolve(true));
+          return () => {
+            if (!joinError) return Promise.resolve(true);
+            listeners.get('onError')?.(joinError);
+            return Promise.reject(joinError);
+          };
         if (prop === 'getBackground') return () => ({ type: 'none' });
         if (prop.startsWith('on'))
           return (fn: (arg: unknown) => void) => {

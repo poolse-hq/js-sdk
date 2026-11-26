@@ -13,6 +13,7 @@ import {
   formatDayLabel,
   isMessageVisibleTo,
   isTombstone,
+  readDlpError,
   receiptsOf,
   sameDay,
   useMe,
@@ -995,6 +996,12 @@ export function ConversationView({
           // Offline: queued, it goes out by itself. Refused while the
           // outbox is on: the row stays with Retry / Delete — except a
           // deleted quote, which isn't worth a retry.
+          // Held back by data-loss prevention: the composer shows the
+          // warning and "Send anyway"; no failed row, no notice here.
+          if (readDlpError(err)) {
+            discardSend(id);
+            throw err;
+          }
           const kept =
             err instanceof MessageQueuedError || (chat.outboxEnabled && !isQuoteGone(err));
           if (kept) {

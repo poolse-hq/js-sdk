@@ -21,6 +21,7 @@ import { MessageQueuedError, safeUuid } from '@poolse/sdk';
 import {
   ApiError,
   canEditOwnMessage,
+  readDlpError,
   isMessageVisibleTo,
   receiptsOf,
   useMembers,
@@ -1086,6 +1087,13 @@ export function ConversationView({
         }
         return;
       }
+      // Held back by data-loss prevention: not a failed row (Retry would
+      // be refused the same way), but the composer's warning, where
+      // "Send anyway" sends again with the acknowledgement.
+      if (readDlpError(err)) {
+        discardSend(req.id);
+        throw err;
+      }
       // Offline: it's queued and goes out by itself. Refused: the row
       // stays with Retry / Delete. Either way the composer is done.
       if (!(err instanceof MessageQueuedError) && !chat.outboxEnabled) throw err;
@@ -1192,9 +1200,13 @@ export function ConversationView({
     }
   };
 
-  const onSendBody = (body: string, opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[] }) =>
+  const onSendBody = (
+    body: string,
+    opts?: { quoted_message_id?: Uuid; attachment_ids?: Uuid[]; dlp_acknowledged?: true },
+  ) =>
     sendRequest({
       body,
+      ...(opts?.dlp_acknowledged ? { dlp_acknowledged: true } : {}),
       ...(opts?.quoted_message_id ? { quoted_message_id: opts.quoted_message_id } : {}),
       ...(opts?.attachment_ids && opts.attachment_ids.length > 0
         ? { attachment_ids: opts.attachment_ids }

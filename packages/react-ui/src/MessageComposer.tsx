@@ -178,6 +178,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
   ) {
     const [value, setValue] = useState('');
     const [sending, setSending] = useState(false);
+    // Why the last send didn't go out; its text is back in the box.
+    const [sendError, setSendError] = useState<string | null>(null);
     const taRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     useAutogrow(taRef, value);
@@ -240,6 +242,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         ...(hasReady ? { attachment_ids: ready.map((it) => it.attachment!.id) } : {}),
       };
       setValue('');
+      setSendError(null);
       setSending(true);
       try {
         // Pass `undefined` (not an empty object) when there are no
@@ -262,6 +265,11 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
           // the text back for "Edit"; the files are still queued.
           setValue((now) => (now ? now : trimmed));
         }
+      } catch (err) {
+        // The send failed: nothing went out, so the words go back in
+        // the box (unless the user already started typing again).
+        setValue((now) => (now ? now : trimmed));
+        setSendError(sendErrorText(err));
       } finally {
         setSending(false);
       }
@@ -335,6 +343,11 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             disabled={disabled || sending}
             {...(Array.isArray(formattingToolbar) ? { actions: formattingToolbar } : {})}
           />
+        )}
+        {sendError && (
+          <p className="poolse-composer__error" role="alert">
+            {sendError}
+          </p>
         )}
         {replyingTo && (
           <ReplyChip
@@ -466,4 +479,12 @@ function ReplyChip({
       )}
     </div>
   );
+}
+
+/** One readable line for a failed send. */
+function sendErrorText(err: unknown): string {
+  const raw = err instanceof Error ? err.message : '';
+  // `[422] code: message` from the REST client → `message`.
+  const text = raw.replace(/^\[\d+\]\s*[^:]*:\s*/, '').trim();
+  return text ? `Couldn't send: ${text}` : "Couldn't send. Try again.";
 }

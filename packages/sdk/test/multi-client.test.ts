@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,
+  MAX_SERVER_ATTEMPTS,
   MessageQueuedError,
   Poolse,
   createIndexedDbStorage,
@@ -336,6 +337,25 @@ describe('outbox', () => {
     expect(c.outbox.entries()).toEqual([]);
     const posts = fetchFn.calls.filter((r) => r.method === 'POST');
     expect(posts.map((r) => (r.body as { id: string }).id)).toEqual(['m-1', 'm-1']);
+    await c.destroy();
+  });
+
+  it('gives up on a message the server keeps failing, so the next ones go out', async () => {
+    let online = false;
+    const fetchFn = routedFetch((_m, _p, body) => {
+      const id = (body as { id: string }).id;
+      if (!online) throw new TypeError('Failed to fetch');
+      return id === 'stuck' ? apiError(503, 'unavailable') : json(msg(id));
+    });
+    const c = client({}, fetchFn);
+    // Both queued while offline: "stuck" first, so it heads the line.
+    await c.outbox.send('c-1', request('stuck'), msg('stuck')).catch(() => {});
+    await c.outbox.send('c-1', request('next'), msg('next')).catch(() => {});
+    online = true;
+    for (let i = 0; i < MAX_SERVER_ATTEMPTS; i++) await c.outbox.flush();
+    expect(c.outbox.entries()).toMatchObject([{ id: 'stuck', status: 'failed' }]);
+    const posts = fetchFn.calls.filter((r) => (r.body as { id?: string })?.id === 'next');
+    expect(posts.length).toBeGreaterThan(1);
     await c.destroy();
   });
 

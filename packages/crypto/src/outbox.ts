@@ -79,6 +79,8 @@ export class NoteOutbox<T> {
   #storage: OutboxStorage;
   #key: ItemKey;
   #flushing: Promise<FlushResult> | null = null;
+  /** The entry being sent right now, if any. */
+  #sending: OutboxEntry<T> | null = null;
 
   private constructor(entries: OutboxEntry<T>[], storage: OutboxStorage, key: ItemKey) {
     this.#entries = entries;
@@ -123,7 +125,10 @@ export class NoteOutbox<T> {
   /** Queue a delete. A note made offline and never sent is just forgotten. */
   async delete(noteId: string, baseRevision: number): Promise<void> {
     const prior = this.#entries.find((e) => e.noteId === noteId);
-    if (prior && prior.baseRevision === 0) {
+    // Never sent, and not being sent right now: nothing on the server to
+    // delete. One in flight may be created by the time this returns, so
+    // it gets a real delete, based on the revision that send writes.
+    if (prior && prior.baseRevision === 0 && this.#sending?.noteId !== noteId) {
       this.#entries = this.#entries.filter((e) => e.noteId !== noteId);
     } else {
       this.#enqueue(noteId, 'delete', baseRevision, null);
@@ -143,12 +148,12 @@ export class NoteOutbox<T> {
     const result: FlushResult = { written: [], dropped: [], pending: 0 };
     const maxConflicts = options.maxConflicts ?? 3;
     while (this.#entries.length > 0) {
-      const entry = this.#entries[0]!;
+      let current = this.#entries[0]!;
       let conflicts = 0;
-      let current = entry;
       let done = false;
       while (!done) {
         let res: OutboxSendResult<T>;
+        this.#sending = current;
         try {
           res = await options.send(current);
         } catch (error) {
@@ -157,32 +162,61 @@ export class NoteOutbox<T> {
           result.pending = this.#entries.length;
           result.error = error;
           return result;
+        } finally {
+          this.#sending = null;
         }
+        // While that send was out, put() may have replaced the entry with a
+        // newer edit, or delete() may have queued a delete: those are newer
+        // than what was just written and must not be lost. Find the note's
+        // entry again by id, and compare it with what was sent.
+        const i = this.#entries.findIndex((e) => e.noteId === current.noteId);
+        const newer = i !== -1 && this.#entries[i] !== current ? this.#entries[i]! : null;
         if (res.status === 'ok') {
           result.written.push(current.noteId);
           options.onWritten?.(current.noteId, res.revision);
+          if (newer) {
+            // Sent next, on top of the revision just written.
+            this.#entries[i] = { ...newer, baseRevision: res.revision };
+          } else if (i !== -1) {
+            this.#entries.splice(i, 1);
+          }
           done = true;
         } else if (res.status === 'gone') {
           result.dropped.push(current.noteId);
+          if (i !== -1) this.#entries.splice(i, 1);
           done = true;
         } else {
           conflicts += 1;
+          // Resolve the newest local version against the server's.
+          const base = newer ?? current;
           const merged =
-            current.op === 'delete'
+            base.op === 'delete'
               ? null
               : options.resolve
-                ? await options.resolve(current.data, res.current, current)
-                : current.data;
-          if (conflicts > maxConflicts || (current.op === 'put' && merged === null)) {
+                ? await options.resolve(base.data, res.current, base)
+                : base.data;
+          if (conflicts > maxConflicts || (base.op === 'put' && merged === null)) {
             result.dropped.push(current.noteId);
+            const j = this.#entries.findIndex((e) => e.noteId === current.noteId);
+            if (j !== -1) this.#entries.splice(j, 1);
             done = true;
           } else {
-            current = { ...current, baseRevision: res.revision, data: merged };
-            this.#entries[0] = current;
+            const j = this.#entries.findIndex((e) => e.noteId === current.noteId);
+            if (j === -1) {
+              // Deleted locally while resolving: nothing left to send.
+              done = true;
+            } else {
+              // Another edit may have landed while resolving; it wins.
+              const latest = this.#entries[j]!;
+              current =
+                latest === base
+                  ? { ...base, baseRevision: res.revision, data: merged }
+                  : { ...latest, baseRevision: res.revision };
+              this.#entries[j] = current;
+            }
           }
         }
       }
-      this.#entries.shift();
       await this.#save();
     }
     return result;

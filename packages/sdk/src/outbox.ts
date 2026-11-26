@@ -77,6 +77,11 @@ interface Waiter {
 const STORAGE_KEY = 'outbox';
 const MIN_BACKOFF_MS = 2_000;
 const MAX_BACKOFF_MS = 60_000;
+// A message the server keeps answering 5xx / 429 / 408 for is given up
+// on after this many tries and marked failed: it waits for a manual
+// Retry instead of holding every queued message behind it. Being offline
+// (no response at all) and auth refreshes never count against it.
+export const MAX_SERVER_ATTEMPTS = 8;
 
 export class Outbox {
   private items: OutboxEntry[] = [];
@@ -292,7 +297,8 @@ export class Outbox {
       return sent;
     } catch (err) {
       if (!this.items.some((e) => e.id === id)) throw err;
-      if (isRetryable(err)) {
+      const exhausted = err instanceof ApiError && entry.attempts + 1 >= MAX_SERVER_ATTEMPTS;
+      if (isRetryable(err) && !exhausted) {
         this.patch(id, { status: 'queued', error: describe(err), errorCode: null });
         this.schedule();
         throw new MessageQueuedError(id, err);

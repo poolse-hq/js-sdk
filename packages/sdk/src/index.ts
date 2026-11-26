@@ -612,6 +612,7 @@ export { ClientTimings, type BuiltInTiming, type TimingEvent } from './timings.j
 export { LocalCache, type LocalCacheOptions } from './local-cache.js';
 export {
   MessageDiscardedError,
+  MAX_SERVER_ATTEMPTS,
   MessageQueuedError,
   Outbox,
   isRetryable,

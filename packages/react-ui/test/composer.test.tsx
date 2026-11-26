@@ -34,6 +34,19 @@ describe('<MessageComposer>', () => {
     expect(button.disabled).toBe(false);
   });
 
+  it('a failed send puts the text back and says so', async () => {
+    const onSend = vi.fn().mockRejectedValue(new Error('[503] unavailable: Server is busy'));
+    const { container } = renderComposer(<MessageComposer onSend={onSend} />);
+    const input = container.querySelector('.poolse-composer__input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'keep me' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(input.value).toBe('keep me');
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Couldn't send: Server is busy",
+    );
+  });
+
   it('Enter without shift submits + clears input', async () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     const { container } = renderComposer(<MessageComposer onSend={onSend} />);

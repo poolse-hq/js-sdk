@@ -324,6 +324,53 @@ describe('offline outbox (NT9)', () => {
     expect((await ob.flush({ send })).written).toEqual(['n2']);
   });
 
+  it('keeps an edit made while the previous one is being sent', async () => {
+    const ak = await AccountKey.generate();
+    const ob = await NoteOutbox.load<Draft>({ storage: new MemoryOutboxStorage(), accountKey: ak });
+    await ob.put('n1', 4, { body: 'first' });
+    const sent: string[] = [];
+    let release!: () => void;
+    const first = new Promise<void>((r) => (release = r));
+    const flushing = ob.flush({
+      send: async (e) => {
+        sent.push(`${e.data?.body}@${e.baseRevision}`);
+        if (sent.length === 1) await first;
+        return { status: 'ok', revision: e.baseRevision + 1 };
+      },
+    });
+    // The user types again while "first" is on the wire.
+    await Promise.resolve();
+    await ob.put('n1', 4, { body: 'second' });
+    release();
+    const res = await flushing;
+    // "second" was not dropped: it went out next, on revision 5.
+    expect(sent).toEqual(['first@4', 'second@5']);
+    expect(res.written).toEqual(['n1', 'n1']);
+    expect(ob.isPending('n1')).toBe(false);
+  });
+
+  it('deletes for real a new note deleted while its first send is out', async () => {
+    const ak = await AccountKey.generate();
+    const ob = await NoteOutbox.load<Draft>({ storage: new MemoryOutboxStorage(), accountKey: ak });
+    await ob.put('tmp', 0, { body: 'x' });
+    const ops: string[] = [];
+    let release!: () => void;
+    const first = new Promise<void>((r) => (release = r));
+    const flushing = ob.flush({
+      send: async (e) => {
+        ops.push(`${e.op}@${e.baseRevision}`);
+        if (ops.length === 1) await first;
+        return { status: 'ok', revision: e.baseRevision + 1 };
+      },
+    });
+    await Promise.resolve();
+    await ob.delete('tmp', 0);
+    release();
+    await flushing;
+    expect(ops).toEqual(['put@0', 'delete@1']);
+    expect(ob.entries).toHaveLength(0);
+  });
+
   it('drops a note made and deleted offline, and gone notes', async () => {
     const ak = await AccountKey.generate();
     const ob = await NoteOutbox.load<Draft>({ storage: new MemoryOutboxStorage(), accountKey: ak });

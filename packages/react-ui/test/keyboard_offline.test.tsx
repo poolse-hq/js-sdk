@@ -203,6 +203,49 @@ describe('side by side', () => {
 });
 
 describe('unsent messages', () => {
+  it('a DLP warning in the default view asks first, then sends with the acknowledgement', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const { container, findByRole, getByText } = renderWithProvider(
+      <ConversationView conversationId="c-1" loadFonts={false} />,
+      routedFetch(
+        viewRoutes([msg(1)], {
+          'POST /v1/conversations/c-1/messages': (req) => {
+            const n = bodies.length;
+            void req
+              .clone()
+              .json()
+              .then((b) => bodies.push(b as Record<string, unknown>));
+            return n === 0
+              ? jsonResponse(
+                  {
+                    error: {
+                      code: 'dlp_warning',
+                      message: 'warn',
+                      doc_url: '',
+                      details: { rules: [{ id: 'cards', name: 'Card number' }] },
+                    },
+                  },
+                  { status: 422 },
+                )
+              : jsonResponse({ data: msg(2) }, { status: 201 });
+          },
+        }),
+      ),
+    );
+    await waitFor(() => expect(rows(container)).toHaveLength(1));
+    const ta = container.querySelector('textarea')!;
+    fireEvent.change(ta, { target: { value: 'card 4111111111111111' } });
+    fireEvent.keyDown(ta, { key: 'Enter' });
+    expect(await findByRole('alertdialog')).toBeTruthy();
+    // No failed row with a Retry that would be refused forever.
+    expect(container.querySelector('.poolse-send-status--failed')).toBeNull();
+    await act(async () => {
+      fireEvent.click(getByText('Send anyway'));
+    });
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toMatchObject({ body: 'card 4111111111111111', dlp_acknowledged: true });
+  });
+
   it('a refused send stays with Retry and Delete, and passes axe', async () => {
     const { container } = renderWithProvider(
       <ConversationView conversationId="c-1" loadFonts={false} />,

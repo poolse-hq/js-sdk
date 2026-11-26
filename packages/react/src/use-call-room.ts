@@ -236,6 +236,10 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   // Whether THIS hook holds the room. Leaving without having joined
   // would release a claim we never made.
   const joined = useRef(false);
+  // Errors a failed join() threw. CallRoom reports them through onError
+  // too, and those must stay until the caller retries: the 8 s clear is
+  // for problems in a call that is otherwise up.
+  const joinFailures = useRef(new WeakSet<Error>());
 
   /**
    * The room this hook is currently responsible for.
@@ -341,6 +345,7 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       if (errorTimer) clearTimeout(errorTimer);
       errorTimer = setTimeout(() => {
         errorTimer = null;
+        if (joinFailures.current.has(err)) return;
         setError((now) => (now === err ? null : now));
       }, ROOM_ERROR_MS);
     });
@@ -396,7 +401,9 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
       if (connected) refreshDevices(target);
       return connected;
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      const error = err instanceof Error ? err : new Error(String(err));
+      joinFailures.current.add(error);
+      setError(error);
       // A thrown join is a real failure, not a missing SFU — the caller
       // should surface it rather than quietly falling back.
       setSfuAvailable(true);

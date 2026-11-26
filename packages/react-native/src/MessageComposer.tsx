@@ -315,7 +315,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
             }
             upload.reset();
           } catch (err) {
-            upload.reset();
+            // Nothing went out: the files stay queued with the text.
             // Data-loss prevention held it back: show why, keep the text.
             const outcome = readDlpError(err);
             if (outcome) setDlp({ outcome, body, opts });

@@ -1042,6 +1042,12 @@
 /* Quote-reply chip — sits above the textarea while the caller has
    `replyingTo` set. Pulse Coral accent stripe on the left mirrors the
    WhatsApp / iMessage convention. */
+.poolse-composer__error {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--poolse-error);
+}
+
 .poolse-composer__reply {
   display: flex;
   align-items: center;
