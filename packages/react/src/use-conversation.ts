@@ -15,9 +15,9 @@ interface UseConversationState {
  * Fetch a single conversation by id. Re-fetches when `id` changes
  * (e.g. routing to a different conversation in the same component).
  *
- * Doesn't subscribe to realtime updates yet — the backend doesn't
- * broadcast `conversation:updated` to user channels. Use `refetch()`
- * after a mutation if you need fresh state in the same render cycle.
+ * Doesn't follow realtime updates (`useConversations` does, through
+ * `conversation:updated` on the user channel). Use `refetch()` after a
+ * mutation if you need fresh state in the same render cycle.
  *
  * ```ts
  * const { conversation, loading } = useConversation(convId);

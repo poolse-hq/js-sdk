@@ -17,6 +17,8 @@ import { usePoolse } from './provider.js';
 
 /** A list loaded once (and on `refresh`), with the usual state. */
 function useLoaded<T>(load: (signal: AbortSignal) => Promise<T[]>, key: string) {
+  // A provider handed another client (another workspace) loads again.
+  const chat = usePoolse();
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -42,7 +44,7 @@ function useLoaded<T>(load: (signal: AbortSignal) => Promise<T[]>, key: string) 
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [key, nonce]);
+  }, [chat, key, nonce]);
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
   return { items, setItems, loading, error, refresh };

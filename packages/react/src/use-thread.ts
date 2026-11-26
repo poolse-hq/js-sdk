@@ -136,8 +136,10 @@ export function useThread(conversationId: Uuid, rootMessageId: Uuid): UseThreadS
         id,
         tenant_id: '',
         conversation_id: conversationId,
-        sender_id: null,
-        sender_external_id: null,
+        // Who is sending, when known, so the row sits on the sender's
+        // side from the start (null would flash it on the other side).
+        sender_id: chat.me.peek()?.id ?? null,
+        sender_external_id: chat.me.peek()?.external_id ?? null,
         type: attrs.type ?? 'text',
         body: attrs.body ?? null,
         reply_to_id: rootMessageId,

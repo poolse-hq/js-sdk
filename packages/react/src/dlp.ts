@@ -5,7 +5,11 @@
 
 import { ApiError } from '@poolse/sdk';
 
-/** One rule that matched: its name as the admin wrote it. The text itself is never echoed back. */
+/**
+ * One rule that matched: its name as the admin wrote it, and the matched
+ * text (`excerpt`) when the server sends it back — servers may leave it
+ * out; the UIs show it when present.
+ */
 export interface DlpMatch {
   rule: string;
   excerpt?: string;

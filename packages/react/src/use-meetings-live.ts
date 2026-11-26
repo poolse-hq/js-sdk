@@ -114,6 +114,8 @@ function useLiveValue<T>(
     );
     const offStatus = onReconnect(chat, refresh);
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- bumping the live counter is the point
+      seq.current++; // a read still in flight is for the old key
       off();
       offStatus();
     };
@@ -465,6 +467,8 @@ export function useLobby(conversationId: string | null, callId: string | null = 
     });
     const offStatus = onReconnect(chat, refresh);
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- bumping the live counter is the point
+      seq.current++; // a read still in flight is for the old key
       off();
       offStatus();
     };

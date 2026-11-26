@@ -161,6 +161,7 @@ export function usePins(conversationId: Uuid): UsePins {
     const conv = chat.realtime.conversation(conversationId);
     const off = conv.onPinChanged(() => void refresh());
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- bumping the live counter is the point
       seq.current++;
       off();
     };
@@ -351,6 +352,7 @@ export function useScheduledMessages(conversationId?: Uuid): UseScheduledMessage
     setLoading(true);
     void refresh();
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- bumping the live counter is the point
       seq.current++;
     };
   }, [refresh]);
@@ -454,6 +456,7 @@ export function useFiles(conversationId: Uuid, kind?: AttachmentKind): UseFiles 
       });
     });
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- bumping the live counter is the point
       epoch.current++;
       off();
     };

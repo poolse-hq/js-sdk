@@ -164,12 +164,19 @@ export function useAttachmentUpload(): UseAttachmentUploadState {
   );
 
   const uploadAll = useCallback(
-    (inputs: AttachmentUploadInput[]): Promise<Attachment[]> => {
+    async (inputs: AttachmentUploadInput[]): Promise<Attachment[]> => {
       // Enqueue all first so the UI shows the full queue immediately,
       // then start the PUTs in parallel. Order in resolved array
       // matches input order regardless of which PUT finishes first.
       const items = inputs.map((inp) => ({ item: enqueue(inp), input: inp }));
-      return Promise.all(items.map(({ item, input }) => runUpload(item.localId, input)));
+      // Every upload settles before the first error is thrown, as the
+      // doc says (Promise.all would reject while others still upload).
+      const results = await Promise.allSettled(
+        items.map(({ item, input }) => runUpload(item.localId, input)),
+      );
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (failed) throw failed.reason;
+      return results.map((r) => (r as PromiseFulfilledResult<Attachment>).value);
     },
     [enqueue, runUpload],
   );

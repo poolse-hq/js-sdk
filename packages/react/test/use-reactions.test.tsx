@@ -41,7 +41,7 @@ describe('useReactions', () => {
       ({ r }: { r: Record<string, string[]> }) =>
         useReactions('m-1', { conversationId: 'c-1', initialReactions: r, currentUserId: 'u-2' }),
       scriptedFetch([]),
-      { initialProps: { r: { '🎉': ['u-1'] } } },
+      { initialProps: { r: { '🎉': ['u-1'] } as Record<string, string[]> } },
     );
     // Same value, new object: nothing changes.
     rerender({ r: { '🎉': ['u-1'] } });

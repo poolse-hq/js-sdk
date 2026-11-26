@@ -196,6 +196,10 @@ export function useCallSummary(
   const needsFull = !initial || initial.shortened;
   useEffect(() => {
     if (needsFull) refresh();
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- bumping the live counter is the point
+      seq.current++; // a read still in flight is for the old call
+    };
   }, [refresh, needsFull]);
 
   useEffect(() => {

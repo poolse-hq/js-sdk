@@ -313,6 +313,8 @@ export function useCallRoom(conversationId: string | null, opts: UseCallRoomOpti
   }, []);
 
   useEffect(() => {
+    // The previous call's error is not this one's.
+    setError(null);
     if (!room) {
       setStatus('idle');
       setParticipants([]);

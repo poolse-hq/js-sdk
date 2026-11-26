@@ -62,6 +62,11 @@ export function useRoom(conversationId: string | null, opts: UseRoomOptions): Us
     setError(null);
   }, [conversationId]);
 
+  // `media` is a new object every render; its functions are stable.
+  const mediaJoin = media.join;
+  const mediaLeave = media.leave;
+  const mediaCamera = media.setCameraEnabled;
+
   const join = useCallback(
     async (kind: 'audio' | 'video' = 'audio', joinOpts: { ring?: boolean } = {}) => {
       if (!conversationId) return;
@@ -73,26 +78,26 @@ export function useRoom(conversationId: string | null, opts: UseRoomOptions): Us
         session.current = joinOpts.ring
           ? await poolse.rooms.ring(conversationId, kind)
           : await poolse.rooms.start(conversationId, kind);
-        const connected = await media.join();
+        const connected = await mediaJoin();
         if (!connected) throw new Error('Rooms need the SFU, which this deployment does not have.');
-        if (kind === 'video') await media.setCameraEnabled(true);
+        if (kind === 'video') await mediaCamera(true);
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
-        media.leave();
+        mediaLeave();
       } finally {
         setJoining(false);
       }
     },
-    [poolse, conversationId, media],
+    [poolse, conversationId, mediaJoin, mediaLeave, mediaCamera],
   );
 
   const leave = useCallback(() => {
-    media.leave();
+    mediaLeave();
     const s = session.current;
     session.current = null;
     // Best-effort: LiveKit reports the departure anyway.
     if (s) void poolse.rooms.leave(s).catch(() => {});
-  }, [poolse, media]);
+  }, [poolse, mediaLeave]);
 
   const joined = media.status === 'connected' || media.status === 'connecting' || joining;
 
