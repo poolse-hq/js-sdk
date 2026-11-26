@@ -20,6 +20,9 @@ concurrency:
 # format-check, test, build), so green on CI means green on a laptop.
 jobs:
   check:
+    # The repo is public and the runner is our lab machine: never run a
+    # pull request from a fork on it.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64, poolse-build]
     timeout-minutes: 30
     steps:
