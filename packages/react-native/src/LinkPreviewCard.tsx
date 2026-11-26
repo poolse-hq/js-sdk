@@ -54,8 +54,13 @@ export function LinkPreviewCard({
   ) : null;
 
   if (preview.type === 'image') {
-    const src = preview.image_url || preview.url;
-    if (imageFailed) return null;
+    // Images load straight from the site: http(s) only, as on web.
+    const src = isWebUrl(preview.image_url)
+      ? preview.image_url
+      : isWebUrl(preview.url)
+        ? preview.url
+        : null;
+    if (imageFailed || !src) return null;
     return (
       <Pressable
         onPress={open}
@@ -76,7 +81,7 @@ export function LinkPreviewCard({
     );
   }
 
-  const hasImage = !!preview.image_url && !imageFailed;
+  const hasImage = !!preview.image_url && isWebUrl(preview.image_url) && !imageFailed;
   return (
     <Pressable
       onPress={open}
@@ -108,7 +113,7 @@ export function LinkPreviewCard({
       ) : null}
       <View style={[styles.cardBody, { padding: theme.spacing.sm, gap: 2 }]}>
         <View style={styles.siteLine}>
-          {preview.favicon_url && !faviconFailed ? (
+          {preview.favicon_url && isWebUrl(preview.favicon_url) && !faviconFailed ? (
             <Image
               source={{ uri: preview.favicon_url }}
               style={styles.favicon}
@@ -208,3 +213,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+function isWebUrl(url: string | null | undefined): url is string {
+  return typeof url === 'string' && /^https?:\/\//i.test(url);
+}

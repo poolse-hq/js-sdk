@@ -87,6 +87,9 @@ versions follow [semver](https://semver.org).
 - `PoolseInbox`: a "New chat" or "New group" that can't be created says so
   over the list (it failed silently). `ConversationView`: an edit that fails
   to save says so (the editor stays open with the text).
+- `LinkPreviewCard` loads preview images and favicons only from http(s)
+  URLs, as on web. The long-press sheet no longer gives two items the same key when labels repeat
+  (two previews from one site).
 
 ## [3.10.3] - 2026-11-26
 

@@ -193,8 +193,9 @@ export function MessageActions({
             </View>
           ) : null}
 
-          {items.map((item) => (
-            <Pressable key={item.label} onPress={item.onPress} style={styles.item}>
+          {items.map((item, i) => (
+            // Labels can repeat (two previews from one site): key by position too.
+            <Pressable key={`${i}:${item.label}`} onPress={item.onPress} style={styles.item}>
               <PoolseIcon
                 name={item.icon}
                 size={18}
