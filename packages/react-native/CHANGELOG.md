@@ -70,6 +70,20 @@ versions follow [semver](https://semver.org).
   then shows "The clip couldn’t be played." instead of fetching a new
   link on every media error; `RecordingPlayer` shows an error once its
   renewals run out.
+- `ThreadView` takes `maxFileSize` and `acceptedFileTypes` (and
+  `ConversationView` passes its own on), so the thread sheet no longer
+  accepts a file the main composer refuses; a refused file is said in the
+  sheet.
+- `AttachmentPicker`: `acceptedTypes` is checked against the picked photo's
+  own type and name as well as the WebP it is converted to, so
+  `["image/jpeg"]` or `[".jpg"]` no longer refuses every photo; the size is
+  still the uploaded one's. Its doc now says the expo pickers are required
+  peers.
+- `UploadQueueStrip`: × on an upload in flight drops its tile (it used to
+  stay, cancelled, with no way to remove it); cancelled uploads are not
+  shown.
+- `MentionInput`: a draft restored from `draftStorage` still notifies the
+  people it @-mentions (names are matched against the members at send time).
 
 ## [3.10.3] - 2026-11-26
 

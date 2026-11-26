@@ -1,6 +1,8 @@
 // @-mention parsing for <MentionInput> — pure, so vitest can run it
 // under node.
 
+import { mentionedUserIdsIn } from '@poolse/react';
+
 /** An `@query` being typed: where the `@` is and what follows it. */
 export interface MentionQuery {
   /** Index of the `@`. */
@@ -38,21 +40,12 @@ export function insertMention(
   return { text: `${before}${token}${after}`, cursor: before.length + token.length };
 }
 
-/**
- * The user ids still mentioned in `text`: those picked whose `@label`
- * is still there (deleting the text drops the mention). Deduped, in
- * pick order.
- */
+/** Who `text` mentions among those picked from the menu (see `mentionedUserIdsIn`). */
 export function mentionedUserIds(
   text: string,
   picked: ReadonlyArray<{ userId: string; label: string }>,
 ): string[] {
-  const out: string[] = [];
-  for (const p of picked) {
-    if (out.includes(p.userId)) continue;
-    if (text.includes(`@${p.label}`)) out.push(p.userId);
-  }
-  return out;
+  return mentionedUserIdsIn(text, picked);
 }
 
 /**

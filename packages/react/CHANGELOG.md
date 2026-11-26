@@ -41,6 +41,9 @@ All notable changes to `@poolse/react` are documented here. Format follows
 - README lists every exported hook; `useOptionalPoolse` is public.
 - `formatDayLabel`: across the spring daylight-saving change the day labels
   are no longer one day off (the day before said "Today").
+- `mentionedUserIdsIn(text, picked, members?)`: who a message mentions — the
+  people picked from the menu, plus members whose name is written out after
+  "@" (a name two members share is left out).
 
 ### Fixed
 

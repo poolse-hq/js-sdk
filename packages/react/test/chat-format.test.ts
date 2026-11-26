@@ -11,6 +11,7 @@ import {
 } from '../src/chat-format.js';
 import { formatMessageTime, formatTimeOfDay, gutterTime, relativeTime } from '../src/chat-time.js';
 import { formatDayLabel } from '../src/grouping.js';
+import { mentionedUserIdsIn } from '../src/mention-text.js';
 import { presenceBadgeKind, presenceText } from '../src/presence-text.js';
 
 const att = (id: string, content_type: string, clip: object | null = null) =>
@@ -109,5 +110,26 @@ describe('presence', () => {
     );
     expect(presenceText({ state: 'offline', last_seen_at: null })).toBe('Offline');
     expect(presenceText(null)).toBeNull();
+  });
+});
+
+describe('mentionedUserIdsIn', () => {
+  const members = [
+    { userId: 'u-ann', label: 'Ann' },
+    { userId: 'u-anna', label: 'Anna' },
+    { userId: 'u-x1', label: 'Sam' },
+    { userId: 'u-x2', label: 'Sam' },
+    { userId: 'u-none', label: '' },
+  ];
+  it('picked names, plus members written out by name (a restored draft)', () => {
+    expect(mentionedUserIdsIn('hi @Anna!', [], members)).toEqual(['u-anna']);
+    expect(mentionedUserIdsIn('@Ann and @Anna', [], members)).toEqual(['u-ann', 'u-anna']);
+    // Two people called Sam: only a pick says which.
+    expect(mentionedUserIdsIn('@Sam?', [], members)).toEqual([]);
+    expect(mentionedUserIdsIn('@Sam?', [{ userId: 'u-x2', label: 'Sam' }], members)).toEqual([
+      'u-x2',
+    ]);
+    expect(mentionedUserIdsIn('no one', [{ userId: 'u-ann', label: 'Ann' }], members)).toEqual([]);
+    expect(mentionedUserIdsIn('@', [], members)).toEqual([]);
   });
 });

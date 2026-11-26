@@ -9,6 +9,7 @@ import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sd
 import {
   agentFromWire,
   displayNameOf,
+  mentionedUserIdsIn,
   useMembers,
   usePoolse,
   useUser,
@@ -265,9 +266,22 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       setSendError(null);
       setSending(true);
       try {
-        const mentions = [...selectedMentions.current]
-          .filter(([, name]) => trimmed.includes(`@${name}`))
-          .map(([id]) => id);
+        // Picked from the menu, or written out by name (a restored
+        // draft keeps the text, not who was picked).
+        const mentions = mentionedUserIdsIn(
+          trimmed,
+          [...selectedMentions.current].map(([userId, label]) => ({ userId, label })),
+          members
+            .filter((m) => m.user_id !== meId)
+            .map((m) => ({
+              userId: m.user_id,
+              label: displayNameOf(m.external_id, {
+                labelFor,
+                profileName: chat.users.peek(m.external_id)?.displayName,
+                fallback: '',
+              }),
+            })),
+        );
         const req: MessageCreateRequest = {
           body: trimmed,
           ...(mentions.length > 0 ? { mentions } : {}),

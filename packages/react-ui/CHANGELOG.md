@@ -16,6 +16,12 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   old, then "4d ago"); the default message time is the locale's ("9:05 AM",
   not "09:05 AM"); file sizes read the same everywhere; the quick reactions
   are one set.
+- The call timer and the agent-invite error text use the shared
+  `formatClock` and `callAgentInviteErrorMessage` helpers instead of
+  private copies (same output).
+- `MentionInput`: a draft restored after switching conversations or a reload
+  still notifies the people it @-mentions (their names are matched against
+  the members at send time; the pick itself was not saved).
 
 ### Fixed
 
@@ -74,12 +80,6 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   full screen (an iframe without `allowfullscreen`, fullscreen turned
   off) even when a fallback video is passed, so the button is hidden
   instead of doing nothing.
-
-### Changed
-
-- The call timer and the agent-invite error text use the shared
-  `formatClock` and `callAgentInviteErrorMessage` helpers instead of
-  private copies (same output).
 
 ## [3.10.3] - 2026-11-26
 

@@ -1,6 +1,7 @@
 import type { Membership, Uuid } from '@poolse/sdk';
 import {
   displayNameOf,
+  mentionedUserIdsIn,
   mentionGroupMeta,
   rankMentionGroups,
   useMe,
@@ -16,7 +17,6 @@ import {
   activeMentionQuery,
   filterMentionCandidates,
   insertMention,
-  mentionedUserIds,
   type MentionQuery,
 } from './internal/mentions.js';
 import { AgentBadge } from './AgentBadge.js';
@@ -151,7 +151,22 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
     };
 
     const handleSend: MessageComposerProps['onSend'] = async (body, opts) => {
-      const mentions = mentionedUserIds(body, pickedRef.current);
+      // Picked from the menu, or written out by name (a restored draft
+      // keeps the text, not who was picked).
+      const mentions = mentionedUserIdsIn(
+        body,
+        pickedRef.current,
+        members
+          .filter((m) => m.user_id !== me?.id)
+          .map((m) => ({
+            userId: m.user_id,
+            label: displayNameOf(m.external_id, {
+              labelFor,
+              profileName: chat.users.peek(m.external_id)?.displayName,
+              fallback: '',
+            }),
+          })),
+      );
       const result = await onSend(body, { ...opts, ...(mentions.length > 0 ? { mentions } : {}) });
       // Held back (beforeSend): the text and its mentions stay.
       if (result === false) return false;

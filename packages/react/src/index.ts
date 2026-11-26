@@ -65,6 +65,7 @@ export {
   presenceText,
   type PresenceBadgeKind,
 } from './presence-text.js';
+export { mentionedUserIdsIn, type MentionCandidate } from './mention-text.js';
 export {
   displayNameOf,
   UNKNOWN_USER_LABEL,

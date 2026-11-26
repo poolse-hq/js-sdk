@@ -20,6 +20,32 @@ const member = (ext: string, uid = `uid-${ext}`) => ({
 });
 
 describe('<MentionInput>', () => {
+  it('a name written out (a restored draft) still mentions the member', async () => {
+    const fetchFn = scriptedFetch([
+      jsonResponse({ data: [member('alice-123'), member('bob-456')] }),
+    ]);
+    const onSend = vi.fn();
+    const { container } = renderWithProvider(
+      <MentionInput
+        conversationId="c-1"
+        onSend={onSend}
+        labelFor={(id) => (id.startsWith('alice') ? 'Alice' : 'Bob')}
+      />,
+      fetchFn,
+    );
+    await waitFor(() => expect(fetchFn.calls.length).toBeGreaterThan(0));
+    const input = container.querySelector('.poolse-composer__input') as HTMLTextAreaElement;
+    act(() => {
+      fireEvent.change(input, { target: { value: 'ping @Alice about it' } });
+    });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' });
+    });
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({ body: 'ping @Alice about it', mentions: ['uid-alice-123'] }),
+    );
+  });
+
   it('shows a dropdown when user types @', async () => {
     const fetchFn = scriptedFetch([
       jsonResponse({ data: [member('alice-123'), member('bob-456')] }),
