@@ -49,6 +49,20 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   then shows "The clip couldn’t be played."; it used to fetch a new link
   on every media error, forever. `RecordingPlayer` says the recording
   couldn't be played once its renewals run out instead of going quiet.
+- The call device menus (microphone, camera, speaker) close when their
+  own button is pressed again; they used to close and reopen at once.
+  `CallControlButton` takes `opensMenu` for a button that opens a menu
+  itself, and its caret is marked `aria-haspopup="menu"`.
+- The floating self-view in `CallVideoGrid` no longer switches the
+  camera on a release that started outside it or on a cancelled gesture,
+  and can be used from the keyboard (Enter / Space).
+- `CallPictureInPicture` keeps the `<PoolseTheme>` colours and
+  light/dark scheme in the PiP window, and reopening the window can no
+  longer leave the new one empty.
+- `useFullscreen` reports `supported: false` where the page may not go
+  full screen (an iframe without `allowfullscreen`, fullscreen turned
+  off) even when a fallback video is passed, so the button is hidden
+  instead of doing nothing.
 
 ## [3.10.3] - 2026-11-26
 

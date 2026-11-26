@@ -320,6 +320,7 @@ export function RoomStage({
             <CallControlButton
               icon="speaker-fill"
               label="Speaker"
+              opensMenu
               onClick={() => openMenu('audiooutput')}
             />
             {menu === 'audiooutput' && (

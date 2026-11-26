@@ -364,12 +364,13 @@ function FloatingSelf({
       const from = origin.current;
       origin.current = null;
       setDrag(null);
-
+      // A release with no press on the tile (it started elsewhere), or the
+      // browser cancelling the gesture, is never a click.
+      if (!from) return;
       if (!moved.current) {
-        onClick?.();
+        if (event.type !== 'pointercancel') onClick?.();
         return;
       }
-      if (!from) return;
 
       // Which half of the stage the tile was let go in decides its
       // corner. Comparing against the stage's own box keeps this right
@@ -393,6 +394,17 @@ function FloatingSelf({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       aria-label={onClick ? 'Your camera. Drag to move, click to switch camera.' : undefined}
     >
       {children}

@@ -110,6 +110,15 @@ export function PoolseTheme({
 }
 
 /**
+ * The nearest `<PoolseTheme>`'s value, or null outside one. Internal: for
+ * content portalled out of the wrapper (the PiP window), which does not
+ * inherit its CSS variables or `data-theme`.
+ */
+export function usePoolseThemeScope(): PoolseThemeValue | null {
+  return useContext(ThemeContext);
+}
+
+/**
  * The nearest `<PoolseTheme>`'s theme and scheme. Outside one, `theme`
  * is `null` and the scheme is the OS's.
  */

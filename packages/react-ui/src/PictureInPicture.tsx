@@ -10,8 +10,18 @@
 //       <CallVideoGrid … /> <CallControls … />
 //     </CallPictureInPicture>
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { tokensToCssVariables } from '@poolse/theme';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
+import { usePoolseThemeScope } from './PoolseTheme.js';
 
 /** Which kind of picture-in-picture this browser offers. */
 export type PictureInPictureKind = 'document' | 'video' | 'none';
@@ -110,6 +120,8 @@ export function usePictureInPicture(): UsePictureInPicture {
         copyStyles(w);
         w.document.body.classList.add('poolse-pip-body');
         w.addEventListener('pagehide', () => {
+          // Only if it is still ours: a reopened window replaces it.
+          if (win.current !== w) return;
           win.current = null;
           setContainer(null);
         });
@@ -149,6 +161,23 @@ export interface CallPictureInPictureProps {
 
 /** Renders `children` into the Document PiP window while it is open; nothing otherwise. */
 export function CallPictureInPicture({ pip, children }: CallPictureInPictureProps) {
+  // The window is another document: the `<PoolseTheme>` wrapper's CSS
+  // variables and scheme do not reach it, so they go on the root here.
+  const scope = usePoolseThemeScope();
+  const vars = useMemo(
+    () => (scope?.theme ? (tokensToCssVariables(scope.theme) as CSSProperties) : undefined),
+    [scope?.theme],
+  );
   if (!pip.container) return null;
-  return createPortal(<div className="poolse-pip">{children}</div>, pip.container);
+  return createPortal(
+    <div
+      className="poolse-pip"
+      data-theme={scope?.colorScheme}
+      data-poolse-theme={scope?.theme?.id}
+      style={vars}
+    >
+      {children}
+    </div>,
+    pip.container,
+  );
 }

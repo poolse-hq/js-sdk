@@ -27,6 +27,11 @@ export interface CallControlButtonProps {
   /** Renders the caret that marks a button as opening a menu. */
   hasMenu?: boolean;
   onMenuClick?: (() => void) | undefined;
+  /**
+   * The button itself opens a `CallDeviceMenu` (the Speaker button): a
+   * second press then closes it instead of reopening it.
+   */
+  opensMenu?: boolean;
 }
 
 /**
@@ -47,6 +52,7 @@ export function CallControlButton({
   disabled = false,
   hasMenu = false,
   onMenuClick,
+  opensMenu = false,
 }: CallControlButtonProps) {
   const classes = [
     'callbtn',
@@ -68,7 +74,8 @@ export function CallControlButton({
           className={classes}
           onClick={onClick}
           disabled={disabled}
-          aria-pressed={tone === 'neutral' ? active || highlight : undefined}
+          aria-pressed={tone === 'neutral' && !opensMenu ? active || highlight : undefined}
+          aria-haspopup={opensMenu ? 'menu' : undefined}
           aria-label={label}
           title={label}
         >
@@ -83,6 +90,7 @@ export function CallControlButton({
             type="button"
             className="callbtn__caret"
             onClick={onMenuClick}
+            aria-haspopup="menu"
             aria-label={`${label} options`}
             title={`${label} options`}
           >
@@ -128,7 +136,13 @@ export function CallDeviceMenu({
   // opened this by accident mid-call will reach for.
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) onClose();
+      const target = event.target as Element | null;
+      if (ref.current?.contains(target)) return;
+      // The button that opened this menu (next to it, `aria-haspopup`)
+      // toggles it on its own click; closing here too would reopen it.
+      const trigger = target?.closest?.('[aria-haspopup="menu"]');
+      if (trigger && ref.current?.parentElement?.contains(trigger)) return;
+      onClose();
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();

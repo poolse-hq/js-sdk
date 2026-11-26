@@ -35,6 +35,23 @@ function elementFullscreenEnabled(): boolean {
   );
 }
 
+/** The browser has the element full-screen API at all (enabled or not). */
+function elementFullscreenApi(): boolean {
+  if (typeof document === 'undefined') return false;
+  return 'fullscreenEnabled' in document || 'webkitFullscreenEnabled' in document;
+}
+
+/**
+ * Whether `video`'s native player can take the screen: only where the
+ * element API is missing altogether (iPhone). Where it exists but is
+ * disabled (an iframe without `allowfullscreen`, a browser setting), the
+ * page is not allowed full screen and the video can't do it either.
+ */
+function videoFallbackWorks(video: HTMLVideoElement | null | undefined): boolean {
+  if (!video || elementFullscreenApi()) return false;
+  return typeof (video as WebkitVideo).webkitEnterFullscreen === 'function';
+}
+
 export function useFullscreen(
   target: RefObject<HTMLElement | null>,
   fallbackVideo?: RefObject<HTMLVideoElement | null>,
@@ -43,7 +60,7 @@ export function useFullscreen(
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
-    setSupported(elementFullscreenEnabled() || Boolean(fallbackVideo));
+    setSupported(elementFullscreenEnabled() || videoFallbackWorks(fallbackVideo?.current));
     const sync = () => setActive(target.current != null && fullscreenElement() === target.current);
     document.addEventListener('fullscreenchange', sync);
     document.addEventListener('webkitfullscreenchange', sync);
