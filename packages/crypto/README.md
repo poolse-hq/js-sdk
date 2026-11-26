@@ -68,7 +68,28 @@ await api.putRecovery({
 ```
 
 At every start: `DeviceKeys.import(await keychain.get('poolse.device'))`, then
-`unwrapAccountKeyForDevice(wrap, device, { accountId })`.
+`unwrapAccountKeyForDevice(wrap, device, { accountId, expectedAccountKeyId })`.
+
+**Pin the account key.** The wrap comes from the server, and anyone can wrap
+a key to a device's public key, so the wrap alone doesn't prove the key is
+yours. Store `accountKey.id` (public, not a secret) in the device's secure
+storage the first time the device holds the key from a source the server
+can't forge: it generated the key, it accepted a QR approval
+(`acceptDeviceGrant`), or the user typed the recovery key. Pass it as
+`expectedAccountKeyId` on every later unwrap; a wrap holding any other key is
+refused with `wrong-key`. `checkPinnedAccountKey(key, pinnedId)` does the same
+check for a key obtained another way.
+
+```ts
+const pinned = await keychain.get('poolse.accountKeyId'); // null on first use
+const { key } = await unwrapAccountKeyForDevice(wrap, device, {
+  accountId,
+  ...(pinned ? { expectedAccountKeyId: pinned } : {}),
+});
+```
+
+On a device with nothing pinned yet (an install from before the pin
+existed), the first unwrap has to be trusted once; pin its id right after.
 
 ### Notes
 
@@ -454,6 +475,16 @@ Protected against them:
   (`deviceFingerprint`) and let people compare them for sensitive shares, and
   should warn when someone's device list changes. Own devices are added only by
   QR approval or the recovery key, which don't trust the directory.
+- **The account key wrap from the server, unless the app pins the key.** A
+  device's copy of the account key (`account_key_wrap`) is stored on the
+  server. A malicious server could replace it with a wrap of a key it chose
+  (anyone can wrap to a device's public key); the device would adopt that key
+  and new notes would be written under a key the server knows. Old notes
+  would fail to open, which is the only visible sign. Apps close this by
+  pinning `AccountKey.id` in secure storage at first trusted use and passing
+  `expectedAccountKeyId` to `unwrapAccountKeyForDevice` (see "Account and
+  "A new account (first device)" above); a first unwrap on a device with no pin yet is still
+  trusted on first use.
 - **Withholding and forking.** The server can withhold updates, pretend
   something was deleted (`purge`), or show two devices different histories.
   Revisions catch rollback only per blob and only against what a device has

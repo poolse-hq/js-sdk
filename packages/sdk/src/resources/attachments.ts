@@ -56,7 +56,8 @@ export interface AttachmentUploadInput {
   /** The recording's length in ms. */
   durationMs?: number;
   /** Upload as a new version of this attachment (MS18). */
-  replacesAttachmentId?: Uuid; /** An opaque, already-encrypted file for a note (NT2): no name, type or processing. */
+  replacesAttachmentId?: Uuid;
+  /** An opaque, already-encrypted file for a note: no name, type or processing. */
   opaque?: boolean;
 }
 
@@ -118,8 +119,9 @@ export class AttachmentsResource {
 
   /**
    * One-call upload: request a presigned URL, PUT the bytes to it,
-   * return the attachment row. After this resolves the attachment is
-   * ready to be referenced from a message send.
+   * return the attachment row from the first step (its `status` may
+   * still read `pending`; the server marks it ready on its own). After
+   * this resolves the attachment can be referenced from a message send.
    *
    * ```ts
    * // Browser <input type="file">:

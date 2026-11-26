@@ -293,6 +293,24 @@ describe('offline outbox (NT9)', () => {
     expect((await NoteOutbox.load({ storage, accountKey: ak })).entries).toHaveLength(0);
   });
 
+  it('can start empty over a queue it cannot read (corrupt, or another account)', async () => {
+    const ak = await AccountKey.generate();
+    const storage = new MemoryOutboxStorage();
+    const ob = await NoteOutbox.load<Draft>({ storage, accountKey: ak });
+    await ob.put('n1', 1, { body: 'a' });
+    const other = await AccountKey.generate();
+    await expectCryptoError(NoteOutbox.load({ storage, accountKey: other }));
+    const fresh = await NoteOutbox.load<Draft>({
+      storage,
+      accountKey: other,
+      ifUnreadable: 'discard',
+    });
+    expect(fresh.entries).toHaveLength(0);
+    expect(fresh.discardedUnreadable).toBe(true);
+    await fresh.put('n2', 0, { body: 'b' });
+    expect((await NoteOutbox.load({ storage, accountKey: other })).entries).toHaveLength(1);
+  });
+
   it('resolves conflicts on the server revision and keeps entries on network errors', async () => {
     const ak = await AccountKey.generate();
     const storage = new MemoryOutboxStorage();

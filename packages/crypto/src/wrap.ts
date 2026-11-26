@@ -317,12 +317,32 @@ export async function wrapAccountKeyForDevice(
   );
 }
 
+/**
+ * Open a wrap of the account key made for this device.
+ *
+ * **A wrap fetched from the server proves nothing on its own:** anyone can
+ * wrap a key to a device's public key, so a malicious server could hand
+ * over a wrap of a key it chose, and every note written afterwards would
+ * be under a key the server knows. Pin the account key: keep its `id`
+ * (public, safe to store) in the device's secure storage the first time
+ * this device holds the key from a source the server can't forge (it
+ * made the key, `acceptDeviceGrant` after the QR approval, or the
+ * recovery key), and pass it as `expectedAccountKeyId` on every later
+ * unwrap of a server-supplied wrap. A wrap that yields another key is
+ * then refused with `wrong-key`. `requireSignatureFrom` is the other
+ * check, when the app knows which of its own devices made the wrap.
+ */
 export async function unwrapAccountKeyForDevice(
   wrap: Uint8Array,
   device: DeviceKeys,
   options: AccountContext & {
     /** Refuse the wrap unless it is signed by one of these devices. */
     requireSignatureFrom?: DevicePublicKeys | readonly DevicePublicKeys[];
+    /**
+     * The pinned `AccountKey.id`: refuse (`wrong-key`) a wrap holding
+     * any other key. Strongly recommended for a wrap from the server.
+     */
+    expectedAccountKeyId?: string;
   },
 ): Promise<UnwrapResult<AccountKey>> {
   const result = await unwrapFromDevice(
@@ -332,11 +352,31 @@ export async function unwrapAccountKeyForDevice(
     { accountId: options.accountId },
     options.requireSignatureFrom,
   );
+  const key = await AccountKey.fromBytes(result.key);
+  checkPinnedAccountKey(key, options.expectedAccountKeyId);
   return {
-    key: await AccountKey.fromBytes(result.key),
+    key,
     signer: result.signer,
     signingKey: result.signingKey,
   };
+}
+
+/**
+ * Refuse an account key that isn't the pinned one (`wrong-key`). For
+ * code paths that get the key some other way; a no-op when nothing is
+ * pinned yet (`undefined` / `null`).
+ */
+export function checkPinnedAccountKey(
+  key: AccountKey,
+  expectedId: string | null | undefined,
+): void {
+  if (expectedId === undefined || expectedId === null) return;
+  if (key.id !== expectedId) {
+    throw new PoolseCryptoError(
+      'wrong-key',
+      'This account key is not the one this device has pinned; the wrap may be forged',
+    );
+  }
 }
 
 /** Wrap an item key under the account key — how the owner keeps it. */

@@ -54,6 +54,7 @@ export {
   type ItemContext,
   wrapAccountKeyForDevice,
   unwrapAccountKeyForDevice,
+  checkPinnedAccountKey,
   wrapItemKey,
   unwrapItemKey,
   shareItemKey,

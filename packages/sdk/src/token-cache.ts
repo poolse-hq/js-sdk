@@ -73,10 +73,10 @@ export class TokenCache {
   invalidate(): void {
     this.token = null;
     this.expMs = null;
-    // Don't clear `inFlight` — let the existing fetch resolve normally;
-    // its result just won't be cached (the freshness check above will
-    // miss it). The next call after `invalidate()` will be served by
-    // that same in-flight promise if it's still pending.
+    // Don't clear `inFlight` — let the existing fetch resolve normally.
+    // Its result IS cached when it lands (`fetchAndStore` stores it), and
+    // the next call after `invalidate()` is served by that same in-flight
+    // promise if it's still pending.
   }
 
   private async fetchAndStore(): Promise<string | null> {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AccountKey,
+  checkPinnedAccountKey,
   DeviceKeys,
   ItemKey,
   decodeDevicePublicKeys,
@@ -101,6 +102,32 @@ describe('account key', () => {
     expect(again.id).toBe(ak.id);
     expect(ak.id).not.toBe(toBase64Url(ak.toBytes()).slice(0, 22));
     expect(JSON.stringify(ak)).toBe(JSON.stringify({ id: ak.id }));
+  });
+
+  it('refuses a server wrap of another key once the account key is pinned', async () => {
+    const real = await AccountKey.generate();
+    const phone = await DeviceKeys.generate();
+    const good = await wrapAccountKeyForDevice(real, phone.publicKeys, account);
+    const pinned = (await unwrapAccountKeyForDevice(good, phone, account)).key.id;
+
+    // A server can wrap a key of its own to the phone's public key.
+    const forged = await wrapAccountKeyForDevice(
+      await AccountKey.generate(),
+      phone.publicKeys,
+      account,
+    );
+    expect((await unwrapAccountKeyForDevice(forged, phone, account)).key.id).not.toBe(pinned);
+    await expectCryptoError(
+      unwrapAccountKeyForDevice(forged, phone, { ...account, expectedAccountKeyId: pinned }),
+      'wrong-key',
+    );
+    const ok = await unwrapAccountKeyForDevice(good, phone, {
+      ...account,
+      expectedAccountKeyId: pinned,
+    });
+    expect(ok.key.id).toBe(real.id);
+    expect(() => checkPinnedAccountKey(real, pinned)).not.toThrow();
+    expect(() => checkPinnedAccountKey(real, null)).not.toThrow();
   });
 
   it('wraps to a device, signed or not', async () => {

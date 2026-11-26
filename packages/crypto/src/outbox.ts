@@ -88,23 +88,43 @@ export class NoteOutbox<T> {
     this.#key = key;
   }
 
+  /**
+   * Open the stored queue. A queue that can't be read — corrupt, written by
+   * a newer version, or sealed under another account key (a different
+   * account signed in on this device) — throws by default, on every start.
+   * With `ifUnreadable: 'discard'` it starts empty instead (the unreadable
+   * edits are lost; `discardedUnreadable` says so, to tell the user), and
+   * the next save replaces it.
+   */
   static async load<T>(options: {
     storage: OutboxStorage;
     accountKey: AccountKey;
+    ifUnreadable?: 'throw' | 'discard';
   }): Promise<NoteOutbox<T>> {
     const key = await outboxKey(options.accountKey);
     const sealed = await options.storage.read();
     let entries: OutboxEntry<T>[] = [];
+    let discarded = false;
     if (sealed && sealed.length > 0) {
-      const text = fromUtf8(await decryptBytes(key, sealed, AD));
-      const parsed = JSON.parse(text) as { v?: number; entries?: OutboxEntry<T>[] };
-      if (parsed.v !== 1 || !Array.isArray(parsed.entries)) {
-        throw new PoolseCryptoError('unsupported', 'Unknown outbox version');
+      try {
+        const text = fromUtf8(await decryptBytes(key, sealed, AD));
+        const parsed = JSON.parse(text) as { v?: number; entries?: OutboxEntry<T>[] };
+        if (parsed.v !== 1 || !Array.isArray(parsed.entries)) {
+          throw new PoolseCryptoError('unsupported', 'Unknown outbox version');
+        }
+        entries = parsed.entries;
+      } catch (err) {
+        if (options.ifUnreadable !== 'discard') throw err;
+        discarded = true;
       }
-      entries = parsed.entries;
     }
-    return new NoteOutbox(entries, options.storage, key);
+    const box = new NoteOutbox<T>(entries, options.storage, key);
+    box.discardedUnreadable = discarded;
+    return box;
   }
+
+  /** `load` found a queue it couldn't read and started empty (`ifUnreadable: 'discard'`). */
+  discardedUnreadable = false;
 
   /** Waiting writes, oldest first. */
   get entries(): readonly OutboxEntry<T>[] {

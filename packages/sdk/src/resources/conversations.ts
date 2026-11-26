@@ -66,7 +66,6 @@ export class ConversationHandle {
   /**
    * Message ops scoped to this conversation: `list`, `send`, `markRead`,
    * `markUnread`.
-   * Lazy: constructed on first access so an idle handle stays cheap.
    */
   public readonly messages: ConversationMessages;
 
