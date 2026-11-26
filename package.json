@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "description": "Workspace root for the poolse JS SDKs (@poolse/sdk, @poolse/react, @poolse/react-ui).",
+  "description": "Workspace root for the poolse JS SDKs (@poolse/theme, @poolse/crypto, @poolse/sdk, @poolse/react, @poolse/react-ui, @poolse/react-native, @poolse/native).",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "scripts": {

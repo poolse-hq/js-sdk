@@ -242,8 +242,6 @@ export function useConversationsStore(): ConversationsStore {
 /**
  * The client of the nearest provider, or null outside one — for hooks
  * that also take an explicit client (`useUnreadTotals(client)`).
- *
- * @internal
  */
 export function useOptionalPoolse(): Poolse | null {
   return useContext(PoolseContext)?.chat ?? null;

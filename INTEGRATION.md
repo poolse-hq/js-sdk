@@ -29,7 +29,7 @@ at <https://poolse.dev/docs/guides/integration>.
 
 ```ts
 // e.g. app/api/chat-token/route.ts (Next.js); the same two calls work in any backend
-const API = 'https://api.poolse.dev';
+const API = 'https://chat.example.com'; // your poolse server
 const KEY = process.env.POOLSE_API_KEY!;
 
 export async function POST(req: Request) {

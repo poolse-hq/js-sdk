@@ -57,10 +57,10 @@ pnpm create vite@latest . --template react-ts
 pnpm install
 pnpm install @poolse/sdk @poolse/react @poolse/react-ui
 
-# OR if you want to link against the local SDK monorepo before publishing:
-pnpm install /Users/jasir/Documents/Work/poolse-js-sdk/packages/sdk \
-             /Users/jasir/Documents/Work/poolse-js-sdk/packages/react \
-             /Users/jasir/Documents/Work/poolse-js-sdk/packages/react-ui
+# OR, to link against a local checkout of this monorepo before publishing:
+pnpm install ../poolse-js/packages/sdk \
+             ../poolse-js/packages/react \
+             ../poolse-js/packages/react-ui
 ```
 
 Replace `src/App.tsx`:

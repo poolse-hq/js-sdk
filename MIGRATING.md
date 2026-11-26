@@ -1,8 +1,9 @@
 # Migrating to 3.0
 
-3.0 is the first stable poolse SDK. The five packages share a version number
-and are released together; the current release is 3.1. Upgrade them
-together:
+3.0 is the first stable poolse SDK. The seven packages (`@poolse/theme`,
+`@poolse/crypto`, `@poolse/sdk`, `@poolse/react`, `@poolse/react-ui`,
+`@poolse/react-native`, `@poolse/native`) share a version number and are
+released together; the current release is 3.10. Upgrade them together:
 
 ```bash
 npm install @poolse/sdk@3 @poolse/react@3 @poolse/react-ui@3 @poolse/react-native@3 @poolse/native@3

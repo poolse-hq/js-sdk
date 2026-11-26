@@ -3,7 +3,7 @@
 TypeScript SDKs for [poolse](https://poolse.dev). Docs: <https://poolse.dev/docs/sdk>
 
 This repository is a pnpm monorepo with **seven packages**. They share one
-version number and are released together (current release: 3.1).
+version number and are released together (current release: 3.10).
 
 | Package                                           | What                                                                                                                             | Use when                                                      |
 | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -30,7 +30,7 @@ import { PoolseProvider, type PoolseConfig } from '@poolse/react';
 import { ConversationView } from '@poolse/react-ui';
 
 const config: PoolseConfig = {
-  // apiUrl defaults to https://api.poolse.dev
+  apiUrl: 'https://chat.example.com', // your poolse server
   getToken: async () => {
     const res = await fetch('/api/chat-token', { method: 'POST' }); // your backend mints the JWT
     const { token } = await res.json();

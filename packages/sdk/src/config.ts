@@ -1,8 +1,7 @@
 /**
- * Hosted poolse API URL. Used as the default for `PoolseConfig.apiUrl`
- * when you don't pass one — appropriate for the vast majority of
- * integrations that target the official poolse cloud. Self-hosted /
- * staging deployments override via the `apiUrl` field.
+ * The default for `PoolseConfig.apiUrl`, kept for compatibility. poolse
+ * runs on your own server (on-prem): always pass `apiUrl` with your
+ * server's URL, or user tokens are sent to this address.
  */
 export const POOLSE_API_URL = 'https://api.poolse.dev';
 
@@ -15,10 +14,10 @@ import type { PoolseUserProfile } from './types.js';
  */
 export interface PoolseConfig {
   /**
-   * Base URL of the poolse REST API. Defaults to the hosted endpoint
-   * at `https://api.poolse.dev`. Override only for self-hosted /
-   * staging deployments. MUST NOT include the `/v1` path — the SDK
-   * adds that itself.
+   * Base URL of your poolse server's REST API, e.g.
+   * `https://chat.example.com`. Set it: the fallback (`POOLSE_API_URL`)
+   * is not your server. MUST NOT include the `/v1` path — the SDK adds
+   * that itself.
    */
   apiUrl?: string;
 
@@ -125,7 +124,8 @@ export interface PoolseConfig {
    *   userResolver: (externalId) => directory[externalId] ?? null
    *
    * Return `null` when the user can't be found — components fall back
-   * to the external_id as a label and an initials avatar.
+   * to the name the server knows, or a neutral label ("Unknown user"),
+   * never a raw id.
    */
   userResolver?: (
     externalId: string,

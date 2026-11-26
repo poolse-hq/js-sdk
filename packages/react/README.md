@@ -56,9 +56,10 @@ function Chat({ conversationId }: { conversationId: string }) {
 }
 ```
 
-The provider creates one `Poolse` instance per mount. Function options are
-read through a ref, so new closures on each render are fine. Remount with a
-new `key` to switch user.
+The provider creates one `Poolse` instance per mount and destroys it right
+after unmount (React StrictMode's development remount keeps it). Function
+options are read through a ref, so new closures on each render are fine.
+Remount with a new `key` to switch user.
 
 ### Several workspaces
 
@@ -124,10 +125,24 @@ of one with `client.destroy({ clearStorage: true })`.
 | `useClip(clipId, initial?)`                                                      | `{ clip, url, loading, error, refresh }` — live through `clip:ready` / `clip:deleted`                                                                               |
 | `useRecordingPlayback(recordingId)`                                              | `{ playback: { url, chapters, transcript }, loading, error, refresh }` — `refresh()` when the media fails                                                           |
 | `useRecordingUrl(recordingId)`                                                   | `{ url, contentType, loading, error, refresh }` — 5-minute link                                                                                                     |
+| `usePoll(message)`                                                               | `{ poll, myOptionIds, closed, pending, error, toggle(optionId), clear, close }`                                                                                     |
+| `usePins(conversationId)`                                                        | `{ pins, loading, error, pin(id), unpin(id), refresh }` — live on `pin:added` / `pin:removed`                                                                       |
+| `useFiles(conversationId, kind?)`                                                | `{ files, loading, error, hasMore, loadMore }` — newest first; new versions on `attachment:processed`                                                               |
+| `useScheduledMessages(conversationId?)`                                          | `{ scheduled, loading, error, schedule, cancel, sendNow, reschedule, refresh }`                                                                                     |
+| `useTranslation(messageId, language)`                                            | `{ translation, loading, error, translate, reset }`                                                                                                                 |
+| `useCatchUp(conversationId)`                                                     | `{ result, loading, error, run(opts?) }` — "what did I miss", on demand                                                                                             |
+| `useThreadFollow(rootId)`                                                        | `{ following, setFollowing(on), error }`                                                                                                                            |
+| `useMessageStreams(conversationId)`                                              | AI agent replies as they are written (`message:stream`)                                                                                                             |
+| `useCustomEmoji()`                                                               | the workspace's custom emoji, from `<CustomEmojiProvider>`                                                                                                          |
+| `useOptionalPoolse()`                                                            | the nearest provider's client, or null outside one                                                                                                                  |
 
 Helpers: `canEditOwnMessage`, `EDIT_WINDOW_MS`, `receiptsOf`,
-`computeGroupPosition`, `sameGroup`, `sameDay`, `formatDayLabel`, plus
-re-exports of the SDK's error classes, call-log helpers and wire types.
+`computeGroupPosition`, `sameGroup`, `sameDay`, `formatDayLabel`, the
+composer helpers (`applyFormat`, slash commands, `rankMentionGroups`,
+`readDlpError`, voice playback and waveform), custom-emoji helpers and
+`CustomEmojiProvider`, `filterConversations`, `orderUnread`,
+`applyCaptureEvent`, plus re-exports of the SDK's error classes, call-log
+helpers and wire types.
 
 Notes that trip people up:
 

@@ -8,7 +8,8 @@
     "packages/sdk",
     "packages/react",
     "packages/react-ui",
-    "packages/react-native"
+    "packages/react-native",
+    "packages/native"
   ],
   "packageOptions": {
     "entryPoints": ["src/index.ts"],
