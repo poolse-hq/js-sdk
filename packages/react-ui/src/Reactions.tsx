@@ -6,6 +6,7 @@ import { useCustomEmoji, useReactions, type CustomEmoji, type ReactionMap } from
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { EmojiGlyph, EmojiPicker, loadEmojiData, rememberEmoji } from './EmojiPicker.js';
 import { PoolseIcon } from './PoolseIcon.js';
+import { ignoreRolledBack } from './rowParts.js';
 
 const COMMON_EMOJIS = ['👍', '❤️', '😂', '🎉', '😢', '🙏'] as const;
 
@@ -61,8 +62,8 @@ export function ReactionStrip({
             type="button"
             className={`poolse-reaction-pill${mine ? ' poolse-reaction-pill--mine' : ''}`}
             onClick={() => {
-              if (mine) void removeReaction(emoji);
-              else void addReaction(emoji);
+              if (mine) void removeReaction(emoji).catch(ignoreRolledBack);
+              else void addReaction(emoji).catch(ignoreRolledBack);
             }}
             aria-pressed={mine}
             aria-label={`${emoji} reacted by ${users.length} ${users.length === 1 ? 'user' : 'users'}`}
@@ -93,7 +94,7 @@ export function ReactionStrip({
             <ReactionPicker
               onPick={(emoji) => {
                 setPickerOpen(false);
-                void addReaction(emoji);
+                void addReaction(emoji).catch(ignoreRolledBack);
               }}
               onClose={() => setPickerOpen(false)}
               customEmoji={custom}

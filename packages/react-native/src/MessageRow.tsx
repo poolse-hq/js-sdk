@@ -30,6 +30,7 @@ import { ReactionChips } from './Reactions.js';
 import { messageA11yLabel } from './internal/a11y.js';
 import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
+import { ignoreRolledBack } from './internal/errors.js';
 import { useTheme } from './theme/PoolseTheme.js';
 import {
   callLogDisplayFor,
@@ -631,7 +632,7 @@ function BubbleMessageRow({
             isSelf={isSelf}
             close={() => setActionsOpen(false)}
             reactions={reactions}
-            addReaction={(emoji) => void reactionsApi.addReaction(emoji)}
+            addReaction={(emoji) => void reactionsApi.addReaction(emoji).catch(ignoreRolledBack)}
             onMoreReactions={() => setEmojiOpen(true)}
             threads={threads}
             quotations={quotations}
@@ -650,7 +651,7 @@ function BubbleMessageRow({
         msg={msg}
         emojiOpen={emojiOpen}
         onCloseEmoji={() => setEmojiOpen(false)}
-        onPickEmoji={(emoji) => void reactionsApi.addReaction(emoji)}
+        onPickEmoji={(emoji) => void reactionsApi.addReaction(emoji).catch(ignoreRolledBack)}
         historyOpen={historyOpen}
         onCloseHistory={() => setHistoryOpen(false)}
       />

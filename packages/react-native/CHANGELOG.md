@@ -16,6 +16,8 @@ versions follow [semver](https://semver.org).
   conversation it was sent from.
 - Images in messages and the viewer fetch a fresh URL when one fails to load
   (an expired signature in a chat left open).
+- A reaction picked from the long-press sheet or the emoji picker that fails
+  no longer becomes an unhandled promise rejection (the pill rolls back).
 
 ## [3.10.3] - 2026-11-26
 

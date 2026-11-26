@@ -36,7 +36,7 @@ import { MessageActions } from './MessageActions.js';
 import { ImageMosaic, isImageContentType, QuotedCard, QuotedPlaceholder } from './MessageBubble.js';
 import type { MessageRowProps, MessageUser } from './MessageRow.js';
 import { PoolseIcon } from './PoolseIcon.js';
-import { InlineReactions, useRowActions } from './rowParts.js';
+import { ignoreRolledBack, InlineReactions, useRowActions } from './rowParts.js';
 import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
 import { userColor } from './userColor.js';
@@ -261,8 +261,8 @@ export function FlatMessageRow({
       <InlineReactions
         reactions={reactionsHook.reactions}
         currentUserId={meId}
-        onAdd={(e) => void reactionsHook.addReaction(e)}
-        onRemove={(e) => void reactionsHook.removeReaction(e)}
+        onAdd={(e) => void reactionsHook.addReaction(e).catch(ignoreRolledBack)}
+        onRemove={(e) => void reactionsHook.removeReaction(e).catch(ignoreRolledBack)}
       />
     ) : null;
 
@@ -278,7 +278,9 @@ export function FlatMessageRow({
     <div className="poolse-row__toolbar">
       <MessageActions
         moreMenu
-        {...(reactions ? { onReact: (emoji) => void reactionsHook.addReaction(emoji) } : {})}
+        {...(reactions
+          ? { onReact: (emoji) => void reactionsHook.addReaction(emoji).catch(ignoreRolledBack) }
+          : {})}
         {...(quotations && onQuote ? { onQuote } : {})}
         {...(threads && onOpenThread ? { onReply: onOpenThread } : {})}
         {...(msg.body

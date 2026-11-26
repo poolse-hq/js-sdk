@@ -38,7 +38,7 @@ import {
 import { MessageActions } from './MessageActions.js';
 import { MessageBubble, type BubbleGroupPosition } from './MessageBubble.js';
 import { PoolseIcon } from './PoolseIcon.js';
-import { InlineReactions, useRowActions } from './rowParts.js';
+import { ignoreRolledBack, InlineReactions, useRowActions } from './rowParts.js';
 import { SendStatus } from './SendStatus.js';
 import { ThreadSummary } from './ThreadSummary.js';
 
@@ -366,8 +366,8 @@ function BubbleMessageRow({
             <InlineReactions
               reactions={reactionsHook.reactions}
               currentUserId={meId}
-              onAdd={(e) => void reactionsHook.addReaction(e)}
-              onRemove={(e) => void reactionsHook.removeReaction(e)}
+              onAdd={(e) => void reactionsHook.addReaction(e).catch(ignoreRolledBack)}
+              onRemove={(e) => void reactionsHook.removeReaction(e).catch(ignoreRolledBack)}
             />
           </div>
         ) : null,
@@ -400,7 +400,7 @@ function BubbleMessageRow({
               {...(reactions
                 ? {
                     onReact: (emoji) => {
-                      void reactionsHook.addReaction(emoji);
+                      void reactionsHook.addReaction(emoji).catch(ignoreRolledBack);
                     },
                   }
                 : {})}

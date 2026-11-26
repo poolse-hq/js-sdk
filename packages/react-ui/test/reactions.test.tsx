@@ -1,6 +1,8 @@
 import { fireEvent } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { CustomEmojiProvider } from '@poolse/react';
 import { ReactionStrip } from '../src/Reactions.js';
+import { InlineReactions } from '../src/rowParts.js';
 import { jsonResponse, renderWithProvider, scriptedFetch } from './_helpers.js';
 
 describe('<ReactionStrip>', () => {
@@ -116,5 +118,25 @@ describe('<ReactionStrip>', () => {
     fireEvent.click(pick);
     // The add fires async; just confirm the picker closes.
     expect(container.querySelector('.poolse-reaction-picker')).toBeNull();
+  });
+});
+
+describe('InlineReactions (the rows’ pills)', () => {
+  it('draws a workspace emoji as its image, not as `:name:` text', () => {
+    const { container } = renderWithProvider(
+      <CustomEmojiProvider emoji={[{ name: 'party', url: 'https://chat.test/e/party.png' }]}>
+        <InlineReactions
+          reactions={{ ':party:': ['u-1'], '👍': ['u-2'] }}
+          currentUserId="u-1"
+          onAdd={() => undefined}
+          onRemove={() => undefined}
+        />
+      </CustomEmojiProvider>,
+      scriptedFetch([]),
+    );
+    const img = container.querySelector('.poolse-reaction-pill img');
+    expect(img?.getAttribute('src')).toBe('https://chat.test/e/party.png');
+    expect(container.textContent).not.toContain(':party:');
+    expect(container.textContent).toContain('👍');
   });
 });

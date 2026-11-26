@@ -26,3 +26,10 @@ export function isQuoteGone(err: unknown): boolean {
     code === 'quoted_message_wrong_conversation'
   );
 }
+
+/**
+ * For a reaction pick's promise: `useReactions` has already rolled the
+ * optimistic change back (the pill goes away again), so the failure
+ * needs no other handling — only not to become an unhandled rejection.
+ */
+export function ignoreRolledBack(): void {}

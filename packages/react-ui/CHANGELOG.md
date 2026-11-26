@@ -23,6 +23,9 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 - `AttachmentPreview` / the image viewer: file links and Download keep
   working in a chat open for more than an hour (the URL is re-signed before
   it expires, and again when an image fails to load).
+- Message rows show a workspace (custom) emoji reaction as its image instead
+  of the raw `:name:` text. A reaction that fails no longer becomes an
+  unhandled promise rejection (the pill rolls back, as before).
 
 ## [3.10.3] - 2026-11-26
 

@@ -2,6 +2,7 @@
 // actions toolbar and the inline reaction pills.
 
 import { useEffect, useRef, useState } from 'react';
+import { EmojiGlyph } from './EmojiPicker.js';
 
 /**
  * Hover doesn't fire on touch devices, so tapping a row toggles its
@@ -73,7 +74,9 @@ export function InlineReactions({
             aria-pressed={mine}
             aria-label={`${emoji} reacted by ${users.length} ${users.length === 1 ? 'user' : 'users'}`}
           >
-            <span>{emoji}</span>
+            <span>
+              <EmojiGlyph emoji={emoji} size={16} />
+            </span>
             <span className="poolse-reaction-pill__count">{users.length}</span>
           </button>
         );
@@ -81,3 +84,10 @@ export function InlineReactions({
     </div>
   );
 }
+
+/**
+ * For a reaction pick's promise: `useReactions` has already rolled the
+ * optimistic change back (the pill goes away again), so the failure
+ * needs no other handling — only not to become an unhandled rejection.
+ */
+export function ignoreRolledBack(): void {}
