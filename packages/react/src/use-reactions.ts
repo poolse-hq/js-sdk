@@ -68,6 +68,19 @@ export function useReactions(messageId: Uuid, opts: UseReactionsOptions): UseRea
   const reactionsRef = useRef<ReactionMap>(reactions);
   reactionsRef.current = reactions;
 
+  // Follow the message's own reactions when they change (a reconnect
+  // catch-up, a refetch, `message:updated`): changes made while the
+  // socket was down arrive only that way. Compared by value, as callers
+  // pass a fresh object on every render.
+  const initialKey = JSON.stringify(opts.initialReactions ?? {});
+  const seenKey = useRef(`${messageId}\u0000${initialKey}`);
+  useEffect(() => {
+    const key = `${messageId}\u0000${initialKey}`;
+    if (seenKey.current === key) return;
+    seenKey.current = key;
+    setReactions(JSON.parse(initialKey) as ReactionMap);
+  }, [messageId, initialKey]);
+
   useEffect(() => {
     const conv = chat.realtime.conversation(opts.conversationId);
 

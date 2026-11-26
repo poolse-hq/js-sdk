@@ -36,6 +36,21 @@ describe('useReactions', () => {
     expect(result.current.reactions).toEqual({ '🎉': ['u-1'] });
   });
 
+  it('follows the message when its reactions change after mount', () => {
+    const { result, rerender } = renderHookWithProvider(
+      ({ r }: { r: Record<string, string[]> }) =>
+        useReactions('m-1', { conversationId: 'c-1', initialReactions: r, currentUserId: 'u-2' }),
+      scriptedFetch([]),
+      { initialProps: { r: { '🎉': ['u-1'] } } },
+    );
+    // Same value, new object: nothing changes.
+    rerender({ r: { '🎉': ['u-1'] } });
+    expect(result.current.reactions).toEqual({ '🎉': ['u-1'] });
+    // Caught up after a reconnect: someone added 👍 while offline.
+    rerender({ r: { '🎉': ['u-1'], '👍': ['u-3'] } });
+    expect(result.current.reactions).toEqual({ '🎉': ['u-1'], '👍': ['u-3'] });
+  });
+
   it('addReaction optimistically appends current user, then POSTs', async () => {
     const fetchFn = scriptedFetch([jsonResponse(baseMsg)]);
     const { result } = renderHookWithProvider(
