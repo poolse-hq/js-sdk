@@ -20,6 +20,9 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   sends or saves a half-typed message: `MessageComposer`, `MentionInput`,
   `EditableMessageBubble`, the emoji search and the transcript search leave
   those keys to the input method.
+- `AttachmentPreview` / the image viewer: file links and Download keep
+  working in a chat open for more than an hour (the URL is re-signed before
+  it expires, and again when an image fails to load).
 
 ## [3.10.3] - 2026-11-26
 

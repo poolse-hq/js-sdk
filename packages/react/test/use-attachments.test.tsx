@@ -1,7 +1,7 @@
 import { act, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { useAttachmentUpload } from '../src/use-attachment-upload.js';
-import { useAttachmentUrl } from '../src/use-attachment-url.js';
+import { ATTACHMENT_URL_REFRESH_MS, useAttachmentUrl } from '../src/use-attachment-url.js';
 import { jsonResponse, noContent, renderHookWithProvider, scriptedFetch } from './_helpers.js';
 
 const baseAttachment = {
@@ -193,6 +193,56 @@ describe('useAttachmentUrl', () => {
     await waitFor(() => expect(result.current.url).toBe('https://storage.test/a-2'));
     // The second call goes to a-2's download URL.
     expect(fetchFn.calls[1]?.url).toBe('https://chat.test/v1/attachments/a-2/download-url');
+  });
+
+  it('never shows the previous attachment while the new id loads', async () => {
+    let release: ((r: Response) => void) | null = null;
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
+      if (url.includes('a-2')) return new Promise<Response>((resolve) => (release = resolve));
+      return jsonResponse({ url: 'https://storage.test/a-1', method: 'get' });
+    }) as unknown as typeof globalThis.fetch;
+    const { result, rerender } = renderHookWithProvider(
+      ({ id }: { id: string }) => useAttachmentUrl(id),
+      fetchFn,
+      { initialProps: { id: 'a-1' } },
+    );
+    await waitFor(() => expect(result.current.url).toBe('https://storage.test/a-1'));
+    rerender({ id: 'a-2' });
+    expect(result.current.url).toBeNull();
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(release).not.toBeNull());
+    await act(async () =>
+      release!(jsonResponse({ url: 'https://storage.test/a-2', method: 'get' })),
+    );
+    await waitFor(() => expect(result.current.url).toBe('https://storage.test/a-2'));
+  });
+
+  it('fetches a fresh URL before the old one expires, and on refresh()', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let n = 0;
+      const fetchFn = vi.fn(async () =>
+        jsonResponse({ url: `https://storage.test/a-1?v=${++n}`, method: 'get' }),
+      ) as unknown as typeof globalThis.fetch;
+      const { result } = renderHookWithProvider(() => useAttachmentUrl('a-1'), fetchFn);
+      await waitFor(() => expect(result.current.url).toBe('https://storage.test/a-1?v=1'));
+      // Right after a fetch, refresh() is ignored (an onError loop can't start).
+      act(() => result.current.refresh());
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        vi.advanceTimersByTime(ATTACHMENT_URL_REFRESH_MS);
+      });
+      await waitFor(() => expect(result.current.url).toBe('https://storage.test/a-1?v=2'));
+      await act(async () => {
+        vi.advanceTimersByTime(10_000);
+      });
+      act(() => result.current.refresh());
+      await waitFor(() => expect(result.current.url).toBe('https://storage.test/a-1?v=3'));
+      expect(result.current.loading).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

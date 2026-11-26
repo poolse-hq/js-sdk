@@ -226,12 +226,13 @@ function Tile({
   onLongPress?: (() => void) | undefined;
 }) {
   const theme = useTheme();
-  const { url } = useAttachmentUrl(attachment.id);
+  const { url, refresh } = useAttachmentUrl(attachment.id);
   return (
     <Pressable onPress={onPress} onLongPress={onLongPress} style={[styles.tileBase, style]}>
       {url ? (
         <Image
           source={{ uri: url }}
+          onError={refresh}
           style={[styles.tileImage, { backgroundColor: theme.colors.surfaceAlt }]}
           resizeMode="cover"
           accessible
@@ -263,7 +264,7 @@ function FullScreenViewer({
   onClose: () => void;
 }) {
   const attachment = images[index]!;
-  const { url } = useAttachmentUrl(attachment.id);
+  const { url, refresh } = useAttachmentUrl(attachment.id);
   const { width, height } = useWindowDimensions();
   const insets = useSafeInsets();
   const n = images.length;
@@ -286,6 +287,7 @@ function FullScreenViewer({
       {url ? (
         <Image
           source={{ uri: url }}
+          onError={refresh}
           style={{ width, height }}
           resizeMode="contain"
           accessible

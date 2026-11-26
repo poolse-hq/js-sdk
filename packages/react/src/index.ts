@@ -38,7 +38,7 @@ export {
   type UploadItem,
   type UploadItemStatus,
 } from './use-attachment-upload.js';
-export { useAttachmentUrl } from './use-attachment-url.js';
+export { ATTACHMENT_URL_REFRESH_MS, useAttachmentUrl } from './use-attachment-url.js';
 export { useAgent, useUser, type UseUserState } from './use-user.js';
 export { useAppEvent } from './use-app-event.js';
 export {

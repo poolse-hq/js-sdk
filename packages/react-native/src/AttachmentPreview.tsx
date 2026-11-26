@@ -30,7 +30,7 @@ export function AttachmentPreview({
 }: AttachmentPreviewProps) {
   const theme = useTheme();
   const isImage = (attachment.content_type ?? '').startsWith('image/');
-  const { url } = useAttachmentUrl(attachment.id);
+  const { url, refresh } = useAttachmentUrl(attachment.id);
   const open =
     onPress ?? (url && /^https?:\/\//i.test(url) ? () => void Linking.openURL(url) : undefined);
 
@@ -40,6 +40,7 @@ export function AttachmentPreview({
         {url ? (
           <Image
             source={{ uri: url }}
+            onError={refresh}
             style={{
               width: maxWidth,
               height: 200,

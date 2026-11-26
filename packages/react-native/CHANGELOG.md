@@ -14,6 +14,8 @@ versions follow [semver](https://semver.org).
   `conversationId` in place no longer clears the new conversation's reply
   chip or drops the old text into it; the outcome goes to the draft of the
   conversation it was sent from.
+- Images in messages and the viewer fetch a fresh URL when one fails to load
+  (an expired signature in a chat left open).
 
 ## [3.10.3] - 2026-11-26
 

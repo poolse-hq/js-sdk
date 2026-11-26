@@ -4,6 +4,16 @@ All notable changes to `@poolse/react` are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [semver](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- `useAttachmentUrl`: the URL is fetched again before the server's one-hour
+  signature expires (`ATTACHMENT_URL_REFRESH_MS`, 50 min), so links and
+  images in a chat left open keep working; a new `refresh()` fetches one now
+  (ignored within 5 s of the last fetch). When the id changes, `url` is null
+  until the new one arrives instead of showing the previous attachment.
+
 ## [3.10.3] - 2026-11-26
 
 ### Changed

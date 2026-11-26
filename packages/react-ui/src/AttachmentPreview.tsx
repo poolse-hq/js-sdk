@@ -23,7 +23,9 @@ export interface AttachmentPreviewProps {
 
 export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProps) {
   const isFullRow = 'content_type' in attachment;
-  const { url, loading, error } = useAttachmentUrl(attachment.id);
+  // The URL is re-signed before it expires (an open chat outlives it),
+  // and again when the image fails to load.
+  const { url, loading, refresh } = useAttachmentUrl(attachment.id);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   if (loading) {
@@ -34,7 +36,7 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
     );
   }
 
-  if (error || !url) {
+  if (!url) {
     return (
       <div className="poolse-attachment poolse-list--placeholder poolse-list--error">
         Failed to load attachment.
@@ -68,10 +70,16 @@ export function AttachmentPreview({ attachment, onClick }: AttachmentPreviewProp
             src={url}
             alt={filename ?? 'attachment'}
             loading="lazy"
+            onError={refresh}
           />
         </button>
         {lightboxOpen && (
-          <Lightbox url={url} filename={filename} onClose={() => setLightboxOpen(false)} />
+          <Lightbox
+            url={url}
+            filename={filename}
+            onClose={() => setLightboxOpen(false)}
+            onError={refresh}
+          />
         )}
       </div>
     );
@@ -136,7 +144,7 @@ export function ImageGallery({
   onClose: () => void;
 }) {
   const att = images[index];
-  const { url } = useAttachmentUrl(att?.id ?? null);
+  const { url, refresh } = useAttachmentUrl(att?.id ?? null);
   if (!att || !url) return null;
   const filename = 'original_filename' in att ? (att.original_filename ?? null) : null;
   const n = images.length;
@@ -145,6 +153,7 @@ export function ImageGallery({
       url={url}
       filename={filename}
       onClose={onClose}
+      onError={refresh}
       {...(n > 1
         ? {
             position: `${index + 1} of ${n}`,
@@ -163,10 +172,13 @@ function Lightbox({
   onPrev,
   onNext,
   position,
+  onError,
 }: {
   url: string;
   filename: string | null;
   onClose: () => void;
+  /** The image failed to load (an expired URL): fetch a fresh one. */
+  onError?: () => void;
   onPrev?: () => void;
   onNext?: () => void;
   /** "2 of 6", when it's one of several. */
@@ -220,6 +232,7 @@ function Lightbox({
         src={url}
         alt={filename ?? 'attachment'}
         onClick={(e) => e.stopPropagation()}
+        {...(onError ? { onError } : {})}
       />
       {onPrev && (
         <button
