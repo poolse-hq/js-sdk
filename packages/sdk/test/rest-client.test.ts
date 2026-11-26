@@ -478,6 +478,38 @@ describe('RestClient.request', () => {
       expect(fetchFn.calls).toHaveLength(1);
     });
 
+    it('a per-call timeoutMs overrides requestTimeoutMs', async () => {
+      const fetchFn = hangingFetch();
+      const client = buildClient({ fetch: fetchFn, requestTimeoutMs: 60_000 });
+      const err = await client
+        .request({ method: 'POST', path: '/v1/x', body: {}, timeoutMs: 20 })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(NetworkError);
+      expect((err as Error).message).toMatch(/after 20 ms/);
+    });
+
+    it('timeoutMs: 0 turns the deadline off for that call', async () => {
+      let answer!: (r: Response) => void;
+      const fetchFn = vi.fn(
+        (_input: RequestInfo | URL, init?: RequestInit) =>
+          new Promise<Response>((resolve, reject) => {
+            answer = resolve;
+            init?.signal?.addEventListener('abort', () =>
+              reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+            );
+          }),
+      ) as unknown as typeof globalThis.fetch;
+      const client = buildClient({ fetch: fetchFn, requestTimeoutMs: 20 });
+      const pending = client.request<{ ok: boolean }>({
+        method: 'GET',
+        path: '/v1/me',
+        timeoutMs: 0,
+      });
+      await new Promise((r) => setTimeout(r, 60)); // well past requestTimeoutMs
+      answer(jsonResponse({ ok: true }));
+      await expect(pending).resolves.toEqual({ ok: true });
+    });
+
     it('a caller abort is still an AbortError, not a timeout', async () => {
       const fetchFn = hangingFetch();
       const client = buildClient({ fetch: fetchFn, requestTimeoutMs: 5_000 });

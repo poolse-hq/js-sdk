@@ -1,7 +1,7 @@
 // Public SDK surface.
 
 export { Poolse } from './poolse.js';
-export { POOLSE_API_URL } from './config.js';
+export { AI_REQUEST_TIMEOUT_MS, POOLSE_API_URL } from './config.js';
 export type { PoolseConfig } from './config.js';
 
 export {

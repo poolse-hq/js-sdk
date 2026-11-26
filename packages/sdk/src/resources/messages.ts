@@ -1,3 +1,4 @@
+import { AI_REQUEST_TIMEOUT_MS } from '../config.js';
 import type { RestClient } from '../rest-client.js';
 import type {
   IncludeDeletedOption,
@@ -124,6 +125,7 @@ export class ConversationMessages {
       method: 'POST',
       path: `/v1/conversations/${this.conversationId}/catch-up`,
       body: opts,
+      timeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(signal ? { signal } : {}),
     });
   }
@@ -330,6 +332,7 @@ export class MessageHandle {
       method: 'POST',
       path: `/v1/messages/${this.id}/translate`,
       body: { language },
+      timeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(signal ? { signal } : {}),
     });
   }

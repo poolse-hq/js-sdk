@@ -67,7 +67,8 @@ export interface PoolseConfig {
    * (default 30_000; 0 turns it off). A timed-out attempt is a
    * `NetworkError`: GET/PUT/DELETE retry it, POST/PATCH don't (the
    * server may have done the work; the outbox resends messages safely
-   * by id).
+   * by id). Endpoints that wait on a model (ask, catch-up, translate,
+   * summaries, follow-up drafts) use `AI_REQUEST_TIMEOUT_MS` instead.
    */
   requestTimeoutMs?: number;
 
@@ -197,6 +198,12 @@ const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_BACKOFF_MS = 250;
 const DEFAULT_MAX_BACKOFF_MS = 30_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Per-attempt timeout for endpoints that wait on a model (meetings ask,
+ * catch-up, translate, summary regenerate, follow-up drafts). The server
+ * gives the model 60 s; this leaves room for queueing and the network.
+ */
+export const AI_REQUEST_TIMEOUT_MS = 90_000;
 
 export function resolveConfig(config: PoolseConfig): ResolvedConfig {
   if (typeof config.getToken !== 'function') {

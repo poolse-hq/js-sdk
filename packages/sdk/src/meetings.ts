@@ -16,6 +16,7 @@
 // `recording_ms`, chapters, playback segments). A `MeetingMoment` carries
 // both so the app can open either the transcript or the recording.
 
+import { AI_REQUEST_TIMEOUT_MS } from './config.js';
 import type { Recording, TranscriptSegment } from './resources/calls.js';
 import type { RestClient } from './rest-client.js';
 import type { Attachment, Message, Uuid } from './types.js';
@@ -828,6 +829,7 @@ export class MeetingsResource {
       },
       // Answers cost model time: no silent repeats.
       maxRetries: 0,
+      timeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
     return meetingAnswerFromWire(res);
@@ -860,6 +862,7 @@ export class MeetingsResource {
         ...(opts.post !== undefined ? { post: opts.post } : {}),
       },
       maxRetries: 0,
+      timeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
     return requireSummary(res);
@@ -968,6 +971,7 @@ export class MeetingsResource {
       path: `${call(callId)}/summary/follow-up`,
       body: { channel: opts.channel ?? 'message', ...(instructions ? { instructions } : {}) },
       maxRetries: 0,
+      timeoutMs: AI_REQUEST_TIMEOUT_MS,
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
     return followUpFromWire(res, callId);
