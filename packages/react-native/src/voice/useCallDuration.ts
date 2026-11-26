@@ -1,3 +1,4 @@
+import { formatClock } from '@poolse/sdk';
 import { useEffect, useRef, useState } from 'react';
 
 /**
@@ -23,13 +24,5 @@ export function useCallDuration(connected: boolean): string | null {
   }, [connected]);
 
   if (!connected || startedAt.current === null) return null;
-  return format(Math.max(0, Math.floor((Date.now() - startedAt.current) / 1000)));
-}
-
-function format(total: number): string {
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  const mm = hours > 0 ? String(minutes).padStart(2, '0') : String(minutes);
-  return `${hours > 0 ? `${hours}:` : ''}${mm}:${String(seconds).padStart(2, '0')}`;
+  return formatClock(Date.now() - startedAt.current);
 }

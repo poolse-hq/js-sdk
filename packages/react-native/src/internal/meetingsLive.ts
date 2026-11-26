@@ -1,20 +1,17 @@
 // Pure helpers behind the live meeting components — no React Native
 // imports, so vitest runs them under node.
 
-import type {
-  CallConnectionQuality,
-  LiveTranscriptSegment,
-  MeetingCard,
-  WhiteboardShape,
+import {
+  formatClock,
+  type CallConnectionQuality,
+  type LiveTranscriptSegment,
+  type MeetingCard,
+  type WhiteboardShape,
 } from '@poolse/sdk';
 
-/** 45 → "0:45", 3725 → "1:02:05". */
+/** 45 → "0:45", 3725 → "1:02:05" (seconds; `formatClock` takes ms). */
 export function formatCountdown(seconds: number | null | undefined): string {
-  const s = Math.max(0, Math.floor(seconds ?? 0));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = String(s % 60).padStart(2, '0');
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+  return formatClock(Math.max(0, Math.floor(seconds ?? 0)) * 1000);
 }
 
 /** Show at most `max` avatars; the rest become "+N". */

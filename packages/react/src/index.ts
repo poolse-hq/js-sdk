@@ -287,6 +287,7 @@ export {
   BRIEF_RULE_MAX,
   BRIEF_TEXT_MAX,
   ESCALATION_ANSWER_MAX,
+  callAgentInviteErrorMessage,
   callAgentModeLabel,
   callAgentOfParticipant,
   callAgentStateLabel,

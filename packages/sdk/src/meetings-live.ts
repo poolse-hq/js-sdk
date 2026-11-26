@@ -550,11 +550,17 @@ export async function waitInLobby(opts: {
     opts.onStatus?.(status);
     if (status.status !== 'waiting') return status;
     await new Promise<void>((resolve) => {
-      const t = setTimeout(resolve, every);
-      opts.signal?.addEventListener('abort', () => {
+      // One listener per wait, removed when the wait ends: a long lobby
+      // wait used to pile up one per poll on the signal.
+      const onAbort = () => {
         clearTimeout(t);
         resolve();
-      });
+      };
+      const t = setTimeout(() => {
+        opts.signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, every);
+      opts.signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 }

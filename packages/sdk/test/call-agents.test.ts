@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  callAgentInviteErrorMessage,
   briefFromWire,
   callAgentFromWire,
   callAgentOfParticipant,
@@ -235,5 +236,17 @@ describe('agents in calls — REST', () => {
       rules: ['no price changes'],
       escalation_timeout_seconds: 30,
     });
+  });
+});
+
+describe('callAgentInviteErrorMessage', () => {
+  it('maps the server codes to plain words', () => {
+    expect(callAgentInviteErrorMessage({ code: 'not_in_call' })).toBe(
+      'Join the call to invite an agent.',
+    );
+    expect(callAgentInviteErrorMessage({ code: 'transcription_unavailable' })).toMatch(
+      /live transcription/,
+    );
+    expect(callAgentInviteErrorMessage(new Error('x'))).toBe('That didn’t work. Try again.');
   });
 });

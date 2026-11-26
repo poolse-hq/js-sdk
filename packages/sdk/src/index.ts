@@ -411,6 +411,7 @@ export {
   WhisperApi,
   briefFromWire,
   callAgentFromWire,
+  callAgentInviteErrorMessage,
   callAgentModeLabel,
   callAgentOfParticipant,
   callAgentStateLabel,

@@ -26,6 +26,8 @@ All notable changes to `@poolse/react` are documented here. Format follows
   media link from a player's `onError`, at most `max` times (default 3)
   a minute, with `exhausted` once the cap is reached. Used by
   `ClipPlayer` and `RecordingPlayer` on both platforms.
+- `callAgentInviteErrorMessage` re-exported from `@poolse/sdk`, next to
+  `escalationErrorMessage` and `whisperErrorMessage`.
 
 ## [3.10.3] - 2026-11-26
 

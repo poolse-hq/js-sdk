@@ -64,6 +64,12 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
   off) even when a fallback video is passed, so the button is hidden
   instead of doing nothing.
 
+### Changed
+
+- The call timer and the agent-invite error text use the shared
+  `formatClock` and `callAgentInviteErrorMessage` helpers instead of
+  private copies (same output).
+
 ## [3.10.3] - 2026-11-26
 
 No changes; released with the other packages.

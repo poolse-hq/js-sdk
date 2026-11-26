@@ -371,6 +371,31 @@ export function whisperHintKindLabel(kind: WhisperHintKind): string {
   }
 }
 
+/** A plain sentence for a failed agent invite (or mode change / removal) in a call. */
+export function callAgentInviteErrorMessage(err: unknown): string {
+  switch (codeOf(err)) {
+    case 'not_in_call':
+      return 'Join the call to invite an agent.';
+    case 'agents_not_allowed':
+      return 'You can’t invite agents to this call.';
+    case 'agent_not_member':
+      return 'Add the agent to this conversation first.';
+    case 'agent_paused':
+      return 'This agent is paused.';
+    case 'transcription_disabled':
+    case 'transcription_unavailable':
+      return 'Agents need live transcription, which isn’t available here.';
+    case 'speaking_disabled':
+      return 'Agents can’t speak in calls here — invite it to take notes.';
+    case 'voice_unavailable':
+      return 'Agents can’t join calls right now. Try again soon.';
+    case 'rate_limited':
+      return 'Too many changes. Wait a moment.';
+    default:
+      return 'That didn’t work. Try again.';
+  }
+}
+
 /** A plain sentence for a whisper error. */
 export function whisperErrorMessage(err: unknown): string {
   const code = codeOf(err);

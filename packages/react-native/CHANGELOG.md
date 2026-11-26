@@ -44,6 +44,12 @@ versions follow [semver](https://semver.org).
   link on every media error; `RecordingPlayer` shows an error once its
   renewals run out.
 
+### Changed
+
+- `formatCountdown`, `useCallDuration` and the agent-invite error text
+  use the shared `formatClock` and `callAgentInviteErrorMessage` helpers
+  instead of private copies (same output).
+
 ## [3.10.3] - 2026-11-26
 
 ### Added

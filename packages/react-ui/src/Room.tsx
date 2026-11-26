@@ -9,7 +9,7 @@
 //     {room.joined && <RoomStage room={room} title="Design review" />}
 
 import { captureErrorMessage, useRecording, type UseRoom } from '@poolse/react';
-import type { CallDeviceKind } from '@poolse/sdk';
+import { formatClock, type CallDeviceKind } from '@poolse/sdk';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CallControlButton, CallDeviceMenu } from './CallControls.js';
@@ -368,9 +368,5 @@ function useElapsed(startedAt: string | null, running: boolean): string | null {
   if (!running || !startedAt) return null;
   const start = Date.parse(startedAt);
   if (!Number.isFinite(start)) return null;
-  const total = Math.max(0, Math.floor((Date.now() - start) / 1000));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = String(total % 60).padStart(2, '0');
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+  return formatClock(Date.now() - start);
 }

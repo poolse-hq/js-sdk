@@ -15,6 +15,7 @@
 import type { AgentEscalation, CallAgent, EscalationReply } from '@poolse/sdk';
 import {
   ESCALATION_ANSWER_MAX,
+  callAgentInviteErrorMessage,
   callAgentModeLabel,
   callAgentStateLabel,
   callAgentStateOf,
@@ -232,7 +233,7 @@ export function InviteAgentMenu({ callAgents, onDone, style }: InviteAgentMenuPr
       ) : null}
       {error ? (
         <Text style={[styles.small, { color: theme.colors.danger }]} accessibilityRole="alert">
-          {inviteErrorMessage(error)}
+          {callAgentInviteErrorMessage(error)}
         </Text>
       ) : null}
     </View>
@@ -525,31 +526,6 @@ export function EscalationList({ callId, empty = null, style }: EscalationListPr
       ))}
     </View>
   );
-}
-
-function inviteErrorMessage(err: unknown): string {
-  const code = (err as { code?: unknown } | null)?.code;
-  switch (code) {
-    case 'not_in_call':
-      return 'Join the call to invite an agent.';
-    case 'agents_not_allowed':
-      return 'You can’t invite agents to this call.';
-    case 'agent_not_member':
-      return 'Add the agent to this conversation first.';
-    case 'agent_paused':
-      return 'This agent is paused.';
-    case 'transcription_disabled':
-    case 'transcription_unavailable':
-      return 'Agents need live transcription, which isn’t available here.';
-    case 'speaking_disabled':
-      return 'Agents can’t speak in calls here — invite it to take notes.';
-    case 'voice_unavailable':
-      return 'Agents can’t join calls right now. Try again soon.';
-    case 'rate_limited':
-      return 'Too many changes. Wait a moment.';
-    default:
-      return 'That didn’t work. Try again.';
-  }
 }
 
 function useExpired(expiresAt: string | null): boolean {

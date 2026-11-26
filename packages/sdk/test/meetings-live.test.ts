@@ -200,6 +200,37 @@ describe('poolse.live REST', () => {
     expect(fetchFn.calls[0]?.url).toBe('https://chat.test/v1/guest/lobby/e1');
     expect(fetchFn.calls[0]?.headers.get('authorization')).toBe('Bearer lobby-tok');
   });
+
+  it('a long lobby wait does not pile abort listeners on the signal', async () => {
+    // A fetch that ignores the signal, so only waitInLobby's own listeners count.
+    const answers = [
+      jsonResponse({ lobby: { status: 'waiting' } }),
+      jsonResponse({ lobby: { status: 'waiting' } }),
+      jsonResponse({ lobby: { status: 'denied' } }),
+    ];
+    const fetchFn = (async () => answers.shift()!) as unknown as typeof fetch;
+    const controller = new AbortController();
+    let live = 0;
+    const add = controller.signal.addEventListener.bind(controller.signal);
+    const remove = controller.signal.removeEventListener.bind(controller.signal);
+    controller.signal.addEventListener = ((type: string, fn: never, o?: never) => {
+      if (type === 'abort') live++;
+      add(type, fn, o);
+    }) as never;
+    controller.signal.removeEventListener = ((type: string, fn: never, o?: never) => {
+      if (type === 'abort') live--;
+      remove(type, fn, o);
+    }) as never;
+    await waitInLobby({
+      apiUrl: 'https://chat.test',
+      entryId: 'e1',
+      lobbyToken: 'tok',
+      intervalMs: 1,
+      fetch: fetchFn,
+      signal: controller.signal,
+    });
+    expect(live).toBe(0);
+  });
 });
 
 /**

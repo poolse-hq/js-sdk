@@ -16,6 +16,14 @@ All notable changes to `@poolse/sdk` are documented here. Format follows
 - `forwardErrorMessage(err)` and `blockActionErrorMessage(err)`: the
   plain-words text the forward dialogs and block renderers show when the
   request fails.
+- `callAgentInviteErrorMessage(err)`: the plain-words text for a failed
+  agent invite in a call, used by both UI packages (it was a private
+  copy in each). Re-exported from `@poolse/react`.
+
+### Fixed
+
+- `waitInLobby` removes its abort listener after each poll; a long lobby
+  wait used to add one listener per poll to the `signal`.
 
 ## [3.10.3] - 2026-11-26
 
