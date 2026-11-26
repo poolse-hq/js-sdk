@@ -10,7 +10,7 @@ import { ConversationView } from '../src/ConversationView.js';
 import { MemberList } from '../src/MemberList.js';
 import { MessageExtrasProvider } from '../src/messageExtras.js';
 import { AskMeetings, RecordingPlayer, SummaryCard } from '../src/Meetings.js';
-import { member, me, msg, viewRoutes } from './_fixtures.js';
+import { member, me, msg, names, viewRoutes } from './_fixtures.js';
 import { jsonResponse, renderWithProvider, routedFetch } from './_helpers.js';
 
 const LONG = 'Scout the Extraordinarily Long-Named Support Triage Assistant';
@@ -74,7 +74,7 @@ describe('agent badge', () => {
     expect(container.querySelector('.poolse-avatar--agent')).toBeTruthy();
 
     renderWithProvider(
-      <MemberList conversationId="c-1" showPresence={false} />,
+      <MemberList conversationId="c-1" showPresence={false} labelFor={names} />,
       routedFetch({
         'GET /v1/conversations/c-1/members': () =>
           jsonResponse({
@@ -82,7 +82,7 @@ describe('agent badge', () => {
           }),
       }),
     );
-    await screen.findByText('scout');
+    await screen.findByText('Scout');
     expect(screen.getAllByText('Agent')).toHaveLength(1);
   });
 });

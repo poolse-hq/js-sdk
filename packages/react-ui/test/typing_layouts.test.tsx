@@ -2,7 +2,7 @@ import { act, waitFor } from '@testing-library/react';
 import { usePoolse } from '@poolse/react';
 import { describe, expect, it } from 'vitest';
 import { ConversationView, type ChatLayout } from '../src/index.js';
-import { msg, viewRoutes } from './_fixtures.js';
+import { msg, names, viewRoutes } from './_fixtures.js';
 import { renderWithProvider, routedFetch } from './_helpers.js';
 
 type TypingHandler = (evt: { external_id: string | null }) => void;
@@ -33,7 +33,12 @@ describe('typing indicator in every layout', () => {
       const { container } = renderWithProvider(
         <>
           <TypingTap onHandler={(fn) => (handler = fn)} />
-          <ConversationView conversationId="c-1" layout={layout} loadFonts={false} />
+          <ConversationView
+            conversationId="c-1"
+            layout={layout}
+            labelFor={names}
+            loadFonts={false}
+          />
         </>,
         routedFetch(viewRoutes([msg(1)])),
       );
@@ -42,7 +47,7 @@ describe('typing indicator in every layout', () => {
       act(() => handler!({ external_id: 'two' }));
       const typing = container.querySelector('.poolse-conversation .poolse-typing');
       await waitFor(() => expect(typing?.hasAttribute('data-typing')).toBe(true));
-      expect(typing?.textContent).toContain('two is typing');
+      expect(typing?.textContent).toContain('Two is typing');
     });
   }
 });

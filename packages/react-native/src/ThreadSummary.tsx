@@ -1,5 +1,5 @@
 import type { Message } from '@poolse/sdk';
-import { useUser } from '@poolse/react';
+import { displayNameOf, useUser } from '@poolse/react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { stackedParticipants, threadSummaryText } from './internal/thread.js';
@@ -94,7 +94,11 @@ function Participant({
 }) {
   const resolved = useUser(externalId);
   const name = externalId
-    ? (labelFor?.(externalId) ?? resolved.profile?.displayName ?? externalId)
+    ? displayNameOf(externalId, {
+        labelFor,
+        profileName: resolved.profile?.displayName,
+        fallback: 'Someone',
+      })
     : null;
   const src = externalId ? (avatarFor?.(externalId) ?? resolved.profile?.avatarUrl ?? null) : null;
   return <Avatar src={src} name={name} seed={externalId ?? fallback} size="xs" />;

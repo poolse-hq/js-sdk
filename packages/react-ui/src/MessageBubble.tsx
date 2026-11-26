@@ -1,5 +1,12 @@
 import type { Attachment, Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
-import { approvalIdOf, citationsOf, clipOf, messageAgent, useUser } from '@poolse/react';
+import {
+  approvalIdOf,
+  citationsOf,
+  clipOf,
+  displayNameOf,
+  messageAgent,
+  useUser,
+} from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -41,9 +48,9 @@ export interface MessageBubbleProps {
    */
   readState?: 'sent' | 'read';
   /**
-   * Optional friendly label for a quoted message's sender. Same shape
-   * as `<MemberList labelFor>` — `(externalId) => string` looking up a
-   * display name from the local member roster.
+   * Display names from the host: the sender label and the quoted
+   * message's sender. Same shape as `<MemberList labelFor>`. Wins over
+   * the `userResolver` profile; with neither, "Unknown user" (never an id).
    */
   labelFor?: (externalId: string) => string;
   /**
@@ -151,8 +158,11 @@ export function MessageBubble({
     !isSelf ? message.sender_external_id : null,
   );
   const senderIsAgent = !isSelf && (!!knownAgent || !!messageAgent(message));
-  const senderFallbackName = message.sender_external_id ?? 'Unknown';
-  const senderName = sender?.displayName ?? senderFallbackName;
+  const senderName = displayNameOf(message.sender_external_id, {
+    labelFor,
+    profileName: sender?.displayName,
+    agentName: knownAgent?.name,
+  });
   const senderColorKey = message.sender_external_id ?? message.sender_id ?? '';
   const senderColorHex = senderColorKey ? userColor(senderColorKey) : 'currentColor';
 
@@ -531,11 +541,10 @@ export function QuotedCard({
   onClick?: (quotedMessageId: Uuid) => void;
 }) {
   const { profile: quotedSender } = useUser(quoted.sender_external_id ?? null);
-  const senderLabel = quoted.sender_external_id
-    ? (labelFor?.(quoted.sender_external_id) ??
-      quotedSender?.displayName ??
-      quoted.sender_external_id)
-    : 'Unknown';
+  const senderLabel = displayNameOf(quoted.sender_external_id, {
+    labelFor,
+    profileName: quotedSender?.displayName,
+  });
   const isDeleted = !!quoted.deleted_at;
   const handleClick = onClick ? () => onClick(quoted.id) : undefined;
 

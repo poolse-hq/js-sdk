@@ -1,5 +1,5 @@
 import type { MemberRole, Membership, Uuid } from '@poolse/sdk';
-import { useMembers, usePresence, useUser } from '@poolse/react';
+import { displayNameOf, useMembers, usePresence, useUser } from '@poolse/react';
 import { type ReactNode } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -127,7 +127,11 @@ function MemberRow({
   // PoolseConfig.userResolver contract for consumers who configured
   // one and expected names + avatars to flow through automatically.
   const resolved = useUser(externalId);
-  const name = labelFor?.(externalId) ?? resolved.profile?.displayName ?? externalId;
+  const name = displayNameOf(externalId, {
+    labelFor,
+    profileName: resolved.profile?.displayName,
+    agentName: resolved.agent?.name,
+  });
   const avatarUrl = avatarFor?.(externalId) ?? resolved.profile?.avatarUrl ?? null;
   // useMembers tells the registry which members are agents (AG1).
   const agent = !!resolved.agent;

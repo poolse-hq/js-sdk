@@ -7,7 +7,7 @@ import { waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import { describe, expect, it } from 'vitest';
 import { ConversationList, ConversationView, MemberList, ThreadView } from '../src/index.js';
-import { conversation, me, member, msg, viewRoutes } from './_fixtures.js';
+import { conversation, me, member, msg, names, viewRoutes } from './_fixtures.js';
 import { jsonResponse, renderWithProvider, routedFetch } from './_helpers.js';
 
 async function violations(root: Element) {
@@ -112,10 +112,10 @@ describe('accessibility (axe)', () => {
 
   it('MemberList', async () => {
     const { container } = renderWithProvider(
-      <MemberList conversationId="c-1" />,
+      <MemberList conversationId="c-1" labelFor={names} />,
       routedFetch(viewRoutes([], {}, [member('u-me', 'me'), member('u-2', 'two')])),
     );
-    await waitFor(() => expect(container.textContent).toContain('two'));
+    await waitFor(() => expect(container.textContent).toContain('Two'));
     const v = await violations(container);
     if (v.length) console.log('AXE', JSON.stringify(v, null, 1));
     expect(v).toEqual([]);

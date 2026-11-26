@@ -18,6 +18,15 @@ versions follow [semver](https://semver.org).
   (an expired signature in a chat left open).
 - A reaction picked from the long-press sheet or the emoji picker that fails
   no longer becomes an unhandled promise rejection (the pill rolls back).
+- Names never show a raw id: rows, bubbles, quote cards, the reply chip,
+  mentions (the inserted `@name` too), the typing line, `MemberList`,
+  `UserName` / `useDisplayName`, `ChatHeader`, `ConversationList` and
+  `PoolseInbox` fall back to "Unknown user" (thread avatars: "Someone"). One
+  order everywhere, the same as web (`displayNameOf` from `@poolse/react`):
+  `labelFor`, then the `userResolver` profile — the bubble header used to
+  prefer the profile, so it could disagree with the row's screen-reader
+  label. `UserName`'s `fallback` is now only for a null `externalId` (as its
+  doc said).
 
 ## [3.10.3] - 2026-11-26
 

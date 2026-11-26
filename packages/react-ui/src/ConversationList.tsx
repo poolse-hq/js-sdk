@@ -14,6 +14,7 @@ import {
   formatCallLogPreview,
   formatRecordingNoticePreview,
   formatCallSummaryPreview,
+  displayNameOf,
   useConversations,
   useMe,
   useUser,
@@ -65,7 +66,7 @@ export interface ConversationListProps {
    * Resolve a user's display name from their `external_id`. Used to
    * render direct-conversation rows (the conversation row picks the
    * OTHER member's external_id and labels the row with their name).
-   * Falls back to the external_id itself when omitted.
+   * Then the `userResolver`, then "Unknown user" (never the id itself).
    */
   labelFor?: (externalId: string) => string;
   /** Avatar URL resolver — same role as `labelFor`, for the direct-chat avatar. */
@@ -371,7 +372,7 @@ function DefaultRow({
 
   const title = isDirect
     ? otherExtId
-      ? (labelFor?.(otherExtId) ?? other?.displayName ?? otherExtId)
+      ? displayNameOf(otherExtId, { labelFor, profileName: other?.displayName })
       : (conv.name ?? 'Direct chat')
     : (conv.name ?? 'Untitled group');
 

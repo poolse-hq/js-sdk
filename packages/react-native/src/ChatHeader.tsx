@@ -1,5 +1,6 @@
 import type { Uuid } from '@poolse/sdk';
 import {
+  displayNameOf,
   useConversation,
   useMe,
   useMembers,
@@ -107,10 +108,13 @@ export function ChatHeader({
     );
   }
 
-  const fallbackName = otherExtId ?? '';
-  const directName =
-    otherUser.profile?.displayName ??
-    (otherExtId ? (labelFor?.(otherExtId) ?? fallbackName) : 'Direct');
+  const directName = otherExtId
+    ? displayNameOf(otherExtId, {
+        labelFor,
+        profileName: otherUser.profile?.displayName,
+        agentName: otherUser.agent?.name,
+      })
+    : 'Direct';
   const title = isDirect ? directName : (conversation.name ?? 'Conversation');
 
   const isOnline = isDirect && otherExtId ? online.has(otherExtId) : false;

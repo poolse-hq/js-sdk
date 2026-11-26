@@ -1,5 +1,12 @@
 import type { Message, QuotedMessagePreview, Uuid } from '@poolse/sdk';
-import { approvalIdOf, citationsOf, clipOf, messageAgent, useUser } from '@poolse/react';
+import {
+  approvalIdOf,
+  citationsOf,
+  clipOf,
+  displayNameOf,
+  messageAgent,
+  useUser,
+} from '@poolse/react';
 import { useState, type ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
@@ -31,7 +38,7 @@ export interface MessageBubbleProps {
   currentUserId: string | null;
   /** `'sent'` → single tick, `'read'` → double tick (theme.colors.accent). */
   readState?: 'sent' | 'read';
-  /** Label resolver keyed by `external_id` — falls back to the externalId itself. */
+  /** Label resolver keyed by `external_id`; then the `userResolver`, then "Unknown user" (never the id). */
   labelFor?: (externalId: string) => string;
   /** Quoted-card tap handler. Typically used to scroll the list to the original message. */
   onQuotedClick?: (quotedMessageId: Uuid) => void;
@@ -131,12 +138,12 @@ export function MessageBubble({
 
   const sender = useUser(!isSelf ? message.sender_external_id : null);
   const senderIsAgent = !isSelf && (!!sender.agent || !!messageAgent(message));
-  const senderFallbackName = message.sender_external_id ?? 'Unknown';
-  const senderLabel =
-    sender.profile?.displayName ??
-    (message.sender_external_id
-      ? (labelFor?.(message.sender_external_id) ?? senderFallbackName)
-      : senderFallbackName);
+  // The same order as the row and web: labelFor, profile, agent name.
+  const senderLabel = displayNameOf(message.sender_external_id, {
+    labelFor,
+    profileName: sender.profile?.displayName,
+    agentName: sender.agent?.name,
+  });
   const senderTint = userColor(message.sender_external_id ?? message.sender_id ?? message.id);
 
   const tailCorner = groupPosition === 'last' || groupPosition === 'standalone';
@@ -528,13 +535,12 @@ export function QuotedCard({
   onPress?: () => void;
 }) {
   const theme = useTheme();
-  // Priority: explicit prop > SDK userResolver > externalId fallback.
+  // Priority: explicit prop > SDK userResolver > "Unknown user".
   const resolved = useUser(quoted.sender_external_id);
-  const senderName = quoted.sender_external_id
-    ? (labelFor?.(quoted.sender_external_id) ??
-      resolved.profile?.displayName ??
-      quoted.sender_external_id)
-    : 'Unknown';
+  const senderName = displayNameOf(quoted.sender_external_id, {
+    labelFor,
+    profileName: resolved.profile?.displayName,
+  });
   // Darker than the bubble on both sides, so the quote reads as
   // something the message sits on top of.
   const bg = isSelf ? 'rgba(0,0,0,0.16)' : theme.colors.surfaceAlt;

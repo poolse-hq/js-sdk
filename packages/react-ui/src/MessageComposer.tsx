@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import type { Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
-import type { FormatKind, SlashCommand } from '@poolse/react';
+import { useUserLabel, type FormatKind, type SlashCommand } from '@poolse/react';
 import {
   ComposerEmojiButton,
   insertAtCaret,
@@ -479,9 +479,7 @@ function ReplyChip({
   labelFor?: (externalId: string) => string;
   onCancel?: () => void;
 }) {
-  const senderLabel = message.sender_external_id
-    ? (labelFor?.(message.sender_external_id) ?? message.sender_external_id)
-    : 'Unknown';
+  const senderLabel = useUserLabel(message.sender_external_id, labelFor);
   const preview = message.body ?? '';
   return (
     <div className="poolse-composer__reply" role="status">

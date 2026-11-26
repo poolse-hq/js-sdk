@@ -1,5 +1,6 @@
 import type { Membership, Uuid } from '@poolse/sdk';
 import {
+  displayNameOf,
   mentionGroupMeta,
   rankMentionGroups,
   useMe,
@@ -115,10 +116,10 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
         .map((m) => ({
           member: m,
           externalId: m.external_id,
-          label:
-            labelFor?.(m.external_id) ??
-            chat.users.peek(m.external_id)?.displayName ??
-            m.external_id,
+          label: displayNameOf(m.external_id, {
+            labelFor,
+            profileName: chat.users.peek(m.external_id)?.displayName,
+          }),
         }));
       return filterMentionCandidates(all, query.query, maxSuggestions);
     }, [query, members, me?.id, labelFor, chat, maxSuggestions]);

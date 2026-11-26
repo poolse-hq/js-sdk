@@ -26,6 +26,13 @@ All notable changes to `@poolse/react-ui` are documented here. Format follows
 - Message rows show a workspace (custom) emoji reaction as its image instead
   of the raw `:name:` text. A reaction that fails no longer becomes an
   unhandled promise rejection (the pill rolls back, as before).
+- Names never show a raw id: message rows, bubbles, quote cards, the reply
+  chip, mentions, the typing line, `UserName` / `useDisplayName`,
+  `ChatHeader` and `ConversationList` fall back to "Unknown user" (thread
+  avatars: "Someone") instead of the external id or `User 1a2b3c`. Every one
+  uses the same order (`displayNameOf` from `@poolse/react`): `labelFor`,
+  then the `userResolver` profile — bubble headers now use `labelFor` too,
+  and the DM title in `ChatHeader` asks the resolver.
 
 ## [3.10.3] - 2026-11-26
 

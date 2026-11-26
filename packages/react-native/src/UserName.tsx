@@ -1,5 +1,5 @@
 import { Text, View } from 'react-native';
-import { useAgent, useUser } from '@poolse/react';
+import { useAgent, useUserLabel } from '@poolse/react';
 
 import { AgentBadge } from './AgentBadge.js';
 import { useTheme } from './theme/PoolseTheme.js';
@@ -7,7 +7,7 @@ import { useTheme } from './theme/PoolseTheme.js';
 export interface UserNameProps {
   /** The user's external_id. Pass null to render the fallback. */
   externalId: string | null | undefined;
-  /** Optional fallback when the resolver returns nothing. Defaults to the externalId itself. */
+  /** Shown when `externalId` is null. Defaults to "" (nothing). */
   fallback?: string;
   /** Caller-supplied label override; if it returns a string, it wins. */
   labelFor?: (externalId: string) => string;
@@ -21,7 +21,7 @@ export interface UserNameProps {
  */
 export function UserName({ externalId, fallback, labelFor, agentBadge = true }: UserNameProps) {
   const theme = useTheme();
-  const name = useDisplayName(externalId, labelFor) || fallback || externalId || '';
+  const name = useDisplayName(externalId, labelFor) || fallback || '';
   const isAgent = !!useAgent(agentBadge ? externalId : null);
   const text = (
     <Text
@@ -41,20 +41,18 @@ export function UserName({ externalId, fallback, labelFor, agentBadge = true }: 
 }
 
 /**
- * Resolves a user's display name via the 3-tier chain:
+ * Resolves a user's display name via the 3-tier chain (`displayNameOf`
+ * in @poolse/react, the same order as web):
  * 1. `labelFor(externalId)` — caller-supplied override
  * 2. SDK `userResolver` (memoized via `useUser`)
- * 3. The externalId itself (so something always renders)
+ * 3. "Unknown user" — never the id itself
+ *
+ * Returns "" when `externalId` is null.
  */
 export function useDisplayName(
   externalId: string | null | undefined,
   labelFor?: (externalId: string) => string,
 ): string {
-  const resolved = useUser(externalId ?? null);
-  if (!externalId) return '';
-  if (labelFor) {
-    const override = labelFor(externalId);
-    if (override) return override;
-  }
-  return resolved.profile?.displayName ?? externalId;
+  const name = useUserLabel(externalId, labelFor);
+  return externalId ? name : '';
 }

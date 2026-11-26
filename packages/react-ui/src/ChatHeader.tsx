@@ -8,6 +8,7 @@ import {
   agentFromWire,
   useAgent,
   useConversation,
+  useUserLabel,
   useMe,
   useMembers,
   usePresence,
@@ -68,9 +69,11 @@ export function ChatHeader({
   const otherMember = isDirect ? members.find((m) => m.user_id !== meId) : null;
   const otherExtId = otherMember?.external_id ?? null;
 
+  // The other person's name: the host's label, else the resolver's.
+  const otherName = useUserLabel(isDirect ? otherExtId : null, labelFor);
   const title = isDirect
     ? otherExtId
-      ? (labelFor?.(otherExtId) ?? otherExtId)
+      ? otherName
       : (conv?.name ?? 'Direct chat')
     : (conv?.name ?? 'Untitled group');
 

@@ -3,6 +3,7 @@ import {
   formatCallLogPreview,
   formatRecordingNoticePreview,
   formatCallSummaryPreview,
+  displayNameOf,
   useConversations,
   useMe,
   useUser,
@@ -534,7 +535,7 @@ function DefaultConversationRow({
   const presence = useUserPresence(showPresence && isDirect ? (otherExtId ?? null) : null);
   const title = isDirect
     ? otherExtId
-      ? (labelFor?.(otherExtId) ?? resolvedOther.profile?.displayName ?? otherExtId)
+      ? displayNameOf(otherExtId, { labelFor, profileName: resolvedOther.profile?.displayName })
       : 'Direct chat'
     : (conv.name ?? 'Untitled group');
 

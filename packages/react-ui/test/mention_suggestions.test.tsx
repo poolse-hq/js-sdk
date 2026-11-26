@@ -2,7 +2,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { PoolseProvider } from '@poolse/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationView, MentionInput } from '../src/index.js';
-import { member, msg, viewRoutes } from './_fixtures.js';
+import { member, msg, names, viewRoutes } from './_fixtures.js';
 import { jsonResponse, routedFetch } from './_helpers.js';
 
 const NAMES: Record<string, string> = { 'u-ali': 'Alice Smith', 'u-bob': 'Bob Jones' };
@@ -85,7 +85,7 @@ describe('mention suggestions', () => {
           ),
         }}
       >
-        <ConversationView conversationId="c-1" loadFonts={false} />
+        <ConversationView conversationId="c-1" loadFonts={false} labelFor={names} />
       </PoolseProvider>,
     );
     await waitFor(() =>
@@ -96,6 +96,6 @@ describe('mention suggestions', () => {
       fireEvent.change(input, { target: { value: '@', selectionStart: 1 } });
     });
     await waitFor(() => expect(items(container)).toHaveLength(1));
-    expect(items(container)[0]?.textContent).toContain('two');
+    expect(items(container)[0]?.textContent).toContain('Two');
   });
 });

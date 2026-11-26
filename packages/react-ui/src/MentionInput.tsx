@@ -8,9 +8,11 @@
 import type { Membership, Message, MessageCreateRequest, Uuid } from '@poolse/sdk';
 import {
   agentFromWire,
+  displayNameOf,
   useMembers,
   usePoolse,
   useUser,
+  useUserLabel,
   mentionGroupMeta,
   rankMentionGroups,
   type FormatKind,
@@ -63,8 +65,8 @@ export interface MentionInputProps {
   disabled?: boolean;
   /**
    * Resolve a member's `external_id` to a display name for the @
-   * dropdown. Defaults to the SDK's `userResolver`, falling back to
-   * the external_id itself when no resolver is configured.
+   * dropdown. Then the SDK's `userResolver`, then "Unknown user"
+   * (never the id itself).
    */
   labelFor?: (externalId: string) => string;
   /**
@@ -210,7 +212,8 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       [addFiles],
     );
 
-    const label = (id: string) => labelFor?.(id) ?? chat.users.peek(id)?.displayName ?? id;
+    const label = (id: string) =>
+      displayNameOf(id, { labelFor, profileName: chat.users.peek(id)?.displayName });
     const meId = chat.me.peek()?.id ?? null;
 
     // Resolve members' names once the menu opens, so typing a display
@@ -434,9 +437,7 @@ export const MentionInput = forwardRef<MessageComposerHandle, MentionInputProps>
       }
     };
 
-    const replyLabel = replyingTo?.sender_external_id
-      ? (labelFor?.(replyingTo.sender_external_id) ?? replyingTo.sender_external_id)
-      : 'Unknown';
+    const replyLabel = useUserLabel(replyingTo?.sender_external_id, labelFor);
 
     const canSend = !disabled && !sending && !uploading && (value.trim() !== '' || readyCount > 0);
 

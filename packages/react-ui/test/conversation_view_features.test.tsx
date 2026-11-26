@@ -1,6 +1,7 @@
 import { fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationList, ConversationView } from '../src/index.js';
+import { names } from './_fixtures.js';
 import { jsonResponse, noContent, renderWithProvider, routedFetch } from './_helpers.js';
 
 const me = {
@@ -167,6 +168,7 @@ describe('<ConversationView> sender and avatar presses', () => {
         avatars="always"
         onSenderPress={onSenderPress}
         onAvatarPress={onAvatarPress}
+        labelFor={names}
         loadFonts={false}
       />,
       fetchFn,
@@ -178,7 +180,7 @@ describe('<ConversationView> sender and avatar presses', () => {
     fireEvent.click(container.querySelector('.poolse-message__sender--button')!);
     fireEvent.click(container.querySelector('.poolse-bubble-shell__avatar-button')!);
 
-    const user = { userId: 'u-2', externalId: 'two', displayName: 'two', avatarUrl: null };
+    const user = { userId: 'u-2', externalId: 'two', displayName: 'Two', avatarUrl: null };
     expect(onSenderPress).toHaveBeenCalledWith(user);
     expect(onAvatarPress).toHaveBeenCalledWith(user);
   });

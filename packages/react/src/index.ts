@@ -39,6 +39,12 @@ export {
   type UploadItemStatus,
 } from './use-attachment-upload.js';
 export { ATTACHMENT_URL_REFRESH_MS, useAttachmentUrl } from './use-attachment-url.js';
+export {
+  displayNameOf,
+  UNKNOWN_USER_LABEL,
+  useUserLabel,
+  type DisplayNameSources,
+} from './display-name.js';
 export { useAgent, useUser, type UseUserState } from './use-user.js';
 export { useAppEvent } from './use-app-event.js';
 export {

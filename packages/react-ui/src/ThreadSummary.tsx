@@ -5,7 +5,7 @@
 // `useMessages`, so this follows along without its own subscription.
 
 import type { Message, ThreadParticipant } from '@poolse/sdk';
-import { useUser } from '@poolse/react';
+import { displayNameOf, useUser } from '@poolse/react';
 import { Avatar } from './Avatar.js';
 import { PoolseIcon } from './PoolseIcon.js';
 import { formatRelativeTime, useNow } from './relativeTime.js';
@@ -52,6 +52,9 @@ export function ThreadSummary({ message, onOpen, maxAvatars = 3, className }: Th
 
 function ParticipantAvatar({ participant }: { participant: ThreadParticipant }) {
   const { profile } = useUser(participant.external_id);
-  const name = profile?.displayName ?? participant.external_id ?? 'Someone';
+  const name = displayNameOf(participant.external_id, {
+    profileName: profile?.displayName,
+    fallback: 'Someone',
+  });
   return <Avatar src={profile?.avatarUrl ?? null} name={name} size="xs" />;
 }

@@ -15,6 +15,7 @@
 import type { Message, Uuid } from '@poolse/sdk';
 import {
   callLogDisplayFor,
+  displayNameOf,
   messageAgent,
   parseCallSummary,
   recordingNoticeDisplayFor,
@@ -81,8 +82,8 @@ export interface MessageRowProps {
   onQuote?: () => void;
   /** "Mark unread" (others' messages): the caller moves the read position back to here. */
   onMarkUnread?: () => void;
-  /** Caller-supplied display-name lookup for the quoted-card sender. */
-  labelFor?: (userId: Uuid) => string;
+  /** Display names by external id (sender label, avatar, quoted card); wins over the resolver. */
+  labelFor?: (externalId: string) => string;
   /** Click on the quoted card — typically scroll-to-original. */
   onQuotedClick?: (quotedMessageId: Uuid) => void;
   /** Where this bubble sits in a same-sender cluster (WhatsApp-style grouping). */
@@ -221,9 +222,11 @@ function BubbleMessageRow({
   // dedup'd cache — keyed, like every resolver lookup, by external id.
   const { profile: senderProfile, agent: senderAgent } = useUser(msg.sender_external_id);
   const senderIsAgent = !!senderAgent || !!messageAgent(msg);
-  const senderFallbackName =
-    msg.sender_external_id ?? (msg.sender_id ? `User ${msg.sender_id.slice(0, 6)}` : 'Unknown');
-  const senderName = senderProfile?.displayName ?? senderFallbackName;
+  const senderName = displayNameOf(msg.sender_external_id, {
+    labelFor,
+    profileName: senderProfile?.displayName,
+    agentName: senderAgent?.name,
+  });
   const isSelf = meId !== null && msg.sender_id === meId;
   const sender: MessageUser = {
     userId: msg.sender_id,

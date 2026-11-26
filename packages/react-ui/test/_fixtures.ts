@@ -103,3 +103,10 @@ export function viewRoutes(
     ...extra,
   };
 }
+
+/**
+ * The hosts' names for the fixture users. An external id is never shown
+ * as a name, so a test that reads a name passes this as `labelFor`.
+ */
+const NAMES: Record<string, string> = { me: 'Me', two: 'Two', scout: 'Scout', ana: 'Ana' };
+export const names = (externalId: string): string => NAMES[externalId] ?? '';

@@ -4,6 +4,7 @@ import {
   formatCallLogPreview,
   formatRecordingNoticePreview,
   formatCallSummaryPreview,
+  displayNameOf,
   useConversations,
   useMe,
   useUser,
@@ -312,7 +313,7 @@ function ConversationRow({
 
   const title = isDirect
     ? otherExtId
-      ? (labelFor?.(otherExtId) ?? resolvedOther.profile?.displayName ?? otherExtId)
+      ? displayNameOf(otherExtId, { labelFor, profileName: resolvedOther.profile?.displayName })
       : 'Direct chat'
     : (conv.name ?? 'Untitled conversation');
   const avatarUrl =

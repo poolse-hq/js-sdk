@@ -5,8 +5,7 @@ export interface TypingIndicatorProps {
   typing: Set<string>;
   /**
    * Resolves an `external_id` to a display label. Defaults to the
-   * SDK's `userResolver` (and falls back to the external_id itself
-   * when the resolver isn't configured).
+   * SDK's `userResolver`, then "Unknown user" (never the id itself).
    */
   labelFor?: (externalId: string) => string;
 }

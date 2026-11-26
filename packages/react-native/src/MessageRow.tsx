@@ -34,6 +34,7 @@ import { ignoreRolledBack } from './internal/errors.js';
 import { useTheme } from './theme/PoolseTheme.js';
 import {
   callLogDisplayFor,
+  displayNameOf,
   isTombstone,
   recordingNoticeDisplayFor,
   messageAgent,
@@ -447,7 +448,7 @@ function BubbleMessageRow({
   const showAvatarRender =
     showAvatarSlot && (groupPosition === 'last' || groupPosition === 'standalone');
   // Resolve avatar / label with the same priority as MessageBubble /
-  // ChatHeader: explicit prop > SDK userResolver > externalId fallback.
+  // ChatHeader: explicit prop > SDK userResolver > "Unknown user".
   // Without the useUser fallback, omitting `avatarFor` / `labelFor` on
   // <ConversationView> bypassed the resolver at the row level even
   // when `PoolseConfig.userResolver` was configured.
@@ -456,15 +457,15 @@ function BubbleMessageRow({
   const avatarUrl = msg.sender_external_id
     ? (avatarFor?.(msg.sender_external_id) ?? rowSender.profile?.avatarUrl ?? null)
     : null;
-  const senderLabel = msg.sender_external_id
-    ? (labelFor?.(msg.sender_external_id) ??
-      rowSender.profile?.displayName ??
-      msg.sender_external_id)
-    : null;
+  const senderLabel = displayNameOf(msg.sender_external_id, {
+    labelFor,
+    profileName: rowSender.profile?.displayName,
+    agentName: rowSender.agent?.name,
+  });
   const sender: MessageUser = {
     userId: msg.sender_id,
     externalId: msg.sender_external_id,
-    displayName: senderLabel ?? 'Unknown',
+    displayName: senderLabel,
     avatarUrl,
   };
   const slotContext: MessageSlotContext = {
@@ -541,7 +542,7 @@ function BubbleMessageRow({
               if (!actions || tombstone) return;
               setActionsOpen(true);
             }}
-            accessibilityLabel={messageA11yLabel(msg, senderLabel ?? 'Unknown', isSelf)}
+            accessibilityLabel={messageA11yLabel(msg, senderLabel, isSelf)}
             {...(actions && !tombstone
               ? {
                   accessibilityHint: 'Long press for message actions',

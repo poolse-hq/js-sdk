@@ -15,6 +15,7 @@ import {
   approvalIdOf,
   citationsOf,
   clipOf,
+  displayNameOf,
   isTombstone,
   messageAgent,
   useReactions,
@@ -105,15 +106,15 @@ export function FlatMessageRow({
     ...(msg.reactions ? { initialReactions: msg.reactions } : {}),
   });
 
-  // Same priority as the bubble row: explicit prop > userResolver > external id.
+  // Same priority as the bubble row: explicit prop > userResolver > "Unknown user".
   const resolved = useUser(msg.sender_external_id);
   const senderIsAgent = !!resolved.agent || !!messageAgent(msg);
   const ext = msg.sender_external_id;
-  const senderName = ext
-    ? (labelFor?.(ext) ?? resolved.profile?.displayName ?? ext)
-    : msg.sender_id
-      ? `User ${msg.sender_id.slice(0, 6)}`
-      : 'Unknown';
+  const senderName = displayNameOf(ext, {
+    labelFor,
+    profileName: resolved.profile?.displayName,
+    agentName: resolved.agent?.name,
+  });
   const avatarUrl = ext ? (avatarFor?.(ext) ?? resolved.profile?.avatarUrl ?? null) : null;
   const sender: MessageUser = {
     userId: msg.sender_id,

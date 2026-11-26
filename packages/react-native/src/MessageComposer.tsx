@@ -12,7 +12,7 @@ import {
   applyFormat,
   applySlashCommand,
   readDlpError,
-  useUser,
+  useUserLabel,
   type DlpOutcome,
   type FormatKind,
   type SlashCommand,
@@ -595,13 +595,7 @@ function ReplyChip({
   onCancel?: () => void;
 }) {
   const theme = useTheme();
-  // Priority: explicit prop > SDK userResolver > externalId fallback.
-  const resolved = useUser(message.sender_external_id);
-  const senderName = message.sender_external_id
-    ? (labelFor?.(message.sender_external_id) ??
-      resolved.profile?.displayName ??
-      message.sender_external_id)
-    : 'Unknown';
+  const senderName = useUserLabel(message.sender_external_id, labelFor);
   return (
     <View
       style={[

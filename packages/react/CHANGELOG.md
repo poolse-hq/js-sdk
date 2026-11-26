@@ -14,6 +14,15 @@ All notable changes to `@poolse/react` are documented here. Format follows
   (ignored within 5 s of the last fetch). When the id changes, `url` is null
   until the new one arrives instead of showing the previous attachment.
 
+### Added
+
+- `displayNameOf(externalId, { labelFor, profileName, agentName, fallback
+})` and `useUserLabel(externalId, labelFor?, fallback?)`: the one order
+  every web and React Native component now uses to name a user — the host's
+  `labelFor`, then the `userResolver` profile, then an agent's name, then
+  `UNKNOWN_USER_LABEL` ("Unknown user"). A source that only echoes the
+  external id counts as no name.
+
 ## [3.10.3] - 2026-11-26
 
 ### Changed

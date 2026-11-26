@@ -1,6 +1,7 @@
 import { fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ConversationView, type ConversationViewProps } from '../src/index.js';
+import { names } from './_fixtures.js';
 import { jsonResponse, noContent, renderWithProvider, routedFetch } from './_helpers.js';
 
 const me = {
@@ -83,7 +84,7 @@ function fetchFor() {
 
 async function mount(props: Partial<ConversationViewProps> = {}) {
   const utils = renderWithProvider(
-    <ConversationView conversationId="c-1" loadFonts={false} {...props} />,
+    <ConversationView conversationId="c-1" loadFonts={false} labelFor={names} {...props} />,
     fetchFor(),
   );
   await waitFor(() => expect(utils.container.textContent).toContain('message 8'));
@@ -116,7 +117,7 @@ describe('<ConversationView layout>', () => {
       const second = row(container, 'm2');
       expect(first.className).toContain('poolse-row--list');
       expect(first.className).toContain('poolse-row--run-start');
-      expect(first.querySelector('.poolse-row__header .poolse-row__name')?.textContent).toBe('two');
+      expect(first.querySelector('.poolse-row__header .poolse-row__name')?.textContent).toBe('Two');
       expect(first.querySelector('.poolse-row__header time')).not.toBeNull();
       expect(first.querySelector('.poolse-row__gutter .poolse-avatar')).not.toBeNull();
 
@@ -126,7 +127,7 @@ describe('<ConversationView layout>', () => {
       expect(second.querySelector('.poolse-avatar')).toBeNull();
 
       // Own messages are left-aligned rows too, with a name.
-      expect(row(container, 'm3').querySelector('.poolse-row__name')?.textContent).toBe('me');
+      expect(row(container, 'm3').querySelector('.poolse-row__name')?.textContent).toBe('Me');
     });
 
     it('has a hover toolbar: React, Reply, Thread, More (Copy / Edit / Delete)', async () => {
@@ -179,7 +180,7 @@ describe('<ConversationView layout>', () => {
       const { container } = await mount({ layout: 'list', onSenderPress, onAvatarPress });
       fireEvent.click(row(container, 'm1').querySelector('.poolse-row__name--button')!);
       expect(onSenderPress).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'u-2', externalId: 'two', displayName: 'two' }),
+        expect.objectContaining({ userId: 'u-2', externalId: 'two', displayName: 'Two' }),
       );
       fireEvent.click(row(container, 'm1').querySelector('.poolse-row__avatar-button')!);
       expect(onAvatarPress).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u-2' }));

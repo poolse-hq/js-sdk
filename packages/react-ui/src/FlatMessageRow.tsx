@@ -15,6 +15,7 @@ import {
   approvalIdOf,
   citationsOf,
   clipOf,
+  displayNameOf,
   messageAgent,
   useReactions,
   useUser,
@@ -81,10 +82,11 @@ export function FlatMessageRow({
   const isSelf = meId !== null && msg.sender_id === meId;
   const { profile, agent: knownAgent } = useUser(msg.sender_external_id);
   const senderIsAgent = !!knownAgent || !!messageAgent(msg);
-  const senderName =
-    profile?.displayName ??
-    msg.sender_external_id ??
-    (msg.sender_id ? `User ${msg.sender_id.slice(0, 6)}` : 'Unknown');
+  const senderName = displayNameOf(msg.sender_external_id, {
+    labelFor,
+    profileName: profile?.displayName,
+    agentName: knownAgent?.name,
+  });
   const sender: MessageUser = {
     userId: msg.sender_id,
     externalId: msg.sender_external_id,
