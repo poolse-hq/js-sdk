@@ -354,8 +354,91 @@ describe('outbox', () => {
     online = true;
     for (let i = 0; i < MAX_SERVER_ATTEMPTS; i++) await c.outbox.flush();
     expect(c.outbox.entries()).toMatchObject([{ id: 'stuck', status: 'failed' }]);
+    // "next" waited behind "stuck" (same conversation) and went once it gave up.
     const posts = fetchFn.calls.filter((r) => (r.body as { id?: string })?.id === 'next');
-    expect(posts.length).toBeGreaterThan(1);
+    expect(posts).toHaveLength(1);
+    await c.destroy();
+  });
+
+  it('a new send goes behind older queued ones of the same conversation', async () => {
+    let online = false;
+    const fetchFn = routedFetch((_m, _p, body) => {
+      if (!online) throw new TypeError('Failed to fetch');
+      return json(msg((body as { id: string }).id));
+    });
+    const c = client({}, fetchFn);
+    await c.outbox.send('c-1', request('a'), msg('a')).catch(() => {});
+    online = true;
+    // "a" waits for its backoff timer; "b" must not overtake it.
+    expect((await c.outbox.send('c-1', request('b'), msg('b'))).id).toBe('b');
+    const posts = fetchFn.calls.filter((r) => r.method === 'POST');
+    expect(posts.map((r) => (r.body as { id: string }).id)).toEqual(['a', 'a', 'b']);
+    expect(c.outbox.entries()).toEqual([]);
+    await c.destroy();
+  });
+
+  it('a send waits for an older one of the same conversation still on the wire', async () => {
+    const order: string[] = [];
+    let releaseA!: () => void;
+    const fetchFn = routedFetch((_m, _p, body) => {
+      const id = (body as { id: string }).id;
+      order.push(`start ${id}`);
+      return json(msg(id));
+    });
+    const slow = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      if (body.id === 'a') await new Promise<void>((r) => (releaseA = r));
+      return fetchFn(input, init);
+    }) as unknown as typeof globalThis.fetch;
+    const c = client({}, slow);
+    const a = c.outbox.send('c-1', request('a'), msg('a'));
+    const other = c.outbox.send('c-2', request('x'), msg('x', 'c-2'));
+    await new Promise((r) => setTimeout(r, 0));
+    const b = c.outbox.send('c-1', request('b'), msg('b'));
+    await new Promise((r) => setTimeout(r, 0));
+    // Another conversation is not held up; "b" waits for "a".
+    expect(order).toEqual(['start x']);
+    releaseA();
+    await Promise.all([a, b, other]);
+    expect(order).toEqual(['start x', 'start a', 'start b']);
+    await c.destroy();
+  });
+
+  it('a server-failing message holds only its own conversation', async () => {
+    let online = false;
+    const fetchFn = routedFetch((_m, _p, body) => {
+      const id = (body as { id: string }).id;
+      if (!online) throw new TypeError('Failed to fetch');
+      return id === 'stuck' ? apiError(503, 'unavailable') : json(msg(id));
+    });
+    const c = client({}, fetchFn);
+    await c.outbox.send('c-1', request('stuck'), msg('stuck')).catch(() => {});
+    await c.outbox.send('c-1', request('after'), msg('after')).catch(() => {});
+    await c.outbox.send('c-2', request('elsewhere'), msg('elsewhere', 'c-2')).catch(() => {});
+    online = true;
+    await c.outbox.flush();
+    expect(c.outbox.entries().map((e) => e.id)).toEqual(['stuck', 'after']);
+    const ids = fetchFn.calls.map((r) => (r.body as { id?: string })?.id);
+    expect(ids).not.toContain('after');
+    expect(ids).toContain('elsewhere');
+    await c.destroy();
+  });
+
+  it('send() settles without storageNamespace while GET /v1/me cannot answer', async () => {
+    vi.useFakeTimers();
+    const fetchFn = routedFetch(() => {
+      throw new TypeError('Failed to fetch');
+    });
+    const c = client({ storage: memoryStorage() }, fetchFn);
+    const sending = c.outbox.send('c-1', request('m-1'), msg('m-1'));
+    const outcome = sending.then(
+      () => 'sent',
+      (err) => (err instanceof MessageQueuedError ? 'queued' : String(err)),
+    );
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(await outcome).toBe('queued');
+    expect(c.outbox.entries()).toMatchObject([{ id: 'm-1', status: 'queued' }]);
+    vi.useRealTimers();
     await c.destroy();
   });
 

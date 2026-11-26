@@ -82,6 +82,8 @@ const MAX_BACKOFF_MS = 60_000;
 // Retry instead of holding every queued message behind it. Being offline
 // (no response at all) and auth refreshes never count against it.
 export const MAX_SERVER_ATTEMPTS = 8;
+// How long a send or flush waits for the stored outbox before going on.
+const HYDRATE_WAIT_MS = 2_000;
 
 export class Outbox {
   private items: OutboxEntry[] = [];
@@ -91,6 +93,7 @@ export class Outbox {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private backoffStep = 0;
   private flushing: Promise<void> | null = null;
+  private readonly inflight = new Map<Uuid, Promise<Message>>();
   private hydrated: Promise<void> | null = null;
   private destroyed = false;
   private persistChain: Promise<void> = Promise.resolve();
@@ -145,7 +148,11 @@ export class Outbox {
     request: MessageCreateRequest & { id: Uuid },
     optimistic: Message,
   ): Promise<Message> {
-    await this.hydrate();
+    // Wait briefly for the stored outbox (so older stored messages keep
+    // their place), but never for good: without `storageNamespace` the
+    // namespace only comes from `GET /v1/me`, which an offline cold start
+    // never answers. Hydration merges the stored entries in later.
+    await this.hydrateBriefly();
     const existing = this.items.find((e) => e.id === request.id);
     if (existing) return this.retry(existing.id);
     const entry: OutboxEntry = {
@@ -164,6 +171,20 @@ export class Outbox {
     if (isOffline()) {
       this.patch(entry.id, { status: 'queued', error: 'Offline' });
       this.schedule();
+      throw new MessageQueuedError(entry.id);
+    }
+    // Keep the conversation's order: wait for older sends still on the
+    // wire, and go behind older queued ones instead of overtaking them.
+    await this.settleOlder(entry.id);
+    if (!this.items.some((e) => e.id === entry.id)) throw new MessageDiscardedError(entry.id);
+    if (this.olderQueued(entry.id)) {
+      this.patch(entry.id, { status: 'queued', error: null });
+      const delivered = this.whenSent(entry.id);
+      delivered.catch(() => {});
+      await this.flush();
+      const now = this.items.find((e) => e.id === entry.id);
+      if (!now) return delivered;
+      if (now.status === 'failed') return delivered;
       throw new MessageQueuedError(entry.id);
     }
     return this.attempt(entry.id);
@@ -198,31 +219,86 @@ export class Outbox {
     this.changed();
   }
 
-  /** Send every queued message now (oldest first). Failed ones wait for `retry`. */
+  /**
+   * Send every queued message now, oldest first per conversation. Failed
+   * ones wait for `retry`. A conversation whose head the server keeps
+   * failing (5xx, 429) waits; the other conversations still go. With no
+   * connection at all the flush stops and tries again later.
+   */
   flush(): Promise<void> {
     if (this.destroyed) return Promise.resolve();
     if (this.flushing) return this.flushing;
     const run = (async () => {
-      await this.hydrate();
+      await this.hydrateBriefly();
       if (this.timer) clearTimeout(this.timer);
       this.timer = null;
-      for (const entry of [...this.items]) {
+      const tried = new Set<Uuid>();
+      const blocked = new Set<Uuid>();
+      for (;;) {
         if (this.destroyed) return;
-        const current = this.items.find((e) => e.id === entry.id);
+        const next = this.items.find(
+          (e) => e.status === 'queued' && !tried.has(e.id) && !blocked.has(e.conversationId),
+        );
+        if (!next) break;
+        tried.add(next.id);
+        await this.settleOlder(next.id);
+        const current = this.items.find((e) => e.id === next.id);
         if (!current || current.status !== 'queued') continue;
         try {
           await this.attempt(current.id);
         } catch (err) {
-          // Still offline: stop here and try again later, in order.
-          if (err instanceof MessageQueuedError) return;
+          if (!(err instanceof MessageQueuedError)) continue;
+          // The server answered but failed: hold this conversation (its
+          // order matters), carry on with the others.
+          if (err.cause instanceof ApiError) {
+            blocked.add(current.conversationId);
+            continue;
+          }
+          // No connection: stop here and try again later, in order.
+          return;
         }
       }
-      this.backoffStep = 0;
+      if (blocked.size === 0) this.backoffStep = 0;
     })().finally(() => {
       if (this.flushing === run) this.flushing = null;
     });
     this.flushing = run;
     return run;
+  }
+
+  /** Wait for the stored outbox, but at most {@link HYDRATE_WAIT_MS}. */
+  private hydrateBriefly(): Promise<void> {
+    const hydrating = this.hydrate();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const wait = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, HYDRATE_WAIT_MS);
+    });
+    return Promise.race([hydrating, wait]).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
+  }
+
+  /** Older entries of the same conversation, oldest first. */
+  private older(id: Uuid): OutboxEntry[] {
+    const index = this.items.findIndex((e) => e.id === id);
+    if (index < 0) return [];
+    const conversationId = this.items[index]!.conversationId;
+    return this.items.slice(0, index).filter((e) => e.conversationId === conversationId);
+  }
+
+  private olderQueued(id: Uuid): boolean {
+    return this.older(id).some((e) => e.status === 'queued');
+  }
+
+  /** Wait until no older entry of the conversation is on the wire. */
+  private async settleOlder(id: Uuid): Promise<void> {
+    for (;;) {
+      const busy = this.older(id)
+        .map((e) => this.inflight.get(e.id))
+        .filter((p): p is Promise<unknown> => p !== undefined);
+      if (busy.length === 0) return;
+      await Promise.allSettled(busy);
+    }
   }
 
   /**
@@ -276,7 +352,17 @@ export class Outbox {
     this.waiters.clear();
   }
 
-  private async attempt(id: Uuid): Promise<Message> {
+  private attempt(id: Uuid): Promise<Message> {
+    const run = this.attemptNow(id);
+    this.inflight.set(id, run);
+    const done = () => {
+      if (this.inflight.get(id) === run) this.inflight.delete(id);
+    };
+    run.then(done, done);
+    return run;
+  }
+
+  private async attemptNow(id: Uuid): Promise<Message> {
     const entry = this.items.find((e) => e.id === id);
     if (!entry) throw new MessageDiscardedError(id);
     this.patch(id, {
@@ -366,6 +452,10 @@ export class Outbox {
       if (this.destroyed) return;
       const scope = await this.deps.scope();
       if (!scope || this.destroyed) return;
+      // Never write over the stored queue before it was read in: a send
+      // made before hydration finished would otherwise drop it.
+      if (this.hydrated) await this.hydrated;
+      if (this.destroyed) return;
       if (this.items.length === 0) await scope.remove(STORAGE_KEY);
       else await scope.setJson(STORAGE_KEY, this.items);
     });
