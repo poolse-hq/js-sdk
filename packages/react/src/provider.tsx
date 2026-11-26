@@ -71,8 +71,9 @@ export interface PoolseProviderProps {
  * ```
  *
  * A `Poolse` instance the provider built from `config` is destroyed on
- * unmount — closes the WebSocket and drops every joined channel. One
- * passed as `client` is left running.
+ * unmount (right after it, so React StrictMode's dev-only remount keeps
+ * it) — closes the WebSocket and drops every joined channel. One passed
+ * as `client` is left running.
  *
  * Several workspaces, side by side:
  *
@@ -182,11 +183,20 @@ export function PoolseProvider({
     }, [config.apiUrl, config.wsUrl, config.socketPath]);
   }
 
-  // Only a client this provider built is its to tear down.
+  // Only a client this provider built is its to tear down. The destroy
+  // waits a tick: React StrictMode (development) unmounts and remounts
+  // every effect once, and a destroyed client never connects again, so
+  // a re-run that follows at once cancels it. A real unmount destroys.
+  const pendingDestroy = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!ownChat) return;
+    if (pendingDestroy.current) clearTimeout(pendingDestroy.current);
+    pendingDestroy.current = null;
     return () => {
-      void ownChat.destroy();
+      pendingDestroy.current = setTimeout(() => {
+        pendingDestroy.current = null;
+        void ownChat.destroy();
+      }, 0);
     };
   }, [ownChat]);
 

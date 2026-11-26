@@ -1,13 +1,10 @@
-import { render } from '@testing-library/react';
-import { useState } from 'react';
+import { act, render } from '@testing-library/react';
+import { StrictMode, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { PoolseProvider, usePoolse } from '../src/index.js';
 
-// Smoke test for the provider — confirms PoolseProvider mounts and
-// usePoolse() returns the constructed instance. The hooks themselves
-// are covered by an end-to-end-style verification rather than per-hook
-// unit tests (the values they produce are 99% pass-through of the
-// underlying SDK, which has its own tests).
+// The provider: mounts, hands out one stable Poolse instance, and owns
+// (destroys) only the one it built. The hooks have their own test files.
 
 function Reader({ onReady }: { onReady: (chat: unknown) => void }) {
   const chat = usePoolse();
@@ -16,6 +13,28 @@ function Reader({ onReady }: { onReady: (chat: unknown) => void }) {
 }
 
 describe('PoolseProvider', () => {
+  it('a client built from config survives StrictMode and is destroyed on unmount', async () => {
+    let chat: { destroyed: boolean } | null = null;
+    const { unmount } = render(
+      <StrictMode>
+        <PoolseProvider
+          config={{
+            apiUrl: 'https://chat.example',
+            getToken: () => 'tok',
+            fetch: vi.fn() as unknown as typeof globalThis.fetch,
+          }}
+        >
+          <Reader onReady={(c) => (chat = c as { destroyed: boolean })} />
+        </PoolseProvider>
+      </StrictMode>,
+    );
+    await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(chat!.destroyed).toBe(false);
+    unmount();
+    await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(chat!.destroyed).toBe(true);
+  });
+
   it('mounts and exposes the Poolse instance via usePoolse', () => {
     const seen: unknown[] = [];
 
