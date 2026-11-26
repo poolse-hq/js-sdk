@@ -1289,6 +1289,8 @@ export function ConversationView({
               {...(appComposerProps ? { composerProps: appComposerProps } : {})}
               {...(beforeSend ? { beforeSend } : {})}
               {...(extraActions ? { extraActions } : {})}
+              {...(maxFileSize !== undefined ? { maxFileSize } : {})}
+              {...(acceptedFileTypes ? { acceptedFileTypes } : {})}
             />
           ) : null}
         </KeyboardAvoidingView>

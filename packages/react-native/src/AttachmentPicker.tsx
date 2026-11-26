@@ -20,7 +20,7 @@ import { PoolseIcon } from './primitives/PoolseIcon.js';
 import { EDGE_TO_EDGE_MODAL } from './internal/edgeToEdge.js';
 import { useSafeInsets } from './internal/safeArea.js';
 import { useSharedUpload, useUploadPreview } from './internal/uploadContext.js';
-import { uploadRejection } from './internal/uploadRules.js';
+import { pickedFileRejection } from './internal/uploadRules.js';
 import { useTheme } from './theme/PoolseTheme.js';
 
 export interface AttachmentPickerProps {
@@ -62,11 +62,12 @@ export interface AttachmentPickerProps {
 }
 
 /**
- * Picker sheet wrapping `expo-image-picker` and `expo-document-picker`.
- * Both must be installed (`npx expo install expo-image-picker
- * expo-document-picker`) when this component is mounted — they're
- * declared as optional peers because consumers who pass
- * `attachments={false}` to ConversationView never render this file.
+ * Picker sheet wrapping `expo-image-picker` and `expo-document-picker`
+ * (and `expo-image-manipulator`, which shrinks photos to WebP). They
+ * are peer dependencies of this package: install them with
+ * `npx expo install expo-image-picker expo-document-picker
+ * expo-image-manipulator`. The module is loaded with the package even
+ * when `attachments={false}`, so they must be present either way.
  */
 export function AttachmentPicker({
   visible,
@@ -92,11 +93,17 @@ export function AttachmentPicker({
       const inputs = await adapter(kind);
       const rejected: string[] = [];
       for (const input of inputs) {
-        const why = uploadRejection(
+        // Photos were converted to WebP: the host's accepted types are
+        // checked against what was picked too, the size against what
+        // will be uploaded.
+        const source = (input as { _source?: { contentType: string; filename?: string | null } })
+          ._source;
+        const why = pickedFileRejection(
           {
             contentType: input.contentType,
             byteSize: input.byteSize,
             filename: input.filename ?? null,
+            ...(source ? { source } : {}),
           },
           {
             ...(maxFileSize !== undefined ? { maxFileSize } : {}),
@@ -276,6 +283,10 @@ async function assetsToInputs(assets: ReadonlyArray<ImagePicker.ImagePickerAsset
           byteSize: compressed.blob.size,
           filename: compressed.filename,
           _previewUri: asset.uri,
+          _source: {
+            contentType: asset.mimeType ?? guessImageType(asset.fileName),
+            filename: asset.fileName ?? null,
+          },
         };
       } catch (err) {
         console.warn('[poolse/picker] image compression failed, sending original:', err);
@@ -292,6 +303,16 @@ async function assetsToInputs(assets: ReadonlyArray<ImagePicker.ImagePickerAsset
       }
     }),
   );
+}
+
+/** The picked photo's type from its name, when the picker gives none. */
+function guessImageType(filename: string | null | undefined): string {
+  const ext = (filename ?? '').toLowerCase().split('.').pop();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'heic' || ext === 'heif') return `image/${ext}`;
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
 }
 
 class PermissionDeniedError extends Error {}
@@ -338,7 +359,7 @@ async function defaultAdapter(
   if (res.canceled) return [];
   return Promise.all(
     res.assets.map(async (asset) => {
-      const isImage = (asset.mimeType ?? '').startsWith('image/');
+      const isImage = (asset.mimeType ?? '').toLowerCase().startsWith('image/');
       if (isImage) {
         try {
           const compressed = await compressImage({
@@ -351,6 +372,7 @@ async function defaultAdapter(
             byteSize: compressed.blob.size,
             filename: compressed.filename,
             _previewUri: asset.uri,
+            _source: { contentType: asset.mimeType ?? 'image/jpeg', filename: asset.name },
           };
         } catch (err) {
           console.warn('[poolse/picker] image compression failed, sending original:', err);

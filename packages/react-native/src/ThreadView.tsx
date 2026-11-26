@@ -66,6 +66,10 @@ export interface ThreadViewProps {
   extraActions?: (msg: Message) => readonly MessageExtraAction[];
   /** Asked before a reply is deleted. Defaults to a native "Delete message?" alert. */
   confirmDelete?: ConfirmDelete;
+  /** Largest attachment accepted, in bytes, as `ConversationView`'s. */
+  maxFileSize?: number;
+  /** Accepted attachment types, as `ConversationView`'s `acceptedFileTypes`. */
+  acceptedFileTypes?: string[];
 }
 
 type ThreadHooks = Pick<
@@ -76,6 +80,8 @@ type ThreadHooks = Pick<
   | 'beforeSend'
   | 'extraActions'
   | 'confirmDelete'
+  | 'maxFileSize'
+  | 'acceptedFileTypes'
 >;
 
 // Sheet covers the bottom 88% of the screen. The remaining 12% is the
@@ -180,6 +186,8 @@ function ThreadSheet({
   const theme = useTheme();
   const followState = useThreadFollow(follow ? rootMessage.id : null);
   const [alsoToChannel, setAlsoToChannel] = useState(false);
+  // A refused attachment (too large, a type not accepted), said in the sheet.
+  const [attachError, setAttachError] = useState<string | null>(null);
   const { me } = useMe();
   const chat = usePoolse();
   const meId = me?.id ?? null;
@@ -410,6 +418,15 @@ function ThreadSheet({
               />
             </View>
           ) : null}
+          {attachError ? (
+            <Text
+              style={[styles.attachError, { color: theme.colors.danger }]}
+              accessibilityLiveRegion="polite"
+              onPress={() => setAttachError(null)}
+            >
+              {attachError}
+            </Text>
+          ) : null}
           {hooks.composerAccessory}
           <MessageComposer
             ref={hooks.composerHandle ?? null}
@@ -430,7 +447,10 @@ function ThreadSheet({
             }}
             placeholder="Reply to thread…"
             attachments
-            onAttachPress={() => setPickerOpen(true)}
+            onAttachPress={() => {
+              setAttachError(null);
+              setPickerOpen(true);
+            }}
             {...hooks.composerProps}
             editingMessage={editingMessage}
             onCancelEdit={() => setEditingId(null)}
@@ -442,7 +462,13 @@ function ThreadSheet({
           />
         </KeyboardAvoidingView>
 
-        <AttachmentPicker visible={pickerOpen} onClose={() => setPickerOpen(false)} />
+        <AttachmentPicker
+          visible={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onError={setAttachError}
+          {...(hooks.maxFileSize !== undefined ? { maxFileSize: hooks.maxFileSize } : {})}
+          {...(hooks.acceptedFileTypes ? { acceptedTypes: hooks.acceptedFileTypes } : {})}
+        />
       </Animated.View>
     </View>
   );
@@ -503,6 +529,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   alsoText: { fontSize: 13 },
+  attachError: { fontSize: 13, paddingHorizontal: 16, paddingTop: 6 },
   title: {
     fontSize: 16,
     fontWeight: '600',

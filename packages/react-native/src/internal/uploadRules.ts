@@ -27,6 +27,36 @@ export function uploadRejection(
   return null;
 }
 
+/**
+ * A picked file, which may have been converted before upload (photos
+ * become WebP): the type is accepted when either the original or the
+ * converted file matches, and the size is the uploaded one's.
+ */
+export function pickedFileRejection(
+  file: {
+    contentType: string;
+    byteSize: number;
+    filename?: string | null;
+    /** What was picked, before conversion. */
+    source?: { contentType: string; filename?: string | null } | null;
+  },
+  rules: UploadRules,
+): string | null {
+  const why = uploadRejection(file, rules);
+  if (!why || !file.source) return why;
+  // The converted file is refused: by size (the original can't help),
+  // or by type, where the original's type may be the accepted one.
+  const asPicked = uploadRejection(
+    {
+      contentType: file.source.contentType,
+      byteSize: file.byteSize,
+      filename: file.source.filename ?? null,
+    },
+    rules,
+  );
+  return asPicked === null ? null : why;
+}
+
 function typeAccepted(
   file: { contentType: string; filename?: string | null },
   accepted: readonly string[],

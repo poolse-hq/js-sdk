@@ -18,7 +18,7 @@ import {
   needsOlderForUnread,
   newMessagesDividerId,
 } from '../src/internal/unread.js';
-import { formatBytes, uploadRejection } from '../src/internal/uploadRules.js';
+import { formatBytes, pickedFileRejection, uploadRejection } from '../src/internal/uploadRules.js';
 
 const NOW = new Date(2026, 10, 21, 15, 0, 0); // Sat 21 Nov 2026, 15:00 local
 const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
@@ -269,6 +269,21 @@ describe('thread summary', () => {
 });
 
 describe('upload rules', () => {
+  it('checks a converted photo by what was picked, and by the size uploaded', () => {
+    const webp = {
+      contentType: 'image/webp',
+      byteSize: 200_000,
+      filename: 'IMG_1.webp',
+      source: { contentType: 'image/jpeg', filename: 'IMG_1.jpg' },
+    };
+    expect(pickedFileRejection(webp, { acceptedTypes: ['image/jpeg', 'image/png'] })).toBeNull();
+    expect(pickedFileRejection(webp, { acceptedTypes: ['.jpg'] })).toBeNull();
+    expect(pickedFileRejection(webp, { acceptedTypes: ['image/webp'] })).toBeNull();
+    expect(pickedFileRejection(webp, { acceptedTypes: ['application/pdf'] })).toMatch(/type/);
+    expect(pickedFileRejection(webp, { maxFileSize: 100_000 })).toMatch(/too large/);
+    const { source: _source, ...plain } = webp;
+    expect(pickedFileRejection(plain, { acceptedTypes: ['image/jpeg'] })).toMatch(/type/);
+  });
   it('rejects by type and size', () => {
     const file = { contentType: 'image/png', byteSize: 3 * 1024 * 1024, filename: 'a.png' };
     expect(uploadRejection(file, {})).toBeNull();

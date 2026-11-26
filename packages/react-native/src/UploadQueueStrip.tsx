@@ -20,7 +20,9 @@ export function UploadQueueStrip() {
   const upload = useSharedUpload();
   const { getPreview } = useUploadPreview();
 
-  if (upload.queue.length === 0) return null;
+  // A cancelled upload is gone from the user's point of view: no tile.
+  const live = upload.queue.filter((it) => it.status !== 'cancelled');
+  if (live.length === 0) return null;
 
   return (
     <ScrollView
@@ -32,17 +34,15 @@ export function UploadQueueStrip() {
       // being clipped by the scroll bounds.
       style={[styles.scrollStyle, { marginBottom: 8 }]}
     >
-      {upload.queue.map((item) => {
+      {live.map((item) => {
         const isError = item.status === 'error';
         const isUploading = item.status === 'uploading' || item.status === 'pending';
         const isImage = (item.contentType ?? '').startsWith('image/');
         const previewUri = getPreview(item.filename);
         const canTerminate = isUploading || item.status === 'ready' || isError;
 
-        const handleClose = () => {
-          if (item.status === 'ready' || isError) upload.remove(item.localId);
-          else upload.cancel(item.localId);
-        };
+        // Drops the tile; an upload in flight is aborted too.
+        const handleClose = () => upload.remove(item.localId);
 
         return (
           <View key={item.localId} style={styles.tileWrap}>
